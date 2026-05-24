@@ -44,3 +44,9 @@ Skill VFX sources:
 - Sword wave, impact burst, thunder seal, lotus fire, and healing aura
   sprites were generated specifically for this prototype with OpenAI image
   generation.
+
+Artifact sprite sources:
+
+- Fenhai heavy ruler, Taixu sea gourd, Jiuxiao thunder seal, Qingzhu sword
+  box, Liuli lotus cauldron, and Qingmu healing bottle sprites were generated
+  specifically for this prototype with OpenAI image generation.

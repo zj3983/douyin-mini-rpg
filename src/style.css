@@ -669,8 +669,8 @@ canvas {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: 66px minmax(0, 1fr);
-  gap: 3px 10px;
+  grid-template-columns: 50px minmax(0, 1fr);
+  gap: 10px;
   align-items: center;
   padding: 10px;
   border: 1px solid var(--drop-color, #facc15);
@@ -681,20 +681,34 @@ canvas {
 }
 
 .settlement-drop b {
-  grid-row: span 2;
+  display: block;
   color: var(--drop-color, #facc15);
   font-size: 13px;
 }
 
 .settlement-drop span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: #f8fafc;
   font-size: 14px;
   font-weight: 900;
 }
 
 .settlement-drop small {
+  display: block;
   color: #94a3b8;
   font-size: 11px;
+}
+
+.settlement-drop .reward-icon {
+  width: 48px;
+  height: 48px;
+}
+
+.settlement-drop > div {
+  min-width: 0;
 }
 
 .bag-sheet {
@@ -1142,6 +1156,14 @@ canvas {
   stroke-linejoin: round;
 }
 
+.equip-icon .artifact-art {
+  display: block;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 9px color-mix(in srgb, var(--item-color, #5eead4), transparent 36%));
+}
+
 .bag-section-title {
   margin: 4px 0 7px;
   color: #fef3c7;
@@ -1259,6 +1281,11 @@ canvas {
   object-fit: contain;
   image-rendering: auto;
   filter: drop-shadow(0 0 8px color-mix(in srgb, var(--item-color, #5eead4), transparent 48%));
+}
+
+.reward-icon .artifact-art {
+  width: 39px;
+  height: 39px;
 }
 
 .material-cell i > img {
@@ -1844,6 +1871,11 @@ canvas {
 .reward-icon > img {
   width: 34px;
   height: 34px;
+}
+
+.reward-icon > img.artifact-art {
+  width: 38px;
+  height: 38px;
 }
 
 .reward-sigil {

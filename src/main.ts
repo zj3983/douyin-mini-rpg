@@ -19,7 +19,7 @@ interface Reward { name: string; rarity: Rarity; count: number; slot?: Slot; atk
 interface SkillTree { slash: number; burst: number; regen: number; chain: number; orbit: number; flame: number; points: number }
 interface MutationTree { swordRide: number; thunderFork: number; swordDomain: number; flameLotus: number }
 interface CharacterDef { id: CharacterId; name: string; title: string; need: number; color: string; portrait: string; battle: string; starter: Partial<SkillTree>; desc: string }
-interface ArtifactDef { key: ArtifactKey; name: string; type: string; color: string; rarity: Rarity; iconId: string; desc: string; source: string; max: number }
+interface ArtifactDef { key: ArtifactKey; name: string; type: string; color: string; rarity: Rarity; iconId: string; image: string; desc: string; source: string; max: number }
 interface StageTheme {
   name: string
   subtitle: string
@@ -194,12 +194,12 @@ const characters: Record<CharacterId, CharacterDef> = {
 }
 
 const artifactDefs: Record<ArtifactKey, ArtifactDef> = {
-  slash: { key: 'slash', name: '焚海重尺', type: '尺类重兵', color: '#fb923c', rarity: '史诗', iconId: 'blade-3', max: 10, source: '参考经典玄幻“重尺破浪”类型，使用原创名称。', desc: '获得后开启重尺剑气，提升自动攻击距离和飞剑斩击伤害。' },
-  burst: { key: 'burst', name: '太虚镇海葫', type: '葫芦法宝', color: '#a855f7', rarity: '史诗', iconId: 'nova-3', max: 10, source: '参考葫芦、瓶类收摄法宝的常见设定。', desc: '获得后开启自动剑罡爆发，怪物聚集时释放范围冲击。' },
-  chain: { key: 'chain', name: '九霄引雷印', type: '雷印法宝', color: '#38bdf8', rarity: '史诗', iconId: 'chain-3', max: 10, source: '参考雷印、雷翅、雷法类网文法宝。', desc: '获得后自动引雷弹射，适合清理一条线上的怪潮。' },
-  orbit: { key: 'orbit', name: '青竹云剑匣', type: '成套飞剑', color: '#67e8f9', rarity: '传说', iconId: 'orbit-3', max: 10, source: '参考成套飞剑和剑匣体系，使用原创名称。', desc: '获得后开启护体剑阵，被围住时飞剑自动环切。' },
-  flame: { key: 'flame', name: '琉璃莲火鼎', type: '火鼎法宝', color: '#fb923c', rarity: '传说', iconId: 'flame-3', max: 10, source: '参考异火、火鼎、莲火类玄幻体系。', desc: '获得后自动铺开莲火符海，密集怪物会被连环引爆。' },
-  regen: { key: 'regen', name: '青木回元瓶', type: '灵瓶法宝', color: '#86efac', rarity: '稀有', iconId: 'guard-3', max: 8, source: '参考灵瓶、药园、青木回复类修仙法宝。', desc: '获得后开启持续回元，战斗中自动恢复生命。' },
+  slash: { key: 'slash', name: '焚海重尺', type: '尺类重兵', color: '#fb923c', rarity: '史诗', iconId: 'blade-3', image: '/assets/generated/artifact-slash.png', max: 10, source: '参考经典玄幻“重尺破浪”类型，使用原创名称。', desc: '获得后开启重尺剑气，提升自动攻击距离和飞剑斩击伤害。' },
+  burst: { key: 'burst', name: '太虚镇海葫', type: '葫芦法宝', color: '#a855f7', rarity: '史诗', iconId: 'nova-3', image: '/assets/generated/artifact-burst.png', max: 10, source: '参考葫芦、瓶类收摄法宝的常见设定。', desc: '获得后开启自动剑罡爆发，怪物聚集时释放范围冲击。' },
+  chain: { key: 'chain', name: '九霄引雷印', type: '雷印法宝', color: '#38bdf8', rarity: '史诗', iconId: 'chain-3', image: '/assets/generated/artifact-chain.png', max: 10, source: '参考雷印、雷翅、雷法类网文法宝。', desc: '获得后自动引雷弹射，适合清理一条线上的怪潮。' },
+  orbit: { key: 'orbit', name: '青竹云剑匣', type: '成套飞剑', color: '#67e8f9', rarity: '传说', iconId: 'orbit-3', image: '/assets/generated/artifact-orbit.png', max: 10, source: '参考成套飞剑和剑匣体系，使用原创名称。', desc: '获得后开启护体剑阵，被围住时飞剑自动环切。' },
+  flame: { key: 'flame', name: '琉璃莲火鼎', type: '火鼎法宝', color: '#fb923c', rarity: '传说', iconId: 'flame-3', image: '/assets/generated/artifact-flame.png', max: 10, source: '参考异火、火鼎、莲火类玄幻体系。', desc: '获得后自动铺开莲火符海，密集怪物会被连环引爆。' },
+  regen: { key: 'regen', name: '青木回元瓶', type: '灵瓶法宝', color: '#86efac', rarity: '稀有', iconId: 'guard-3', image: '/assets/generated/artifact-regen.png', max: 8, source: '参考灵瓶、药园、青木回复类修仙法宝。', desc: '获得后开启持续回元，战斗中自动恢复生命。' },
 }
 
 const pools: Record<Rarity, Reward[]> = {
@@ -894,7 +894,8 @@ function rewardNote(reward: Reward) {
 }
 
 function artifactIcon(key: ArtifactKey) {
-  return evolutionIcon(artifactDefs[key].iconId)
+  const def = artifactDefs[key]
+  return `<img class="artifact-art" src="${def.image}" alt="">`
 }
 
 function renderEquipPanel() {
@@ -1371,7 +1372,7 @@ function renderSettlement(options: {
 }) {
   const rewardTotal = options.rewards.tickets + options.rewards.exp + options.rewards.skill
   const dropHtml = options.drop
-    ? `<div class="settlement-drop" style="--drop-color:${rarityColor[options.drop.rarity]}"><b>${options.drop.rarity}</b><span>${options.drop.name}</span><small>${options.drop.artifact ? '已收入法宝库' : options.drop.slot ? '已自动比较装备' : `数量 x${options.drop.count}`}</small></div>`
+    ? `<div class="settlement-drop" style="--drop-color:${rarityColor[options.drop.rarity]};--item-color:${rarityColor[options.drop.rarity]}"><i class="reward-icon">${rewardIcon(options.drop)}</i><div><b>${options.drop.rarity}</b><span>${options.drop.name}</span><small>${options.drop.artifact ? '已收入法宝库' : options.drop.slot ? '已自动比较装备' : `数量 x${options.drop.count}`}</small></div></div>`
     : ''
   settlementResults.innerHTML = `
     <div class="settlement-card ${options.tone}">
