@@ -462,6 +462,14 @@ const swordActionSprites = {
   slash: loadSprite('/assets/generated/action-sword-slash.png'),
 }
 
+const monsterSprites: Record<EnemyKind, HTMLImageElement> = {
+  slime: loadSprite('/assets/generated/monster-spirit-fox.png'),
+  bat: loadSprite('/assets/generated/monster-bone-bat.png'),
+  wolf: loadSprite('/assets/generated/monster-crystal-beast.png'),
+  crystal: loadSprite('/assets/generated/monster-crystal-beast.png'),
+  warden: loadSprite('/assets/generated/monster-gatekeeper.png'),
+}
+
 let input: Vec = { x: 0, y: 0 }
 let last = performance.now()
 let enemyId = 1
@@ -3518,6 +3526,7 @@ function drawEffect(effect: Effect, ox: number, oy: number) {
 }
 
 function drawEnemySide(enemy: Enemy, x: number, groundY: number) {
+  if (drawEnemySprite(enemy, x, groundY)) return
   if (enemy.kind === 'bat') {
     drawBatEnemy(enemy, x, groundY)
     return
@@ -3531,6 +3540,55 @@ function drawEnemySide(enemy: Enemy, x: number, groundY: number) {
     return
   }
   drawSpiritEnemy(enemy, x, groundY)
+}
+
+function enemySpriteLayout(enemy: Enemy) {
+  if (enemy.kind === 'warden' || enemy.boss) return { width: 186, height: 186, lift: 4, barWidth: 118, barY: 164 }
+  if (enemy.kind === 'bat') return { width: enemy.elite ? 132 : 112, height: enemy.elite ? 132 : 112, lift: 50, barWidth: enemy.elite ? 82 : 68, barY: 112 }
+  if (enemy.kind === 'crystal') return { width: enemy.elite ? 142 : 122, height: enemy.elite ? 142 : 122, lift: 0, barWidth: enemy.elite ? 86 : 72, barY: 120 }
+  if (enemy.kind === 'wolf') return { width: enemy.elite ? 132 : 116, height: enemy.elite ? 132 : 116, lift: 0, barWidth: enemy.elite ? 84 : 70, barY: 112 }
+  return { width: enemy.elite ? 112 : 92, height: enemy.elite ? 112 : 92, lift: 0, barWidth: enemy.elite ? 76 : 62, barY: 92 }
+}
+
+function drawEnemySprite(enemy: Enemy, x: number, groundY: number) {
+  const sprite = monsterSprites[enemy.kind]
+  if (!sprite?.complete || sprite.naturalWidth <= 0) return false
+  const theme = activeStageTheme()
+  const layout = enemySpriteLayout(enemy)
+  const pulse = Math.sin(performance.now() * 0.006 + enemy.id) * 0.5 + 0.5
+  const float = enemy.kind === 'bat' ? Math.sin(performance.now() * 0.006 + enemy.id) * 7 : Math.sin(performance.now() * 0.003 + enemy.id) * 2
+  const baseY = groundY - layout.lift + float
+  const faceRight = state.hero.x > enemy.x
+  ctx.save()
+  ctx.translate(x, baseY)
+  ctx.globalAlpha = enemy.hit > 0 ? 0.72 : 1
+  ctx.fillStyle = 'rgba(0,0,0,.34)'
+  ctx.beginPath()
+  ctx.ellipse(0, 8, layout.width * (enemy.kind === 'bat' ? 0.28 : 0.33), enemy.kind === 'bat' ? 6 : 10, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.shadowColor = enemy.boss ? '#facc15' : enemy.elite ? '#fb923c' : theme.accent
+  ctx.shadowBlur = enemy.boss ? 26 : enemy.elite ? 20 : 12
+  if (faceRight) ctx.scale(-1, 1)
+  const hitScale = 1 + (enemy.hit > 0 ? 0.04 : 0) + (enemy.elite ? pulse * 0.018 : 0)
+  ctx.scale(hitScale, hitScale)
+  ctx.drawImage(sprite, -layout.width / 2, -layout.height + 12, layout.width, layout.height)
+  ctx.restore()
+
+  if (enemy.elite || enemy.boss) {
+    ctx.save()
+    ctx.globalAlpha = enemy.boss ? 0.36 : 0.22
+    ctx.strokeStyle = enemy.boss ? '#facc15' : theme.accent
+    ctx.lineWidth = enemy.boss ? 3 : 2
+    ctx.shadowColor = ctx.strokeStyle
+    ctx.shadowBlur = 16
+    ctx.beginPath()
+    ctx.ellipse(x, baseY - layout.height * 0.44, layout.width * 0.44, layout.height * 0.38, 0, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.restore()
+  }
+
+  drawEnemyBar(enemy, x, baseY - layout.barY, layout.barWidth)
+  return true
 }
 
 function drawSpiritEnemy(enemy: Enemy, x: number, groundY: number) {
