@@ -1548,7 +1548,224 @@ canvas {
 
 .skill-list {
   display: grid;
+  gap: 10px;
+}
+
+.skill-sheet .rates {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin: 2px 0 10px;
+}
+
+.skill-sheet .rates span {
+  min-width: 0;
+  padding: 7px 6px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 10px;
+  color: #bfdbfe;
+  text-align: center;
+  background: rgba(2, 6, 23, 0.5);
+}
+
+.skill-sheet .rates b {
+  color: #fef3c7;
+}
+
+.artifact-switch {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+}
+
+.artifact-tab {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  min-width: 0;
+  min-height: 112px;
+  padding: 8px 5px 7px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--item-color, #38bdf8), transparent 36%);
+  border-radius: 12px;
+  color: #dbeafe;
+  background:
+    radial-gradient(circle at 50% 20%, color-mix(in srgb, var(--item-color, #38bdf8), transparent 72%), transparent 43%),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.86), rgba(2, 6, 23, 0.78));
+  box-shadow: inset 0 0 16px rgba(255, 255, 255, 0.04);
+}
+
+.artifact-tab.active {
+  border-color: color-mix(in srgb, var(--item-color, #38bdf8), white 18%);
+  box-shadow:
+    0 0 22px color-mix(in srgb, var(--item-color, #38bdf8), transparent 74%),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.artifact-tab.locked {
+  opacity: 0.58;
+}
+
+.artifact-tab i {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  font-style: normal;
+}
+
+.artifact-tab .artifact-art {
+  width: 58px;
+  height: 58px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 9px color-mix(in srgb, var(--item-color, #38bdf8), transparent 34%));
+}
+
+.artifact-tab span,
+.artifact-tab small {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-tab span {
+  margin-top: 4px;
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.artifact-tab small {
+  margin-top: 2px;
+  color: color-mix(in srgb, var(--item-color, #38bdf8), white 32%);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.artifact-focus-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr);
+  gap: 12px;
+  overflow: hidden;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--item-color, #38bdf8), transparent 32%);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 24% 22%, color-mix(in srgb, var(--item-color, #38bdf8), transparent 68%), transparent 35%),
+    linear-gradient(145deg, rgba(15, 23, 42, 0.94), rgba(2, 6, 23, 0.8));
+  box-shadow: 0 18px 40px rgba(2, 6, 23, 0.25), inset 0 0 22px rgba(255, 255, 255, 0.04);
+}
+
+.artifact-focus-card.locked {
+  opacity: 0.76;
+}
+
+.artifact-hero-art {
+  display: grid;
+  place-items: center;
+  min-height: 138px;
+  border: 1px solid color-mix(in srgb, var(--item-color, #38bdf8), transparent 44%);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle, color-mix(in srgb, var(--item-color, #38bdf8), transparent 70%), transparent 62%),
+    rgba(2, 6, 23, 0.54);
+}
+
+.artifact-hero-art .artifact-art {
+  width: 112px;
+  height: 112px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 14px color-mix(in srgb, var(--item-color, #38bdf8), transparent 24%));
+}
+
+.artifact-copy {
+  min-width: 0;
+}
+
+.artifact-copy small,
+.artifact-copy b,
+.artifact-copy span,
+.artifact-copy p,
+.artifact-source {
+  display: block;
+  min-width: 0;
+}
+
+.artifact-copy small {
+  color: color-mix(in srgb, var(--item-color, #38bdf8), white 34%);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.artifact-copy b {
+  margin-top: 3px;
+  color: #f8fafc;
+  font-size: 20px;
+  line-height: 1.12;
+}
+
+.artifact-copy span {
+  margin-top: 5px;
+  color: #fef3c7;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.artifact-copy p {
+  margin: 8px 0 0;
+  color: #cbd5e1;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.artifact-meter {
+  grid-column: 1 / -1;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.82);
+}
+
+.artifact-meter i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--item-color, #38bdf8), #fef3c7);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--item-color, #38bdf8), transparent 52%);
+}
+
+.artifact-source {
+  grid-column: 1 / -1;
+  padding: 8px 9px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 10px;
+  color: #94a3b8;
+  background: rgba(2, 6, 23, 0.44);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.artifact-upgrade {
+  grid-column: 1 / -1;
+  min-height: 44px;
+  border: 1px solid color-mix(in srgb, var(--item-color, #38bdf8), white 8%);
+  border-radius: 12px;
+  color: #020617;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--item-color, #38bdf8), white 20%), #fef3c7);
+  font-size: 15px;
+  font-weight: 1000;
+  box-shadow: 0 0 22px color-mix(in srgb, var(--item-color, #38bdf8), transparent 74%);
+}
+
+.artifact-upgrade:disabled {
+  color: #94a3b8;
+  background: rgba(15, 23, 42, 0.72);
+  box-shadow: none;
 }
 
 .skill-row {

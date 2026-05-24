@@ -494,6 +494,7 @@ let moveTarget: Vec | null = null
 let moveTargetPulse = 0
 let lastCanvasTapAt = 0
 let dragMovePointer: number | null = null
+let selectedArtifactKey: ArtifactKey = 'slash'
 
 const guideTexts = [
   '野外会自动沿世界地图前进，点击战斗画面可临时接管移动。',
@@ -1057,33 +1058,77 @@ function renderBagPanel() {
 }
 
 function renderSkillPanel() {
-  skillPointsLabel.textContent = `法宝精华：${state.skills.points}。副本击杀精英、撤离和通关可获得；未获得的法宝不能淬炼。`
+  const ownedCount = artifactKeys.filter((key) => hasArtifact(key)).length
+  const maxedCount = artifactKeys.filter((key) => hasArtifact(key) && artifactLevel(key) >= artifactDefs[key].max).length
+  if (!artifactKeys.includes(selectedArtifactKey)) selectedArtifactKey = 'slash'
+  skillPointsLabel.innerHTML = `
+    <span>精华 <b>${state.skills.points}</b></span>
+    <span>已获 <b>${ownedCount}/${artifactKeys.length}</b></span>
+    <span>满阶 <b>${maxedCount}</b></span>
+  `
   skillList.innerHTML = ''
+  const switcher = document.createElement('div')
+  switcher.className = 'artifact-switch'
   artifactKeys.forEach((key) => {
     const def = artifactDefs[key]
     const owned = hasArtifact(key)
     const level = artifactLevel(key)
     const bonus = owned ? (activeCharacter().starter[key] ?? 0) : 0
-    const cost = level + 1
-    const row = document.createElement('div')
-    row.className = 'skill-row'
-    if (!owned) row.classList.add('locked')
-    row.style.setProperty('--item-color', def.color)
-    const levelText = owned ? (bonus > 0 ? `Lv.${level}+${bonus}/${def.max}` : `Lv.${level}/${def.max}`) : '未获得'
-    row.innerHTML = `
-      <i class="equip-icon" style="--item-color:${def.color}">${artifactIcon(key)}</i>
-      <div>
-        <b>${def.name} ${levelText}</b>
-        <small>${def.type} · ${def.desc}${bonus > 0 ? ` · ${activeCharacter().name} 亲和 +${bonus}` : ''}<br>${def.source}</small>
-      </div>
+    const tab = document.createElement('button')
+    tab.type = 'button'
+    tab.className = `artifact-tab ${selectedArtifactKey === key ? 'active' : ''} ${owned ? 'owned' : 'locked'}`
+    tab.style.setProperty('--item-color', def.color)
+    tab.innerHTML = `
+      <i>${artifactIcon(key)}</i>
+      <span>${def.name}</span>
+      <small>${owned ? `Lv.${Math.min(level, def.max)}${bonus > 0 ? `+${bonus}` : ''}` : '未得'}</small>
     `
-    const btn = document.createElement('button')
-    btn.textContent = owned ? '淬炼' : '副本'
-    btn.disabled = !owned || level >= def.max || state.skills.points < cost
-    btn.addEventListener('click', () => upgradeSkill(key, def.max))
-    row.appendChild(btn)
-    skillList.appendChild(row)
+    tab.addEventListener('click', () => {
+      selectedArtifactKey = key
+      renderSkillPanel()
+    })
+    switcher.appendChild(tab)
   })
+  skillList.appendChild(switcher)
+
+  const def = artifactDefs[selectedArtifactKey]
+  const owned = hasArtifact(selectedArtifactKey)
+  const level = artifactLevel(selectedArtifactKey)
+  const shownLevel = Math.min(level, def.max)
+  const overflow = Math.max(0, level - def.max)
+  const bonus = owned ? (activeCharacter().starter[selectedArtifactKey] ?? 0) : 0
+  const cost = shownLevel + 1
+  const progress = owned ? Math.min(100, (shownLevel / def.max) * 100) : 0
+  const detail = document.createElement('div')
+  detail.className = `artifact-focus-card ${owned ? 'owned' : 'locked'}`
+  detail.style.setProperty('--item-color', def.color)
+  detail.innerHTML = `
+    <div class="artifact-hero-art">${artifactIcon(selectedArtifactKey)}</div>
+    <div class="artifact-copy">
+      <small>${def.rarity} · ${def.type}</small>
+      <b>${def.name}</b>
+      <span>${owned ? `Lv.${shownLevel}/${def.max}${bonus > 0 ? ` · ${activeCharacter().name}亲和 +${bonus}` : ''}${overflow > 0 ? ` · 溢出 ${overflow}` : ''}` : '副本未获得'}</span>
+      <p>${def.desc}</p>
+    </div>
+    <div class="artifact-meter"><i style="width:${progress}%"></i></div>
+    <div class="artifact-source">${def.source}</div>
+  `
+  const action = document.createElement('button')
+  action.type = 'button'
+  action.className = 'artifact-upgrade'
+  if (!owned) {
+    action.textContent = '副本掉落'
+    action.disabled = true
+  } else if (level >= def.max) {
+    action.textContent = '已满阶'
+    action.disabled = true
+  } else {
+    action.textContent = `淬炼 · ${cost} 精华`
+    action.disabled = state.skills.points < cost
+  }
+  action.addEventListener('click', () => upgradeSkill(selectedArtifactKey, def.max))
+  detail.appendChild(action)
+  skillList.appendChild(detail)
 }
 
 function upgradeSkill(key: keyof SkillTree, max: number) {
