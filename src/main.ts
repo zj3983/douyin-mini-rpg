@@ -12,7 +12,7 @@ type ArtifactKey = 'slash' | 'burst' | 'regen' | 'chain' | 'orbit' | 'flame'
 interface Vec { x: number; y: number }
 interface Enemy extends Vec { id: number; hp: number; maxHp: number; speed: number; elite: boolean; kind: EnemyKind; boss?: boolean; hit: number }
 interface FloatingText extends Vec { text: string; color: string; life: number }
-type EffectKind = 'ring' | 'slash' | 'blade' | 'shockwave' | 'bolt' | 'orbit' | 'flare' | 'swordrain' | 'thunderstorm' | 'firesea'
+type EffectKind = 'ring' | 'slash' | 'blade' | 'shockwave' | 'bolt' | 'orbit' | 'flare' | 'swordrain' | 'thunderstorm' | 'firesea' | 'impact' | 'heal'
 interface Effect extends Vec { radius: number; color: string; life: number; maxLife: number; kind?: EffectKind; angle?: number }
 interface SoulOrb extends Vec { id: number; value: number; life: number; phase: number }
 interface Reward { name: string; rarity: Rarity; count: number; slot?: Slot; atk?: number; hp?: number; skill?: number; characterId?: CharacterId; artifact?: ArtifactKey }
@@ -246,6 +246,9 @@ const state = {
   texts: [] as FloatingText[],
   effects: [] as Effect[],
   soulOrbs: [] as SoulOrb[],
+  screenShake: 0,
+  hitStop: 0,
+  healPulse: 0,
   bag: [] as Reward[],
   kills: 0,
   tickets: 0,
@@ -468,6 +471,14 @@ const monsterSprites: Record<EnemyKind, HTMLImageElement> = {
   wolf: loadSprite('/assets/generated/monster-crystal-beast.png'),
   crystal: loadSprite('/assets/generated/monster-crystal-beast.png'),
   warden: loadSprite('/assets/generated/monster-gatekeeper.png'),
+}
+
+const vfxSprites = {
+  swordWave: loadSprite('/assets/generated/vfx-sword-wave.png'),
+  impact: loadSprite('/assets/generated/vfx-impact-burst.png'),
+  thunder: loadSprite('/assets/generated/vfx-thunder-seal.png'),
+  lotus: loadSprite('/assets/generated/vfx-lotus-fire.png'),
+  heal: loadSprite('/assets/generated/vfx-heal-aura.png'),
 }
 
 let input: Vec = { x: 0, y: 0 }
@@ -1182,7 +1193,24 @@ function spawnBoss() {
 function damageEnemy(enemy: Enemy, amount: number) {
   enemy.hp -= amount
   enemy.hit = 0.18
-  state.texts.push({ x: enemy.x, y: enemy.y - 24, text: `-${amount}`, color: '#fff', life: 0.7 })
+  const power = Math.min(2.2, 0.72 + amount / 120 + (enemy.elite ? 0.22 : 0) + (enemy.boss ? 0.38 : 0))
+  const knockDir = enemy.x >= state.hero.x ? 1 : -1
+  enemy.x += knockDir * (enemy.boss ? 6 : 14) * power
+  enemy.y += (Math.random() - 0.5) * (enemy.boss ? 6 : 16)
+  state.screenShake = Math.max(state.screenShake, 0.08 * power)
+  state.hitStop = Math.max(state.hitStop, Math.min(0.055, 0.018 + amount / 4200))
+  state.effects.push({
+    x: enemy.x,
+    y: enemy.y - (enemy.boss ? 68 : enemy.kind === 'bat' ? 44 : 32),
+    radius: 72 + amount * 0.34 + (enemy.elite ? 18 : 0) + (enemy.boss ? 42 : 0),
+    color: enemy.boss ? '#facc15' : enemy.elite ? '#fed7aa' : '#e0f2fe',
+    life: 0.24,
+    maxLife: 0.24,
+    kind: 'impact',
+    angle: Math.atan2(enemy.y - state.hero.y, enemy.x - state.hero.x),
+  })
+  const crit = amount >= totalAtk() + skillPower()
+  state.texts.push({ x: enemy.x + (Math.random() - 0.5) * 12, y: enemy.y - 34, text: `${crit ? '破！' : ''}-${amount}`, color: crit ? '#fef08a' : '#fff', life: 0.78 })
   if (enemy.hp > 0) return
 
   state.enemies = state.enemies.filter((e) => e.id !== enemy.id)
@@ -1684,6 +1712,12 @@ function update(dt: number) {
     updateHud()
     return
   }
+  state.screenShake = Math.max(0, state.screenShake - dt * 1.65)
+  state.hitStop = Math.max(0, state.hitStop - dt)
+  if (state.hitStop > 0) {
+    updateHud()
+    return
+  }
   state.attackCd = Math.max(0, state.attackCd - dt)
   state.skillCd = Math.max(0, state.skillCd - dt)
   state.chainCd = Math.max(0, state.chainCd - dt)
@@ -1710,6 +1744,19 @@ function update(dt: number) {
   }
   if (effectiveSkill('regen') > 0 && state.hero.hp < maxHp()) {
     state.hero.hp = Math.min(maxHp(), state.hero.hp + effectiveSkill('regen') * 1.6 * dt)
+    state.healPulse = Math.max(0, state.healPulse - dt)
+    if (state.healPulse <= 0) {
+      state.healPulse = 2.2
+      state.effects.push({
+        x: state.hero.x,
+        y: state.hero.y - 20,
+        radius: 118 + effectiveSkill('regen') * 8,
+        color: '#86efac',
+        life: 0.85,
+        maxLife: 0.85,
+        kind: 'heal',
+      })
+    }
   }
 
   ensureEnemies()
@@ -2372,6 +2419,13 @@ function draw() {
   ctx.fillStyle = grd
   ctx.fillRect(0, 0, w, h)
 
+  ctx.save()
+  if (state.screenShake > 0) {
+    const shake = Math.min(11, 3 + state.screenShake * 70)
+    const t = performance.now() * 0.055
+    ctx.translate(Math.sin(t * 1.7) * shake + (Math.random() - 0.5) * shake * 0.55, Math.cos(t * 2.1) * shake * 0.45)
+  }
+
   const groundY = h * 0.72
   const ox = w / 2 - state.hero.x
   const oy = groundY - state.hero.y
@@ -2401,6 +2455,7 @@ function draw() {
     ctx.globalAlpha = 1
   }
   drawScreenAtmosphere(w, h)
+  ctx.restore()
 }
 
 function drawSideTerrain(w: number, h: number, ox: number, groundY: number) {
@@ -3198,8 +3253,54 @@ function drawEffect(effect: Effect, ox: number, oy: number) {
     ctx.stroke()
   }
 
+  const drawVfxImage = (sprite: HTMLImageElement, dx: number, dy: number, size: number, alpha: number, rotation = 0, scaleX = 1) => {
+    if (!sprite.complete || sprite.naturalWidth <= 0) return
+    ctx.save()
+    ctx.globalAlpha *= alpha
+    ctx.globalCompositeOperation = 'lighter'
+    ctx.translate(dx, dy)
+    ctx.rotate(rotation)
+    ctx.scale(scaleX, 1)
+    ctx.drawImage(sprite, -size / 2, -size / 2, size, size)
+    ctx.restore()
+  }
+
   ctx.save()
-  if (effect.kind === 'swordrain') {
+  if (effect.kind === 'impact') {
+    ctx.translate(x, y)
+    const size = Math.min(230, 100 + effect.radius * 0.92)
+    drawVfxImage(vfxSprites.impact, 0, 0, size, Math.min(1, 0.35 + t * 0.95), (effect.angle ?? 0) * 0.12)
+    ctx.globalAlpha = t
+    ctx.strokeStyle = effect.color
+    ctx.shadowColor = effect.color
+    ctx.shadowBlur = 22
+    ctx.lineWidth = 4
+    ctx.beginPath()
+    ctx.arc(0, 0, effect.radius * (0.35 + progress * 0.72), 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.strokeStyle = 'rgba(255,255,255,.9)'
+    ctx.lineWidth = 2
+    for (let i = 0; i < 9; i += 1) {
+      const a = i * Math.PI * 2 / 9 + progress * 0.4
+      ctx.beginPath()
+      ctx.moveTo(Math.cos(a) * effect.radius * 0.18, Math.sin(a) * effect.radius * 0.12)
+      ctx.lineTo(Math.cos(a) * effect.radius * (0.54 + progress * 0.42), Math.sin(a) * effect.radius * (0.34 + progress * 0.34))
+      ctx.stroke()
+    }
+  } else if (effect.kind === 'heal') {
+    ctx.translate(x, y - 26)
+    drawVfxImage(vfxSprites.heal, 0, -18, Math.min(240, 128 + effect.radius * 0.72), 0.5 + t * 0.55, progress * 0.18)
+    ctx.globalAlpha = t * 0.55
+    ctx.strokeStyle = '#bbf7d0'
+    ctx.shadowColor = '#86efac'
+    ctx.shadowBlur = 20
+    ctx.lineWidth = 2
+    for (let i = 0; i < 3; i += 1) {
+      ctx.beginPath()
+      ctx.ellipse(0, 24, effect.radius * (0.38 + i * 0.1 + progress * 0.08), 18 + i * 7, i * 0.18, 0, Math.PI * 2)
+      ctx.stroke()
+    }
+  } else if (effect.kind === 'swordrain') {
     const w = canvas.width
     const h = canvas.height
     const centerX = x
@@ -3239,6 +3340,7 @@ function drawEffect(effect: Effect, ox: number, oy: number) {
     const h = canvas.height
     const count = Math.min(18, 7 + Math.floor(effect.radius / 70))
     ctx.globalAlpha = t
+    drawVfxImage(vfxSprites.thunder, x, y - 66, Math.min(540, 240 + effect.radius * 0.44), 0.42 + t * 0.42, progress * 0.08)
     const sky = ctx.createLinearGradient(0, 0, 0, h)
     sky.addColorStop(0, 'rgba(8,47,73,.34)')
     sky.addColorStop(0.52, 'rgba(14,165,233,.1)')
@@ -3271,6 +3373,7 @@ function drawEffect(effect: Effect, ox: number, oy: number) {
     const h = canvas.height
     const count = Math.min(32, 12 + Math.floor(effect.radius / 42))
     ctx.globalAlpha = t
+    drawVfxImage(vfxSprites.lotus, x, y - 34, Math.min(620, 230 + effect.radius * 0.56), 0.5 + t * 0.45, -progress * 0.06)
     const heat = ctx.createRadialGradient(x, y, 20, x, y, Math.max(w, h) * 0.72)
     heat.addColorStop(0, 'rgba(254,240,138,.34)')
     heat.addColorStop(0.36, 'rgba(249,115,22,.18)')
@@ -3299,6 +3402,7 @@ function drawEffect(effect: Effect, ox: number, oy: number) {
     }
   } else if (effect.kind === 'bolt') {
     ctx.translate(x, y)
+    drawVfxImage(vfxSprites.thunder, 0, 0, Math.min(210, 96 + effect.radius * 0.28), 0.46 + t * 0.38, progress * 0.12)
     ctx.rotate(effect.angle ?? 0)
     ctx.globalAlpha = t
     ctx.shadowColor = effect.color
@@ -3369,6 +3473,7 @@ function drawEffect(effect: Effect, ox: number, oy: number) {
   } else if (effect.kind === 'flare') {
     ctx.translate(x, y - 34)
     ctx.globalAlpha = t
+    drawVfxImage(vfxSprites.lotus, 0, 0, Math.min(260, 100 + effect.radius * 0.9), 0.52 + t * 0.36, progress * 0.08)
     ctx.shadowColor = effect.color
     ctx.shadowBlur = 34
     const burst = ctx.createRadialGradient(0, 0, 8, 0, 0, effect.radius * (0.5 + progress * 0.24))
@@ -3405,6 +3510,7 @@ function drawEffect(effect: Effect, ox: number, oy: number) {
     ctx.translate(x + dir * progress * 34, y - 54)
     ctx.scale(dir, 1)
     ctx.globalAlpha = t
+    drawVfxImage(vfxSprites.swordWave, 12 + progress * 22, -2, Math.min(250, 114 + effect.radius * 0.72), 0.56 + t * 0.36, -0.08)
     ctx.lineCap = 'round'
     ctx.shadowColor = effect.color
     ctx.shadowBlur = 24
@@ -3435,6 +3541,7 @@ function drawEffect(effect: Effect, ox: number, oy: number) {
     ctx.translate(x + dir * progress * 64, y - 30)
     ctx.scale(dir, 1)
     ctx.globalAlpha = t
+    drawVfxImage(vfxSprites.swordWave, 68 + progress * 52, -16, Math.min(430, 180 + effect.radius * 0.82), 0.52 + t * 0.42, -0.05)
     ctx.shadowColor = effect.color
     ctx.shadowBlur = 30
     const length = 150 + effect.radius * 0.58 + progress * 70

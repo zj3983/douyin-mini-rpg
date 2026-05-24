@@ -38,3 +38,9 @@ Monster sprite sources:
 - Spirit fox demon, bone-winged bat demon, amethyst crystal beast, and
   secret-realm gatekeeper sprites were generated specifically for this
   prototype with OpenAI image generation.
+
+Skill VFX sources:
+
+- Sword wave, impact burst, thunder seal, lotus fire, and healing aura
+  sprites were generated specifically for this prototype with OpenAI image
+  generation.
