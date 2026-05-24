@@ -1,0 +1,34 @@
+Item PNG sources:
+
+- Potions: "Potions" by Programmer16, OpenGameArt, CC0.
+  https://opengameart.org/content/potions-3
+
+- Gem sprites: "Gem Icons" and "CC0 Gem Icons", OpenGameArt, CC0.
+  https://opengameart.org/content/gem-icons-0
+  https://opengameart.org/content/cc0-gem-icons
+
+- Ingot sprites: "CC0 Ingot Icons" by AntumDeluge, OpenGameArt, CC0.
+  https://opengameart.org/content/cc0-ingot-icons
+
+- Inventory item sprites: "2D RPG Item Icons" by Kit, OpenGameArt, CC0.
+  https://opengameart.org/content/2d-rpg-item-icons
+
+- Herb sprites: "48 Alchemy Herbs Icons Pack" by CraftPix.net 2D Game Assets,
+  OpenGameArt, OGA-BY 3.0.
+  https://opengameart.org/content/48-alchemy-herbs-icons-pack
+
+Character portrait sources:
+
+- Qinglan Sword Cultivator, Nine Heavens Thunder Envoy,
+  Lotus Fire Talisman Master, and Azure Wood Spirit Healer portraits
+  were generated specifically for this prototype with OpenAI image generation.
+
+Map background sources:
+
+- World xianxia side-scrolling background and secret-realm dungeon background
+  were generated specifically for this prototype with OpenAI image generation.
+
+Battle sprite sources:
+
+- Qinglan Sword Cultivator idle, flying, and slash action sprites were generated
+  specifically for this prototype with OpenAI image generation.

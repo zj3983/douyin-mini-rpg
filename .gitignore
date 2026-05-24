@@ -1,0 +1,42 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Local verification screenshots
+/*-check*.png
+/*-preview.png
+/layout-check.png
+/settlement-preview.png
+/skill-effect-check.png
+/sword-mutation-check.png
+/full-screen-skill*.png
+
+# Downloaded source packs kept only for local experimentation
+/assets/vendor/
+/public/assets/generated/FantasyPortraitSet1/
+/public/assets/generated/FantasyPortraitSet1.zip
+/public/assets/generated/cultivator-source.png
+/public/assets/item-icons/*.zip
+Thumbs.db
+**/Thumbs.db
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
