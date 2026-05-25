@@ -2,6 +2,7 @@ import './style.css'
 
 type Rarity = '普通' | '稀有' | '史诗' | '传说'
 type Mode = 'wild' | 'dungeon'
+type AppPage = 'battle' | 'gacha' | 'equip' | 'bag' | 'artifact'
 type Slot = 'weapon' | 'armor' | 'core'
 type AttackSource = 'manual' | 'auto' | 'skill'
 type EvolutionTier = '初阶' | '进阶' | '高阶'
@@ -306,30 +307,27 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <div class="bar"><i id="hp-bar"></i></div>
     </section>
 
-    <section class="viewport-wrap">
-      <canvas id="game" width="720" height="960"></canvas>
-    </section>
+    <section class="page-stack">
+      <section id="battle-view" class="page-view battle-view" data-page="battle">
+        <section class="viewport-wrap">
+          <canvas id="game" width="720" height="960"></canvas>
+        </section>
 
-    <section class="progress-panel">
-      <div class="progress-topline"><div id="message" class="message"></div></div>
-      <div id="guide-tip" class="guide-tip"></div>
-      <div id="quest-label">任务：击杀 0/15</div>
-      <div id="gear-label">装备：无</div>
-    </section>
+        <section class="progress-panel">
+          <div class="progress-topline"><div id="message" class="message"></div></div>
+          <div id="guide-tip" class="guide-tip"></div>
+          <div id="quest-label">任务：击杀 0/15</div>
+          <div id="gear-label">装备：无</div>
+        </section>
 
-    <section class="controls">
-      <div id="auto-orb" class="auto-orb"><i></i><span id="auto-orb-label">自动<br>探索</span></div>
-      <div class="actions">
-        <button id="mode-btn" type="button">副本券 3/3</button>
-        <button id="gacha-btn" type="button">抽卡</button>
-        <button id="equip-btn" type="button">装备</button>
-        <button id="bag-btn" type="button">背包</button>
-        <button id="train-btn" type="button">法宝</button>
-      </div>
-    </section>
+        <section class="battle-actions">
+          <div id="auto-orb" class="auto-orb"><i></i><span id="auto-orb-label">自动<br>探索</span></div>
+          <button id="mode-btn" type="button">副本券 3/3</button>
+        </section>
+      </section>
 
-    <section id="gacha-panel" class="sheet gacha-sheet" hidden>
-      <div class="sheet-head"><h2>星门补给</h2><button id="close-gacha" type="button">x</button></div>
+      <section id="gacha-panel" class="page-view page-sheet gacha-sheet" data-page="gacha" hidden>
+      <div class="sheet-head"><h2>星门补给</h2><button id="close-gacha" class="page-close" type="button">x</button></div>
       <div class="gacha-stage">
         <div id="gate-core" class="gate-core"><i></i><span>等待连接</span></div>
         <div class="gacha-copy">
@@ -349,6 +347,32 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <div id="pull-results" class="results"></div>
     </section>
 
+      <section id="equip-panel" class="page-view page-sheet equip-sheet" data-page="equip" hidden>
+      <div class="sheet-head"><h2>装备</h2><button id="close-equip" class="page-close" type="button">x</button></div>
+      <div id="equipped-list" class="gear-cards"></div>
+      <div id="equip-list" class="results"></div>
+    </section>
+
+      <section id="bag-panel" class="page-view page-sheet bag-sheet" data-page="bag" hidden>
+      <div class="sheet-head"><h2>背包</h2><button id="close-bag" class="page-close" type="button">x</button></div>
+      <div id="bag-list" class="results"></div>
+    </section>
+
+      <section id="skill-panel" class="page-view page-sheet skill-sheet" data-page="artifact" hidden>
+      <div class="sheet-head"><h2>法宝库</h2><button id="close-skill-panel" class="page-close" type="button">x</button></div>
+      <div id="skill-points" class="rates"></div>
+      <div id="skill-list" class="skill-list"></div>
+    </section>
+    </section>
+
+    <nav class="bottom-nav" aria-label="主导航">
+      <button id="battle-btn" class="active" type="button" data-page="battle"><i>战</i><span>战斗</span></button>
+      <button id="gacha-btn" type="button" data-page="gacha"><i>召</i><span>抽卡</span></button>
+      <button id="equip-btn" type="button" data-page="equip"><i>装</i><span>装备</span></button>
+      <button id="bag-btn" type="button" data-page="bag"><i>囊</i><span>背包</span></button>
+      <button id="train-btn" type="button" data-page="artifact"><i>宝</i><span>法宝</span></button>
+    </nav>
+
     <section id="lore-panel" class="sheet lore-sheet" hidden>
       <div class="sheet-head"><h2>虚境档案</h2><button id="close-lore" type="button">x</button></div>
       <div class="lore-copy">
@@ -362,23 +386,6 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <section id="settlement-panel" class="sheet settlement" hidden>
       <div class="sheet-head"><h2>副本结算</h2><button id="close-settlement" type="button">x</button></div>
       <div id="settlement-results" class="results"></div>
-    </section>
-
-    <section id="equip-panel" class="sheet equip-sheet" hidden>
-      <div class="sheet-head"><h2>装备</h2><button id="close-equip" type="button">x</button></div>
-      <div id="equipped-list" class="gear-cards"></div>
-      <div id="equip-list" class="results"></div>
-    </section>
-
-    <section id="bag-panel" class="sheet bag-sheet" hidden>
-      <div class="sheet-head"><h2>背包</h2><button id="close-bag" type="button">x</button></div>
-      <div id="bag-list" class="results"></div>
-    </section>
-
-    <section id="skill-panel" class="sheet skill-sheet" hidden>
-      <div class="sheet-head"><h2>法宝库</h2><button id="close-skill-panel" type="button">x</button></div>
-      <div id="skill-points" class="rates"></div>
-      <div id="skill-list" class="skill-list"></div>
     </section>
 
     <section id="evolution-panel" class="sheet evolution-sheet" hidden>
@@ -424,6 +431,15 @@ const skillPanel = document.querySelector<HTMLDivElement>('#skill-panel')!
 const closeSkillPanel = document.querySelector<HTMLButtonElement>('#close-skill-panel')!
 const skillPointsLabel = document.querySelector<HTMLDivElement>('#skill-points')!
 const skillList = document.querySelector<HTMLDivElement>('#skill-list')!
+const battleView = document.querySelector<HTMLElement>('#battle-view')!
+const navButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.bottom-nav button[data-page]'))
+const pagePanels: Record<AppPage, HTMLElement> = {
+  battle: battleView,
+  gacha: gachaPanel,
+  equip: equipPanel,
+  bag: bagPanel,
+  artifact: skillPanel,
+}
 const evolutionPanel = document.querySelector<HTMLDivElement>('#evolution-panel')!
 const evolutionList = document.querySelector<HTMLDivElement>('#evolution-list')!
 const guideTip = document.querySelector<HTMLDivElement>('#guide-tip')!
@@ -495,6 +511,7 @@ let moveTargetPulse = 0
 let lastCanvasTapAt = 0
 let dragMovePointer: number | null = null
 let selectedArtifactKey: ArtifactKey = 'slash'
+let activePage: AppPage = 'battle'
 
 const guideTexts = [
   '野外会自动沿世界地图前进，点击战斗画面可临时接管移动。',
@@ -4347,6 +4364,36 @@ function toast(text: string) {
   state.message = text
 }
 
+function prepareGachaPage() {
+  gateCore.classList.remove('opening')
+  const label = gateCore.querySelector('span')
+  if (label) label.textContent = '等待连接'
+  if (!pullResults.innerHTML.trim()) {
+    pullResults.innerHTML = '<div class="gacha-empty">星门尚未开启。抽卡券来自副本撤离和通关，可召回装备、角色碎片与修炼材料。</div>'
+  }
+}
+
+function showPage(page: AppPage) {
+  activePage = page
+  Object.entries(pagePanels).forEach(([key, panel]) => {
+    panel.hidden = key !== page
+  })
+  navButtons.forEach((button) => {
+    button.classList.toggle('active', button.dataset.page === page)
+  })
+  if (page === 'gacha') prepareGachaPage()
+  if (page === 'equip') {
+    renderEquipPanel()
+    advanceGuide(3)
+  }
+  if (page === 'bag') {
+    renderBagPanel()
+    advanceGuide(3)
+  }
+  if (page === 'artifact') renderSkillPanel()
+  updateHud()
+}
+
 function loop(now: number) {
   const dt = Math.min(0.033, (now - last) / 1000)
   last = now
@@ -4369,34 +4416,20 @@ function bindControls() {
   autoOrb.addEventListener('click', toggleAutoExplore)
   modeBtn.addEventListener('click', enterDungeon)
   loreBtn.addEventListener('click', () => { lorePanel.hidden = false })
-  gachaBtn.addEventListener('click', () => {
-    gachaPanel.hidden = false
-    gateCore.classList.remove('opening')
-    const label = gateCore.querySelector('span')
-    if (label) label.textContent = '等待连接'
-    pullResults.innerHTML = '<div class="gacha-empty">星门尚未开启。抽卡券来自副本撤离和通关，可召回装备、角色碎片与修炼材料。</div>'
-    updateHud()
+  gachaBtn.addEventListener('click', () => showPage('gacha'))
+  equipBtn.addEventListener('click', () => showPage('equip'))
+  bagBtn.addEventListener('click', () => showPage('bag'))
+  trainBtn.addEventListener('click', () => showPage('artifact'))
+  navButtons.forEach((button) => {
+    const page = button.dataset.page as AppPage | undefined
+    if (page === 'battle') button.addEventListener('click', () => showPage('battle'))
   })
-  equipBtn.addEventListener('click', () => {
-    renderEquipPanel()
-    equipPanel.hidden = false
-    advanceGuide(3)
-  })
-  bagBtn.addEventListener('click', () => {
-    renderBagPanel()
-    bagPanel.hidden = false
-    advanceGuide(3)
-  })
-  trainBtn.addEventListener('click', () => {
-    renderSkillPanel()
-    skillPanel.hidden = false
-  })
-  closeGacha.addEventListener('click', () => { gachaPanel.hidden = true })
+  closeGacha.addEventListener('click', () => { showPage('battle') })
   closeLore.addEventListener('click', () => { lorePanel.hidden = true })
   closeSettlement.addEventListener('click', () => { settlementPanel.hidden = true })
-  closeEquip.addEventListener('click', () => { equipPanel.hidden = true })
-  closeBag.addEventListener('click', () => { bagPanel.hidden = true })
-  closeSkillPanel.addEventListener('click', () => { skillPanel.hidden = true })
+  closeEquip.addEventListener('click', () => { showPage('battle') })
+  closeBag.addEventListener('click', () => { showPage('battle') })
+  closeSkillPanel.addEventListener('click', () => { showPage('battle') })
   pullOne.addEventListener('click', () => pull(1))
   pullTen.addEventListener('click', () => pull(10))
 }
@@ -4421,7 +4454,7 @@ function toggleAutoExplore() {
 }
 
 function setMoveTargetFromPointer(event: PointerEvent, allowDash: boolean) {
-  if (!gachaPanel.hidden || !equipPanel.hidden || !bagPanel.hidden || !skillPanel.hidden || !evolutionPanel.hidden || !settlementPanel.hidden || !lorePanel.hidden) return
+  if (activePage !== 'battle' || !evolutionPanel.hidden || !settlementPanel.hidden || !lorePanel.hidden) return
   const rect = canvas.getBoundingClientRect()
   const sx = ((event.clientX - rect.left) / rect.width) * canvas.width
   const sy = ((event.clientY - rect.top) / rect.height) * canvas.height

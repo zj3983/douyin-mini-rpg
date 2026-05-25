@@ -50,7 +50,7 @@ button:disabled {
   height: 100svh;
   max-height: 920px;
   display: grid;
-  grid-template-rows: 178px minmax(0, 1fr) 112px 90px;
+  grid-template-rows: 178px minmax(0, 1fr) 76px;
   overflow: hidden;
   border-inline: 1px solid rgba(148, 163, 184, 0.18);
   background: #08111b;
@@ -122,8 +122,37 @@ button:disabled {
   align-self: end;
 }
 
+.page-stack {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(34, 211, 238, 0.08), transparent 38%),
+    #07111a;
+}
+
+.page-view {
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+  scrollbar-color: rgba(94, 234, 212, 0.52) rgba(2, 6, 23, 0.42);
+  scrollbar-width: thin;
+  touch-action: pan-y;
+}
+
+.page-view[hidden] {
+  display: none !important;
+}
+
+.battle-view {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 112px 88px;
+  overflow: hidden;
+}
+
 .viewport-wrap {
   position: relative;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -131,6 +160,7 @@ canvas {
   width: 100%;
   height: 100%;
   display: block;
+  touch-action: none;
 }
 
 .guide-tip {
@@ -274,7 +304,7 @@ canvas {
   text-overflow: ellipsis;
 }
 
-.controls {
+.battle-actions {
   position: relative;
   display: grid;
   grid-template-columns: 76px minmax(0, 1fr);
@@ -283,6 +313,17 @@ canvas {
   padding: 7px 14px;
   background: rgba(2, 6, 23, 0.96);
   border-top: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.battle-actions #mode-btn {
+  min-height: 56px;
+  border-color: rgba(250, 204, 21, 0.34);
+  color: #fef3c7;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(250, 204, 21, 0.14), transparent 36%),
+    rgba(15, 23, 42, 0.88);
+  font-size: 16px;
+  font-weight: 1000;
 }
 
 .progress-panel {
@@ -400,16 +441,82 @@ canvas {
   color: #fecdd3;
 }
 
-.actions {
+.bottom-nav {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 5px;
+  padding: 7px 8px 8px;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(2, 6, 23, 0.98));
 }
 
-.actions button {
-  min-height: 32px;
-  padding: 0 6px;
+.bottom-nav button {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 3px;
+  min-width: 0;
+  min-height: 58px;
+  padding: 4px 2px;
+  border-color: rgba(148, 163, 184, 0.16);
+  border-radius: 13px;
+  color: #94a3b8;
+  background: rgba(15, 23, 42, 0.46);
+  font-size: 11px;
+}
+
+.bottom-nav button i {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  color: #cbd5e1;
+  background: rgba(2, 6, 23, 0.54);
   font-size: 14px;
+  font-style: normal;
+  font-weight: 1000;
+}
+
+.bottom-nav button span {
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bottom-nav button.active {
+  border-color: rgba(94, 234, 212, 0.52);
+  color: #ecfeff;
+  background:
+    radial-gradient(circle at 50% 20%, rgba(94, 234, 212, 0.22), transparent 42%),
+    rgba(8, 47, 73, 0.58);
+  box-shadow: 0 0 20px rgba(34, 211, 238, 0.14), inset 0 0 14px rgba(255, 255, 255, 0.04);
+}
+
+.bottom-nav button.active i {
+  color: #02111f;
+  background: linear-gradient(135deg, #5eead4, #fef3c7);
+}
+
+.page-sheet {
+  padding: 14px;
+  background:
+    radial-gradient(circle at 80% 0%, rgba(94, 234, 212, 0.1), transparent 30%),
+    rgba(2, 6, 23, 0.96);
+}
+
+.page-sheet .sheet-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding-bottom: 10px;
+  background: linear-gradient(180deg, rgba(2, 6, 23, 0.98), rgba(2, 6, 23, 0.86));
+}
+
+.page-close {
+  display: none;
 }
 
 .sheet {
@@ -2242,7 +2349,11 @@ canvas {
 
 @media (max-height: 760px) {
   .phone-shell {
-    grid-template-rows: 158px minmax(0, 1fr) 104px 82px;
+    grid-template-rows: 158px minmax(0, 1fr) 68px;
+  }
+
+  .battle-view {
+    grid-template-rows: minmax(0, 1fr) 104px 78px;
   }
 
   .topbar {
@@ -2283,7 +2394,7 @@ canvas {
     font-size: 9px;
   }
 
-  .controls {
+  .battle-actions {
     padding: 6px 12px;
   }
 
@@ -2292,8 +2403,22 @@ canvas {
     height: 68px;
   }
 
-  .actions button {
-    min-height: 32px;
+  .battle-actions #mode-btn {
+    min-height: 50px;
+  }
+
+  .bottom-nav {
+    padding: 5px 7px 6px;
+  }
+
+  .bottom-nav button {
+    min-height: 54px;
+  }
+
+  .bottom-nav button i {
+    width: 25px;
+    height: 25px;
+    font-size: 13px;
   }
 
   .sheet {
