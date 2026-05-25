@@ -57,7 +57,7 @@ interface StageTheme {
   enemyDark: string
   enemyNames: Record<EnemyKind, string>
 }
-interface EvolutionOption { id: string; iconId: string; title: string; desc: string; color: string; tier: EvolutionTier; mutation?: boolean; apply: () => void }
+interface EvolutionOption { id: string; iconId: string; iconHtml?: string; title: string; desc: string; color: string; tier: EvolutionTier; mutation?: boolean; apply: () => void }
 interface EvolutionTemplate { id: string; title: string; color: string; build: (rank: number, tier: EvolutionTier) => EvolutionOption }
 interface SaveData {
   hero: { x: number; y: number; hp: number; baseHp: number; level: number; exp: number; baseAtk: number; skillPower: number }
@@ -1142,7 +1142,7 @@ function initProfiles() {
 const guideTexts = [
   '野外会自动沿世界地图前进，点击战斗画面可临时接管移动。',
   '靠近敌人后角色会自动普攻；获得法宝后会自动释放对应仙术。',
-  '吸收魂质球升级，三选一获得进化卡。',
+  '吸收魂质球升级，从已获得法宝中三选一获得进化卡。',
   '抽卡券只从副本带出，星门补给主要召回角色碎片和装备。',
   '点击法宝，查看副本获得的焚海重尺、雷印、剑匣等自动仙术。',
   '每日 3 次副本入场，收集门钥碎片后找到撤离门带走收益。',
@@ -2920,7 +2920,32 @@ function tierRank(tier: EvolutionTier) {
   return tier === '高阶' ? 3 : tier === '进阶' ? 2 : 1
 }
 
+function artifactEvolutionTemplate(
+  key: ArtifactKey,
+  title: string,
+  desc: (power: number) => string,
+  apply: (power: number) => void,
+): EvolutionTemplate {
+  const def = artifactDefs[key]
+  return {
+    id: `artifact-${key}`,
+    title,
+    color: rarityColor[def.rarity],
+    build: (power, cardTier) => ({
+      id: `artifact-${key}`,
+      iconId: def.iconId,
+      iconHtml: artifactIcon(key),
+      title,
+      tier: cardTier,
+      color: rarityColor[def.rarity],
+      desc: `${def.name}：${desc(power)}`,
+      apply: () => apply(power),
+    }),
+  }
+}
+
 function evolutionRequiredArtifact(id: string): ArtifactKey | null {
+  if (id.startsWith('artifact-')) return id.replace('artifact-', '') as ArtifactKey
   if (id === 'blade' || id === 'mutate-ride') return 'slash'
   if (id === 'nova') return 'burst'
   if (id === 'chain' || id === 'mutate-thunder') return 'chain'
@@ -3225,12 +3250,79 @@ function evolutionOptions(): EvolutionOption[] {
       }),
     },
   ]
-  const availablePool = pool.filter((option) => {
+  const artifactGrowthPool: EvolutionTemplate[] = [
+    artifactEvolutionTemplate('slash', '重尺开锋', (power) => `重尺剑气 +${power}阶，飞剑攻击 +${power + 2}。`, (power) => {
+      empowerArtifact('slash', power)
+      state.hero.baseAtk += power + 2
+    }),
+    artifactEvolutionTemplate('burst', '镇海剑罡', (power) => `剑罡爆发 +${power}阶，法宝威力 +${power * 3}。`, (power) => {
+      empowerArtifact('burst', power)
+      state.hero.skillPower += power * 3
+      state.skillCd = Math.min(state.skillCd, 0.8)
+    }),
+    artifactEvolutionTemplate('chain', '九霄雷链', (power) => `引雷弹射 +${power}阶，法宝威力 +${power * 2}。`, (power) => {
+      empowerArtifact('chain', power)
+      state.hero.skillPower += power * 2
+      state.chainCd = 0
+    }),
+    artifactEvolutionTemplate('orbit', '剑匣环切', (power) => `护体剑阵 +${power}阶，飞剑攻击 +${power + 2}。`, (power) => {
+      empowerArtifact('orbit', power)
+      state.hero.baseAtk += power + 2
+      state.orbitCd = 0
+    }),
+    artifactEvolutionTemplate('flame', '莲火铺场', (power) => `莲火符海 +${power}阶，法宝威力 +${power * 3}。`, (power) => {
+      empowerArtifact('flame', power)
+      state.hero.skillPower += power * 3
+      state.flameCd = 0
+    }),
+    artifactEvolutionTemplate('regen', '回元灵潮', (power) => `回元瓶 +${power}阶，生命上限 +${power * 8}并恢复生命。`, (power) => {
+      empowerArtifact('regen', power)
+      state.hero.baseHp += power * 8
+      state.hero.hp = Math.min(maxHp(), state.hero.hp + maxHp() * 0.35)
+    }),
+    artifactEvolutionTemplate('bell', '镇魂护身', (power) => `镇魂铃 +${power}阶，生命上限 +${power * 12}。`, (power) => {
+      empowerArtifact('bell', power)
+      state.hero.baseHp += power * 12
+      state.hero.hp = maxHp()
+    }),
+    artifactEvolutionTemplate('needle', '破障银芒', (power) => `破障针 +${power}阶，基础攻击 +${power * 2}并重置普攻。`, (power) => {
+      empowerArtifact('needle', power)
+      state.hero.baseAtk += power * 2
+      state.attackCd = 0
+    }),
+    artifactEvolutionTemplate('mirror', '映魂破绽', (power) => `映魂镜 +${power}阶，法宝威力 +${power * 2}，精华 +${power}。`, (power) => {
+      empowerArtifact('mirror', power)
+      state.hero.skillPower += power * 2
+      state.skills.points += power
+    }),
+    artifactEvolutionTemplate('fan', '流云疾行', (power) => `御风扇 +${power}阶，御剑频率 +${power}。`, (power) => {
+      empowerArtifact('fan', power)
+      state.autoHaste += power
+      state.attackCd = 0
+    }),
+    artifactEvolutionTemplate('banner', '万魂归幡', (power) => `万魂幡 +${power}阶，法宝威力 +${power * 2}，抽卡券 +${power}。`, (power) => {
+      empowerArtifact('banner', power)
+      state.hero.skillPower += power * 2
+      state.tickets += power
+    }),
+    artifactEvolutionTemplate('seal', '镇界星纹', (power) => `镇界印 +${power}阶，攻击和生命同步提升。`, (power) => {
+      empowerArtifact('seal', power)
+      state.hero.baseAtk += power * 2
+      state.hero.baseHp += power * 10
+      state.hero.hp = maxHp()
+    }),
+  ]
+  const ownedArtifactGrowthPool = artifactGrowthPool.filter((option) => {
     const required = evolutionRequiredArtifact(option.id)
-    return !required || hasArtifact(required)
+    return required ? hasArtifact(required) : false
   })
-  const mutationPool = availablePool.filter((option) => option.id.startsWith('mutate-'))
-  const growthPool = availablePool.filter((option) => !option.id.startsWith('mutate-'))
+  const fallbackGrowthPool = pool.filter((option) => ['vital', 'magnet', 'ticket'].includes(option.id))
+  const mutationPool = pool.filter((option) => {
+    if (!option.id.startsWith('mutate-')) return false
+    const required = evolutionRequiredArtifact(option.id)
+    return required ? hasArtifact(required) : false
+  })
+  const growthPool = ownedArtifactGrowthPool.length >= 3 ? ownedArtifactGrowthPool : [...ownedArtifactGrowthPool, ...fallbackGrowthPool]
   const selected = [...shuffle(mutationPool).slice(0, 1), ...shuffle(growthPool).slice(0, 3)]
   return selected.slice(0, 3).map((option) => option.build(rank, tier))
 }
@@ -3285,12 +3377,14 @@ function openEvolutionPanel() {
     button.type = 'button'
     button.dataset.kind = option.id
     button.style.borderColor = option.color
-    button.innerHTML = `<i>${evolutionIcon(option.iconId)}</i><b>${option.title}</b><span>${option.desc}</span>${option.mutation ? '<em>质变</em>' : ''}`
+    button.style.setProperty('--card-accent', option.color)
+    button.style.setProperty('--card-glow', `color-mix(in srgb, ${option.color}, transparent 72%)`)
+    button.innerHTML = `<i>${option.iconHtml ?? evolutionIcon(option.iconId)}</i><b>${option.title}</b><span>${option.desc}</span>${option.mutation ? '<em>质变</em>' : ''}`
     button.addEventListener('click', () => chooseEvolution(option))
     evolutionList.appendChild(button)
   }
   evolutionPanel.hidden = false
-  toast(`魂质进化 Lv.${state.hero.level}：选择一个模板方向。`)
+  toast(`魂质进化 Lv.${state.hero.level}：选择一个法宝进化方向。`)
 }
 
 function chooseEvolution(option: EvolutionOption) {

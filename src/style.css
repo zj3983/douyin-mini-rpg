@@ -1438,6 +1438,13 @@ canvas {
   height: 31px;
 }
 
+.evolution-card i .artifact-art {
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 10px var(--card-glow, rgba(94, 234, 212, 0.22)));
+}
+
 .evolution-card b,
 .evolution-card span {
   display: block;
@@ -1556,6 +1563,15 @@ canvas {
   --card-icon-bg: rgba(136, 19, 55, 0.76);
   --card-text: #fecdd3;
   background: linear-gradient(135deg, rgba(76, 5, 25, 0.96), rgba(136, 19, 55, 0.72));
+}
+
+.evolution-card[data-kind^='artifact-'] {
+  --card-icon: #f8fafc;
+  --card-icon-bg: rgba(2, 6, 23, 0.66);
+  --card-text: #e0f2fe;
+  background:
+    radial-gradient(circle at 82% 18%, color-mix(in srgb, var(--card-accent, #5eead4), transparent 72%), transparent 30%),
+    linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(8, 47, 73, 0.76));
 }
 
 .evolution-card[data-kind^='mutate-'] {
