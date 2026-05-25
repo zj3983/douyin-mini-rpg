@@ -1766,7 +1766,7 @@ function renderBagPanel() {
   }
 }
 
-function renderSkillPanel() {
+function renderSkillPanel(focusDetail = false) {
   const ownedCount = artifactKeys.filter((key) => hasArtifact(key)).length
   const maxedCount = artifactKeys.filter((key) => hasArtifact(key) && artifactLevel(key) >= artifactDefs[key].max).length
   if (!artifactKeys.includes(selectedArtifactKey)) selectedArtifactKey = 'slash'
@@ -1776,43 +1776,6 @@ function renderSkillPanel() {
     <span>满阶 <b>${maxedCount}</b></span>
   `
   skillList.innerHTML = ''
-  artifactRarityOrder.forEach((rarity) => {
-    const groupKeys = artifactKeys.filter((key) => artifactDefs[key].rarity === rarity)
-    if (!groupKeys.length) return
-    const group = document.createElement('section')
-    group.className = 'artifact-rarity-group'
-    group.style.setProperty('--rarity-color', rarityColor[rarity])
-    const groupOwned = groupKeys.filter((key) => hasArtifact(key)).length
-    group.innerHTML = `<div class="artifact-rarity-head"><b>${rarity}</b><span>${groupOwned}/${groupKeys.length}</span></div>`
-    const switcher = document.createElement('div')
-    switcher.className = 'artifact-switch'
-    groupKeys.forEach((key) => {
-      const def = artifactDefs[key]
-      const owned = hasArtifact(key)
-      const level = artifactLevel(key)
-      const bonus = owned ? (activeCharacter().starter[key] ?? 0) : 0
-      const tab = document.createElement('button')
-      tab.type = 'button'
-      tab.dataset.artifact = key
-      tab.className = `artifact-tab ${selectedArtifactKey === key ? 'active' : ''} ${owned ? 'owned' : 'locked'}`
-      tab.style.setProperty('--item-color', def.color)
-      tab.style.setProperty('--rarity-color', rarityColor[def.rarity])
-      tab.innerHTML = `
-        <em>${def.rarity}</em>
-        <i>${artifactIcon(key)}</i>
-        <span>${def.name}</span>
-        <small>${owned ? `Lv.${Math.min(level, def.max)}${bonus > 0 ? `+${bonus}` : ''}` : '未获得'}</small>
-      `
-      tab.addEventListener('click', () => {
-        selectedArtifactKey = key
-        renderSkillPanel()
-      })
-      switcher.appendChild(tab)
-    })
-    group.appendChild(switcher)
-    skillList.appendChild(group)
-  })
-
   const def = artifactDefs[selectedArtifactKey]
   const owned = hasArtifact(selectedArtifactKey)
   const level = artifactLevel(selectedArtifactKey)
@@ -1852,6 +1815,45 @@ function renderSkillPanel() {
   action.addEventListener('click', () => upgradeSkill(selectedArtifactKey, def.max))
   detail.appendChild(action)
   skillList.appendChild(detail)
+
+  artifactRarityOrder.forEach((rarity) => {
+    const groupKeys = artifactKeys.filter((key) => artifactDefs[key].rarity === rarity)
+    if (!groupKeys.length) return
+    const group = document.createElement('section')
+    group.className = 'artifact-rarity-group'
+    group.style.setProperty('--rarity-color', rarityColor[rarity])
+    const groupOwned = groupKeys.filter((key) => hasArtifact(key)).length
+    group.innerHTML = `<div class="artifact-rarity-head"><b>${rarity}</b><span>${groupOwned}/${groupKeys.length}</span></div>`
+    const switcher = document.createElement('div')
+    switcher.className = 'artifact-switch'
+    groupKeys.forEach((key) => {
+      const def = artifactDefs[key]
+      const owned = hasArtifact(key)
+      const level = artifactLevel(key)
+      const bonus = owned ? (activeCharacter().starter[key] ?? 0) : 0
+      const tab = document.createElement('button')
+      tab.type = 'button'
+      tab.dataset.artifact = key
+      tab.className = `artifact-tab ${selectedArtifactKey === key ? 'active' : ''} ${owned ? 'owned' : 'locked'}`
+      tab.style.setProperty('--item-color', def.color)
+      tab.style.setProperty('--rarity-color', rarityColor[def.rarity])
+      tab.innerHTML = `
+        <em>${def.rarity}</em>
+        <i>${artifactIcon(key)}</i>
+        <span>${def.name}</span>
+        <small>${owned ? `Lv.${Math.min(level, def.max)}${bonus > 0 ? `+${bonus}` : ''}` : '未获得'}</small>
+      `
+      tab.addEventListener('click', () => {
+        selectedArtifactKey = key
+        renderSkillPanel(true)
+      })
+      switcher.appendChild(tab)
+    })
+    group.appendChild(switcher)
+    skillList.appendChild(group)
+  })
+
+  if (focusDetail) requestAnimationFrame(() => skillPanel.scrollTo({ top: 0, behavior: 'smooth' }))
 }
 
 function upgradeSkill(key: ArtifactKey, max: number) {
