@@ -2,13 +2,14 @@ import './style.css'
 
 type Rarity = '普通' | '稀有' | '史诗' | '传说'
 type Mode = 'wild' | 'dungeon'
-type AppPage = 'battle' | 'gacha' | 'equip' | 'bag' | 'artifact'
+type AppPage = 'battle' | 'dungeon' | 'gacha' | 'equip' | 'bag' | 'artifact'
 type Slot = 'weapon' | 'armor' | 'core'
 type AttackSource = 'manual' | 'auto' | 'skill'
 type EvolutionTier = '初阶' | '进阶' | '高阶'
 type EnemyKind = 'slime' | 'bat' | 'wolf' | 'crystal' | 'warden'
 type CharacterId = 'sword' | 'thunder' | 'flame' | 'wood'
 type ArtifactKey = 'slash' | 'burst' | 'regen' | 'chain' | 'orbit' | 'flame'
+type DungeonId = 'mossCave' | 'starHall' | 'mistMaze' | 'crystalMine' | 'bloodRift' | 'kingTomb'
 
 interface Vec { x: number; y: number }
 interface Enemy extends Vec { id: number; hp: number; maxHp: number; speed: number; elite: boolean; kind: EnemyKind; boss?: boolean; hit: number }
@@ -24,6 +25,23 @@ interface SkillTree { slash: number; burst: number; regen: number; chain: number
 interface MutationTree { swordRide: number; thunderFork: number; swordDomain: number; flameLotus: number }
 interface CharacterDef { id: CharacterId; name: string; title: string; need: number; color: string; portrait: string; battle: string; starter: Partial<SkillTree>; desc: string }
 interface ArtifactDef { key: ArtifactKey; name: string; type: string; color: string; rarity: Rarity; iconId: string; image: string; desc: string; source: string; max: number }
+interface DungeonDef {
+  id: DungeonId
+  name: string
+  subtitle: string
+  themeIndex: number
+  unlockLevel: number
+  timeLimit: number
+  killGoal: number
+  materialGoal: number
+  ticketBonus: number
+  expBonus: number
+  skillBonus: number
+  artifactFocus: ArtifactKey[]
+  trait: string
+  threat: string
+  color: string
+}
 interface StageTheme {
   name: string
   subtitle: string
@@ -65,6 +83,7 @@ interface SaveData {
   ownedCharacters?: CharacterId[]
   characterShards?: Partial<Record<CharacterId, number>>
   artifacts?: Partial<Record<ArtifactKey, number>>
+  activeDungeon?: DungeonId
 }
 
 interface PlayerProfile {
@@ -203,6 +222,111 @@ const stageThemes: StageTheme[] = [
 ]
 const stageNames = stageThemes.map((theme) => theme.name)
 
+const dungeonDefs: DungeonDef[] = [
+  {
+    id: 'mossCave',
+    name: '灵根洞天',
+    subtitle: '青苔丘陵下的初阶灵脉',
+    themeIndex: 0,
+    unlockLevel: 1,
+    timeLimit: 150,
+    killGoal: 10,
+    materialGoal: 3,
+    ticketBonus: 4,
+    expBonus: 30,
+    skillBonus: 2,
+    artifactFocus: ['slash', 'regen'],
+    trait: '门钥碎片多，适合新手撤离。',
+    threat: '灵草傀和青苔兽',
+    color: '#5eead4',
+  },
+  {
+    id: 'starHall',
+    name: '废阵回廊',
+    subtitle: '残星哨站遗留的破碎阵心',
+    themeIndex: 1,
+    unlockLevel: 8,
+    timeLimit: 140,
+    killGoal: 12,
+    materialGoal: 4,
+    ticketBonus: 7,
+    expBonus: 48,
+    skillBonus: 3,
+    artifactFocus: ['chain', 'burst'],
+    trait: '抽卡券收益更高，怪潮更密。',
+    threat: '裂隙飞魇和星核晶卫',
+    color: '#38bdf8',
+  },
+  {
+    id: 'mistMaze',
+    name: '迷灯幻境',
+    subtitle: '雾灯林道深处的移动幻阵',
+    themeIndex: 2,
+    unlockLevel: 14,
+    timeLimit: 135,
+    killGoal: 13,
+    materialGoal: 4,
+    ticketBonus: 6,
+    expBonus: 66,
+    skillBonus: 4,
+    artifactFocus: ['orbit', 'regen'],
+    trait: '法宝精华更多，撤离门距离更远。',
+    threat: '雾翅妖蝠和司命幻影',
+    color: '#99f6e4',
+  },
+  {
+    id: 'crystalMine',
+    name: '地心晶窟',
+    subtitle: '晶脉矿坑坍塌后的妖晶巢',
+    themeIndex: 3,
+    unlockLevel: 22,
+    timeLimit: 130,
+    killGoal: 14,
+    materialGoal: 5,
+    ticketBonus: 8,
+    expBonus: 86,
+    skillBonus: 5,
+    artifactFocus: ['burst', 'orbit'],
+    trait: '精英比例更高，通关更容易出史诗法宝。',
+    threat: '晶甲妖兽和紫晶镇守',
+    color: '#c084fc',
+  },
+  {
+    id: 'bloodRift',
+    name: '血月断层',
+    subtitle: '裂隙前线燃烧的血月战场',
+    themeIndex: 4,
+    unlockLevel: 34,
+    timeLimit: 125,
+    killGoal: 15,
+    materialGoal: 5,
+    ticketBonus: 9,
+    expBonus: 112,
+    skillBonus: 6,
+    artifactFocus: ['flame', 'slash'],
+    trait: '怪物压迫最强，莲火和重尺掉落权重更高。',
+    threat: '血牙魔狼和裂隙守门人',
+    color: '#fb7185',
+  },
+  {
+    id: 'kingTomb',
+    name: '铜阙墓道',
+    subtitle: '古王庭外环沉睡的王庭秘藏',
+    themeIndex: 5,
+    unlockLevel: 48,
+    timeLimit: 120,
+    killGoal: 16,
+    materialGoal: 6,
+    ticketBonus: 12,
+    expBonus: 150,
+    skillBonus: 8,
+    artifactFocus: ['flame', 'orbit', 'chain'],
+    trait: '高阶副本，通关结算奖励最高。',
+    threat: '铜甲影卫和古庭镇灵',
+    color: '#fbbf24',
+  },
+]
+
 const characters: Record<CharacterId, CharacterDef> = {
   sword: { id: 'sword', name: '青岚剑修', title: '剑匣亲和 / 重尺成长', need: 20, color: '#67e8f9', portrait: '/assets/generated/portrait-sword.png', battle: '/assets/generated/character-sword.png', starter: { slash: 2, orbit: 1 }, desc: '获得剑类法宝后亲和更高，普攻距离和剑阵成长更快。' },
   thunder: { id: 'thunder', name: '九霄雷使', title: '雷印亲和 / 群怪压制', need: 30, color: '#38bdf8', portrait: '/assets/generated/portrait-thunder.png', battle: '/assets/generated/character-thunder.png', starter: { chain: 3, burst: 1 }, desc: '获得雷印法宝后弹射更强，适合处理密集怪潮。' },
@@ -256,6 +380,7 @@ const state = {
   skills: { slash: 0, burst: 0, regen: 0, chain: 0, orbit: 0, flame: 0, points: 0 } as SkillTree,
   artifacts: { ...baseArtifacts },
   mutations: { ...baseMutations },
+  activeDungeon: 'mossCave' as DungeonId,
   activeCharacter: 'sword' as CharacterId,
   ownedCharacters: ['sword'] as CharacterId[],
   characterShards: { ...baseCharacterShards },
@@ -344,6 +469,19 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         </section>
       </section>
 
+      <section id="dungeon-panel" class="page-view page-sheet dungeon-sheet" data-page="dungeon" hidden>
+      <div class="sheet-head dungeon-head">
+        <div><h2>秘境副本</h2><small id="dungeon-entry-summary">入场 3/3</small></div>
+        <button id="close-dungeon" class="page-close" type="button">x</button>
+      </div>
+      <div class="dungeon-brief">
+        <small>每日入场次数共享</small>
+        <b>选择秘境，带回抽卡券、法宝和材料</b>
+        <span id="dungeon-brief-copy">副本需要收集门钥碎片，找到撤离门后才能安全带走收益。</span>
+      </div>
+      <div id="dungeon-list" class="dungeon-list"></div>
+    </section>
+
       <section id="gacha-panel" class="page-view page-sheet gacha-sheet" data-page="gacha" hidden>
       <div class="sheet-head"><h2>星门补给</h2><button id="close-gacha" class="page-close" type="button">x</button></div>
       <div class="gacha-stage">
@@ -385,6 +523,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 
     <nav class="bottom-nav" aria-label="主导航">
       <button id="battle-btn" class="active" type="button" data-page="battle"><i>战</i><span>战斗</span></button>
+      <button id="dungeon-btn" type="button" data-page="dungeon"><i>境</i><span>副本</span></button>
       <button id="gacha-btn" type="button" data-page="gacha"><i>召</i><span>抽卡</span></button>
       <button id="equip-btn" type="button" data-page="equip"><i>装</i><span>装备</span></button>
       <button id="bag-btn" type="button" data-page="bag"><i>囊</i><span>背包</span></button>
@@ -447,6 +586,7 @@ const ctx = canvas.getContext('2d')!
 const autoOrb = document.querySelector<HTMLDivElement>('#auto-orb')!
 const autoOrbLabel = document.querySelector<HTMLSpanElement>('#auto-orb-label')!
 const modeBtn = document.querySelector<HTMLButtonElement>('#mode-btn')!
+const dungeonBtn = document.querySelector<HTMLButtonElement>('#dungeon-btn')!
 const gachaBtn = document.querySelector<HTMLButtonElement>('#gacha-btn')!
 const equipBtn = document.querySelector<HTMLButtonElement>('#equip-btn')!
 const bagBtn = document.querySelector<HTMLButtonElement>('#bag-btn')!
@@ -467,6 +607,11 @@ const closeLore = document.querySelector<HTMLButtonElement>('#close-lore')!
 const settlementPanel = document.querySelector<HTMLDivElement>('#settlement-panel')!
 const settlementResults = document.querySelector<HTMLDivElement>('#settlement-results')!
 const closeSettlement = document.querySelector<HTMLButtonElement>('#close-settlement')!
+const dungeonPanel = document.querySelector<HTMLDivElement>('#dungeon-panel')!
+const closeDungeon = document.querySelector<HTMLButtonElement>('#close-dungeon')!
+const dungeonList = document.querySelector<HTMLDivElement>('#dungeon-list')!
+const dungeonEntrySummary = document.querySelector<HTMLElement>('#dungeon-entry-summary')!
+const dungeonBriefCopy = document.querySelector<HTMLElement>('#dungeon-brief-copy')!
 const equipPanel = document.querySelector<HTMLDivElement>('#equip-panel')!
 const closeEquip = document.querySelector<HTMLButtonElement>('#close-equip')!
 const bagPanel = document.querySelector<HTMLDivElement>('#bag-panel')!
@@ -482,6 +627,7 @@ const battleView = document.querySelector<HTMLElement>('#battle-view')!
 const navButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.bottom-nav button[data-page]'))
 const pagePanels: Record<AppPage, HTMLElement> = {
   battle: battleView,
+  dungeon: dungeonPanel,
   gacha: gachaPanel,
   equip: equipPanel,
   bag: bagPanel,
@@ -865,6 +1011,7 @@ function resetRuntimeState() {
   state.skills = { slash: 0, burst: 0, regen: 0, chain: 0, orbit: 0, flame: 0, points: 0 }
   state.artifacts = { ...baseArtifacts }
   state.mutations = { ...baseMutations }
+  state.activeDungeon = 'mossCave'
   state.activeCharacter = 'sword'
   state.ownedCharacters = ['sword']
   state.characterShards = { ...baseCharacterShards }
@@ -1014,6 +1161,7 @@ function loadGame() {
       })
     }
     state.mutations = { ...baseMutations, ...(save.mutations ?? {}) }
+    state.activeDungeon = dungeonDefs.some((dungeon) => dungeon.id === save.activeDungeon) ? save.activeDungeon! : 'mossCave'
     state.activeCharacter = save.activeCharacter ?? 'sword'
     state.ownedCharacters = save.ownedCharacters?.length ? save.ownedCharacters : ['sword']
     state.characterShards = { ...baseCharacterShards, ...(save.characterShards ?? {}) }
@@ -1053,6 +1201,7 @@ function saveGame() {
     skills: state.skills,
     artifacts: state.artifacts,
     mutations: state.mutations,
+    activeDungeon: state.activeDungeon,
     kills: state.kills,
     tickets: state.tickets,
     dungeonEntries: state.dungeonEntries,
@@ -1380,6 +1529,65 @@ function artifactIcon(key: ArtifactKey) {
   return `<img class="artifact-art" src="${def.image}" alt="">`
 }
 
+function renderDungeonPanel() {
+  dungeonEntrySummary.textContent = `入场 ${state.dungeonEntries}/3 | 当前 Lv.${state.hero.level}`
+  dungeonBriefCopy.textContent = state.mode === 'dungeon'
+    ? `正在挑战 ${activeDungeonDef().name}，回到战斗页可继续探索或靠近撤离门。`
+    : '副本会消耗每日入场次数；收集门钥碎片后找到撤离门，才能带走抽卡券和法宝。'
+  dungeonList.innerHTML = ''
+  dungeonDefs.forEach((dungeon) => {
+    const theme = stageThemes[dungeon.themeIndex] ?? stageThemes[0]
+    const locked = state.hero.level < dungeon.unlockLevel
+    const active = state.activeDungeon === dungeon.id
+    const card = document.createElement('article')
+    card.className = `dungeon-card ${active ? 'active' : ''} ${locked ? 'locked' : ''}`
+    card.style.setProperty('--dungeon-color', dungeon.color)
+    card.style.setProperty('--dungeon-bg', theme.ground)
+    const drops = dungeon.artifactFocus
+      .map((key) => `<span style="--item-color:${artifactDefs[key].color}">${artifactIcon(key)}<b>${artifactDefs[key].name}</b></span>`)
+      .join('')
+    card.innerHTML = `
+      <div class="dungeon-card-art">
+        <i></i><em>${locked ? `Lv.${dungeon.unlockLevel}` : '可进入'}</em>
+      </div>
+      <div class="dungeon-card-main">
+        <small>${theme.name} | ${dungeon.threat}</small>
+        <b>${dungeon.name}</b>
+        <p>${dungeon.subtitle}</p>
+      </div>
+      <div class="dungeon-stats">
+        <span><small>时间</small><b>${dungeon.timeLimit}s</b></span>
+        <span><small>目标</small><b>${dungeon.killGoal}怪</b></span>
+        <span><small>门钥</small><b>${dungeon.materialGoal}</b></span>
+      </div>
+      <div class="dungeon-drop-row">${drops}</div>
+      <p class="dungeon-trait">${dungeon.trait}</p>
+    `
+    const action = document.createElement('button')
+    action.type = 'button'
+    action.className = 'dungeon-enter'
+    action.disabled = locked || state.dungeonEntries <= 0 || state.mode === 'dungeon'
+    action.textContent = state.mode === 'dungeon'
+      ? '挑战中'
+      : locked
+        ? `Lv.${dungeon.unlockLevel} 解锁`
+        : state.dungeonEntries <= 0
+          ? '次数不足'
+          : '进入副本'
+    action.addEventListener('click', (event) => {
+      event.stopPropagation()
+      enterDungeon(dungeon.id)
+    })
+    card.append(action)
+    card.addEventListener('click', () => {
+      state.activeDungeon = dungeon.id
+      saveGame()
+      renderDungeonPanel()
+    })
+    dungeonList.append(card)
+  })
+}
+
 function renderEquipPanel() {
   equippedList.innerHTML = ''
   const active = activeCharacter()
@@ -1634,8 +1842,11 @@ function cloneReward(item: Reward): Reward {
 }
 
 function rollArtifactReward(): Reward {
-  const stage = worldStageNo()
+  const stage = state.mode === 'dungeon' ? Math.max(1, Math.ceil(activeDungeonDef().unlockLevel / 8)) : worldStageNo()
   const candidates: ArtifactKey[] = ['slash', 'regen']
+  if (state.mode === 'dungeon') {
+    candidates.push(...activeDungeonDef().artifactFocus)
+  }
   if (stage >= 2 || state.mode === 'dungeon') candidates.push('chain', 'burst')
   if (stage >= 3 || Math.random() < 0.45) candidates.push('orbit')
   if (stage >= 4 || Math.random() < 0.38) candidates.push('flame')
@@ -1650,7 +1861,7 @@ function rollDungeonDrop(): Reward {
 
 function chooseEnemyKind(elite: boolean): EnemyKind {
   if (elite && Math.random() < 0.34) return 'crystal'
-  const stage = worldStageNo()
+  const stage = state.mode === 'dungeon' ? Math.max(1, Math.ceil(activeDungeonDef().unlockLevel / 8)) : worldStageNo()
   const pool: EnemyKind[] = ['slime']
   if (stage >= 2 || state.mode === 'dungeon') pool.push('bat')
   if (stage >= 3) pool.push('wolf')
@@ -1792,10 +2003,11 @@ function damageEnemy(enemy: Enemy, amount: number) {
 }
 
 function completeDungeon() {
+  const dungeon = activeDungeonDef()
   const kills = Math.max(0, state.kills - state.dungeonStartKills)
-  const ticketReward = state.dungeonLootTickets + 4 + Math.floor(kills / 4)
-  const expReward = state.dungeonLootExp + 30 + kills * 3
-  const skillReward = state.dungeonLootSkill + 2 + Math.floor(kills / 6)
+  const ticketReward = state.dungeonLootTickets + dungeon.ticketBonus + Math.floor(kills / 4)
+  const expReward = state.dungeonLootExp + dungeon.expBonus + kills * 3
+  const skillReward = state.dungeonLootSkill + dungeon.skillBonus + Math.floor(kills / 6)
   const bossDrop = rollDungeonDrop()
   sfx.level()
   flashScreen('rgba(250,204,21,.26)', 0.22, 0.28)
@@ -1809,14 +2021,15 @@ function completeDungeon() {
 
   state.lastSettlement = `击杀 ${kills} | 抽卡券 +${ticketReward} | 经验 +${expReward} | 法宝精华 +${skillReward} | Boss 掉落：${bossDrop.name}`
   renderSettlement({
-    result: '副本通关',
-    subtitle: 'Boss 已击破，战利品已同步回主世界线',
+    result: `${dungeon.name}通关`,
+    subtitle: `${dungeon.subtitle}已稳定，战利品已同步回主世界线`,
     rank: dungeonRank(kills, true, true),
     tone: 'clear',
     kills,
     rewards: { tickets: ticketReward, exp: expReward, skill: skillReward },
     lines: [
       `门钥碎片：${state.dungeonMaterials}/${state.dungeonMaterialGoal}`,
+      `秘境特性：${dungeon.trait}`,
       `Boss 掉落：${bossDrop.rarity} ${bossDrop.name}`,
       `结算方式：击败守门人后自动带回全部收益`,
     ],
@@ -1827,6 +2040,7 @@ function completeDungeon() {
 }
 
 function extractDungeon() {
+  const dungeon = activeDungeonDef()
   if (!state.dungeonGateFound) {
     toast(`撤离门未定位，先收集门钥碎片 ${state.dungeonMaterials}/${state.dungeonMaterialGoal}。`)
     return
@@ -1850,14 +2064,15 @@ function extractDungeon() {
   if (extractDrop) acceptReward(extractDrop)
 
   renderSettlement({
-    result: '撤离成功',
-    subtitle: '你在裂隙坍塌前带走了携带战利品',
+    result: `${dungeon.name}撤离`,
+    subtitle: '你在秘境坍塌前带走了携带战利品',
     rank: dungeonRank(kills, true, false),
     tone: 'extract',
     kills,
     rewards: { tickets: ticketReward, exp: expReward, skill: skillReward },
     lines: [
       `门钥碎片：${state.dungeonMaterials}/${state.dungeonMaterialGoal}`,
+      `当前秘境：${dungeon.subtitle}`,
       `撤离距离：已抵达撤离门`,
       extractDrop ? `撤离搜获：${extractDrop.rarity} ${extractDrop.name}` : '撤离搜获：未发现完整法宝',
       ticketReward + expReward + skillReward > 0 ? '携带收益已全部入账' : '本次携带收益较少，建议多刷几波再撤离',
@@ -1869,11 +2084,12 @@ function extractDungeon() {
 }
 
 function failDungeon(reason: string) {
+  const dungeon = activeDungeonDef()
   const kills = Math.max(0, state.kills - state.dungeonStartKills)
   sfx.hit(1.4, true)
   flashScreen('rgba(251,113,133,.22)', 0.18, 0.2)
   renderSettlement({
-    result: '撤离失败',
+    result: `${dungeon.name}失败`,
     subtitle: '副本空间坍塌，未撤出的携带收益已遗失',
     rank: 'D',
     tone: 'fail',
@@ -2235,24 +2451,33 @@ function levelUpSoul() {
   updateHud()
 }
 
-function enterDungeon() {
+function enterDungeon(dungeonId: DungeonId = state.activeDungeon) {
   if (state.mode === 'dungeon') {
     extractDungeon()
     return
   }
-  if (state.dungeonEntries <= 0) {
-    toast('今日副本入场次数已用完，明天刷新 3 次。')
+  const dungeon = dungeonDefs.find((item) => item.id === dungeonId) ?? dungeonDefs[0]
+  if (state.hero.level < dungeon.unlockLevel) {
+    toast(`需要 Lv.${dungeon.unlockLevel} 才能进入 ${dungeon.name}。`)
+    updateHud()
     return
   }
+  if (state.dungeonEntries <= 0) {
+    toast('今日副本入场次数已用完，明天刷新 3 次。')
+    updateHud()
+    return
+  }
+  state.activeDungeon = dungeon.id
   state.dungeonEntries -= 1
   state.mode = 'dungeon'
   state.enemies = []
   state.soulOrbs = []
-  state.dungeonTime = 150
+  state.dungeonTime = dungeon.timeLimit
   state.dungeonStartKills = state.kills
-  state.dungeonGoal = state.kills + 10
+  state.dungeonGoal = state.kills + dungeon.killGoal
+  state.dungeonMaterialGoal = dungeon.materialGoal
   const extractAngle = Math.random() * Math.PI * 2
-  const extractDistance = 280 + Math.random() * 180
+  const extractDistance = 280 + Math.random() * 180 + Math.max(0, dungeon.materialGoal - 3) * 22
   state.dungeonExtractX = state.hero.x + (Math.cos(extractAngle) < 0 ? -1 : 1) * extractDistance
   state.dungeonExtractY = state.hero.y
   state.dungeonLootTickets = 0
@@ -2264,8 +2489,9 @@ function enterDungeon() {
   state.bossSpawned = false
   sfx.gacha(3)
   flashScreen('rgba(56,189,248,.18)', 0.16, 0.2)
-  toast(`副本开启：剩余入场 ${state.dungeonEntries}/3。收集门钥碎片，撤离带走抽卡券和法宝。`)
+  toast(`${dungeon.name}开启：剩余入场 ${state.dungeonEntries}/3。收集门钥碎片，撤离带走抽卡券和法宝。`)
   advanceGuide(4)
+  showPage('battle')
   saveGame()
 }
 
@@ -3239,12 +3465,20 @@ function stageTheme(no = worldStageNo()): StageTheme {
   return stageThemes[(no - 1) % stageThemes.length]
 }
 
+function activeDungeonDef() {
+  return dungeonDefs.find((dungeon) => dungeon.id === state.activeDungeon) ?? dungeonDefs[0]
+}
+
 function activeStageTheme(): StageTheme {
+  if (state.mode === 'dungeon') {
+    return stageThemes[activeDungeonDef().themeIndex] ?? stageThemes[0]
+  }
   return stageTheme(worldStageNo())
 }
 
 function dungeonStageTitle() {
-  return activeStageTheme().dungeon
+  const dungeon = activeDungeonDef()
+  return `${dungeon.name}·${dungeon.subtitle}`
 }
 
 function darkenHex(hex: string, amount: number) {
@@ -4927,16 +5161,18 @@ function updateHud() {
   const extractDistance = state.dungeonGateFound
     ? Math.round(Math.hypot(state.hero.x - state.dungeonExtractX, state.hero.y - state.dungeonExtractY))
     : 0
+  const dungeon = activeDungeonDef()
+  const dungeonKills = Math.max(0, state.kills - state.dungeonStartKills)
   const dungeonProgress = state.mode === 'dungeon'
     ? state.bossSpawned
       ? `Boss 战 | 碎片 ${state.dungeonMaterials}/${state.dungeonMaterialGoal} | 携带 券${state.dungeonLootTickets}/经${state.dungeonLootExp}/精${state.dungeonLootSkill} | ${state.dungeonGateFound ? `撤离 ${extractDistance}m` : '找门'}`
-      : `清怪 ${Math.max(0, state.kills - state.dungeonStartKills)}/10 | 碎片 ${state.dungeonMaterials}/${state.dungeonMaterialGoal} | 携带 券${state.dungeonLootTickets}/经${state.dungeonLootExp}/精${state.dungeonLootSkill} | ${state.dungeonGateFound ? `撤离 ${extractDistance}m` : '找门'}`
+      : `清怪 ${dungeonKills}/${dungeon.killGoal} | 碎片 ${state.dungeonMaterials}/${state.dungeonMaterialGoal} | 携带 券${state.dungeonLootTickets}/经${state.dungeonLootExp}/精${state.dungeonLootSkill} | ${state.dungeonGateFound ? `撤离 ${extractDistance}m` : '找门'}`
     : ''
   setText('quest-label', dungeonProgress || (state.questClaimed ? `当前：第${currentStage}关 ${worldStageTitle(currentStage)}，每日副本 ${state.dungeonEntries}/3，进副本拿抽卡券和法宝` : `当前：第${currentStage}关 ${worldStageTitle(currentStage)} | 任务击杀 ${Math.min(state.kills, state.questTarget)}/${state.questTarget}`))
   const artifactCount = artifactKeys.filter((key) => hasArtifact(key)).length
   setText('gear-label', `法宝 ${artifactCount}/${artifactKeys.length} | 精华 ${state.skills.points} | 质变：${mutationSummary()} | 装备：${state.gear.weapon?.name ?? '无武器'} | ${state.gear.armor?.name ?? '无护甲'} | ${state.gear.core?.name ?? '无核心'}`)
   document.querySelector<HTMLElement>('#hp-bar')!.style.width = `${Math.max(0, state.hero.hp / maxHp()) * 100}%`
-  modeBtn.textContent = state.mode === 'dungeon' ? '撤离' : `副本券 ${state.dungeonEntries}/3`
+  modeBtn.textContent = state.mode === 'dungeon' ? '撤离' : '选择副本'
   autoOrb.classList.toggle('manual', !!moveTarget)
   autoOrb.classList.toggle('paused', state.mode === 'wild' && !state.autoExplore && !moveTarget)
   autoOrbLabel.innerHTML = moveTarget ? '手动<br>目标' : state.mode === 'dungeon' ? '副本<br>探索' : state.autoExplore ? '自动<br>推进' : '暂停<br>推进'
@@ -4945,6 +5181,7 @@ function updateHud() {
   gachaTicketCount.textContent = String(state.tickets)
   gachaPityCount.textContent = `${Math.min(state.pity, 10)}/10`
   gachaPityBar.style.width = `${Math.min(100, state.pity * 10)}%`
+  if (!dungeonPanel.hidden) renderDungeonPanel()
   if (!equipPanel.hidden) renderEquipPanel()
   if (!bagPanel.hidden) renderBagPanel()
   if (!skillPanel.hidden) renderSkillPanel()
@@ -4976,6 +5213,7 @@ function showPage(page: AppPage) {
     button.classList.toggle('active', button.dataset.page === page)
   })
   if (page === 'gacha') prepareGachaPage()
+  if (page === 'dungeon') renderDungeonPanel()
   if (page === 'equip') {
     renderEquipPanel()
     advanceGuide(3)
@@ -5011,7 +5249,10 @@ function bindControls() {
   canvas.addEventListener('pointerup', () => { dragMovePointer = null })
   canvas.addEventListener('pointercancel', () => { dragMovePointer = null })
   autoOrb.addEventListener('click', toggleAutoExplore)
-  modeBtn.addEventListener('click', enterDungeon)
+  modeBtn.addEventListener('click', () => {
+    if (state.mode === 'dungeon') enterDungeon()
+    else showPage('dungeon')
+  })
   profileBtn.addEventListener('click', () => showProfilePanel(false))
   closeProfile.addEventListener('click', () => { if (activeProfile) profilePanel.hidden = true })
   profileSwitch.addEventListener('click', () => showProfilePanel(true))
@@ -5042,6 +5283,7 @@ function bindControls() {
     activateProfile(profile.id)
   })
   loreBtn.addEventListener('click', () => { lorePanel.hidden = false })
+  dungeonBtn.addEventListener('click', () => showPage('dungeon'))
   gachaBtn.addEventListener('click', () => showPage('gacha'))
   equipBtn.addEventListener('click', () => showPage('equip'))
   bagBtn.addEventListener('click', () => showPage('bag'))
@@ -5051,6 +5293,7 @@ function bindControls() {
     if (page === 'battle') button.addEventListener('click', () => showPage('battle'))
   })
   closeGacha.addEventListener('click', () => { showPage('battle') })
+  closeDungeon.addEventListener('click', () => { showPage('battle') })
   closeLore.addEventListener('click', () => { lorePanel.hidden = true })
   closeSettlement.addEventListener('click', () => { settlementPanel.hidden = true })
   closeEquip.addEventListener('click', () => { showPage('battle') })

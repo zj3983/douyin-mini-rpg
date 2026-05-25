@@ -654,7 +654,7 @@ canvas {
 
 .bottom-nav {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 5px;
   padding: 7px 8px 8px;
   border-top: 1px solid rgba(148, 163, 184, 0.18);
@@ -728,6 +728,268 @@ canvas {
 
 .page-close {
   display: none;
+}
+
+.dungeon-sheet {
+  background:
+    radial-gradient(circle at 20% 0%, rgba(250, 204, 21, 0.14), transparent 32%),
+    radial-gradient(circle at 86% 8%, rgba(94, 234, 212, 0.14), transparent 30%),
+    linear-gradient(180deg, rgba(7, 18, 31, 0.98), rgba(2, 6, 23, 0.98));
+}
+
+.dungeon-head h2 {
+  margin: 0;
+}
+
+.dungeon-head small {
+  display: block;
+  margin-top: 3px;
+  color: #93c5fd;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.dungeon-brief {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  overflow: hidden;
+  padding: 13px 14px;
+  border: 1px solid rgba(250, 204, 21, 0.28);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 86% 20%, rgba(250, 204, 21, 0.18), transparent 28%),
+    linear-gradient(135deg, rgba(8, 47, 73, 0.74), rgba(15, 23, 42, 0.86));
+}
+
+.dungeon-brief::after {
+  content: '';
+  position: absolute;
+  right: 10px;
+  bottom: -78px;
+  width: 132px;
+  height: 132px;
+  border: 1px solid rgba(94, 234, 212, 0.2);
+  border-radius: 999px;
+  box-shadow: inset 0 0 30px rgba(94, 234, 212, 0.08);
+}
+
+.dungeon-brief small,
+.dungeon-brief b,
+.dungeon-brief span {
+  position: relative;
+  z-index: 1;
+}
+
+.dungeon-brief small {
+  color: #fef3c7;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.dungeon-brief b {
+  color: #f8fafc;
+  font-size: 18px;
+}
+
+.dungeon-brief span {
+  color: #cbd5e1;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.dungeon-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+  padding-bottom: 14px;
+}
+
+.dungeon-card {
+  --dungeon-color: #5eead4;
+  position: relative;
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  gap: 10px 12px;
+  overflow: hidden;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--dungeon-color), transparent 54%);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--dungeon-color), transparent 78%), transparent 34%),
+    linear-gradient(135deg, color-mix(in srgb, var(--dungeon-bg, #0f172a), #020617 38%), rgba(2, 6, 23, 0.9));
+  box-shadow: inset 0 0 24px rgba(255, 255, 255, 0.03);
+}
+
+.dungeon-card.active {
+  box-shadow: 0 0 28px color-mix(in srgb, var(--dungeon-color), transparent 86%), inset 0 0 24px rgba(255, 255, 255, 0.04);
+}
+
+.dungeon-card.locked {
+  filter: saturate(0.62);
+  opacity: 0.72;
+}
+
+.dungeon-card-art {
+  position: relative;
+  grid-row: 1 / 3;
+  min-height: 112px;
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.16);
+  border-radius: 13px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--dungeon-color), transparent 82%), transparent),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.07) 0 1px, transparent 1px 18px),
+    rgba(2, 6, 23, 0.48);
+}
+
+.dungeon-card-art i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 58px;
+  height: 92px;
+  border: 2px solid color-mix(in srgb, var(--dungeon-color), white 12%);
+  border-radius: 999px 999px 12px 12px;
+  transform: translate(-50%, -50%) rotate(12deg);
+  background:
+    radial-gradient(circle at 50% 24%, rgba(255, 255, 255, 0.34), transparent 14%),
+    radial-gradient(circle at 50% 58%, color-mix(in srgb, var(--dungeon-color), transparent 36%), transparent 52%);
+  box-shadow: 0 0 28px color-mix(in srgb, var(--dungeon-color), transparent 58%);
+}
+
+.dungeon-card-art em {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  padding: 4px 5px;
+  border-radius: 999px;
+  color: #02111f;
+  background: linear-gradient(135deg, #fef3c7, var(--dungeon-color));
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 1000;
+  text-align: center;
+}
+
+.dungeon-card-main {
+  min-width: 0;
+}
+
+.dungeon-card-main small,
+.dungeon-card-main b,
+.dungeon-card-main p {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dungeon-card-main small {
+  color: color-mix(in srgb, var(--dungeon-color), white 34%);
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.dungeon-card-main b {
+  margin-top: 2px;
+  color: #f8fafc;
+  font-size: 19px;
+  white-space: nowrap;
+}
+
+.dungeon-card-main p,
+.dungeon-trait {
+  margin: 4px 0 0;
+  color: #cbd5e1;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.dungeon-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.dungeon-stats span {
+  min-width: 0;
+  padding: 6px 4px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 9px;
+  text-align: center;
+  background: rgba(2, 6, 23, 0.38);
+}
+
+.dungeon-stats small,
+.dungeon-stats b {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dungeon-stats small {
+  color: #94a3b8;
+  font-size: 10px;
+}
+
+.dungeon-stats b {
+  color: #fef3c7;
+  font-size: 12px;
+}
+
+.dungeon-drop-row,
+.dungeon-trait,
+.dungeon-enter {
+  grid-column: 1 / 3;
+}
+
+.dungeon-drop-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.dungeon-drop-row span {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 5px;
+  align-items: center;
+  padding: 5px;
+  border: 1px solid color-mix(in srgb, var(--item-color, #5eead4), transparent 50%);
+  border-radius: 10px;
+  background: rgba(2, 6, 23, 0.45);
+}
+
+.dungeon-drop-row .artifact-art {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.dungeon-drop-row b {
+  overflow: hidden;
+  color: #dbeafe;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dungeon-enter {
+  min-height: 44px;
+  border-color: color-mix(in srgb, var(--dungeon-color), transparent 36%);
+  color: #02111f;
+  background: linear-gradient(135deg, var(--dungeon-color), #fef3c7);
+  font-size: 15px;
+  font-weight: 1000;
+}
+
+.dungeon-enter:disabled {
+  color: #cbd5e1;
+  background: rgba(15, 23, 42, 0.82);
 }
 
 .sheet {
