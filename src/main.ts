@@ -1552,6 +1552,10 @@ function artifactIcon(key: ArtifactKey) {
   return `<img class="artifact-art" src="${def.image}" alt="">`
 }
 
+function unknownArtifactIcon(rarity: Rarity) {
+  return `<span class="artifact-unknown" style="--rarity-color:${rarityColor[rarity]}">?</span>`
+}
+
 function renderDungeonPanel() {
   dungeonEntrySummary.textContent = `入场 ${state.dungeonEntries}/3 | 当前 Lv.${state.hero.level}`
   dungeonBriefCopy.textContent = state.mode === 'dungeon'
@@ -1801,12 +1805,19 @@ function renderSkillPanel() {
       tab.className = `artifact-tab ${selectedArtifactKey === key ? 'active' : ''} ${owned ? 'owned' : 'locked'}`
       tab.style.setProperty('--item-color', rarityColor[def.rarity])
       tab.style.setProperty('--rarity-color', rarityColor[def.rarity])
-      tab.innerHTML = `
-        <em>${def.rarity}</em>
-        <i>${artifactIcon(key)}</i>
-        <span>${def.name}</span>
-        <small>${owned ? `Lv.${Math.min(level, def.max)}${bonus > 0 ? `+${bonus}` : ''}` : '未获得'}</small>
-      `
+      tab.innerHTML = owned
+        ? `
+          <em>${def.rarity}</em>
+          <i>${artifactIcon(key)}</i>
+          <span>${def.name}</span>
+          <small>${`Lv.${Math.min(level, def.max)}${bonus > 0 ? ` · 天赋+${bonus}阶` : ''}`}</small>
+        `
+        : `
+          <em>${def.rarity}</em>
+          <i>${unknownArtifactIcon(def.rarity)}</i>
+          <span>未鉴定法宝</span>
+          <small>副本掉落</small>
+        `
       tab.addEventListener('click', () => {
         openArtifactDetail(key)
       })
@@ -1832,27 +1843,35 @@ function openArtifactDetail(key: ArtifactKey) {
   const bonus = owned ? (activeCharacter().starter[key] ?? 0) : 0
   const cost = shownLevel + 1
   const progress = owned ? Math.min(100, (shownLevel / def.max) * 100) : 0
+  const displayName = owned ? def.name : `未鉴定${def.rarity}法宝`
+  const displayType = owned ? def.type : '副本封存'
+  const displayLevel = owned
+    ? `Lv.${shownLevel}/${def.max}${bonus > 0 ? ` · 角色天赋：效果 +${bonus}阶` : ''}${overflow > 0 ? ` · 溢出 ${overflow}` : ''}`
+    : '尚未获得，名称与效果待鉴定'
+  const displayDesc = owned ? def.desc : '这个槽位只代表可能出现的法宝品质。进入副本并成功撤离后，才会揭示真实名称、图片和法宝效果。'
+  const displaySource = owned ? def.source : '副本掉落：获得后收入法宝库，重复获得会自动进阶并返还法宝精华。'
+  const displayIcon = owned ? artifactIcon(key) : unknownArtifactIcon(def.rarity)
   artifactDetailPanel.hidden = false
   artifactDetailPanel.style.setProperty('--item-color', rarityColor[def.rarity])
   artifactDetailPanel.style.setProperty('--rarity-color', rarityColor[def.rarity])
   artifactDetailPanel.innerHTML = `
-    <div class="artifact-focus-card artifact-modal-card ${owned ? 'owned' : 'locked'}" role="dialog" aria-modal="true" aria-label="${def.name}详情">
+    <div class="artifact-focus-card artifact-modal-card ${owned ? 'owned' : 'locked'}" role="dialog" aria-modal="true" aria-label="${displayName}详情">
       <button class="artifact-modal-close" type="button" aria-label="关闭法宝详情">x</button>
-      <div class="artifact-hero-art">${artifactIcon(key)}</div>
+      <div class="artifact-hero-art">${displayIcon}</div>
       <div class="artifact-copy">
-        <small><em>${def.rarity}</em> ${def.type}</small>
-        <b>${def.name}</b>
-        <span>${owned ? `Lv.${shownLevel}/${def.max}${bonus > 0 ? ` · ${activeCharacter().name}亲和 +${bonus}` : ''}${overflow > 0 ? ` · 溢出 ${overflow}` : ''}` : '副本未获得'}</span>
-        <p>${def.desc}</p>
+        <small><em>${def.rarity}</em> ${displayType}</small>
+        <b>${displayName}</b>
+        <span>${displayLevel}</span>
+        <p>${displayDesc}</p>
       </div>
       <div class="artifact-meter"><i style="width:${progress}%"></i></div>
-      <div class="artifact-source">${def.source}</div>
+      <div class="artifact-source">${displaySource}</div>
       <button class="artifact-upgrade" type="button"></button>
     </div>
   `
   const action = artifactDetailPanel.querySelector<HTMLButtonElement>('.artifact-upgrade')!
   if (!owned) {
-    action.textContent = '副本掉落'
+    action.textContent = '去副本寻找'
     action.disabled = true
   } else if (level >= def.max) {
     action.textContent = '已满阶'
