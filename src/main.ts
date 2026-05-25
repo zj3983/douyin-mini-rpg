@@ -1799,7 +1799,7 @@ function renderSkillPanel() {
       tab.type = 'button'
       tab.dataset.artifact = key
       tab.className = `artifact-tab ${selectedArtifactKey === key ? 'active' : ''} ${owned ? 'owned' : 'locked'}`
-      tab.style.setProperty('--item-color', def.color)
+      tab.style.setProperty('--item-color', rarityColor[def.rarity])
       tab.style.setProperty('--rarity-color', rarityColor[def.rarity])
       tab.innerHTML = `
         <em>${def.rarity}</em>
@@ -1833,7 +1833,7 @@ function openArtifactDetail(key: ArtifactKey) {
   const cost = shownLevel + 1
   const progress = owned ? Math.min(100, (shownLevel / def.max) * 100) : 0
   artifactDetailPanel.hidden = false
-  artifactDetailPanel.style.setProperty('--item-color', def.color)
+  artifactDetailPanel.style.setProperty('--item-color', rarityColor[def.rarity])
   artifactDetailPanel.style.setProperty('--rarity-color', rarityColor[def.rarity])
   artifactDetailPanel.innerHTML = `
     <div class="artifact-focus-card artifact-modal-card ${owned ? 'owned' : 'locked'}" role="dialog" aria-modal="true" aria-label="${def.name}详情">
