@@ -20,7 +20,7 @@ type ParticleKind = 'spark' | 'ember' | 'soul' | 'shard' | 'rune'
 interface Particle extends Vec { vx: number; vy: number; size: number; color: string; life: number; maxLife: number; kind: ParticleKind; spin: number }
 interface ScreenFlash { color: string; life: number; maxLife: number; strength: number }
 interface SoulOrb extends Vec { id: number; value: number; life: number; phase: number }
-interface Reward { name: string; rarity: Rarity; count: number; slot?: Slot; atk?: number; hp?: number; skill?: number; characterId?: CharacterId; artifact?: ArtifactKey }
+interface Reward { name: string; rarity: Rarity; count: number; slot?: Slot; atk?: number; hp?: number; skill?: number; characterId?: CharacterId; artifact?: ArtifactKey; forge?: number }
 interface SkillTree { slash: number; burst: number; regen: number; chain: number; orbit: number; flame: number; bell: number; needle: number; mirror: number; fan: number; banner: number; seal: number; points: number }
 interface MutationTree { swordRide: number; thunderFork: number; swordDomain: number; flameLotus: number }
 interface CharacterDef { id: CharacterId; name: string; title: string; need: number; color: string; portrait: string; battle: string; starter: Partial<SkillTree>; desc: string }
@@ -1270,6 +1270,7 @@ const guideTexts = [
   '吸收魂质球升级，只会强化攻击、生命或法力三项角色基础。',
   '抽卡券只从副本带出，星门补给主要召回角色碎片和装备。',
   '点击法宝，消耗法宝精华和灵石淬炼，达到节点后触发技能质变。',
+  '灵石还可以强化装备；角色碎片满了以后在背包合成新角色。',
   '每日 3 次副本入场，收集门钥碎片后找到撤离门带走收益。',
 ]
 
@@ -1393,15 +1394,15 @@ function claimDailyReward() {
 }
 
 function totalAtk() {
-  return state.hero.baseAtk + state.hero.level * 3 + effectiveSkill('slash') * 4 + effectiveSkill('needle') * 2 + effectiveSkill('seal') * 3 + state.mutations.swordRide * 3 + (state.gear.weapon?.atk ?? 0)
+  return state.hero.baseAtk + state.hero.level * 3 + effectiveSkill('slash') * 4 + effectiveSkill('needle') * 2 + effectiveSkill('seal') * 3 + state.mutations.swordRide * 3 + equipmentStat(state.gear.weapon, 'atk')
 }
 
 function maxHp() {
-  return state.hero.baseHp + state.hero.level * 12 + effectiveSkill('regen') * 5 + effectiveSkill('bell') * 10 + effectiveSkill('seal') * 8 + (state.gear.armor?.hp ?? 0)
+  return state.hero.baseHp + state.hero.level * 12 + effectiveSkill('regen') * 5 + effectiveSkill('bell') * 10 + effectiveSkill('seal') * 8 + equipmentStat(state.gear.armor, 'hp')
 }
 
 function skillPower() {
-  return state.hero.skillPower + effectiveSkill('burst') * 6 + effectiveSkill('mirror') * 4 + effectiveSkill('banner') * 3 + state.mutations.flameLotus * 4 + (state.gear.core?.skill ?? 0)
+  return state.hero.skillPower + effectiveSkill('burst') * 6 + effectiveSkill('mirror') * 4 + effectiveSkill('banner') * 3 + state.mutations.flameLotus * 4 + equipmentStat(state.gear.core, 'skill')
 }
 
 function grantExp(amount: number) {
@@ -1603,8 +1604,52 @@ function equipManual(item: Reward) {
   updateHud()
 }
 
+function equipmentForgeLevel(item?: Reward | null) {
+  return item?.forge ?? 0
+}
+
+function equipmentForgeMax(item?: Reward | null) {
+  if (!item) return 0
+  return 4 + rarityRank[item.rarity] * 2
+}
+
+function equipmentForgeCost(item: Reward) {
+  return (equipmentForgeLevel(item) + 1) * rarityRank[item.rarity] * 45
+}
+
+function equipmentStat(item: Reward | null | undefined, stat: 'atk' | 'hp' | 'skill') {
+  if (!item) return 0
+  const base = item[stat] ?? 0
+  const forge = equipmentForgeLevel(item)
+  if (stat === 'atk') return base + forge * (2 + rarityRank[item.rarity])
+  if (stat === 'hp') return base + forge * (8 + rarityRank[item.rarity] * 4)
+  return base + forge * (2 + rarityRank[item.rarity])
+}
+
+function upgradeEquipped(slot: Slot) {
+  const item = state.gear[slot]
+  if (!item) return
+  const max = equipmentForgeMax(item)
+  if (equipmentForgeLevel(item) >= max) {
+    toast(`${item.name} 已强化到当前上限。`)
+    return
+  }
+  const cost = equipmentForgeCost(item)
+  if (state.spiritStones < cost) {
+    toast(`灵石不足：强化 ${item.name} 需要 ${cost} 灵石。`)
+    return
+  }
+  state.spiritStones -= cost
+  item.forge = equipmentForgeLevel(item) + 1
+  state.hero.hp = Math.min(maxHp(), state.hero.hp + 20)
+  toast(`装备强化：${item.name} +${item.forge}`)
+  saveGame()
+  renderEquipPanel()
+  updateHud()
+}
+
 function equipmentScore(item: Reward) {
-  return rarityRank[item.rarity] * 100 + (item.atk ?? 0) + (item.hp ?? 0) + (item.skill ?? 0)
+  return rarityRank[item.rarity] * 100 + equipmentStat(item, 'atk') + equipmentStat(item, 'hp') + equipmentStat(item, 'skill')
 }
 
 function sameEquipment(a: Reward | null, b: Reward) {
@@ -1639,11 +1684,41 @@ function gainCharacterShards(item: Reward) {
   const before = state.characterShards[item.characterId] ?? 0
   const after = before + item.count
   state.characterShards[item.characterId] = after
-  if (!state.ownedCharacters.includes(item.characterId) && after >= def.need) {
-    state.ownedCharacters.push(item.characterId)
-    toast(`角色合成：${def.name}`)
-    state.texts.push({ x: state.hero.x, y: state.hero.y - 92, text: `合成角色：${def.name}`, color: def.color, life: 1.2 })
+  if (!state.ownedCharacters.includes(item.characterId) && before < def.need && after >= def.need) {
+    toast(`${def.name} 碎片已满，可在背包消耗灵石合成。`)
   }
+}
+
+function characterSynthesisCost(def: CharacterDef) {
+  return def.need * 12
+}
+
+function synthesizeCharacter(id: CharacterId) {
+  const def = characters[id]
+  if (state.ownedCharacters.includes(id)) {
+    switchCharacter(id)
+    return
+  }
+  const have = state.characterShards[id] ?? 0
+  if (have < def.need) {
+    toast(`${def.name} 碎片 ${have}/${def.need}`)
+    return
+  }
+  const cost = characterSynthesisCost(def)
+  if (state.spiritStones < cost) {
+    toast(`合成 ${def.name} 需要 ${cost} 灵石。`)
+    return
+  }
+  state.spiritStones -= cost
+  state.ownedCharacters.push(id)
+  state.activeCharacter = id
+  state.hero.hp = Math.min(maxHp(), state.hero.hp + 30)
+  toast(`角色合成并出战：${def.name}`)
+  state.texts.push({ x: state.hero.x, y: state.hero.y - 92, text: `合成角色：${def.name}`, color: def.color, life: 1.2 })
+  saveGame()
+  if (!equipPanel.hidden) renderEquipPanel()
+  if (!bagPanel.hidden) renderBagPanel()
+  updateHud()
 }
 
 function switchCharacter(id: CharacterId) {
@@ -1666,9 +1741,10 @@ function itemStats(item: Reward) {
   const parts = []
   if (item.characterId) return `${characters[item.characterId].name} 碎片 +${item.count}`
   if (item.artifact) return `${artifactDefs[item.artifact].type} · 法宝等级 +${item.count}`
-  if (item.atk) parts.push(`攻击 +${item.atk}`)
-  if (item.hp) parts.push(`生命 +${item.hp}`)
-  if (item.skill) parts.push(`法力 +${item.skill}`)
+  if (item.atk) parts.push(`攻击 +${equipmentStat(item, 'atk')}`)
+  if (item.hp) parts.push(`生命 +${equipmentStat(item, 'hp')}`)
+  if (item.skill) parts.push(`法力 +${equipmentStat(item, 'skill')}`)
+  if (item.slot && equipmentForgeLevel(item) > 0) parts.push(`强化 +${equipmentForgeLevel(item)}`)
   return parts.join(' / ') || `数量 x${item.count}`
 }
 
@@ -1749,6 +1825,25 @@ function artifactDropSource(key: ArtifactKey) {
   return [basePool, focusedDungeons.length ? `${focusedDungeons.join('、')}重点掉落` : ''].filter(Boolean).join('；')
 }
 
+function dungeonRewardPreview(dungeon: DungeonDef) {
+  const minStones = dungeon.skillBonus * 18 + dungeon.killGoal * 7
+  return [
+    `券 ${dungeon.ticketBonus}+`,
+    `灵石 ${minStones}+`,
+    `精华 ${dungeon.skillBonus}+`,
+  ].join(' / ')
+}
+
+function artifactPoolForDungeon(dungeon: DungeonDef, stage: number) {
+  const pool: ArtifactKey[] = ['bell', 'needle', 'regen', 'slash']
+  pool.push(...dungeon.artifactFocus, ...dungeon.artifactFocus, ...dungeon.artifactFocus)
+  if (dungeon.unlockLevel >= 20) pool.push(...dungeon.artifactFocus)
+  if (stage >= 2) pool.push('mirror', 'fan', 'chain', 'burst')
+  if (stage >= 3) pool.push('banner', 'orbit')
+  if (stage >= 4) pool.push('flame', 'seal')
+  return pool
+}
+
 function renderDungeonPanel() {
   dungeonEntrySummary.textContent = `入场 ${state.dungeonEntries}/3 | 当前 Lv.${state.hero.level}`
   dungeonBriefCopy.textContent = state.mode === 'dungeon'
@@ -1780,6 +1875,7 @@ function renderDungeonPanel() {
         <span><small>目标</small><b>${dungeon.killGoal}怪</b></span>
         <span><small>门钥</small><b>${dungeon.materialGoal}</b></span>
       </div>
+      <div class="dungeon-reward-row"><small>主要收益</small><b>${dungeonRewardPreview(dungeon)}</b></div>
       <div class="dungeon-drop-row">${drops}</div>
       <p class="dungeon-trait">${dungeon.trait}</p>
     `
@@ -1830,18 +1926,23 @@ function renderEquipPanel() {
     const item = state.gear[slot]
     const div = document.createElement('div')
     div.className = `gear-card equip-slot ${item ? 'equipped' : 'empty'}`
+    const forgeCost = item ? equipmentForgeCost(item) : 0
+    const forgeMax = item ? equipmentForgeMax(item) : 0
+    const forgeLevel = equipmentForgeLevel(item)
     div.innerHTML = `
       <i class="equip-icon">${equipIcon(slot)}</i>
       <div class="gear-card-copy">
         <b>${slotName(slot)}</b>
-        <span>${item ? item.name : '未装备'}</span>
-        <small>${item ? itemStats(item) : '抽卡获得装备后可穿戴'}</small>
+        <span>${item ? `${item.name}${forgeLevel > 0 ? ` +${forgeLevel}` : ''}` : '未装备'}</span>
+        <small>${item ? `${itemStats(item)} | ${forgeLevel}/${forgeMax}` : '抽卡获得装备后可穿戴'}</small>
       </div>
+      ${item ? `<button class="gear-forge" type="button" ${forgeLevel >= forgeMax || state.spiritStones < forgeCost ? 'disabled' : ''}>${forgeLevel >= forgeMax ? '已满' : `${forgeCost}灵石`}</button>` : ''}
     `
     if (item) {
       div.style.borderColor = rarityColor[item.rarity]
       div.style.setProperty('--item-color', rarityColor[item.rarity])
     }
+    div.querySelector<HTMLButtonElement>('.gear-forge')?.addEventListener('click', () => upgradeEquipped(slot))
     equippedList.appendChild(div)
   })
 
@@ -1886,7 +1987,7 @@ function renderEquipPanel() {
       <i class="equip-icon" style="--item-color:${rarityColor[item.rarity]}">${equipIcon(item.slot)}</i>
       <div class="bag-row-copy">
         <span style="color:${rarityColor[item.rarity]}">${equipped ? '已穿戴' : '点击穿戴'} · ${item.rarity} · ${slotName(item.slot)}</span>
-        <b>${item.name}</b>
+        <b>${item.name}${equipmentForgeLevel(item) > 0 ? ` +${equipmentForgeLevel(item)}` : ''}</b>
         <small>${itemStats(item)}</small>
       </div>
     `
@@ -1929,19 +2030,28 @@ function renderBagPanel() {
   ;(Object.values(characters) as CharacterDef[]).forEach((def) => {
     const owned = state.ownedCharacters.includes(def.id)
     const shards = state.characterShards[def.id] ?? 0
+    const ready = !owned && shards >= def.need
+    const synthCost = characterSynthesisCost(def)
     const cell = document.createElement('button')
     cell.type = 'button'
-    cell.className = `inventory-cell shard-cell ${owned ? 'owned' : ''}`
+    cell.className = `inventory-cell shard-cell ${owned ? 'owned' : ''} ${ready ? 'ready' : ''}`
     cell.style.setProperty('--item-color', def.color)
     const progress = Math.min(100, (shards / def.need) * 100)
     cell.innerHTML = `
       <i>${characterShardIcon(def)}</i>
       <em><u style="width:${owned ? 100 : progress}%"></u></em>
-      <span>${owned ? '已合成' : `${Math.min(shards, def.need)}/${def.need}`}</span>
+      <span>${owned ? '已合成' : ready ? '可合成' : `${Math.min(shards, def.need)}/${def.need}`}</span>
     `
     cell.addEventListener('click', () => {
-      showDetail(def.name, owned ? (state.activeCharacter === def.id ? '出战中' : '已合成角色') : `角色碎片 ${Math.min(shards, def.need)}/${def.need}`, def.desc, def.color)
+      const meta = owned
+        ? (state.activeCharacter === def.id ? '出战中' : '已合成角色')
+        : ready
+          ? `可合成 · 消耗 ${synthCost} 灵石`
+          : `角色碎片 ${Math.min(shards, def.need)}/${def.need}`
+      const desc = ready ? `${def.desc} 点击消耗灵石合成并出战。` : def.desc
+      showDetail(def.name, meta, desc, def.color)
       if (owned) switchCharacter(def.id)
+      else if (ready) synthesizeCharacter(def.id)
     })
     characterGrid.appendChild(cell)
   })
@@ -2119,10 +2229,9 @@ function cloneReward(item: Reward): Reward {
 
 function rollArtifactReward(): Reward {
   const stage = state.mode === 'dungeon' ? Math.max(1, Math.ceil(activeDungeonDef().unlockLevel / 8)) : worldStageNo()
-  const candidates: ArtifactKey[] = ['bell', 'needle', 'regen', 'slash']
-  if (state.mode === 'dungeon') {
-    candidates.push(...activeDungeonDef().artifactFocus)
-  }
+  const candidates: ArtifactKey[] = state.mode === 'dungeon'
+    ? artifactPoolForDungeon(activeDungeonDef(), stage)
+    : ['bell', 'needle', 'regen', 'slash']
   if (stage >= 2 || state.mode === 'dungeon') candidates.push('mirror', 'fan', 'chain', 'burst')
   if (stage >= 3 || Math.random() < 0.45) candidates.push('banner', 'orbit')
   if (stage >= 4 || Math.random() < 0.38) candidates.push('flame', 'seal')
@@ -2132,7 +2241,9 @@ function rollArtifactReward(): Reward {
 }
 
 function rollDungeonDrop(): Reward {
-  return Math.random() < 0.68 ? rollArtifactReward() : rollReward()
+  const stage = Math.max(1, Math.ceil(activeDungeonDef().unlockLevel / 8))
+  const artifactChance = Math.min(0.82, 0.6 + stage * 0.04)
+  return Math.random() < artifactChance ? rollArtifactReward() : rollReward()
 }
 
 function chooseEnemyKind(elite: boolean): EnemyKind {
