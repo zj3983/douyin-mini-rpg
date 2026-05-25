@@ -10,6 +10,7 @@ type EnemyKind = 'slime' | 'bat' | 'wolf' | 'crystal' | 'warden'
 type CharacterId = 'sword' | 'thunder' | 'flame' | 'wood'
 type ArtifactKey = 'slash' | 'burst' | 'regen' | 'chain' | 'orbit' | 'flame' | 'bell' | 'needle' | 'mirror' | 'fan' | 'banner' | 'seal'
 type DungeonId = 'mossCave' | 'starHall' | 'mistMaze' | 'crystalMine' | 'bloodRift' | 'kingTomb'
+type DungeonNodeKind = 'key' | 'herb' | 'ore' | 'chest'
 
 interface Vec { x: number; y: number }
 interface Enemy extends Vec { id: number; hp: number; maxHp: number; speed: number; elite: boolean; kind: EnemyKind; boss?: boolean; hit: number }
@@ -436,6 +437,9 @@ const state = {
   dungeonLootExp: 0,
   dungeonLootSkill: 0,
   dungeonLootStones: 0,
+  dungeonHerbs: 0,
+  dungeonOres: 0,
+  dungeonChests: 0,
   dungeonMaterials: 0,
   dungeonMaterialGoal: 3,
   dungeonGateFound: false,
@@ -1193,6 +1197,9 @@ function resetRuntimeState() {
   state.dungeonLootExp = 0
   state.dungeonLootSkill = 0
   state.dungeonLootStones = 0
+  state.dungeonHerbs = 0
+  state.dungeonOres = 0
+  state.dungeonChests = 0
   state.dungeonMaterials = 0
   state.dungeonMaterialGoal = 3
   state.dungeonGateFound = false
@@ -2421,6 +2428,7 @@ function completeDungeon() {
     rewards: { tickets: ticketReward, stones: stoneReward, exp: expReward, skill: skillReward },
     lines: [
       `门钥碎片：${state.dungeonMaterials}/${state.dungeonMaterialGoal}`,
+      dungeonExplorationSummary(),
       `秘境特性：${dungeon.trait}`,
       `Boss 掉落：${bossDrop.rarity} ${bossDrop.name}`,
       `结算方式：击败守门人后自动带回全部收益`,
@@ -2466,6 +2474,7 @@ function extractDungeon() {
     rewards: { tickets: ticketReward, stones: stoneReward, exp: expReward, skill: skillReward },
     lines: [
       `门钥碎片：${state.dungeonMaterials}/${state.dungeonMaterialGoal}`,
+      dungeonExplorationSummary(),
       `当前秘境：${dungeon.subtitle}`,
       `撤离距离：已抵达撤离门`,
       extractDrop ? `撤离搜获：${extractDrop.rarity} ${extractDrop.name}` : '撤离搜获：未发现完整法宝',
@@ -2492,6 +2501,7 @@ function failDungeon(reason: string) {
     lines: [
       reason,
       `遗失携带：抽卡券 ${state.dungeonLootTickets} / 灵石 ${state.dungeonLootStones} / 经验 ${state.dungeonLootExp} / 法宝精华 ${state.dungeonLootSkill}`,
+      dungeonExplorationSummary(),
       `门钥碎片：${state.dungeonMaterials}/${state.dungeonMaterialGoal}`,
     ],
   })
@@ -2506,6 +2516,10 @@ function dungeonRank(kills: number, success: boolean, bossClear: boolean) {
   if (kills >= 10) return 'A'
   if (kills >= 5) return 'B'
   return 'C'
+}
+
+function dungeonExplorationSummary() {
+  return `探索采集：灵草 ${state.dungeonHerbs} / 灵矿 ${state.dungeonOres} / 宝匣 ${state.dungeonChests}`
 }
 
 function renderSettlement(options: {
@@ -2558,6 +2572,9 @@ function leaveDungeon(message: string) {
   state.dungeonLootExp = 0
   state.dungeonLootSkill = 0
   state.dungeonLootStones = 0
+  state.dungeonHerbs = 0
+  state.dungeonOres = 0
+  state.dungeonChests = 0
   state.dungeonMaterials = 0
   state.dungeonGateFound = false
   collectedMaterialCells = new Set()
@@ -2582,6 +2599,46 @@ function gainDungeonMaterial(x: number, y: number, label: string) {
   } else {
     toast(`获得${label} ${state.dungeonMaterials}/${state.dungeonMaterialGoal}`)
   }
+}
+
+function gainDungeonNode(kind: DungeonNodeKind, x: number, y: number) {
+  if (state.mode !== 'dungeon') return
+  const dungeon = activeDungeonDef()
+  if (kind === 'key') {
+    gainDungeonMaterial(x, y, '符文碎片')
+    return
+  }
+  let text = ''
+  let color = '#fef3c7'
+  if (kind === 'herb') {
+    const exp = 14 + Math.floor(dungeon.expBonus / 8)
+    const heal = Math.round(maxHp() * 0.12)
+    state.dungeonLootExp += exp
+    state.dungeonHerbs += 1
+    state.hero.hp = Math.min(maxHp(), state.hero.hp + heal)
+    text = `灵草 +${exp}经验`
+    color = '#86efac'
+  } else if (kind === 'ore') {
+    const stones = 26 + dungeon.skillBonus * 6 + Math.floor(Math.random() * 12)
+    state.dungeonLootStones += stones
+    state.dungeonOres += 1
+    text = `灵石矿 +${stones}`
+    color = '#facc15'
+  } else {
+    const tickets = Math.random() < 0.58 ? 1 : 2
+    const essence = Math.random() < 0.46 ? 1 : 0
+    const stones = 38 + dungeon.ticketBonus * 4
+    state.dungeonLootTickets += tickets
+    state.dungeonLootSkill += essence
+    state.dungeonLootStones += stones
+    state.dungeonChests += 1
+    text = `宝匣 券+${tickets}${essence ? ' 精华+1' : ''}`
+    color = '#fef08a'
+  }
+  sfx.soul(kind === 'chest' ? 4 : 2)
+  addParticleBurst(x, y - 46, color, kind === 'chest' ? 24 : 16, kind === 'chest' ? 1.08 : 0.82, 'rune')
+  state.texts.push({ x, y: y - 64, text, color, life: 1 })
+  toast(`采集${text}，撤离后入账。`)
 }
 
 function attack(radius: number, multiplier: number, source: AttackSource = multiplier > 1 ? 'skill' : 'manual') {
@@ -2887,6 +2944,9 @@ function enterDungeon(dungeonId: DungeonId = state.activeDungeon) {
   state.dungeonLootExp = 0
   state.dungeonLootSkill = 0
   state.dungeonLootStones = 0
+  state.dungeonHerbs = 0
+  state.dungeonOres = 0
+  state.dungeonChests = 0
   state.dungeonMaterials = 0
   state.dungeonGateFound = false
   collectedMaterialCells = new Set()
@@ -4376,6 +4436,15 @@ function cellRandom(x: number, y: number, salt = 0) {
   return n - Math.floor(n)
 }
 
+function dungeonNodeKindForCell(gx: number, gy: number): DungeonNodeKind | null {
+  const roll = cellRandom(gx, gy, 33)
+  if (roll < 0.24) return 'key'
+  if (roll < 0.42) return 'herb'
+  if (roll < 0.58) return 'ore'
+  if (roll < 0.68) return 'chest'
+  return null
+}
+
 function drawMapCell(gx: number, gy: number, ox: number, oy: number) {
   const baseX = gx * 180
   const baseY = gy * 180
@@ -4387,16 +4456,16 @@ function drawMapCell(gx: number, gy: number, ox: number, oy: number) {
 
   if (state.mode === 'dungeon') {
     drawBrokenTile(x2, y2, cellRandom(gx, gy, 26))
-    if (type < 0.34) drawRift(x, y, cellRandom(gx, gy, 4))
-    else if (type < 0.68) {
-      const cellKey = `${gx}:${gy}`
-      const harvestable = cellRandom(gx, gy, 8) > 0.42 && !state.dungeonGateFound && !collectedMaterialCells.has(cellKey)
-      drawRuneStone(x, y, cellRandom(gx, gy, 5), harvestable)
-      if (harvestable && Math.hypot(state.hero.x - (x - ox), state.hero.y - (y - oy)) < 48) {
+    const nodeKind = dungeonNodeKindForCell(gx, gy)
+    if (nodeKind) {
+      const cellKey = `${nodeKind}:${gx}:${gy}`
+      const harvestable = !collectedMaterialCells.has(cellKey) && (nodeKind !== 'key' || !state.dungeonGateFound)
+      drawDungeonNode(nodeKind, x, y, cellRandom(gx, gy, 5), harvestable)
+      if (harvestable && Math.hypot(state.hero.x - (x - ox), state.hero.y - (y - oy)) < 50) {
         collectedMaterialCells.add(cellKey)
-        gainDungeonMaterial(x - ox, y - oy, '符文碎片')
+        gainDungeonNode(nodeKind, x - ox, y - oy)
       }
-    }
+    } else if (type < 0.42) drawRift(x, y, cellRandom(gx, gy, 4))
     else drawBrokenTile(x, y, cellRandom(gx, gy, 6))
     if (cellRandom(gx, gy, 28) > 0.62) drawDungeonPillar(x2 + 36, y2 - 24, cellRandom(gx, gy, 29))
     return
@@ -4438,6 +4507,31 @@ function drawMysticArray(x: number, y: number) {
   ctx.lineTo(x, y - 26)
   ctx.lineTo(x + 25, y + 18)
   ctx.closePath()
+  ctx.stroke()
+  ctx.restore()
+}
+
+function drawDungeonNode(kind: DungeonNodeKind, x: number, y: number, seed: number, harvestable: boolean) {
+  if (kind === 'key') {
+    drawRuneStone(x, y, seed, harvestable)
+  } else if (kind === 'herb') {
+    drawSpiritGrass(x, y, seed)
+  } else if (kind === 'ore') {
+    drawSpiritStone(x, y, seed)
+  } else {
+    drawTreasureChest(x, y, seed)
+  }
+  if (!harvestable) return
+  const theme = activeStageTheme()
+  const pulse = Math.sin(performance.now() * 0.006 + seed * 8) * 0.5 + 0.5
+  ctx.save()
+  ctx.globalAlpha = 0.42 + pulse * 0.22
+  ctx.strokeStyle = kind === 'chest' ? '#facc15' : theme.accent
+  ctx.shadowColor = ctx.strokeStyle
+  ctx.shadowBlur = 18
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.ellipse(x, y + 20, 34 + pulse * 6, 11 + pulse * 2, 0, 0, Math.PI * 2)
   ctx.stroke()
   ctx.restore()
 }
@@ -4490,6 +4584,39 @@ function drawSpiritStone(x: number, y: number, seed: number) {
   ctx.moveTo(-9, 2)
   ctx.lineTo(7, -9)
   ctx.lineTo(3, 9)
+  ctx.stroke()
+  ctx.restore()
+}
+
+function drawTreasureChest(x: number, y: number, seed: number) {
+  const theme = activeStageTheme()
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.rotate((seed - 0.5) * 0.18)
+  ctx.globalAlpha = 0.86
+  ctx.shadowColor = '#facc15'
+  ctx.shadowBlur = 16
+  ctx.fillStyle = '#78350f'
+  ctx.strokeStyle = 'rgba(254,243,199,.82)'
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.roundRect(-25, -14, 50, 34, 6)
+  ctx.fill()
+  ctx.stroke()
+  ctx.fillStyle = theme.enemyDark
+  ctx.beginPath()
+  ctx.roundRect(-24, -28, 48, 24, 12)
+  ctx.fill()
+  ctx.stroke()
+  ctx.fillStyle = '#facc15'
+  ctx.fillRect(-4, -15, 8, 17)
+  ctx.beginPath()
+  ctx.arc(0, -1, 4, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.strokeStyle = '#fef3c7'
+  ctx.beginPath()
+  ctx.moveTo(-18, -6)
+  ctx.lineTo(18, -6)
   ctx.stroke()
   ctx.restore()
 }
@@ -5727,8 +5854,8 @@ function updateHud() {
   const dungeonKills = Math.max(0, state.kills - state.dungeonStartKills)
   const dungeonProgress = state.mode === 'dungeon'
     ? state.bossSpawned
-      ? `Boss 战 | 碎片 ${state.dungeonMaterials}/${state.dungeonMaterialGoal} | 携带 券${state.dungeonLootTickets}/灵${state.dungeonLootStones}/精${state.dungeonLootSkill} | ${state.dungeonGateFound ? `撤离 ${extractDistance}m` : '找门'}`
-      : `清怪 ${dungeonKills}/${dungeon.killGoal} | 碎片 ${state.dungeonMaterials}/${state.dungeonMaterialGoal} | 携带 券${state.dungeonLootTickets}/灵${state.dungeonLootStones}/精${state.dungeonLootSkill} | ${state.dungeonGateFound ? `撤离 ${extractDistance}m` : '找门'}`
+      ? `Boss 战 | 碎片 ${state.dungeonMaterials}/${state.dungeonMaterialGoal} | 探${state.dungeonHerbs + state.dungeonOres + state.dungeonChests} | 携带 券${state.dungeonLootTickets}/灵${state.dungeonLootStones}/精${state.dungeonLootSkill} | ${state.dungeonGateFound ? `撤离 ${extractDistance}m` : '找门'}`
+      : `清怪 ${dungeonKills}/${dungeon.killGoal} | 碎片 ${state.dungeonMaterials}/${state.dungeonMaterialGoal} | 探${state.dungeonHerbs + state.dungeonOres + state.dungeonChests} | 携带 券${state.dungeonLootTickets}/灵${state.dungeonLootStones}/精${state.dungeonLootSkill} | ${state.dungeonGateFound ? `撤离 ${extractDistance}m` : '找门'}`
     : ''
   setText('quest-label', dungeonProgress || (state.questClaimed ? `当前：第${currentStage}关 ${worldStageTitle(currentStage)}，每日副本 ${state.dungeonEntries}/3，进副本拿抽卡券和法宝` : `当前：第${currentStage}关 ${worldStageTitle(currentStage)} | 任务击杀 ${Math.min(state.kills, state.questTarget)}/${state.questTarget}`))
   const artifactCount = artifactKeys.filter((key) => hasArtifact(key)).length
