@@ -105,6 +105,217 @@ button:disabled {
   font-size: 12px;
 }
 
+.profile-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  padding: 18px;
+  background:
+    radial-gradient(circle at 50% 8%, rgba(250, 204, 21, 0.14), transparent 32%),
+    radial-gradient(circle at 18% 72%, rgba(94, 234, 212, 0.16), transparent 28%),
+    rgba(2, 6, 23, 0.88);
+  backdrop-filter: blur(10px);
+  touch-action: pan-y;
+}
+
+.profile-panel[hidden] {
+  display: none !important;
+}
+
+.profile-card {
+  width: min(100%, 398px);
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(250, 204, 21, 0.34);
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, rgba(11, 18, 32, 0.98), rgba(8, 47, 73, 0.9)),
+    rgba(2, 6, 23, 0.98);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.48), inset 0 0 28px rgba(250, 204, 21, 0.04);
+}
+
+.profile-head,
+.profile-current {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.profile-head small {
+  display: block;
+  color: #67e8f9;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.profile-head h2 {
+  margin: 2px 0 0;
+  color: #facc15;
+  font-size: 28px;
+  line-height: 1;
+}
+
+.profile-close {
+  width: 38px;
+  min-height: 38px;
+  border-radius: 999px;
+}
+
+.profile-note {
+  margin: 0;
+  color: #cbd5e1;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.profile-current {
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid rgba(94, 234, 212, 0.22);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.55);
+}
+
+.profile-current span {
+  overflow: hidden;
+  color: #e0f2fe;
+  font-size: 13px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-current button {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: #fef3c7;
+  font-size: 12px;
+}
+
+.profile-list {
+  display: grid;
+  gap: 8px;
+  max-height: 172px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.profile-row {
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  grid-template-rows: 20px 18px;
+  gap: 2px 10px;
+  align-items: center;
+  padding: 8px;
+  border-radius: 12px;
+  text-align: left;
+  background:
+    radial-gradient(circle at 0% 50%, rgba(94, 234, 212, 0.12), transparent 48%),
+    rgba(15, 23, 42, 0.72);
+}
+
+.profile-row.active {
+  border-color: rgba(250, 204, 21, 0.5);
+  background:
+    radial-gradient(circle at 0% 50%, rgba(250, 204, 21, 0.18), transparent 48%),
+    rgba(30, 41, 59, 0.78);
+}
+
+.profile-row i {
+  grid-row: 1 / 3;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  color: #02111f;
+  background: linear-gradient(135deg, #5eead4, #facc15);
+  font-style: normal;
+  font-weight: 1000;
+}
+
+.profile-row span,
+.profile-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-row span {
+  color: #f8fafc;
+  font-size: 14px;
+}
+
+.profile-row small {
+  color: #93c5fd;
+  font-size: 11px;
+}
+
+.profile-empty {
+  padding: 12px;
+  border: 1px dashed rgba(148, 163, 184, 0.28);
+  border-radius: 12px;
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.4;
+  background: rgba(2, 6, 23, 0.4);
+}
+
+.profile-field {
+  display: grid;
+  gap: 6px;
+}
+
+.profile-field span {
+  color: #bae6fd;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.profile-field input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 12px;
+  color: #f8fafc;
+  outline: none;
+  background: rgba(2, 6, 23, 0.74);
+  font: inherit;
+  font-weight: 800;
+}
+
+.profile-field input:focus {
+  border-color: rgba(94, 234, 212, 0.68);
+  box-shadow: 0 0 0 3px rgba(94, 234, 212, 0.12);
+}
+
+.profile-error {
+  padding: 8px 10px;
+  border: 1px solid rgba(251, 113, 133, 0.4);
+  border-radius: 10px;
+  color: #fecdd3;
+  background: rgba(136, 19, 55, 0.26);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.profile-submit {
+  min-height: 52px;
+  border-color: rgba(250, 204, 21, 0.5);
+  color: #17120a;
+  background: linear-gradient(135deg, #facc15, #5eead4);
+  font-size: 17px;
+  box-shadow: 0 12px 34px rgba(250, 204, 21, 0.18);
+}
+
 .topbar .character-showcase {
   grid-column: 1 / 3;
   grid-row: 2;

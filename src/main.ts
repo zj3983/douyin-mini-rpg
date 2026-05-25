@@ -67,6 +67,19 @@ interface SaveData {
   artifacts?: Partial<Record<ArtifactKey, number>>
 }
 
+interface PlayerProfile {
+  id: string
+  name: string
+  pin: string
+  createdAt: number
+  lastLoginAt: number
+}
+
+interface ProfileIndex {
+  activeId: string | null
+  profiles: PlayerProfile[]
+}
+
 const rarityColor: Record<Rarity, string> = {
   普通: '#dbeafe',
   稀有: '#5eead4',
@@ -293,7 +306,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <main class="phone-shell">
     <section class="topbar">
       <div><strong>虚境试炼</strong><span id="mode-label">野外刷怪</span></div>
-      <div class="currency"><button id="lore-btn" class="lore-btn" type="button">档案</button><span>抽卡券</span><b id="ticket-count">0</b></div>
+      <div class="currency"><button id="profile-btn" class="lore-btn" type="button">账号</button><button id="lore-btn" class="lore-btn" type="button">档案</button><span>抽卡券</span><b id="ticket-count">0</b></div>
       <div class="character-showcase">
         <div class="character-stage"><img id="hero-showcase-img" src="/assets/oga-rpg/hero-idle/FR_Adventurer_Idle_000.png" alt=""></div>
         <div class="character-meta">
@@ -398,6 +411,34 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <p class="rates">魂质共鸣已满，选择一个方向强化本局模板。</p>
       <div id="evolution-list" class="evolution-list"></div>
     </section>
+
+    <section id="profile-panel" class="profile-panel" hidden>
+      <form id="profile-form" class="profile-card">
+        <div class="profile-head">
+          <div>
+            <small>本地账号</small>
+            <h2>灵契身份</h2>
+          </div>
+          <button id="close-profile" class="profile-close" type="button">x</button>
+        </div>
+        <p class="profile-note">单机版先按本机玩家保存，不联网；换浏览器或清缓存会影响本地资料。</p>
+        <div class="profile-current">
+          <span id="profile-current">未登录</span>
+          <button id="profile-switch" type="button">切换</button>
+        </div>
+        <div id="profile-list" class="profile-list"></div>
+        <label class="profile-field">
+          <span>玩家名</span>
+          <input id="profile-name" maxlength="12" autocomplete="username" placeholder="输入玩家名">
+        </label>
+        <label class="profile-field">
+          <span>本机口令</span>
+          <input id="profile-pin" maxlength="18" type="password" autocomplete="current-password" placeholder="可不填">
+        </label>
+        <div id="profile-error" class="profile-error" hidden></div>
+        <button id="profile-submit" class="profile-submit" type="submit">进入游戏</button>
+      </form>
+    </section>
   </main>
 `
 
@@ -410,6 +451,7 @@ const gachaBtn = document.querySelector<HTMLButtonElement>('#gacha-btn')!
 const equipBtn = document.querySelector<HTMLButtonElement>('#equip-btn')!
 const bagBtn = document.querySelector<HTMLButtonElement>('#bag-btn')!
 const trainBtn = document.querySelector<HTMLButtonElement>('#train-btn')!
+const profileBtn = document.querySelector<HTMLButtonElement>('#profile-btn')!
 const loreBtn = document.querySelector<HTMLButtonElement>('#lore-btn')!
 const closeGacha = document.querySelector<HTMLButtonElement>('#close-gacha')!
 const pullOne = document.querySelector<HTMLButtonElement>('#pull-one')!
@@ -452,7 +494,18 @@ const heroShowcaseImg = document.querySelector<HTMLImageElement>('#hero-showcase
 const heroShowcaseLevel = document.querySelector<HTMLElement>('#hero-showcase-level')!
 const heroShowcaseTitle = document.querySelector<HTMLElement>('#hero-showcase-title')!
 const heroShowcaseGear = document.querySelector<HTMLElement>('#hero-showcase-gear')!
-const SAVE_KEY = 'void-trial-save-v1'
+const profilePanel = document.querySelector<HTMLDivElement>('#profile-panel')!
+const profileForm = document.querySelector<HTMLFormElement>('#profile-form')!
+const closeProfile = document.querySelector<HTMLButtonElement>('#close-profile')!
+const profileSwitch = document.querySelector<HTMLButtonElement>('#profile-switch')!
+const profileCurrent = document.querySelector<HTMLElement>('#profile-current')!
+const profileList = document.querySelector<HTMLDivElement>('#profile-list')!
+const profileNameInput = document.querySelector<HTMLInputElement>('#profile-name')!
+const profilePinInput = document.querySelector<HTMLInputElement>('#profile-pin')!
+const profileError = document.querySelector<HTMLDivElement>('#profile-error')!
+const LEGACY_SAVE_KEY = 'void-trial-save-v1'
+const PROFILE_INDEX_KEY = 'void-trial-profile-index-v1'
+const PROFILE_SAVE_PREFIX = `${LEGACY_SAVE_KEY}:profile:`
 
 function loadSprite(src: string) {
   const image = new Image()
@@ -517,6 +570,7 @@ let lastCanvasTapAt = 0
 let dragMovePointer: number | null = null
 let selectedArtifactKey: ArtifactKey = 'slash'
 let activePage: AppPage = 'battle'
+let activeProfile: PlayerProfile | null = null
 let audioCtx: AudioContext | null = null
 let audioMaster: GainNode | null = null
 let audioUnlocked = false
@@ -691,6 +745,228 @@ function addSlashParticles(x: number, y: number, angle: number, color: string, s
   }
 }
 
+function profileSaveKey(profileId = activeProfile?.id) {
+  return profileId ? `${PROFILE_SAVE_PREFIX}${profileId}` : LEGACY_SAVE_KEY
+}
+
+function normalizeProfileName(name: string) {
+  return name.trim().replace(/\s+/g, ' ').slice(0, 12)
+}
+
+function readProfileIndex(): ProfileIndex {
+  const raw = localStorage.getItem(PROFILE_INDEX_KEY)
+  if (!raw) return { activeId: null, profiles: [] }
+  try {
+    const parsed = JSON.parse(raw) as Partial<ProfileIndex>
+    const profiles = Array.isArray(parsed.profiles)
+      ? parsed.profiles
+        .filter((profile): profile is PlayerProfile => Boolean(profile?.id && profile?.name))
+        .map((profile) => ({
+          id: String(profile.id),
+          name: normalizeProfileName(String(profile.name)) || '本机玩家',
+          pin: String(profile.pin ?? ''),
+          createdAt: Number(profile.createdAt) || Date.now(),
+          lastLoginAt: Number(profile.lastLoginAt) || Number(profile.createdAt) || Date.now(),
+        }))
+      : []
+    const activeId = profiles.some((profile) => profile.id === parsed.activeId) ? String(parsed.activeId) : profiles[0]?.id ?? null
+    return { activeId, profiles }
+  } catch {
+    localStorage.removeItem(PROFILE_INDEX_KEY)
+    return { activeId: null, profiles: [] }
+  }
+}
+
+function writeProfileIndex(index: ProfileIndex) {
+  localStorage.setItem(PROFILE_INDEX_KEY, JSON.stringify(index))
+}
+
+function createProfile(name: string, pin: string): PlayerProfile {
+  const id = typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+  const now = Date.now()
+  return { id, name, pin: pin.trim(), createdAt: now, lastLoginAt: now }
+}
+
+function profileSummary(profileId: string) {
+  const raw = localStorage.getItem(profileSaveKey(profileId))
+  if (!raw) return { level: 1, tickets: 0, savedAt: 0 }
+  try {
+    const save = JSON.parse(raw) as Partial<SaveData>
+    return {
+      level: save.hero?.level ?? save.soulLevel ?? 1,
+      tickets: save.tickets ?? 0,
+      savedAt: save.savedAt ?? 0,
+    }
+  } catch {
+    return { level: 1, tickets: 0, savedAt: 0 }
+  }
+}
+
+function setProfileError(message: string) {
+  profileError.hidden = !message
+  profileError.textContent = message
+}
+
+function updateProfileUi() {
+  profileCurrent.textContent = activeProfile ? `当前玩家：${activeProfile.name}` : '请选择或创建玩家'
+  profileSwitch.disabled = !activeProfile
+  closeProfile.hidden = !activeProfile || profilePanel.classList.contains('blocking')
+  profileList.innerHTML = ''
+  const index = readProfileIndex()
+  if (!index.profiles.length) {
+    const empty = document.createElement('div')
+    empty.className = 'profile-empty'
+    empty.textContent = '还没有本地玩家，输入名字后会创建第一份档案。'
+    profileList.append(empty)
+    return
+  }
+  index.profiles
+    .slice()
+    .sort((a, b) => b.lastLoginAt - a.lastLoginAt)
+    .forEach((profile) => {
+      const summary = profileSummary(profile.id)
+      const row = document.createElement('button')
+      row.type = 'button'
+      row.className = `profile-row ${activeProfile?.id === profile.id ? 'active' : ''}`
+      const mark = document.createElement('i')
+      mark.textContent = profile.name.slice(0, 1)
+      const meta = document.createElement('span')
+      meta.textContent = profile.name
+      const detail = document.createElement('small')
+      detail.textContent = `Lv.${summary.level} | 抽卡券 ${summary.tickets}${profile.pin ? ' | 有口令' : ''}`
+      row.append(mark, meta, detail)
+      row.addEventListener('click', () => {
+        if (profile.pin) {
+          profileNameInput.value = profile.name
+          profilePinInput.focus()
+          setProfileError('这个玩家设置了本机口令，输入后进入。')
+          return
+        }
+        activateProfile(profile.id)
+      })
+      profileList.append(row)
+    })
+}
+
+function showProfilePanel(blocking = false) {
+  profilePanel.hidden = false
+  profilePanel.classList.toggle('blocking', blocking || !activeProfile)
+  setProfileError('')
+  updateProfileUi()
+  setTimeout(() => profileNameInput.focus(), 0)
+}
+
+function resetRuntimeState() {
+  state.mode = 'wild'
+  Object.assign(state.hero, { x: 0, y: 0, hp: 120, baseHp: 120, level: 1, exp: 0, baseAtk: 16, skillPower: 0 })
+  state.gear = { weapon: null, armor: null, core: null }
+  state.skills = { slash: 0, burst: 0, regen: 0, chain: 0, orbit: 0, flame: 0, points: 0 }
+  state.artifacts = { ...baseArtifacts }
+  state.mutations = { ...baseMutations }
+  state.activeCharacter = 'sword'
+  state.ownedCharacters = ['sword']
+  state.characterShards = { ...baseCharacterShards }
+  state.enemies = []
+  state.texts = []
+  state.effects = []
+  state.particles = []
+  state.soulOrbs = []
+  state.screenShake = 0
+  state.screenFlash = null
+  state.hitStop = 0
+  state.healPulse = 0
+  state.bag = []
+  state.kills = 0
+  state.tickets = 0
+  state.dungeonEntries = 3
+  state.pity = 0
+  state.wave = 1
+  state.skillCd = 0
+  state.chainCd = 0
+  state.orbitCd = 0
+  state.flameCd = 0
+  state.attackCd = 0
+  state.dungeonTime = 0
+  state.dungeonGoal = 12
+  state.dungeonStartKills = 0
+  state.dungeonExtractX = 0
+  state.dungeonExtractY = 0
+  state.dungeonLootTickets = 0
+  state.dungeonLootExp = 0
+  state.dungeonLootSkill = 0
+  state.dungeonMaterials = 0
+  state.dungeonMaterialGoal = 3
+  state.dungeonGateFound = false
+  state.bossSpawned = false
+  state.lastSettlement = ''
+  state.questTarget = 15
+  state.questClaimed = false
+  state.lastDaily = ''
+  state.guideStep = 0
+  state.soulExp = 0
+  state.autoHaste = 0
+  state.autoExplore = true
+  state.message = '意识已接入《虚境试炼》，灵契行者将自动沿世界线推进。'
+  input = { x: 0, y: 0 }
+  collectedMaterialCells = new Set()
+  moveTarget = null
+  moveTargetPulse = 0
+  dragMovePointer = null
+  selectedArtifactKey = 'slash'
+  autoWorldWalk = 0
+  last = performance.now()
+  showPage('battle')
+}
+
+function activateProfile(profileId: string) {
+  const index = readProfileIndex()
+  const profile = index.profiles.find((item) => item.id === profileId)
+  if (!profile) {
+    showProfilePanel(true)
+    setProfileError('没有找到这个玩家档案。')
+    return
+  }
+  profile.lastLoginAt = Date.now()
+  index.activeId = profile.id
+  writeProfileIndex(index)
+  activeProfile = profile
+  profilePanel.hidden = true
+  resetRuntimeState()
+  loadGame()
+  ensureEnemies()
+  toast(`已进入 ${profile.name} 的本地档案。`)
+  updateProfileUi()
+  updateHud()
+  updateGuide()
+}
+
+function initProfiles() {
+  const index = readProfileIndex()
+  if (!index.profiles.length) {
+    const legacy = localStorage.getItem(LEGACY_SAVE_KEY)
+    if (legacy) {
+      const profile = createProfile('本机玩家', '')
+      index.profiles.push(profile)
+      index.activeId = profile.id
+      writeProfileIndex(index)
+      localStorage.setItem(profileSaveKey(profile.id), legacy)
+    }
+  }
+  const nextIndex = readProfileIndex()
+  const active = nextIndex.profiles.find((profile) => profile.id === nextIndex.activeId) ?? nextIndex.profiles[0]
+  if (active) {
+    activeProfile = active
+    active.lastLoginAt = Date.now()
+    nextIndex.activeId = active.id
+    writeProfileIndex(nextIndex)
+  } else {
+    showProfilePanel(true)
+  }
+  updateProfileUi()
+}
+
 const guideTexts = [
   '野外会自动沿世界地图前进，点击战斗画面可临时接管移动。',
   '靠近敌人后角色会自动普攻；获得法宝后会自动释放对应仙术。',
@@ -717,7 +993,9 @@ function updateGuide() {
 }
 
 function loadGame() {
-  const raw = localStorage.getItem(SAVE_KEY)
+  if (!activeProfile) return
+  const key = profileSaveKey(activeProfile.id)
+  const raw = localStorage.getItem(key)
   if (!raw) {
     claimDailyReward()
     return
@@ -762,12 +1040,13 @@ function loadGame() {
     }
     claimDailyReward()
   } catch {
-    localStorage.removeItem(SAVE_KEY)
+    localStorage.removeItem(key)
     claimDailyReward()
   }
 }
 
 function saveGame() {
+  if (!activeProfile) return
   const save: SaveData = {
     hero: state.hero,
     gear: state.gear,
@@ -792,7 +1071,14 @@ function saveGame() {
     characterShards: state.characterShards,
     savedAt: Date.now(),
   }
-  localStorage.setItem(SAVE_KEY, JSON.stringify(save))
+  localStorage.setItem(profileSaveKey(activeProfile.id), JSON.stringify(save))
+  const index = readProfileIndex()
+  const profile = index.profiles.find((item) => item.id === activeProfile?.id)
+  if (profile) {
+    profile.lastLoginAt = Date.now()
+    index.activeId = profile.id
+    writeProfileIndex(index)
+  }
 }
 
 function claimDailyReward() {
@@ -4633,7 +4919,7 @@ function updateHud() {
   setText('level-label', `Lv.${state.hero.level}`)
   setText('atk-label', `攻击 ${totalAtk()}`)
   setText('kill-label', `击杀 ${state.kills}`)
-  setText('soul-label', `魂质Lv.${state.hero.level} ${state.soulExp}/${soulNeed()}`)
+  setText('soul-label', `魂Lv.${state.hero.level} ${state.soulExp}/${soulNeed()}`)
   const currentStage = worldStageNo()
   setText('wave-label', state.mode === 'dungeon' ? `副本 ${Math.ceil(state.dungeonTime)}s` : `第${currentStage}关`)
   setText('mode-label', state.mode === 'dungeon' ? `副本·${dungeonStageTitle()}` : `世界地图·${worldStageTitle(currentStage)}`)
@@ -4726,6 +5012,35 @@ function bindControls() {
   canvas.addEventListener('pointercancel', () => { dragMovePointer = null })
   autoOrb.addEventListener('click', toggleAutoExplore)
   modeBtn.addEventListener('click', enterDungeon)
+  profileBtn.addEventListener('click', () => showProfilePanel(false))
+  closeProfile.addEventListener('click', () => { if (activeProfile) profilePanel.hidden = true })
+  profileSwitch.addEventListener('click', () => showProfilePanel(true))
+  profileForm.addEventListener('submit', (event) => {
+    event.preventDefault()
+    const name = normalizeProfileName(profileNameInput.value)
+    const pin = profilePinInput.value.trim()
+    if (!name) {
+      setProfileError('先输入玩家名。')
+      profileNameInput.focus()
+      return
+    }
+    const index = readProfileIndex()
+    const existing = index.profiles.find((profile) => profile.name.toLowerCase() === name.toLowerCase())
+    if (existing) {
+      if (existing.pin && existing.pin !== pin) {
+        setProfileError('本机口令不对。')
+        profilePinInput.focus()
+        return
+      }
+      activateProfile(existing.id)
+      return
+    }
+    const profile = createProfile(name, pin)
+    index.profiles.push(profile)
+    index.activeId = profile.id
+    writeProfileIndex(index)
+    activateProfile(profile.id)
+  })
   loreBtn.addEventListener('click', () => { lorePanel.hidden = false })
   gachaBtn.addEventListener('click', () => showPage('gacha'))
   equipBtn.addEventListener('click', () => showPage('equip'))
@@ -4765,7 +5080,7 @@ function toggleAutoExplore() {
 }
 
 function setMoveTargetFromPointer(event: PointerEvent, allowDash: boolean) {
-  if (activePage !== 'battle' || !evolutionPanel.hidden || !settlementPanel.hidden || !lorePanel.hidden) return
+  if (activePage !== 'battle' || !evolutionPanel.hidden || !settlementPanel.hidden || !lorePanel.hidden || !profilePanel.hidden) return
   const rect = canvas.getBoundingClientRect()
   const sx = ((event.clientX - rect.left) / rect.width) * canvas.width
   const sy = ((event.clientY - rect.top) / rect.height) * canvas.height
@@ -4788,7 +5103,8 @@ function setMoveTargetFromPointer(event: PointerEvent, allowDash: boolean) {
 }
 
 bindControls()
-loadGame()
+initProfiles()
+if (activeProfile) loadGame()
 ensureEnemies()
 updateHud()
 updateGuide()
