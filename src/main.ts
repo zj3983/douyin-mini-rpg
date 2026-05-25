@@ -15,6 +15,9 @@ interface Enemy extends Vec { id: number; hp: number; maxHp: number; speed: numb
 interface FloatingText extends Vec { text: string; color: string; life: number }
 type EffectKind = 'ring' | 'slash' | 'blade' | 'shockwave' | 'bolt' | 'orbit' | 'flare' | 'swordrain' | 'thunderstorm' | 'firesea' | 'impact' | 'heal'
 interface Effect extends Vec { radius: number; color: string; life: number; maxLife: number; kind?: EffectKind; angle?: number }
+type ParticleKind = 'spark' | 'ember' | 'soul' | 'shard' | 'rune'
+interface Particle extends Vec { vx: number; vy: number; size: number; color: string; life: number; maxLife: number; kind: ParticleKind; spin: number }
+interface ScreenFlash { color: string; life: number; maxLife: number; strength: number }
 interface SoulOrb extends Vec { id: number; value: number; life: number; phase: number }
 interface Reward { name: string; rarity: Rarity; count: number; slot?: Slot; atk?: number; hp?: number; skill?: number; characterId?: CharacterId; artifact?: ArtifactKey }
 interface SkillTree { slash: number; burst: number; regen: number; chain: number; orbit: number; flame: number; points: number }
@@ -246,8 +249,10 @@ const state = {
   enemies: [] as Enemy[],
   texts: [] as FloatingText[],
   effects: [] as Effect[],
+  particles: [] as Particle[],
   soulOrbs: [] as SoulOrb[],
   screenShake: 0,
+  screenFlash: null as ScreenFlash | null,
   hitStop: 0,
   healPulse: 0,
   bag: [] as Reward[],
@@ -512,6 +517,179 @@ let lastCanvasTapAt = 0
 let dragMovePointer: number | null = null
 let selectedArtifactKey: ArtifactKey = 'slash'
 let activePage: AppPage = 'battle'
+let audioCtx: AudioContext | null = null
+let audioMaster: GainNode | null = null
+let audioUnlocked = false
+const soundLast: Record<string, number> = {}
+
+function unlockAudio() {
+  const AudioCtor = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  if (!AudioCtor) return
+  if (!audioCtx) {
+    audioCtx = new AudioCtor()
+    audioMaster = audioCtx.createGain()
+    audioMaster.gain.value = 0.36
+    audioMaster.connect(audioCtx.destination)
+  }
+  if (audioCtx.state === 'suspended') void audioCtx.resume()
+  audioUnlocked = true
+}
+
+function soundReady() {
+  return !!audioCtx && !!audioMaster && audioUnlocked
+}
+
+function canPlaySound(key: string, gap = 60) {
+  const now = performance.now()
+  if ((soundLast[key] ?? 0) + gap > now) return false
+  soundLast[key] = now
+  return true
+}
+
+function tone(freq: number, duration: number, type: OscillatorType, volume: number, endFreq = freq * 0.72, delay = 0) {
+  if (!soundReady() || !audioCtx || !audioMaster) return
+  const start = audioCtx.currentTime + delay
+  const osc = audioCtx.createOscillator()
+  const gain = audioCtx.createGain()
+  osc.type = type
+  osc.frequency.setValueAtTime(freq, start)
+  osc.frequency.exponentialRampToValueAtTime(Math.max(24, endFreq), start + duration)
+  gain.gain.setValueAtTime(0.0001, start)
+  gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume), start + 0.008)
+  gain.gain.exponentialRampToValueAtTime(0.0001, start + duration)
+  osc.connect(gain)
+  gain.connect(audioMaster)
+  osc.start(start)
+  osc.stop(start + duration + 0.03)
+}
+
+function noiseBurst(duration: number, volume: number, filterFreq = 900, delay = 0) {
+  if (!soundReady() || !audioCtx || !audioMaster) return
+  const start = audioCtx.currentTime + delay
+  const length = Math.max(1, Math.floor(audioCtx.sampleRate * duration))
+  const buffer = audioCtx.createBuffer(1, length, audioCtx.sampleRate)
+  const data = buffer.getChannelData(0)
+  for (let i = 0; i < length; i += 1) {
+    const fade = 1 - i / length
+    data[i] = (Math.random() * 2 - 1) * fade
+  }
+  const source = audioCtx.createBufferSource()
+  const filter = audioCtx.createBiquadFilter()
+  const gain = audioCtx.createGain()
+  filter.type = 'bandpass'
+  filter.frequency.setValueAtTime(filterFreq, start)
+  filter.Q.value = 4.4
+  gain.gain.setValueAtTime(volume, start)
+  gain.gain.exponentialRampToValueAtTime(0.0001, start + duration)
+  source.buffer = buffer
+  source.connect(filter)
+  filter.connect(gain)
+  gain.connect(audioMaster)
+  source.start(start)
+}
+
+const sfx = {
+  slash(strong = false) {
+    if (!canPlaySound(strong ? 'slash-strong' : 'slash', strong ? 120 : 72)) return
+    tone(strong ? 520 : 390, strong ? 0.16 : 0.1, 'sawtooth', strong ? 0.07 : 0.045, strong ? 96 : 150)
+    tone(strong ? 980 : 760, strong ? 0.11 : 0.07, 'triangle', strong ? 0.055 : 0.034, strong ? 360 : 420, 0.012)
+    noiseBurst(strong ? 0.09 : 0.055, strong ? 0.04 : 0.022, strong ? 1800 : 1400)
+  },
+  hit(power = 1, killed = false) {
+    if (!canPlaySound(killed ? 'kill' : 'hit', killed ? 80 : 45)) return
+    tone(killed ? 88 : 120 + power * 24, killed ? 0.18 : 0.075, 'triangle', killed ? 0.075 : 0.035, killed ? 42 : 70)
+    noiseBurst(killed ? 0.14 : 0.065, killed ? 0.06 : 0.028, killed ? 520 : 780)
+    if (killed) tone(260, 0.12, 'sine', 0.035, 520, 0.03)
+  },
+  thunder() {
+    if (!canPlaySound('thunder', 180)) return
+    noiseBurst(0.18, 0.065, 2400)
+    tone(980, 0.08, 'square', 0.045, 360)
+    tone(1460, 0.1, 'sawtooth', 0.032, 620, 0.035)
+  },
+  flame() {
+    if (!canPlaySound('flame', 220)) return
+    noiseBurst(0.22, 0.06, 680)
+    tone(190, 0.22, 'sawtooth', 0.05, 74)
+    tone(520, 0.14, 'triangle', 0.032, 260, 0.04)
+  },
+  orbit() {
+    if (!canPlaySound('orbit', 180)) return
+    for (let i = 0; i < 4; i += 1) tone(520 + i * 130, 0.08, 'triangle', 0.026, 340 + i * 82, i * 0.025)
+  },
+  heal() {
+    if (!canPlaySound('heal', 1200)) return
+    tone(420, 0.16, 'sine', 0.025, 620)
+    tone(660, 0.2, 'sine', 0.022, 880, 0.08)
+  },
+  soul(count = 1) {
+    if (!canPlaySound('soul', 110)) return
+    tone(520 + count * 28, 0.09, 'sine', 0.026, 840 + count * 30)
+    tone(820 + count * 24, 0.11, 'triangle', 0.018, 1180, 0.035)
+  },
+  level() {
+    if (!canPlaySound('level', 650)) return
+    for (let i = 0; i < 5; i += 1) tone(420 + i * 120, 0.16, 'sine', 0.034, 620 + i * 140, i * 0.055)
+  },
+  gacha(rank = 1) {
+    if (!canPlaySound(`gacha-${rank}`, 110)) return
+    tone(300 + rank * 70, 0.14, rank >= 3 ? 'triangle' : 'sine', 0.032 + rank * 0.008, 540 + rank * 120)
+    if (rank >= 3) tone(860 + rank * 80, 0.2, 'sine', 0.038, 1280 + rank * 120, 0.05)
+  },
+}
+
+function flashScreen(color: string, strength = 0.14, life = 0.16) {
+  const current = state.screenFlash
+  if (current && current.life / current.maxLife > strength) return
+  state.screenFlash = { color, strength, life, maxLife: life }
+}
+
+function addParticleBurst(x: number, y: number, color: string, count: number, power = 1, kind: ParticleKind = 'spark') {
+  if (state.particles.length > 260) state.particles.splice(0, state.particles.length - 220)
+  for (let i = 0; i < count; i += 1) {
+    const angle = Math.random() * Math.PI * 2
+    const speed = (90 + Math.random() * 260) * power
+    const lift = kind === 'ember' ? -70 : kind === 'soul' ? -130 : -35
+    const life = 0.32 + Math.random() * (kind === 'rune' ? 0.7 : 0.42)
+    state.particles.push({
+      x: x + (Math.random() - 0.5) * 22 * power,
+      y: y + (Math.random() - 0.5) * 18 * power,
+      vx: Math.cos(angle) * speed * (kind === 'rune' ? 0.35 : 1),
+      vy: Math.sin(angle) * speed * 0.55 + lift * power,
+      size: (2.8 + Math.random() * 7) * power,
+      color,
+      life,
+      maxLife: life,
+      kind,
+      spin: (Math.random() - 0.5) * 8,
+    })
+  }
+}
+
+function addSlashParticles(x: number, y: number, angle: number, color: string, strong = false) {
+  const count = strong ? 28 : 14
+  const length = strong ? 190 : 92
+  if (state.particles.length > 260) state.particles.splice(0, state.particles.length - 220)
+  for (let i = 0; i < count; i += 1) {
+    const along = (i / Math.max(1, count - 1) - 0.5) * length
+    const side = (Math.random() - 0.5) * (strong ? 64 : 34)
+    const ca = Math.cos(angle)
+    const sa = Math.sin(angle)
+    const life = 0.24 + Math.random() * 0.26
+    state.particles.push({
+      x: x + ca * along - sa * side,
+      y: y + sa * along + ca * side - 32,
+      vx: ca * (120 + Math.random() * 180) + (Math.random() - 0.5) * 70,
+      vy: sa * (70 + Math.random() * 80) - 40 - Math.random() * 70,
+      size: strong ? 5 + Math.random() * 8 : 3 + Math.random() * 5,
+      color,
+      life,
+      maxLife: life,
+      kind: 'shard',
+      spin: (Math.random() - 0.5) * 10,
+    })
+  }
+}
 
 const guideTexts = [
   '野外会自动沿世界地图前进，点击战斗画面可临时接管移动。',
@@ -1257,11 +1435,17 @@ function damageEnemy(enemy: Enemy, amount: number) {
   enemy.hp -= amount
   enemy.hit = 0.18
   const power = Math.min(2.2, 0.72 + amount / 120 + (enemy.elite ? 0.22 : 0) + (enemy.boss ? 0.38 : 0))
+  const killed = enemy.hp <= 0
   const knockDir = enemy.x >= state.hero.x ? 1 : -1
   enemy.x += knockDir * (enemy.boss ? 6 : 14) * power
   enemy.y += (Math.random() - 0.5) * (enemy.boss ? 6 : 16)
   state.screenShake = Math.max(state.screenShake, 0.08 * power)
   state.hitStop = Math.max(state.hitStop, Math.min(0.055, 0.018 + amount / 4200))
+  sfx.hit(power, killed)
+  addParticleBurst(enemy.x, enemy.y - (enemy.boss ? 62 : 34), enemy.boss ? '#facc15' : enemy.elite ? '#fed7aa' : '#e0f2fe', killed ? 28 : 12, killed ? 1.45 : Math.min(1.15, power), enemy.kind === 'crystal' || enemy.kind === 'warden' ? 'shard' : 'spark')
+  if (killed) {
+    flashScreen(enemy.boss ? 'rgba(250,204,21,.38)' : enemy.elite ? 'rgba(251,146,60,.25)' : 'rgba(224,242,254,.14)', enemy.boss ? 0.28 : enemy.elite ? 0.18 : 0.1, enemy.boss ? 0.28 : 0.16)
+  }
   state.effects.push({
     x: enemy.x,
     y: enemy.y - (enemy.boss ? 68 : enemy.kind === 'bat' ? 44 : 32),
@@ -1327,6 +1511,8 @@ function completeDungeon() {
   const expReward = state.dungeonLootExp + 30 + kills * 3
   const skillReward = state.dungeonLootSkill + 2 + Math.floor(kills / 6)
   const bossDrop = rollDungeonDrop()
+  sfx.level()
+  flashScreen('rgba(250,204,21,.26)', 0.22, 0.28)
 
   state.tickets += ticketReward
   grantExp(expReward)
@@ -1369,6 +1555,8 @@ function extractDungeon() {
   const expReward = state.dungeonLootExp
   const skillReward = state.dungeonLootSkill
   const extractDrop = kills >= 4 && Math.random() < 0.42 ? rollArtifactReward() : null
+  sfx.soul(4)
+  flashScreen('rgba(94,234,212,.2)', 0.16, 0.22)
 
   state.tickets += ticketReward
   grantExp(expReward)
@@ -1396,6 +1584,8 @@ function extractDungeon() {
 
 function failDungeon(reason: string) {
   const kills = Math.max(0, state.kills - state.dungeonStartKills)
+  sfx.hit(1.4, true)
+  flashScreen('rgba(251,113,133,.22)', 0.18, 0.2)
   renderSettlement({
     result: '撤离失败',
     subtitle: '副本空间坍塌，未撤出的携带收益已遗失',
@@ -1480,6 +1670,8 @@ function leaveDungeon(message: string) {
 function gainDungeonMaterial(x: number, y: number, label: string) {
   if (state.mode !== 'dungeon' || state.dungeonGateFound) return
     state.dungeonMaterials = Math.min(state.dungeonMaterialGoal, state.dungeonMaterials + 1)
+  sfx.soul(2)
+  addParticleBurst(x, y - 42, '#38bdf8', 16, 0.9, 'rune')
   state.texts.push({ x, y: y - 58, text: `+${label}`, color: '#38bdf8', life: 0.9 })
   if (state.dungeonMaterials >= state.dungeonMaterialGoal) {
     state.dungeonGateFound = true
@@ -1487,6 +1679,7 @@ function gainDungeonMaterial(x: number, y: number, label: string) {
     const distance = 260 + Math.random() * 160
     state.dungeonExtractX = state.hero.x + (Math.cos(angle) < 0 ? -1 : 1) * distance
     state.dungeonExtractY = state.hero.y
+    flashScreen('rgba(56,189,248,.18)', 0.15, 0.18)
     toast('门钥完整，撤离门已显现。')
   } else {
     toast(`获得${label} ${state.dungeonMaterials}/${state.dungeonMaterialGoal}`)
@@ -1508,6 +1701,9 @@ function attack(radius: number, multiplier: number, source: AttackSource = multi
   if (!heroIsMoving()) heroFacing = attackFacing
   const direction = Math.cos(attackFacing) < 0 ? -1 : 1
   lastAttackFlash = performance.now()
+  sfx.slash(multiplier > 1)
+  addSlashParticles(state.hero.x + direction * (multiplier > 1 ? 86 : 54), state.hero.y, attackFacing, multiplier > 1 ? '#67e8f9' : '#e0f2fe', multiplier > 1)
+  if (multiplier > 1) flashScreen('rgba(103,232,249,.16)', 0.13, 0.14)
   hits.forEach((enemy) => damageEnemy(enemy, Math.round((totalAtk() + skillPower()) * multiplier)))
   state.effects.push({
     x: state.hero.x + direction * (multiplier > 1 ? 96 : 58),
@@ -1609,6 +1805,9 @@ function gainArtifact(reward: Reward) {
   if (before > 0) state.skills.points += essence
   const label = before > 0 ? `${artifactDefs[key].name} 进阶 +${gain}` : `获得法宝：${artifactDefs[key].name}`
   toast(label)
+  sfx.gacha(rarityRank[reward.rarity])
+  flashScreen('rgba(250,204,21,.2)', 0.18, 0.22)
+  addParticleBurst(state.hero.x, state.hero.y - 90, artifactDefs[key].color, 34, 1.18, 'rune')
   state.texts.push({ x: state.hero.x, y: state.hero.y - 108, text: label, color: artifactDefs[key].color, life: 1.3 })
 }
 
@@ -1641,6 +1840,7 @@ async function pull(count: number) {
     gateCore.classList.add('opening')
     const label = gateCore.querySelector('span')
     if (label) label.textContent = '星门开启中...'
+    sfx.gacha(2)
     updateHud()
     await sleep(520)
 
@@ -1648,6 +1848,10 @@ async function pull(count: number) {
     for (let i = 0; i < count; i += 1) {
       const reward = rollReward()
       acceptReward(reward)
+      sfx.gacha(rarityRank[reward.rarity])
+      if (rarityRank[reward.rarity] >= 3) {
+        flashScreen(reward.rarity === '传说' ? 'rgba(250,204,21,.26)' : 'rgba(192,132,252,.2)', reward.rarity === '传说' ? 0.22 : 0.16, 0.22)
+      }
       if (!bestReward || rarityRank[reward.rarity] > rarityRank[bestReward.rarity]) bestReward = reward
       const row = document.createElement('div')
       row.className = `pull-card rarity-${rarityRank[reward.rarity]} ${rarityRank[reward.rarity] >= 3 ? 'high' : ''}`
@@ -1715,7 +1919,11 @@ function collectSoulOrbs(dt: number) {
     }
   }
   state.soulOrbs = remaining
-  if (gained > 0) gainSoul(gained)
+  if (gained > 0) {
+    sfx.soul(gained)
+    addParticleBurst(state.hero.x, state.hero.y - 52, '#5eead4', Math.min(20, 5 + gained * 3), 0.72, 'soul')
+    gainSoul(gained)
+  }
 }
 
 function soulNeed(level = state.hero.level) {
@@ -1734,6 +1942,9 @@ function levelUpSoul() {
   state.soulExp -= soulNeed()
   state.hero.level += 1
   state.hero.hp = maxHp()
+  sfx.level()
+  flashScreen('rgba(94,234,212,.2)', 0.17, 0.22)
+  addParticleBurst(state.hero.x, state.hero.y - 70, '#5eead4', 34, 1.22, 'rune')
   openEvolutionPanel()
   updateHud()
 }
@@ -1765,6 +1976,8 @@ function enterDungeon() {
   state.dungeonGateFound = false
   collectedMaterialCells = new Set()
   state.bossSpawned = false
+  sfx.gacha(3)
+  flashScreen('rgba(56,189,248,.18)', 0.16, 0.2)
   toast(`副本开启：剩余入场 ${state.dungeonEntries}/3。收集门钥碎片，撤离带走抽卡券和法宝。`)
   advanceGuide(4)
   saveGame()
@@ -1810,6 +2023,8 @@ function update(dt: number) {
     state.healPulse = Math.max(0, state.healPulse - dt)
     if (state.healPulse <= 0) {
       state.healPulse = 2.2
+      sfx.heal()
+      addParticleBurst(state.hero.x, state.hero.y - 42, '#86efac', 12, 0.72, 'soul')
       state.effects.push({
         x: state.hero.x,
         y: state.hero.y - 20,
@@ -1858,6 +2073,18 @@ function update(dt: number) {
   state.texts = state.texts.filter((text) => text.life > 0)
   state.effects.forEach((effect) => { effect.life -= dt })
   state.effects = state.effects.filter((effect) => effect.life > 0)
+  state.particles.forEach((particle) => {
+    particle.x += particle.vx * dt
+    particle.y += particle.vy * dt
+    particle.vx *= 0.985
+    particle.vy += (particle.kind === 'ember' ? -8 : particle.kind === 'soul' ? -24 : 62) * dt
+    particle.life -= dt
+  })
+  state.particles = state.particles.filter((particle) => particle.life > 0).slice(-260)
+  if (state.screenFlash) {
+    state.screenFlash.life -= dt
+    if (state.screenFlash.life <= 0) state.screenFlash = null
+  }
   updateHud()
 }
 
@@ -1888,6 +2115,9 @@ function autoChainLightning() {
     .sort((a, b) => Math.hypot(a.x - state.hero.x, a.y - state.hero.y) - Math.hypot(b.x - state.hero.x, b.y - state.hero.y))
     .slice(0, 2 + Math.floor(chainSkill / 2) + forkLevel)
   if (targets.length === 0) return
+  sfx.thunder()
+  flashScreen('rgba(186,230,253,.18)', forkLevel >= 2 ? 0.18 : 0.11, 0.14)
+  addParticleBurst(state.hero.x, state.hero.y - 90, '#bae6fd', 12 + forkLevel * 6, 0.9 + forkLevel * 0.18, 'rune')
   if (forkLevel > 0) state.texts.push({ x: state.hero.x, y: state.hero.y - 92, text: forkLevel >= 3 ? '九霄雷云·满屏' : '雷印分裂', color: '#bae6fd', life: 0.85 })
   if (forkLevel >= 2) {
     const stormRadius = 420 + forkLevel * 120
@@ -1908,6 +2138,7 @@ function autoChainLightning() {
   let from: Vec = state.hero
   targets.forEach((enemy, index) => {
     damageEnemy(enemy, Math.round((totalAtk() * 0.52 + skillPower() * 0.62) * (1 + chainSkill * 0.08)))
+    addParticleBurst(enemy.x, enemy.y - 54, '#bae6fd', 8, 0.85, 'spark')
     state.effects.push({
       x: (from.x + enemy.x) / 2,
       y: (from.y + enemy.y) / 2 - 36,
@@ -1959,6 +2190,9 @@ function autoOrbitBlade() {
     .filter((enemy) => Math.hypot(enemy.x - state.hero.x, enemy.y - state.hero.y) <= radius)
     .slice(0, 3 + Math.floor(orbitSkill / 2) + domainLevel)
   if (targets.length === 0 && domainLevel <= 0) return
+  sfx.orbit()
+  addParticleBurst(state.hero.x, state.hero.y - 34, '#e0f2fe', 16 + domainLevel * 8, 0.9 + domainLevel * 0.16, 'shard')
+  if (domainLevel >= 2) flashScreen('rgba(224,242,254,.14)', 0.12, 0.13)
   if (domainLevel > 0) state.texts.push({ x: state.hero.x, y: state.hero.y - 104, text: domainLevel >= 3 ? '剑域铺满' : '剑域展开', color: '#e0f2fe', life: 0.78 })
   targets.forEach((enemy) => damageEnemy(enemy, Math.round(totalAtk() * (0.42 + orbitSkill * 0.05 + domainLevel * 0.04) + skillPower() * 0.28)))
   state.effects.push({
@@ -2007,6 +2241,9 @@ function autoFlameBurst() {
     .sort((a, b) => b.score - a.score)[0]
   if (!target || target.score < 2 || Math.hypot(target.enemy.x - state.hero.x, target.enemy.y - state.hero.y) > 380) return
   const radius = 96 + flameSkill * 8 + lotusLevel * 14
+  sfx.flame()
+  flashScreen('rgba(251,146,60,.18)', lotusLevel >= 2 ? 0.2 : 0.12, 0.16)
+  addParticleBurst(target.enemy.x, target.enemy.y - 42, '#fb923c', 22 + lotusLevel * 8, 1 + lotusLevel * 0.18, 'ember')
   state.effects.push({
     x: target.enemy.x,
     y: target.enemy.y,
@@ -2463,6 +2700,9 @@ function openEvolutionPanel() {
 
 function chooseEvolution(option: EvolutionOption) {
   option.apply()
+  sfx.level()
+  flashScreen(option.mutation ? 'rgba(250,204,21,.24)' : 'rgba(94,234,212,.16)', option.mutation ? 0.24 : 0.14, 0.2)
+  addParticleBurst(state.hero.x, state.hero.y - 70, option.color, option.mutation ? 42 : 24, option.mutation ? 1.25 : 0.9, 'rune')
   state.texts.push({ x: state.hero.x, y: state.hero.y - 44, text: option.mutation ? `质变觉醒：${option.title}` : option.title, color: option.color, life: option.mutation ? 1.35 : 1 })
   evolutionPanel.hidden = true
   toast(`${option.mutation ? '质变觉醒' : '已进化'}：${option.title}`)
@@ -2498,6 +2738,7 @@ function draw() {
   drawWorldDetails(ox, oy)
   for (const orb of state.soulOrbs) drawSoulOrb(orb, ox, oy)
   for (const effect of state.effects) drawEffect(effect, ox, oy)
+  for (const particle of state.particles) drawParticle(particle, ox, oy)
   drawMoveTarget(ox, oy)
 
   const target = nearestEnemy()
@@ -2519,6 +2760,7 @@ function draw() {
   }
   drawScreenAtmosphere(w, h)
   ctx.restore()
+  drawScreenFlash(w, h)
 }
 
 function drawSideTerrain(w: number, h: number, ox: number, groundY: number) {
@@ -2872,6 +3114,24 @@ function drawScreenAtmosphere(w: number, h: number) {
   ctx.restore()
 }
 
+function drawScreenFlash(w: number, h: number) {
+  if (!state.screenFlash) return
+  const flash = state.screenFlash
+  const t = Math.max(0, flash.life / flash.maxLife)
+  ctx.save()
+  ctx.globalCompositeOperation = 'lighter'
+  ctx.globalAlpha = flash.strength * t
+  ctx.fillStyle = flash.color
+  ctx.fillRect(0, 0, w, h)
+  ctx.globalAlpha = flash.strength * t * 0.9
+  const glow = ctx.createRadialGradient(w / 2, h * 0.52, 20, w / 2, h * 0.52, Math.max(w, h) * 0.72)
+  glow.addColorStop(0, flash.color)
+  glow.addColorStop(1, 'rgba(255,255,255,0)')
+  ctx.fillStyle = glow
+  ctx.fillRect(0, 0, w, h)
+  ctx.restore()
+}
+
 function nearestEnemy() {
   let target: Enemy | null = null
   let best = Number.POSITIVE_INFINITY
@@ -2955,6 +3215,54 @@ function drawSoulOrb(orb: SoulOrb, ox: number, oy: number) {
   ctx.beginPath()
   ctx.arc(x, y, 15 + pulse * 3, 0, Math.PI * 2)
   ctx.stroke()
+  ctx.restore()
+}
+
+function drawParticle(particle: Particle, ox: number, oy: number) {
+  const t = Math.max(0, particle.life / particle.maxLife)
+  const x = particle.x + ox
+  const y = particle.y + oy
+  ctx.save()
+  ctx.globalCompositeOperation = particle.kind === 'ember' || particle.kind === 'spark' ? 'lighter' : 'source-over'
+  ctx.globalAlpha = Math.min(1, t * 1.2)
+  ctx.shadowColor = particle.color
+  ctx.shadowBlur = 8 + particle.size * 1.7
+  ctx.translate(x, y)
+  ctx.rotate(particle.spin * (1 - t))
+  if (particle.kind === 'shard') {
+    ctx.fillStyle = particle.color
+    ctx.strokeStyle = 'rgba(255,255,255,.62)'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(0, -particle.size * 1.5)
+    ctx.lineTo(particle.size * 0.8, 0)
+    ctx.lineTo(0, particle.size * 1.6)
+    ctx.lineTo(-particle.size * 0.75, 0)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+  } else if (particle.kind === 'rune') {
+    ctx.strokeStyle = particle.color
+    ctx.lineWidth = 1.8
+    ctx.beginPath()
+    ctx.arc(0, 0, particle.size * (0.8 + (1 - t) * 0.45), 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(-particle.size * 0.65, 0)
+    ctx.lineTo(particle.size * 0.65, 0)
+    ctx.moveTo(0, -particle.size * 0.65)
+    ctx.lineTo(0, particle.size * 0.65)
+    ctx.stroke()
+  } else {
+    const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, particle.size * 1.8)
+    gradient.addColorStop(0, '#ffffff')
+    gradient.addColorStop(0.28, particle.color)
+    gradient.addColorStop(1, 'rgba(255,255,255,0)')
+    ctx.fillStyle = gradient
+    ctx.beginPath()
+    ctx.arc(0, 0, particle.size * (0.6 + t * 0.7), 0, Math.PI * 2)
+    ctx.fill()
+  }
   ctx.restore()
 }
 
@@ -4403,7 +4711,10 @@ function loop(now: number) {
 }
 
 function bindControls() {
+  window.addEventListener('pointerdown', unlockAudio, { passive: true })
+  window.addEventListener('click', unlockAudio)
   canvas.addEventListener('pointerdown', (event) => {
+    unlockAudio()
     dragMovePointer = event.pointerId
     canvas.setPointerCapture(event.pointerId)
     setMoveTargetFromPointer(event, true)
