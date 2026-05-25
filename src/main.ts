@@ -108,6 +108,7 @@ const rarityColor: Record<Rarity, string> = {
 
 const rarityRank: Record<Rarity, number> = { 普通: 1, 稀有: 2, 史诗: 3, 传说: 4 }
 const baseMutations: MutationTree = { swordRide: 0, thunderFork: 0, swordDomain: 0, flameLotus: 0 }
+const mutationMaxLevel = 3
 const baseCharacterShards: Record<CharacterId, number> = { sword: 0, thunder: 0, flame: 0, wood: 0 }
 const artifactKeys: ArtifactKey[] = ['slash', 'burst', 'chain', 'orbit', 'flame', 'regen', 'bell', 'needle', 'mirror', 'fan', 'banner', 'seal']
 const artifactRarityOrder: Rarity[] = ['传说', '史诗', '稀有', '普通']
@@ -1353,11 +1354,29 @@ function autoWorldSpeed() {
 
 function mutationSummary() {
   const names: string[] = []
-  if (state.mutations.swordRide > 0) names.push(`化虹${state.mutations.swordRide}`)
-  if (state.mutations.thunderFork > 0) names.push(`雷印${state.mutations.thunderFork}`)
-  if (state.mutations.swordDomain > 0) names.push(`剑域${state.mutations.swordDomain}`)
-  if (state.mutations.flameLotus > 0) names.push(`莲火${state.mutations.flameLotus}`)
+  if (state.mutations.swordRide > 0) names.push(`化虹·${mutationStageName(state.mutations.swordRide)}`)
+  if (state.mutations.thunderFork > 0) names.push(`雷印·${mutationStageName(state.mutations.thunderFork)}`)
+  if (state.mutations.swordDomain > 0) names.push(`剑域·${mutationStageName(state.mutations.swordDomain)}`)
+  if (state.mutations.flameLotus > 0) names.push(`莲火·${mutationStageName(state.mutations.flameLotus)}`)
   return names.length > 0 ? names.join(' / ') : '未觉醒'
+}
+
+function mutationStageName(level: number) {
+  if (level >= mutationMaxLevel) return '大成'
+  if (level >= 2) return '进阶'
+  if (level >= 1) return '觉醒'
+  return '未觉醒'
+}
+
+function mutationNextTitle(base: string, current: number) {
+  return `${base}·${mutationStageName(Math.min(mutationMaxLevel, current + 1))}`
+}
+
+function mutationNextDesc(current: number, awaken: string, advance: string, complete: string) {
+  const next = Math.min(mutationMaxLevel, current + 1)
+  if (next >= mutationMaxLevel) return `大成：${complete}`
+  if (next >= 2) return `进阶：${advance}`
+  return `觉醒：${awaken}`
 }
 
 function activeCharacter() {
@@ -2954,6 +2973,14 @@ function evolutionRequiredArtifact(id: string): ArtifactKey | null {
   return null
 }
 
+function mutationLevelForOption(id: string) {
+  if (id === 'mutate-ride') return state.mutations.swordRide
+  if (id === 'mutate-thunder') return state.mutations.thunderFork
+  if (id === 'mutate-domain') return state.mutations.swordDomain
+  if (id === 'mutate-flame') return state.mutations.flameLotus
+  return 0
+}
+
 function evolutionOptions(): EvolutionOption[] {
   const tier = currentEvolutionTier()
   const rank = tierRank(tier)
@@ -3089,15 +3116,18 @@ function evolutionOptions(): EvolutionOption[] {
       build: (power, cardTier) => ({
         id: 'mutate-ride',
         iconId: power >= 3 ? 'blade-3' : power >= 2 ? 'blade-2' : 'blade-1',
-        title: state.mutations.swordRide > 0 ? '飞剑化虹·进阶' : '飞剑化虹',
+        title: mutationNextTitle('飞剑化虹', state.mutations.swordRide),
         tier: cardTier,
         color: '#67e8f9',
         mutation: true,
-        desc: state.mutations.swordRide > 0
-          ? `御剑速度继续提升，普攻额外锁定目标。`
-          : `质变：脚下本命飞剑显形，野外推进更快，普攻可同时御剑追击。`,
+        desc: mutationNextDesc(
+          state.mutations.swordRide,
+          '脚下本命飞剑显形，野外推进更快，普攻可同时御剑追击。',
+          '御剑速度继续提升，普攻额外锁定目标。',
+          '化虹形态稳定，野外推进和普攻追击达到当前上限。',
+        ),
         apply: () => {
-          state.mutations.swordRide += 1
+          state.mutations.swordRide = Math.min(mutationMaxLevel, state.mutations.swordRide + 1)
           empowerArtifact('slash', power)
           state.autoHaste += 1
         },
@@ -3110,15 +3140,18 @@ function evolutionOptions(): EvolutionOption[] {
       build: (power, cardTier) => ({
         id: 'mutate-thunder',
         iconId: power >= 3 ? 'chain-3' : power >= 2 ? 'chain-2' : 'chain-1',
-        title: state.mutations.thunderFork > 0 ? '雷印分裂·进阶' : '雷印分裂',
+        title: mutationNextTitle('雷印分裂', state.mutations.thunderFork),
         tier: cardTier,
         color: '#38bdf8',
         mutation: true,
-        desc: state.mutations.thunderFork > 0
-          ? `九霄雷诀继续增加弹射目标，高阶后召出满屏雷云。`
-          : `质变：九霄雷诀留下雷印，进阶后自动铺开满屏雷云。`,
+        desc: mutationNextDesc(
+          state.mutations.thunderFork,
+          '九霄雷诀留下雷印，后续可分裂出更多雷链。',
+          '雷印弹射目标增加，并开始铺开连锁雷云。',
+          '雷印大成，雷云形态达到当前满屏上限。',
+        ),
         apply: () => {
-          state.mutations.thunderFork += 1
+          state.mutations.thunderFork = Math.min(mutationMaxLevel, state.mutations.thunderFork + 1)
           empowerArtifact('chain', power)
           state.chainCd = 0
         },
@@ -3131,15 +3164,18 @@ function evolutionOptions(): EvolutionOption[] {
       build: (power, cardTier) => ({
         id: 'mutate-domain',
         iconId: power >= 3 ? 'orbit-3' : power >= 2 ? 'orbit-2' : 'orbit-1',
-        title: state.mutations.swordDomain > 0 ? '万剑剑域·进阶' : '万剑剑域',
+        title: mutationNextTitle('万剑剑域', state.mutations.swordDomain),
         tier: cardTier,
         color: '#a5f3fc',
         mutation: true,
-        desc: state.mutations.swordDomain > 0
-          ? `剑域继续扩大，高阶后万剑落屏。`
-          : `质变：护体剑阵变成剑域，进阶后可演化为满屏万剑。`,
+        desc: mutationNextDesc(
+          state.mutations.swordDomain,
+          '护体剑阵变成剑域，开始向外扩张。',
+          '剑域继续扩大，万剑数量明显增加。',
+          '剑域大成，万剑落屏达到当前表现上限。',
+        ),
         apply: () => {
-          state.mutations.swordDomain += 1
+          state.mutations.swordDomain = Math.min(mutationMaxLevel, state.mutations.swordDomain + 1)
           empowerArtifact('orbit', power)
           state.orbitCd = 0
         },
@@ -3152,15 +3188,18 @@ function evolutionOptions(): EvolutionOption[] {
       build: (power, cardTier) => ({
         id: 'mutate-flame',
         iconId: power >= 3 ? 'flame-3' : power >= 2 ? 'flame-2' : 'flame-1',
-        title: state.mutations.flameLotus > 0 ? '莲火符海·进阶' : '莲火符海',
+        title: mutationNextTitle('莲火符海', state.mutations.flameLotus),
         tier: cardTier,
         color: '#fb923c',
         mutation: true,
-        desc: state.mutations.flameLotus > 0
-          ? `离火符阵追加更多符火，高阶后莲火铺满战场。`
-          : `质变：离火符阵分裂成莲火符海，进阶后可铺满屏幕。`,
+        desc: mutationNextDesc(
+          state.mutations.flameLotus,
+          '离火符阵分裂成莲火符海，开始持续铺场。',
+          '符火数量增加，莲火覆盖范围扩大。',
+          '莲火大成，符海铺满战场达到当前上限。',
+        ),
         apply: () => {
-          state.mutations.flameLotus += 1
+          state.mutations.flameLotus = Math.min(mutationMaxLevel, state.mutations.flameLotus + 1)
           empowerArtifact('flame', power)
           state.flameCd = 0
         },
@@ -3319,6 +3358,7 @@ function evolutionOptions(): EvolutionOption[] {
   const fallbackGrowthPool = pool.filter((option) => ['vital', 'magnet', 'ticket'].includes(option.id))
   const mutationPool = pool.filter((option) => {
     if (!option.id.startsWith('mutate-')) return false
+    if (mutationLevelForOption(option.id) >= mutationMaxLevel) return false
     const required = evolutionRequiredArtifact(option.id)
     return required ? hasArtifact(required) : false
   })
