@@ -2291,6 +2291,67 @@ canvas {
   opacity: 0.76;
 }
 
+.artifact-detail-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 35;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background:
+    radial-gradient(circle at 50% 20%, color-mix(in srgb, var(--item-color, #38bdf8), transparent 82%), transparent 38%),
+    rgba(2, 6, 23, 0.72);
+  backdrop-filter: blur(8px);
+  touch-action: pan-y;
+}
+
+.artifact-detail-panel[hidden] {
+  display: none !important;
+}
+
+.artifact-modal-card {
+  width: min(100%, 398px);
+  max-height: min(650px, calc(100svh - 118px));
+  overflow: auto;
+  padding: 14px;
+  border-color: color-mix(in srgb, var(--rarity-color, #facc15), transparent 18%);
+  border-radius: 18px;
+  box-shadow:
+    0 26px 90px rgba(0, 0, 0, 0.58),
+    0 0 38px color-mix(in srgb, var(--item-color, #38bdf8), transparent 78%),
+    inset 0 0 30px rgba(255, 255, 255, 0.05);
+  animation: artifact-pop 150ms ease-out;
+}
+
+.artifact-modal-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  width: 38px;
+  min-height: 38px;
+  border-color: rgba(226, 232, 240, 0.24);
+  border-radius: 999px;
+  color: #e2e8f0;
+  background: rgba(2, 6, 23, 0.72);
+  font-size: 18px;
+}
+
+.artifact-modal-card .artifact-copy {
+  padding-right: 34px;
+}
+
+@keyframes artifact-pop {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .artifact-hero-art {
   display: grid;
   place-items: center;
@@ -2402,6 +2463,16 @@ canvas {
   color: #94a3b8;
   background: rgba(15, 23, 42, 0.72);
   box-shadow: none;
+}
+
+@media (max-width: 390px) {
+  .artifact-modal-card {
+    grid-template-columns: 1fr;
+  }
+
+  .artifact-modal-card .artifact-copy {
+    padding-right: 0;
+  }
 }
 
 .skill-row {

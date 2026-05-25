@@ -541,6 +541,8 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     </section>
     </section>
 
+    <section id="artifact-detail-panel" class="artifact-detail-panel" hidden></section>
+
     <nav class="bottom-nav" aria-label="主导航">
       <button id="battle-btn" class="active" type="button" data-page="battle"><i>战</i><span>战斗</span></button>
       <button id="dungeon-btn" type="button" data-page="dungeon"><i>境</i><span>副本</span></button>
@@ -643,6 +645,7 @@ const skillPanel = document.querySelector<HTMLDivElement>('#skill-panel')!
 const closeSkillPanel = document.querySelector<HTMLButtonElement>('#close-skill-panel')!
 const skillPointsLabel = document.querySelector<HTMLDivElement>('#skill-points')!
 const skillList = document.querySelector<HTMLDivElement>('#skill-list')!
+const artifactDetailPanel = document.querySelector<HTMLElement>('#artifact-detail-panel')!
 const battleView = document.querySelector<HTMLElement>('#battle-view')!
 const navButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.bottom-nav button[data-page]'))
 const pagePanels: Record<AppPage, HTMLElement> = {
@@ -1766,7 +1769,7 @@ function renderBagPanel() {
   }
 }
 
-function renderSkillPanel(focusDetail = false) {
+function renderSkillPanel() {
   const ownedCount = artifactKeys.filter((key) => hasArtifact(key)).length
   const maxedCount = artifactKeys.filter((key) => hasArtifact(key) && artifactLevel(key) >= artifactDefs[key].max).length
   if (!artifactKeys.includes(selectedArtifactKey)) selectedArtifactKey = 'slash'
@@ -1776,45 +1779,6 @@ function renderSkillPanel(focusDetail = false) {
     <span>满阶 <b>${maxedCount}</b></span>
   `
   skillList.innerHTML = ''
-  const def = artifactDefs[selectedArtifactKey]
-  const owned = hasArtifact(selectedArtifactKey)
-  const level = artifactLevel(selectedArtifactKey)
-  const shownLevel = Math.min(level, def.max)
-  const overflow = Math.max(0, level - def.max)
-  const bonus = owned ? (activeCharacter().starter[selectedArtifactKey] ?? 0) : 0
-  const cost = shownLevel + 1
-  const progress = owned ? Math.min(100, (shownLevel / def.max) * 100) : 0
-  const detail = document.createElement('div')
-  detail.className = `artifact-focus-card ${owned ? 'owned' : 'locked'}`
-  detail.style.setProperty('--item-color', def.color)
-  detail.style.setProperty('--rarity-color', rarityColor[def.rarity])
-  detail.innerHTML = `
-    <div class="artifact-hero-art">${artifactIcon(selectedArtifactKey)}</div>
-    <div class="artifact-copy">
-      <small><em>${def.rarity}</em> ${def.type}</small>
-      <b>${def.name}</b>
-      <span>${owned ? `Lv.${shownLevel}/${def.max}${bonus > 0 ? ` · ${activeCharacter().name}亲和 +${bonus}` : ''}${overflow > 0 ? ` · 溢出 ${overflow}` : ''}` : '副本未获得'}</span>
-      <p>${def.desc}</p>
-    </div>
-    <div class="artifact-meter"><i style="width:${progress}%"></i></div>
-    <div class="artifact-source">${def.source}</div>
-  `
-  const action = document.createElement('button')
-  action.type = 'button'
-  action.className = 'artifact-upgrade'
-  if (!owned) {
-    action.textContent = '副本掉落'
-    action.disabled = true
-  } else if (level >= def.max) {
-    action.textContent = '已满阶'
-    action.disabled = true
-  } else {
-    action.textContent = `淬炼 · ${cost} 精华`
-    action.disabled = state.skills.points < cost
-  }
-  action.addEventListener('click', () => upgradeSkill(selectedArtifactKey, def.max))
-  detail.appendChild(action)
-  skillList.appendChild(detail)
 
   artifactRarityOrder.forEach((rarity) => {
     const groupKeys = artifactKeys.filter((key) => artifactDefs[key].rarity === rarity)
@@ -1844,16 +1808,65 @@ function renderSkillPanel(focusDetail = false) {
         <small>${owned ? `Lv.${Math.min(level, def.max)}${bonus > 0 ? `+${bonus}` : ''}` : '未获得'}</small>
       `
       tab.addEventListener('click', () => {
-        selectedArtifactKey = key
-        renderSkillPanel(true)
+        openArtifactDetail(key)
       })
       switcher.appendChild(tab)
     })
     group.appendChild(switcher)
     skillList.appendChild(group)
   })
+}
 
-  if (focusDetail) requestAnimationFrame(() => skillPanel.scrollTo({ top: 0, behavior: 'smooth' }))
+function closeArtifactDetail() {
+  artifactDetailPanel.hidden = true
+  artifactDetailPanel.innerHTML = ''
+}
+
+function openArtifactDetail(key: ArtifactKey) {
+  selectedArtifactKey = key
+  const def = artifactDefs[key]
+  const owned = hasArtifact(key)
+  const level = artifactLevel(key)
+  const shownLevel = Math.min(level, def.max)
+  const overflow = Math.max(0, level - def.max)
+  const bonus = owned ? (activeCharacter().starter[key] ?? 0) : 0
+  const cost = shownLevel + 1
+  const progress = owned ? Math.min(100, (shownLevel / def.max) * 100) : 0
+  artifactDetailPanel.hidden = false
+  artifactDetailPanel.style.setProperty('--item-color', def.color)
+  artifactDetailPanel.style.setProperty('--rarity-color', rarityColor[def.rarity])
+  artifactDetailPanel.innerHTML = `
+    <div class="artifact-focus-card artifact-modal-card ${owned ? 'owned' : 'locked'}" role="dialog" aria-modal="true" aria-label="${def.name}详情">
+      <button class="artifact-modal-close" type="button" aria-label="关闭法宝详情">x</button>
+      <div class="artifact-hero-art">${artifactIcon(key)}</div>
+      <div class="artifact-copy">
+        <small><em>${def.rarity}</em> ${def.type}</small>
+        <b>${def.name}</b>
+        <span>${owned ? `Lv.${shownLevel}/${def.max}${bonus > 0 ? ` · ${activeCharacter().name}亲和 +${bonus}` : ''}${overflow > 0 ? ` · 溢出 ${overflow}` : ''}` : '副本未获得'}</span>
+        <p>${def.desc}</p>
+      </div>
+      <div class="artifact-meter"><i style="width:${progress}%"></i></div>
+      <div class="artifact-source">${def.source}</div>
+      <button class="artifact-upgrade" type="button"></button>
+    </div>
+  `
+  const action = artifactDetailPanel.querySelector<HTMLButtonElement>('.artifact-upgrade')!
+  if (!owned) {
+    action.textContent = '副本掉落'
+    action.disabled = true
+  } else if (level >= def.max) {
+    action.textContent = '已满阶'
+    action.disabled = true
+  } else {
+    action.textContent = `淬炼 · ${cost} 精华`
+    action.disabled = state.skills.points < cost
+  }
+  action.addEventListener('click', () => {
+    upgradeSkill(key, def.max)
+    openArtifactDetail(key)
+  })
+  artifactDetailPanel.querySelector<HTMLButtonElement>('.artifact-modal-close')?.addEventListener('click', closeArtifactDetail)
+  renderSkillPanel()
 }
 
 function upgradeSkill(key: ArtifactKey, max: number) {
@@ -5239,6 +5252,7 @@ function prepareGachaPage() {
 
 function showPage(page: AppPage) {
   activePage = page
+  if (page !== 'artifact') closeArtifactDetail()
   Object.entries(pagePanels).forEach(([key, panel]) => {
     panel.hidden = key !== page
   })
@@ -5332,6 +5346,12 @@ function bindControls() {
   closeEquip.addEventListener('click', () => { showPage('battle') })
   closeBag.addEventListener('click', () => { showPage('battle') })
   closeSkillPanel.addEventListener('click', () => { showPage('battle') })
+  artifactDetailPanel.addEventListener('click', (event) => {
+    if (event.target === artifactDetailPanel) closeArtifactDetail()
+  })
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !artifactDetailPanel.hidden) closeArtifactDetail()
+  })
   pullOne.addEventListener('click', () => pull(1))
   pullTen.addEventListener('click', () => pull(10))
 }
