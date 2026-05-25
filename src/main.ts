@@ -535,7 +535,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     </section>
 
       <section id="skill-panel" class="page-view page-sheet skill-sheet" data-page="artifact" hidden>
-      <div class="sheet-head"><h2>法宝库</h2><button id="close-skill-panel" class="page-close" type="button">x</button></div>
+      <div class="sheet-head skill-head"><div><h2 id="artifact-page-title">法宝匣</h2><small id="artifact-page-subtitle">副本带回的法宝会在这里显形</small></div><button id="close-skill-panel" class="page-close" type="button">x</button></div>
       <div id="skill-points" class="rates"></div>
       <div id="skill-list" class="skill-list"></div>
     </section>
@@ -645,6 +645,8 @@ const skillPanel = document.querySelector<HTMLDivElement>('#skill-panel')!
 const closeSkillPanel = document.querySelector<HTMLButtonElement>('#close-skill-panel')!
 const skillPointsLabel = document.querySelector<HTMLDivElement>('#skill-points')!
 const skillList = document.querySelector<HTMLDivElement>('#skill-list')!
+const artifactPageTitle = document.querySelector<HTMLElement>('#artifact-page-title')!
+const artifactPageSubtitle = document.querySelector<HTMLElement>('#artifact-page-subtitle')!
 const artifactDetailPanel = document.querySelector<HTMLElement>('#artifact-detail-panel')!
 const battleView = document.querySelector<HTMLElement>('#battle-view')!
 const navButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.bottom-nav button[data-page]'))
@@ -1777,6 +1779,10 @@ function renderSkillPanel() {
   const ownedCount = artifactKeys.filter((key) => hasArtifact(key)).length
   const maxedCount = artifactKeys.filter((key) => hasArtifact(key) && artifactLevel(key) >= artifactDefs[key].max).length
   if (!artifactKeys.includes(selectedArtifactKey)) selectedArtifactKey = 'slash'
+  artifactPageTitle.textContent = ownedCount > 0 ? `法宝匣 ${ownedCount}/${artifactKeys.length}` : '未开封法宝匣'
+  artifactPageSubtitle.textContent = ownedCount > 0
+    ? `已显形 ${ownedCount} 件，未获得的仍是未鉴定槽位。`
+    : '进入副本撤离后，法宝才会显形并解锁详情。'
   skillPointsLabel.innerHTML = `
     <span>精华 <b>${state.skills.points}</b></span>
     <span>已获 <b>${ownedCount}/${artifactKeys.length}</b></span>

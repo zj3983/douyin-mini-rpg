@@ -1303,6 +1303,24 @@ canvas {
   border-color: rgba(96, 165, 250, 0.48);
 }
 
+.skill-sheet .skill-head {
+  position: static;
+  padding-bottom: 12px;
+  background: transparent;
+}
+
+.skill-head h2 {
+  margin: 0;
+}
+
+.skill-head small {
+  display: block;
+  margin-top: 4px;
+  color: #93c5fd;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .lore-sheet {
   border-color: rgba(94, 234, 212, 0.42);
 }
