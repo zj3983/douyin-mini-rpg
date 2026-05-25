@@ -2131,6 +2131,36 @@ canvas {
   gap: 10px;
 }
 
+.artifact-rarity-group {
+  display: grid;
+  gap: 7px;
+}
+
+.artifact-rarity-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+  padding: 0 3px;
+}
+
+.artifact-rarity-head b {
+  color: var(--rarity-color, #f8fafc);
+  font-size: 14px;
+}
+
+.artifact-rarity-head span {
+  min-width: 44px;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--rarity-color, #f8fafc), transparent 48%);
+  border-radius: 999px;
+  color: #dbeafe;
+  text-align: center;
+  background: rgba(2, 6, 23, 0.5);
+  font-size: 11px;
+  font-weight: 900;
+}
+
 .skill-sheet .rates {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2173,6 +2203,21 @@ canvas {
     radial-gradient(circle at 50% 20%, color-mix(in srgb, var(--item-color, #38bdf8), transparent 72%), transparent 43%),
     linear-gradient(180deg, rgba(15, 23, 42, 0.86), rgba(2, 6, 23, 0.78));
   box-shadow: inset 0 0 16px rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+}
+
+.artifact-tab em {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 2px 5px;
+  border: 1px solid color-mix(in srgb, var(--rarity-color, #dbeafe), transparent 36%);
+  border-radius: 999px;
+  color: var(--rarity-color, #dbeafe);
+  background: rgba(2, 6, 23, 0.68);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 1000;
 }
 
 .artifact-tab.active {
@@ -2183,7 +2228,8 @@ canvas {
 }
 
 .artifact-tab.locked {
-  opacity: 0.58;
+  opacity: 0.7;
+  border-style: dashed;
 }
 
 .artifact-tab i {
@@ -2280,6 +2326,16 @@ canvas {
   color: color-mix(in srgb, var(--item-color, #38bdf8), white 34%);
   font-size: 11px;
   font-weight: 900;
+}
+
+.artifact-copy small em {
+  display: inline-block;
+  margin-right: 5px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: #020617;
+  background: var(--rarity-color, #dbeafe);
+  font-style: normal;
 }
 
 .artifact-copy b {

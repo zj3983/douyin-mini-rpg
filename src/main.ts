@@ -8,7 +8,7 @@ type AttackSource = 'manual' | 'auto' | 'skill'
 type EvolutionTier = '初阶' | '进阶' | '高阶'
 type EnemyKind = 'slime' | 'bat' | 'wolf' | 'crystal' | 'warden'
 type CharacterId = 'sword' | 'thunder' | 'flame' | 'wood'
-type ArtifactKey = 'slash' | 'burst' | 'regen' | 'chain' | 'orbit' | 'flame'
+type ArtifactKey = 'slash' | 'burst' | 'regen' | 'chain' | 'orbit' | 'flame' | 'bell' | 'needle' | 'mirror' | 'fan' | 'banner' | 'seal'
 type DungeonId = 'mossCave' | 'starHall' | 'mistMaze' | 'crystalMine' | 'bloodRift' | 'kingTomb'
 
 interface Vec { x: number; y: number }
@@ -21,7 +21,7 @@ interface Particle extends Vec { vx: number; vy: number; size: number; color: st
 interface ScreenFlash { color: string; life: number; maxLife: number; strength: number }
 interface SoulOrb extends Vec { id: number; value: number; life: number; phase: number }
 interface Reward { name: string; rarity: Rarity; count: number; slot?: Slot; atk?: number; hp?: number; skill?: number; characterId?: CharacterId; artifact?: ArtifactKey }
-interface SkillTree { slash: number; burst: number; regen: number; chain: number; orbit: number; flame: number; points: number }
+interface SkillTree { slash: number; burst: number; regen: number; chain: number; orbit: number; flame: number; bell: number; needle: number; mirror: number; fan: number; banner: number; seal: number; points: number }
 interface MutationTree { swordRide: number; thunderFork: number; swordDomain: number; flameLotus: number }
 interface CharacterDef { id: CharacterId; name: string; title: string; need: number; color: string; portrait: string; battle: string; starter: Partial<SkillTree>; desc: string }
 interface ArtifactDef { key: ArtifactKey; name: string; type: string; color: string; rarity: Rarity; iconId: string; image: string; desc: string; source: string; max: number }
@@ -109,8 +109,22 @@ const rarityColor: Record<Rarity, string> = {
 const rarityRank: Record<Rarity, number> = { 普通: 1, 稀有: 2, 史诗: 3, 传说: 4 }
 const baseMutations: MutationTree = { swordRide: 0, thunderFork: 0, swordDomain: 0, flameLotus: 0 }
 const baseCharacterShards: Record<CharacterId, number> = { sword: 0, thunder: 0, flame: 0, wood: 0 }
-const artifactKeys: ArtifactKey[] = ['slash', 'burst', 'chain', 'orbit', 'flame', 'regen']
-const baseArtifacts: Record<ArtifactKey, number> = { slash: 0, burst: 0, regen: 0, chain: 0, orbit: 0, flame: 0 }
+const artifactKeys: ArtifactKey[] = ['slash', 'burst', 'chain', 'orbit', 'flame', 'regen', 'bell', 'needle', 'mirror', 'fan', 'banner', 'seal']
+const artifactRarityOrder: Rarity[] = ['传说', '史诗', '稀有', '普通']
+const baseArtifacts: Record<ArtifactKey, number> = {
+  slash: 0,
+  burst: 0,
+  regen: 0,
+  chain: 0,
+  orbit: 0,
+  flame: 0,
+  bell: 0,
+  needle: 0,
+  mirror: 0,
+  fan: 0,
+  banner: 0,
+  seal: 0,
+}
 
 const stageSpan = 620
 const stageThemes: StageTheme[] = [
@@ -235,7 +249,7 @@ const dungeonDefs: DungeonDef[] = [
     ticketBonus: 4,
     expBonus: 30,
     skillBonus: 2,
-    artifactFocus: ['slash', 'regen'],
+    artifactFocus: ['slash', 'regen', 'bell'],
     trait: '门钥碎片多，适合新手撤离。',
     threat: '灵草傀和青苔兽',
     color: '#5eead4',
@@ -252,7 +266,7 @@ const dungeonDefs: DungeonDef[] = [
     ticketBonus: 7,
     expBonus: 48,
     skillBonus: 3,
-    artifactFocus: ['chain', 'burst'],
+    artifactFocus: ['chain', 'burst', 'needle'],
     trait: '抽卡券收益更高，怪潮更密。',
     threat: '裂隙飞魇和星核晶卫',
     color: '#38bdf8',
@@ -269,7 +283,7 @@ const dungeonDefs: DungeonDef[] = [
     ticketBonus: 6,
     expBonus: 66,
     skillBonus: 4,
-    artifactFocus: ['orbit', 'regen'],
+    artifactFocus: ['orbit', 'regen', 'mirror'],
     trait: '法宝精华更多，撤离门距离更远。',
     threat: '雾翅妖蝠和司命幻影',
     color: '#99f6e4',
@@ -286,7 +300,7 @@ const dungeonDefs: DungeonDef[] = [
     ticketBonus: 8,
     expBonus: 86,
     skillBonus: 5,
-    artifactFocus: ['burst', 'orbit'],
+    artifactFocus: ['burst', 'orbit', 'fan'],
     trait: '精英比例更高，通关更容易出史诗法宝。',
     threat: '晶甲妖兽和紫晶镇守',
     color: '#c084fc',
@@ -303,7 +317,7 @@ const dungeonDefs: DungeonDef[] = [
     ticketBonus: 9,
     expBonus: 112,
     skillBonus: 6,
-    artifactFocus: ['flame', 'slash'],
+    artifactFocus: ['flame', 'slash', 'banner'],
     trait: '怪物压迫最强，莲火和重尺掉落权重更高。',
     threat: '血牙魔狼和裂隙守门人',
     color: '#fb7185',
@@ -320,7 +334,7 @@ const dungeonDefs: DungeonDef[] = [
     ticketBonus: 12,
     expBonus: 150,
     skillBonus: 8,
-    artifactFocus: ['flame', 'orbit', 'chain'],
+    artifactFocus: ['flame', 'orbit', 'chain', 'seal'],
     trait: '高阶副本，通关结算奖励最高。',
     threat: '铜甲影卫和古庭镇灵',
     color: '#fbbf24',
@@ -341,6 +355,12 @@ const artifactDefs: Record<ArtifactKey, ArtifactDef> = {
   orbit: { key: 'orbit', name: '青竹云剑匣', type: '成套飞剑', color: '#67e8f9', rarity: '传说', iconId: 'orbit-3', image: '/assets/generated/artifact-orbit.png', max: 10, source: '参考成套飞剑和剑匣体系，使用原创名称。', desc: '获得后开启护体剑阵，被围住时飞剑自动环切。' },
   flame: { key: 'flame', name: '琉璃莲火鼎', type: '火鼎法宝', color: '#fb923c', rarity: '传说', iconId: 'flame-3', image: '/assets/generated/artifact-flame.png', max: 10, source: '参考异火、火鼎、莲火类玄幻体系。', desc: '获得后自动铺开莲火符海，密集怪物会被连环引爆。' },
   regen: { key: 'regen', name: '青木回元瓶', type: '灵瓶法宝', color: '#86efac', rarity: '稀有', iconId: 'guard-3', image: '/assets/generated/artifact-regen.png', max: 8, source: '参考灵瓶、药园、青木回复类修仙法宝。', desc: '获得后开启持续回元，战斗中自动恢复生命。' },
+  bell: { key: 'bell', name: '清心镇魂铃', type: '铃类法宝', color: '#facc15', rarity: '普通', iconId: 'guard-1', image: '/assets/generated/artifact-bell.png', max: 6, source: '低阶护魂法器，常见于外门试炼和灵根洞天。', desc: '镇定神魂，提升生命上限，并让低阶战斗容错更高。' },
+  needle: { key: 'needle', name: '太乙破障针', type: '针类暗宝', color: '#e5e7eb', rarity: '普通', iconId: 'quick-1', image: '/assets/generated/artifact-needle.png', max: 6, source: '参考破障针、飞针、暗器类修仙法器，定位为前期攻击法宝。', desc: '细如银芒，强化基础攻击，适合补足前期清怪速度。' },
+  mirror: { key: 'mirror', name: '玄照映魂镜', type: '魂镜法宝', color: '#22d3ee', rarity: '稀有', iconId: 'nova-2', image: '/assets/generated/artifact-mirror.png', max: 8, source: '参考照妖镜、轮回镜、魂镜类法宝，使用原创名称。', desc: '映照魂魄弱点，提升法宝威力，并略微提高副本精华收益。' },
+  fan: { key: 'fan', name: '流云御风扇', type: '风系法宝', color: '#7dd3fc', rarity: '稀有', iconId: 'quick-2', image: '/assets/generated/artifact-fan.png', max: 8, source: '参考芭蕉扇、风雷扇、御风法器的常见设定。', desc: '御风提速，缩短普攻间隔，并提升世界地图自动推进速度。' },
+  banner: { key: 'banner', name: '玄阴万魂幡', type: '幡类法宝', color: '#c084fc', rarity: '史诗', iconId: 'magnet-3', image: '/assets/generated/artifact-banner.png', max: 10, source: '参考魂幡、阵旗、招魂幡体系，使用偏暗系原创法宝名。', desc: '收拢副本残魂，提高撤离和通关时携带的抽卡券收益。' },
+  seal: { key: 'seal', name: '星斗镇界印', type: '印玺法宝', color: '#fde68a', rarity: '传说', iconId: 'gate-3', image: '/assets/generated/artifact-seal.png', max: 10, source: '参考翻天印、镇界印、星斗印类高阶法宝。', desc: '镇压一方世界线，提升攻击、生命和副本经验结算。' },
 }
 
 const pools: Record<Rarity, Reward[]> = {
@@ -377,7 +397,7 @@ const state = {
   mode: 'wild' as Mode,
   hero: { x: 0, y: 0, hp: 120, baseHp: 120, level: 1, exp: 0, baseAtk: 16, skillPower: 0 },
   gear: { weapon: null, armor: null, core: null } as Record<Slot, Reward | null>,
-  skills: { slash: 0, burst: 0, regen: 0, chain: 0, orbit: 0, flame: 0, points: 0 } as SkillTree,
+  skills: { slash: 0, burst: 0, regen: 0, chain: 0, orbit: 0, flame: 0, bell: 0, needle: 0, mirror: 0, fan: 0, banner: 0, seal: 0, points: 0 } as SkillTree,
   artifacts: { ...baseArtifacts },
   mutations: { ...baseMutations },
   activeDungeon: 'mossCave' as DungeonId,
@@ -1008,7 +1028,7 @@ function resetRuntimeState() {
   state.mode = 'wild'
   Object.assign(state.hero, { x: 0, y: 0, hp: 120, baseHp: 120, level: 1, exp: 0, baseAtk: 16, skillPower: 0 })
   state.gear = { weapon: null, armor: null, core: null }
-  state.skills = { slash: 0, burst: 0, regen: 0, chain: 0, orbit: 0, flame: 0, points: 0 }
+  state.skills = { slash: 0, burst: 0, regen: 0, chain: 0, orbit: 0, flame: 0, bell: 0, needle: 0, mirror: 0, fan: 0, banner: 0, seal: 0, points: 0 }
   state.artifacts = { ...baseArtifacts }
   state.mutations = { ...baseMutations }
   state.activeDungeon = 'mossCave'
@@ -1240,15 +1260,15 @@ function claimDailyReward() {
 }
 
 function totalAtk() {
-  return state.hero.baseAtk + state.hero.level * 3 + effectiveSkill('slash') * 4 + state.mutations.swordRide * 3 + (state.gear.weapon?.atk ?? 0)
+  return state.hero.baseAtk + state.hero.level * 3 + effectiveSkill('slash') * 4 + effectiveSkill('needle') * 2 + effectiveSkill('seal') * 3 + state.mutations.swordRide * 3 + (state.gear.weapon?.atk ?? 0)
 }
 
 function maxHp() {
-  return state.hero.baseHp + state.hero.level * 12 + effectiveSkill('regen') * 5 + (state.gear.armor?.hp ?? 0)
+  return state.hero.baseHp + state.hero.level * 12 + effectiveSkill('regen') * 5 + effectiveSkill('bell') * 10 + effectiveSkill('seal') * 8 + (state.gear.armor?.hp ?? 0)
 }
 
 function skillPower() {
-  return state.hero.skillPower + effectiveSkill('burst') * 6 + state.mutations.flameLotus * 4 + (state.gear.core?.skill ?? 0)
+  return state.hero.skillPower + effectiveSkill('burst') * 6 + effectiveSkill('mirror') * 4 + effectiveSkill('banner') * 3 + state.mutations.flameLotus * 4 + (state.gear.core?.skill ?? 0)
 }
 
 function grantExp(amount: number) {
@@ -1265,7 +1285,7 @@ function autoAttackRange() {
 }
 
 function autoAttackDelay() {
-  return Math.max(0.34, 0.62 - state.autoHaste * 0.05)
+  return Math.max(0.3, 0.62 - state.autoHaste * 0.05 - effectiveSkill('fan') * 0.025)
 }
 
 function manualMoving() {
@@ -1316,7 +1336,7 @@ function dashToMoveTarget() {
 function autoWorldSpeed() {
   if (state.mode !== 'wild' || manualMoving() || !state.autoExplore) return 0
   const target = nearestEnemy()
-  const cruise = 92 + state.mutations.swordRide * 10
+  const cruise = 92 + state.mutations.swordRide * 10 + effectiveSkill('fan') * 6
   if (!target) return cruise
   const ahead = target.x >= state.hero.x - 40
   const distance = Math.hypot(target.x - state.hero.x, target.y - state.hero.y)
@@ -1756,29 +1776,42 @@ function renderSkillPanel() {
     <span>满阶 <b>${maxedCount}</b></span>
   `
   skillList.innerHTML = ''
-  const switcher = document.createElement('div')
-  switcher.className = 'artifact-switch'
-  artifactKeys.forEach((key) => {
-    const def = artifactDefs[key]
-    const owned = hasArtifact(key)
-    const level = artifactLevel(key)
-    const bonus = owned ? (activeCharacter().starter[key] ?? 0) : 0
-    const tab = document.createElement('button')
-    tab.type = 'button'
-    tab.className = `artifact-tab ${selectedArtifactKey === key ? 'active' : ''} ${owned ? 'owned' : 'locked'}`
-    tab.style.setProperty('--item-color', def.color)
-    tab.innerHTML = `
-      <i>${artifactIcon(key)}</i>
-      <span>${def.name}</span>
-      <small>${owned ? `Lv.${Math.min(level, def.max)}${bonus > 0 ? `+${bonus}` : ''}` : '未得'}</small>
-    `
-    tab.addEventListener('click', () => {
-      selectedArtifactKey = key
-      renderSkillPanel()
+  artifactRarityOrder.forEach((rarity) => {
+    const groupKeys = artifactKeys.filter((key) => artifactDefs[key].rarity === rarity)
+    if (!groupKeys.length) return
+    const group = document.createElement('section')
+    group.className = 'artifact-rarity-group'
+    group.style.setProperty('--rarity-color', rarityColor[rarity])
+    const groupOwned = groupKeys.filter((key) => hasArtifact(key)).length
+    group.innerHTML = `<div class="artifact-rarity-head"><b>${rarity}</b><span>${groupOwned}/${groupKeys.length}</span></div>`
+    const switcher = document.createElement('div')
+    switcher.className = 'artifact-switch'
+    groupKeys.forEach((key) => {
+      const def = artifactDefs[key]
+      const owned = hasArtifact(key)
+      const level = artifactLevel(key)
+      const bonus = owned ? (activeCharacter().starter[key] ?? 0) : 0
+      const tab = document.createElement('button')
+      tab.type = 'button'
+      tab.dataset.artifact = key
+      tab.className = `artifact-tab ${selectedArtifactKey === key ? 'active' : ''} ${owned ? 'owned' : 'locked'}`
+      tab.style.setProperty('--item-color', def.color)
+      tab.style.setProperty('--rarity-color', rarityColor[def.rarity])
+      tab.innerHTML = `
+        <em>${def.rarity}</em>
+        <i>${artifactIcon(key)}</i>
+        <span>${def.name}</span>
+        <small>${owned ? `Lv.${Math.min(level, def.max)}${bonus > 0 ? `+${bonus}` : ''}` : '未获得'}</small>
+      `
+      tab.addEventListener('click', () => {
+        selectedArtifactKey = key
+        renderSkillPanel()
+      })
+      switcher.appendChild(tab)
     })
-    switcher.appendChild(tab)
+    group.appendChild(switcher)
+    skillList.appendChild(group)
   })
-  skillList.appendChild(switcher)
 
   const def = artifactDefs[selectedArtifactKey]
   const owned = hasArtifact(selectedArtifactKey)
@@ -1791,10 +1824,11 @@ function renderSkillPanel() {
   const detail = document.createElement('div')
   detail.className = `artifact-focus-card ${owned ? 'owned' : 'locked'}`
   detail.style.setProperty('--item-color', def.color)
+  detail.style.setProperty('--rarity-color', rarityColor[def.rarity])
   detail.innerHTML = `
     <div class="artifact-hero-art">${artifactIcon(selectedArtifactKey)}</div>
     <div class="artifact-copy">
-      <small>${def.rarity} · ${def.type}</small>
+      <small><em>${def.rarity}</em> ${def.type}</small>
       <b>${def.name}</b>
       <span>${owned ? `Lv.${shownLevel}/${def.max}${bonus > 0 ? ` · ${activeCharacter().name}亲和 +${bonus}` : ''}${overflow > 0 ? ` · 溢出 ${overflow}` : ''}` : '副本未获得'}</span>
       <p>${def.desc}</p>
@@ -1820,8 +1854,7 @@ function renderSkillPanel() {
   skillList.appendChild(detail)
 }
 
-function upgradeSkill(key: keyof SkillTree, max: number) {
-  if (key === 'points') return
+function upgradeSkill(key: ArtifactKey, max: number) {
   if (!hasArtifact(key)) {
     toast(`先在副本获得法宝：${artifactDefs[key].name}`)
     return
@@ -1843,13 +1876,13 @@ function cloneReward(item: Reward): Reward {
 
 function rollArtifactReward(): Reward {
   const stage = state.mode === 'dungeon' ? Math.max(1, Math.ceil(activeDungeonDef().unlockLevel / 8)) : worldStageNo()
-  const candidates: ArtifactKey[] = ['slash', 'regen']
+  const candidates: ArtifactKey[] = ['bell', 'needle', 'regen', 'slash']
   if (state.mode === 'dungeon') {
     candidates.push(...activeDungeonDef().artifactFocus)
   }
-  if (stage >= 2 || state.mode === 'dungeon') candidates.push('chain', 'burst')
-  if (stage >= 3 || Math.random() < 0.45) candidates.push('orbit')
-  if (stage >= 4 || Math.random() < 0.38) candidates.push('flame')
+  if (stage >= 2 || state.mode === 'dungeon') candidates.push('mirror', 'fan', 'chain', 'burst')
+  if (stage >= 3 || Math.random() < 0.45) candidates.push('banner', 'orbit')
+  if (stage >= 4 || Math.random() < 0.38) candidates.push('flame', 'seal')
   const key = candidates[Math.floor(Math.random() * candidates.length)]
   const def = artifactDefs[key]
   return { name: def.name, rarity: def.rarity, count: 1, artifact: key, skill: rarityRank[def.rarity] }
@@ -2005,9 +2038,9 @@ function damageEnemy(enemy: Enemy, amount: number) {
 function completeDungeon() {
   const dungeon = activeDungeonDef()
   const kills = Math.max(0, state.kills - state.dungeonStartKills)
-  const ticketReward = state.dungeonLootTickets + dungeon.ticketBonus + Math.floor(kills / 4)
-  const expReward = state.dungeonLootExp + dungeon.expBonus + kills * 3
-  const skillReward = state.dungeonLootSkill + dungeon.skillBonus + Math.floor(kills / 6)
+  const ticketReward = state.dungeonLootTickets + dungeon.ticketBonus + Math.floor(kills / 4) + Math.floor(effectiveSkill('banner') / 2)
+  const expReward = state.dungeonLootExp + dungeon.expBonus + kills * 3 + effectiveSkill('seal') * 4
+  const skillReward = state.dungeonLootSkill + dungeon.skillBonus + Math.floor(kills / 6) + Math.floor(effectiveSkill('mirror') / 3)
   const bossDrop = rollDungeonDrop()
   sfx.level()
   flashScreen('rgba(250,204,21,.26)', 0.22, 0.28)
@@ -2051,9 +2084,9 @@ function extractDungeon() {
     return
   }
   const kills = Math.max(0, state.kills - state.dungeonStartKills)
-  const ticketReward = state.dungeonLootTickets
-  const expReward = state.dungeonLootExp
-  const skillReward = state.dungeonLootSkill
+  const ticketReward = state.dungeonLootTickets + Math.floor(effectiveSkill('banner') / 3)
+  const expReward = state.dungeonLootExp + effectiveSkill('seal') * 2
+  const skillReward = state.dungeonLootSkill + Math.floor(effectiveSkill('mirror') / 4)
   const extractDrop = kills >= 4 && Math.random() < 0.42 ? rollArtifactReward() : null
   sfx.soul(4)
   flashScreen('rgba(94,234,212,.2)', 0.16, 0.22)
@@ -2311,6 +2344,7 @@ function gainArtifact(reward: Reward) {
   flashScreen('rgba(250,204,21,.2)', 0.18, 0.22)
   addParticleBurst(state.hero.x, state.hero.y - 90, artifactDefs[key].color, 34, 1.18, 'rune')
   state.texts.push({ x: state.hero.x, y: state.hero.y - 108, text: label, color: artifactDefs[key].color, life: 1.3 })
+  if (!skillPanel.hidden) renderSkillPanel()
 }
 
 function empowerArtifact(key: ArtifactKey, amount: number) {
@@ -2318,6 +2352,7 @@ function empowerArtifact(key: ArtifactKey, amount: number) {
   const def = artifactDefs[key]
   state.artifacts[key] = Math.min(def.max, artifactLevel(key) + amount)
   state.skills[key] = state.artifacts[key]
+  if (!skillPanel.hidden) renderSkillPanel()
 }
 
 function sleep(ms: number) {
@@ -5181,10 +5216,6 @@ function updateHud() {
   gachaTicketCount.textContent = String(state.tickets)
   gachaPityCount.textContent = `${Math.min(state.pity, 10)}/10`
   gachaPityBar.style.width = `${Math.min(100, state.pity * 10)}%`
-  if (!dungeonPanel.hidden) renderDungeonPanel()
-  if (!equipPanel.hidden) renderEquipPanel()
-  if (!bagPanel.hidden) renderBagPanel()
-  if (!skillPanel.hidden) renderSkillPanel()
 }
 
 function setText(id: string, text: string) {
