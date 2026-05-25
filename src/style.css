@@ -2479,6 +2479,9 @@ canvas {
 
 .artifact-source {
   grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 8px;
   padding: 8px 9px;
   border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 10px;
@@ -2486,6 +2489,15 @@ canvas {
   background: rgba(2, 6, 23, 0.44);
   font-size: 11px;
   line-height: 1.35;
+}
+
+.artifact-source b {
+  color: color-mix(in srgb, var(--rarity-color, #dbeafe), white 24%);
+  white-space: nowrap;
+}
+
+.artifact-source span {
+  min-width: 0;
 }
 
 .artifact-upgrade {

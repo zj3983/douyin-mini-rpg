@@ -1558,6 +1558,12 @@ function unknownArtifactIcon(rarity: Rarity) {
   return `<span class="artifact-unknown" style="--rarity-color:${rarityColor[rarity]}">?</span>`
 }
 
+function artifactDropSource(key: ArtifactKey) {
+  const focusedDungeons = dungeonDefs.filter((dungeon) => dungeon.artifactFocus.includes(key)).map((dungeon) => dungeon.name)
+  const basePool = ['bell', 'needle', 'regen', 'slash'].includes(key) ? '任意副本基础法宝池' : ''
+  return [basePool, focusedDungeons.length ? `${focusedDungeons.join('、')}重点掉落` : ''].filter(Boolean).join('；')
+}
+
 function renderDungeonPanel() {
   dungeonEntrySummary.textContent = `入场 ${state.dungeonEntries}/3 | 当前 Lv.${state.hero.level}`
   dungeonBriefCopy.textContent = state.mode === 'dungeon'
@@ -1855,7 +1861,9 @@ function openArtifactDetail(key: ArtifactKey) {
     ? `Lv.${shownLevel}/${def.max}${bonus > 0 ? ` · 角色天赋：效果 +${bonus}阶` : ''}${overflow > 0 ? ` · 溢出 ${overflow}` : ''}`
     : '尚未获得，名称与效果待鉴定'
   const displayDesc = owned ? def.desc : '这个槽位只代表可能出现的法宝品质。进入副本并成功撤离后，才会揭示真实名称、图片和法宝效果。'
-  const displaySource = owned ? def.source : '副本掉落：获得后收入法宝库，重复获得会自动进阶并返还法宝精华。'
+  const displaySource = owned
+    ? `<b>获取出处：</b><span>${artifactDropSource(key)}</span><b>设定来源：</b><span>${def.source}</span>`
+    : '<b>获取出处：</b><span>副本封存槽位，获得后显示具体掉落副本。</span><b>设定来源：</b><span>未鉴定前不显示真实法宝来源。</span>'
   const displayIcon = owned ? artifactIcon(key) : unknownArtifactIcon(def.rarity)
   artifactDetailPanel.hidden = false
   artifactDetailPanel.style.setProperty('--item-color', rarityColor[def.rarity])
