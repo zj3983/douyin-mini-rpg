@@ -65,6 +65,7 @@ interface SaveData {
   skills: SkillTree
   kills: number
   tickets: number
+  spiritStones?: number
   dungeonEntries?: number
   pity: number
   wave: number
@@ -417,6 +418,7 @@ const state = {
   bag: [] as Reward[],
   kills: 0,
   tickets: 0,
+  spiritStones: 0,
   dungeonEntries: 3,
   pity: 0,
   wave: 1,
@@ -433,6 +435,7 @@ const state = {
   dungeonLootTickets: 0,
   dungeonLootExp: 0,
   dungeonLootSkill: 0,
+  dungeonLootStones: 0,
   dungeonMaterials: 0,
   dungeonMaterialGoal: 3,
   dungeonGateFound: false,
@@ -452,7 +455,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <main class="phone-shell">
     <section class="topbar">
       <div><strong>虚境试炼</strong><span id="mode-label">野外刷怪</span></div>
-      <div class="currency"><button id="profile-btn" class="lore-btn" type="button">账号</button><button id="lore-btn" class="lore-btn" type="button">档案</button><span>抽卡券</span><b id="ticket-count">0</b></div>
+      <div class="currency"><button id="profile-btn" class="lore-btn" type="button">账号</button><button id="lore-btn" class="lore-btn" type="button">档案</button><span>抽卡券</span><b id="ticket-count">0</b><span>灵石</span><b id="stone-count">0</b></div>
       <div class="character-showcase">
         <div class="character-stage"><img id="hero-showcase-img" src="/assets/oga-rpg/hero-idle/FR_Adventurer_Idle_000.png" alt=""></div>
         <div class="character-meta">
@@ -464,6 +467,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <div class="stat-line">
         <span id="level-label">Lv.1</span>
         <span id="atk-label">攻击 0</span>
+        <span id="mana-label">法力 0</span>
         <span id="kill-label">击杀 0</span>
         <span id="soul-label">魂质Lv.1 0/5</span>
         <span id="wave-label">波次 1</span>
@@ -515,6 +519,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       </div>
       <div class="gacha-meter">
         <div><small>抽卡券</small><b id="gacha-ticket-count">0</b></div>
+        <div><small>灵石</small><b id="gacha-stone-count">0</b></div>
         <div><small>保底</small><b id="gacha-pity-count">0/10</b></div>
         <div><small>目标</small><b>史诗+</b></div>
         <i id="gacha-pity-bar"></i>
@@ -623,6 +628,7 @@ const gachaPanel = document.querySelector<HTMLDivElement>('#gacha-panel')!
 const pullResults = document.querySelector<HTMLDivElement>('#pull-results')!
 const gateCore = document.querySelector<HTMLDivElement>('#gate-core')!
 const gachaTicketCount = document.querySelector<HTMLElement>('#gacha-ticket-count')!
+const gachaStoneCount = document.querySelector<HTMLElement>('#gacha-stone-count')!
 const gachaPityCount = document.querySelector<HTMLElement>('#gacha-pity-count')!
 const gachaPityBar = document.querySelector<HTMLElement>('#gacha-pity-bar')!
 const lorePanel = document.querySelector<HTMLDivElement>('#lore-panel')!
@@ -1078,16 +1084,17 @@ function createProfile(name: string, pin: string): PlayerProfile {
 
 function profileSummary(profileId: string) {
   const raw = localStorage.getItem(profileSaveKey(profileId))
-  if (!raw) return { level: 1, tickets: 0, savedAt: 0 }
+  if (!raw) return { level: 1, tickets: 0, spiritStones: 0, savedAt: 0 }
   try {
     const save = JSON.parse(raw) as Partial<SaveData>
     return {
       level: save.hero?.level ?? save.soulLevel ?? 1,
       tickets: save.tickets ?? 0,
+      spiritStones: save.spiritStones ?? 0,
       savedAt: save.savedAt ?? 0,
     }
   } catch {
-    return { level: 1, tickets: 0, savedAt: 0 }
+    return { level: 1, tickets: 0, spiritStones: 0, savedAt: 0 }
   }
 }
 
@@ -1122,7 +1129,7 @@ function updateProfileUi() {
       const meta = document.createElement('span')
       meta.textContent = profile.name
       const detail = document.createElement('small')
-      detail.textContent = `Lv.${summary.level} | 抽卡券 ${summary.tickets}${profile.pin ? ' | 有口令' : ''}`
+      detail.textContent = `Lv.${summary.level} | 券 ${summary.tickets} | 灵石 ${summary.spiritStones}${profile.pin ? ' | 有口令' : ''}`
       row.append(mark, meta, detail)
       row.addEventListener('click', () => {
         if (profile.pin) {
@@ -1168,6 +1175,7 @@ function resetRuntimeState() {
   state.bag = []
   state.kills = 0
   state.tickets = 0
+  state.spiritStones = 0
   state.dungeonEntries = 3
   state.pity = 0
   state.wave = 1
@@ -1184,6 +1192,7 @@ function resetRuntimeState() {
   state.dungeonLootTickets = 0
   state.dungeonLootExp = 0
   state.dungeonLootSkill = 0
+  state.dungeonLootStones = 0
   state.dungeonMaterials = 0
   state.dungeonMaterialGoal = 3
   state.dungeonGateFound = false
@@ -1258,9 +1267,9 @@ function initProfiles() {
 const guideTexts = [
   '野外会自动沿世界地图前进，点击战斗画面可临时接管移动。',
   '靠近敌人后角色会自动普攻；获得法宝后会自动释放对应仙术。',
-  '吸收魂质球升级，从已获得法宝中三选一获得进化卡。',
+  '吸收魂质球升级，只会强化攻击、生命或法力三项角色基础。',
   '抽卡券只从副本带出，星门补给主要召回角色碎片和装备。',
-  '点击法宝，查看副本获得的焚海重尺、雷印、剑匣等自动仙术。',
+  '点击法宝，消耗法宝精华和灵石淬炼，达到节点后触发技能质变。',
   '每日 3 次副本入场，收集门钥碎片后找到撤离门带走收益。',
 ]
 
@@ -1302,6 +1311,7 @@ function loadGame() {
       })
     }
     state.mutations = { ...baseMutations, ...(save.mutations ?? {}) }
+    artifactKeys.forEach((key) => syncArtifactMutation(key, true))
     state.activeDungeon = dungeonDefs.some((dungeon) => dungeon.id === save.activeDungeon) ? save.activeDungeon! : 'mossCave'
     state.activeCharacter = save.activeCharacter ?? 'sword'
     state.ownedCharacters = save.ownedCharacters?.length ? save.ownedCharacters : ['sword']
@@ -1310,6 +1320,7 @@ function loadGame() {
     if (!state.ownedCharacters.includes(state.activeCharacter)) state.activeCharacter = 'sword'
     state.kills = save.kills ?? 0
     state.tickets = save.tickets ?? 0
+    state.spiritStones = save.spiritStones ?? 0
     state.dungeonEntries = save.dungeonEntries ?? 3
     state.pity = save.pity ?? 0
     state.wave = save.wave ?? 1
@@ -1345,6 +1356,7 @@ function saveGame() {
     activeDungeon: state.activeDungeon,
     kills: state.kills,
     tickets: state.tickets,
+    spiritStones: state.spiritStones,
     dungeonEntries: state.dungeonEntries,
     pity: state.pity,
     wave: state.wave,
@@ -1516,6 +1528,45 @@ function effectiveSkill(key: keyof SkillTree) {
   return artifactEffectiveLevel(key)
 }
 
+function artifactUpgradeCost(key: ArtifactKey) {
+  const nextLevel = Math.min(artifactDefs[key].max, artifactLevel(key) + 1)
+  const rank = rarityRank[artifactDefs[key].rarity]
+  return {
+    essence: nextLevel,
+    stones: nextLevel * rank * 30,
+  }
+}
+
+function mutationKeyForArtifact(key: ArtifactKey): keyof MutationTree | null {
+  if (key === 'slash') return 'swordRide'
+  if (key === 'chain') return 'thunderFork'
+  if (key === 'orbit') return 'swordDomain'
+  if (key === 'flame') return 'flameLotus'
+  return null
+}
+
+function mutationStageForArtifactLevel(level: number) {
+  if (level >= 10) return 3
+  if (level >= 6) return 2
+  if (level >= 3) return 1
+  return 0
+}
+
+function syncArtifactMutation(key: ArtifactKey, silent = false) {
+  const mutationKey = mutationKeyForArtifact(key)
+  if (!mutationKey) return
+  const next = mutationStageForArtifactLevel(artifactLevel(key))
+  if (next <= state.mutations[mutationKey]) return
+  state.mutations[mutationKey] = next
+  if (!silent) {
+    const label = `${artifactDefs[key].name}质变：${mutationStageName(next)}`
+    toast(label)
+    flashScreen('rgba(250,204,21,.2)', 0.18, 0.22)
+    addParticleBurst(state.hero.x, state.hero.y - 92, artifactDefs[key].color, 36, 1.15, 'rune')
+    state.texts.push({ x: state.hero.x, y: state.hero.y - 118, text: label, color: artifactDefs[key].color, life: 1.25 })
+  }
+}
+
 function heroIsMoving() {
   return manualMoving() || autoWorldWalk > 0
 }
@@ -1617,7 +1668,7 @@ function itemStats(item: Reward) {
   if (item.artifact) return `${artifactDefs[item.artifact].type} · 法宝等级 +${item.count}`
   if (item.atk) parts.push(`攻击 +${item.atk}`)
   if (item.hp) parts.push(`生命 +${item.hp}`)
-  if (item.skill) parts.push(`法宝威力 +${item.skill}`)
+  if (item.skill) parts.push(`法力 +${item.skill}`)
   return parts.join(' / ') || `数量 x${item.count}`
 }
 
@@ -1771,7 +1822,7 @@ function renderEquipPanel() {
     <div class="gear-card-copy">
       <b>装备方案</b>
       <span>${active.name} · 战力 ${totalAtk()}</span>
-      <small>${active.title} | 生命 ${maxHp()} | 法宝威力 ${skillPower()}</small>
+      <small>${active.title} | 生命 ${maxHp()} | 法力 ${skillPower()}</small>
     </div>
   `
   equippedList.appendChild(summary)
@@ -1860,7 +1911,7 @@ function renderBagPanel() {
     <div class="inventory-top">
       <div><small>随身仓库</small><b>${Object.keys(characters).length + allMaterials.length}/${totalSlots}</b></div>
       <div><small>抽卡券</small><b>${state.tickets}</b></div>
-      <div><small>副本入场</small><b>${state.dungeonEntries}/3</b></div>
+      <div><small>灵石</small><b>${state.spiritStones}</b></div>
     </div>
     <div class="inventory-section">角色碎片</div>
     <div id="character-grid" class="inventory-grid"></div>
@@ -1925,6 +1976,7 @@ function renderSkillPanel() {
     : '进入副本撤离后，法宝才会显形并解锁详情。'
   skillPointsLabel.innerHTML = `
     <span>精华 <b>${state.skills.points}</b></span>
+    <span>灵石 <b>${state.spiritStones}</b></span>
     <span>已获 <b>${ownedCount}/${artifactKeys.length}</b></span>
     <span>满阶 <b>${maxedCount}</b></span>
   `
@@ -1987,7 +2039,7 @@ function openArtifactDetail(key: ArtifactKey) {
   const shownLevel = Math.min(level, def.max)
   const overflow = Math.max(0, level - def.max)
   const bonus = owned ? (activeCharacter().starter[key] ?? 0) : 0
-  const cost = shownLevel + 1
+  const cost = artifactUpgradeCost(key)
   const progress = owned ? Math.min(100, (shownLevel / def.max) * 100) : 0
   const displayName = owned ? def.name : `未鉴定${def.rarity}法宝`
   const displayType = owned ? def.type : '副本封存'
@@ -2025,8 +2077,8 @@ function openArtifactDetail(key: ArtifactKey) {
     action.textContent = '已满阶'
     action.disabled = true
   } else {
-    action.textContent = `淬炼 · ${cost} 精华`
-    action.disabled = state.skills.points < cost
+    action.textContent = `淬炼 · ${cost.essence}精华 / ${cost.stones}灵石`
+    action.disabled = state.skills.points < cost.essence || state.spiritStones < cost.stones
   }
   action.addEventListener('click', () => {
     upgradeSkill(key, def.max)
@@ -2041,12 +2093,21 @@ function upgradeSkill(key: ArtifactKey, max: number) {
     toast(`先在副本获得法宝：${artifactDefs[key].name}`)
     return
   }
-  const cost = artifactLevel(key) + 1
-  if (artifactLevel(key) >= max || state.skills.points < cost) return
-  state.skills.points -= cost
+  const cost = artifactUpgradeCost(key)
+  if (artifactLevel(key) >= max) return
+  if (state.skills.points < cost.essence || state.spiritStones < cost.stones) {
+    toast(`淬炼材料不足：需要 ${cost.essence} 精华 / ${cost.stones} 灵石。`)
+    return
+  }
+  const beforeStage = mutationStageForArtifactLevel(artifactLevel(key))
+  state.skills.points -= cost.essence
+  state.spiritStones -= cost.stones
   state.artifacts[key] += 1
   state.skills[key] = state.artifacts[key]
-  toast(`法宝淬炼：${artifactDefs[key].name} +1`)
+  syncArtifactMutation(key)
+  if (!mutationKeyForArtifact(key) || mutationStageForArtifactLevel(artifactLevel(key)) === beforeStage) {
+    toast(`法宝淬炼：${artifactDefs[key].name} +1`)
+  }
   saveGame()
   renderSkillPanel()
   updateHud()
@@ -2185,12 +2246,15 @@ function damageEnemy(enemy: Enemy, amount: number) {
     const expGain = enemy.elite ? 22 : 10
     const ticketGain = enemy.elite || dungeonKillNo % 2 === 0 || Math.random() < 0.28 ? 1 : 0
     const skillGain = enemy.elite && Math.random() < 0.55 ? 1 : 0
+    const stoneGain = enemy.elite ? 18 + Math.floor(dungeonKillNo / 2) : 7 + Math.floor(Math.random() * 6)
     state.dungeonLootExp += expGain
     state.dungeonLootTickets += ticketGain
     state.dungeonLootSkill += skillGain
+    state.dungeonLootStones += stoneGain
     state.texts.push({ x: enemy.x, y: enemy.y - 44, text: `携带 经验+${expGain}`, color: '#93c5fd', life: 0.85 })
     if (ticketGain > 0) state.texts.push({ x: enemy.x + 18, y: enemy.y - 66, text: '抽卡券+1', color: '#facc15', life: 0.9 })
     if (skillGain > 0) state.texts.push({ x: enemy.x - 18, y: enemy.y - 86, text: '法宝精华+1', color: '#c084fc', life: 0.9 })
+    state.texts.push({ x: enemy.x + 6, y: enemy.y - 104, text: `灵石+${stoneGain}`, color: '#fef08a', life: 0.85 })
     if (!state.dungeonGateFound && (enemy.elite || dungeonKillNo % 3 === 0 || Math.random() < 0.35)) {
       gainDungeonMaterial(enemy.x, enemy.y, enemy.elite ? '完整门钥' : '门钥碎片')
     }
@@ -2223,25 +2287,27 @@ function completeDungeon() {
   const ticketReward = state.dungeonLootTickets + dungeon.ticketBonus + Math.floor(kills / 4) + Math.floor(effectiveSkill('banner') / 2)
   const expReward = state.dungeonLootExp + dungeon.expBonus + kills * 3 + effectiveSkill('seal') * 4
   const skillReward = state.dungeonLootSkill + dungeon.skillBonus + Math.floor(kills / 6) + Math.floor(effectiveSkill('mirror') / 3)
+  const stoneReward = state.dungeonLootStones + dungeon.skillBonus * 18 + kills * 5 + effectiveSkill('mirror') * 2
   const bossDrop = rollDungeonDrop()
   sfx.level()
   flashScreen('rgba(250,204,21,.26)', 0.22, 0.28)
 
   state.tickets += ticketReward
+  state.spiritStones += stoneReward
   grantExp(expReward)
   state.skills.points += skillReward
   if (bossDrop) {
     acceptReward(bossDrop)
   }
 
-  state.lastSettlement = `击杀 ${kills} | 抽卡券 +${ticketReward} | 经验 +${expReward} | 法宝精华 +${skillReward} | Boss 掉落：${bossDrop.name}`
+  state.lastSettlement = `击杀 ${kills} | 抽卡券 +${ticketReward} | 灵石 +${stoneReward} | 经验 +${expReward} | 法宝精华 +${skillReward} | Boss 掉落：${bossDrop.name}`
   renderSettlement({
     result: `${dungeon.name}通关`,
     subtitle: `${dungeon.subtitle}已稳定，战利品已同步回主世界线`,
     rank: dungeonRank(kills, true, true),
     tone: 'clear',
     kills,
-    rewards: { tickets: ticketReward, exp: expReward, skill: skillReward },
+    rewards: { tickets: ticketReward, stones: stoneReward, exp: expReward, skill: skillReward },
     lines: [
       `门钥碎片：${state.dungeonMaterials}/${state.dungeonMaterialGoal}`,
       `秘境特性：${dungeon.trait}`,
@@ -2269,11 +2335,13 @@ function extractDungeon() {
   const ticketReward = state.dungeonLootTickets + Math.floor(effectiveSkill('banner') / 3)
   const expReward = state.dungeonLootExp + effectiveSkill('seal') * 2
   const skillReward = state.dungeonLootSkill + Math.floor(effectiveSkill('mirror') / 4)
+  const stoneReward = state.dungeonLootStones + kills * 2
   const extractDrop = kills >= 4 && Math.random() < 0.42 ? rollArtifactReward() : null
   sfx.soul(4)
   flashScreen('rgba(94,234,212,.2)', 0.16, 0.22)
 
   state.tickets += ticketReward
+  state.spiritStones += stoneReward
   grantExp(expReward)
   state.skills.points += skillReward
   if (extractDrop) acceptReward(extractDrop)
@@ -2284,13 +2352,13 @@ function extractDungeon() {
     rank: dungeonRank(kills, true, false),
     tone: 'extract',
     kills,
-    rewards: { tickets: ticketReward, exp: expReward, skill: skillReward },
+    rewards: { tickets: ticketReward, stones: stoneReward, exp: expReward, skill: skillReward },
     lines: [
       `门钥碎片：${state.dungeonMaterials}/${state.dungeonMaterialGoal}`,
       `当前秘境：${dungeon.subtitle}`,
       `撤离距离：已抵达撤离门`,
       extractDrop ? `撤离搜获：${extractDrop.rarity} ${extractDrop.name}` : '撤离搜获：未发现完整法宝',
-      ticketReward + expReward + skillReward > 0 ? '携带收益已全部入账' : '本次携带收益较少，建议多刷几波再撤离',
+      ticketReward + expReward + skillReward + stoneReward > 0 ? '携带收益已全部入账' : '本次携带收益较少，建议多刷几波再撤离',
     ],
     drop: extractDrop,
   })
@@ -2309,10 +2377,10 @@ function failDungeon(reason: string) {
     rank: 'D',
     tone: 'fail',
     kills,
-    rewards: { tickets: 0, exp: 0, skill: 0 },
+    rewards: { tickets: 0, stones: 0, exp: 0, skill: 0 },
     lines: [
       reason,
-      `遗失携带：抽卡券 ${state.dungeonLootTickets} / 经验 ${state.dungeonLootExp} / 法宝精华 ${state.dungeonLootSkill}`,
+      `遗失携带：抽卡券 ${state.dungeonLootTickets} / 灵石 ${state.dungeonLootStones} / 经验 ${state.dungeonLootExp} / 法宝精华 ${state.dungeonLootSkill}`,
       `门钥碎片：${state.dungeonMaterials}/${state.dungeonMaterialGoal}`,
     ],
   })
@@ -2335,11 +2403,11 @@ function renderSettlement(options: {
   rank: string
   tone: 'clear' | 'extract' | 'fail'
   kills: number
-  rewards: { tickets: number; exp: number; skill: number }
+  rewards: { tickets: number; stones: number; exp: number; skill: number }
   lines: string[]
   drop?: Reward | null
 }) {
-  const rewardTotal = options.rewards.tickets + options.rewards.exp + options.rewards.skill
+  const rewardTotal = options.rewards.tickets + options.rewards.stones + options.rewards.exp + options.rewards.skill
   const dropHtml = options.drop
     ? `<div class="settlement-drop" style="--drop-color:${rarityColor[options.drop.rarity]};--item-color:${rarityColor[options.drop.rarity]}"><i class="reward-icon">${rewardIcon(options.drop)}</i><div><b>${options.drop.rarity}</b><span>${options.drop.name}</span><small>${options.drop.artifact ? '已收入法宝库' : options.drop.slot ? '已自动比较装备' : `数量 x${options.drop.count}`}</small></div></div>`
     : ''
@@ -2355,6 +2423,7 @@ function renderSettlement(options: {
       </div>
       <div class="settlement-rewards">
         <div><small>抽卡券</small><b>+${options.rewards.tickets}</b></div>
+        <div><small>灵石</small><b>+${options.rewards.stones}</b></div>
         <div><small>经验</small><b>+${options.rewards.exp}</b></div>
         <div><small>法宝精华</small><b>+${options.rewards.skill}</b></div>
       </div>
@@ -2377,6 +2446,7 @@ function leaveDungeon(message: string) {
   state.dungeonLootTickets = 0
   state.dungeonLootExp = 0
   state.dungeonLootSkill = 0
+  state.dungeonLootStones = 0
   state.dungeonMaterials = 0
   state.dungeonGateFound = false
   collectedMaterialCells = new Set()
@@ -2519,13 +2589,17 @@ function gainArtifact(reward: Reward) {
   state.artifacts[key] = before + gain
   state.skills[key] = state.artifacts[key]
   const essence = Math.max(1, rarityRank[reward.rarity] - 1)
-  if (before > 0) state.skills.points += essence
+  if (before > 0) {
+    state.skills.points += essence
+    state.spiritStones += essence * 18
+  }
   const label = before > 0 ? `${artifactDefs[key].name} 进阶 +${gain}` : `获得法宝：${artifactDefs[key].name}`
   toast(label)
   sfx.gacha(rarityRank[reward.rarity])
   flashScreen('rgba(250,204,21,.2)', 0.18, 0.22)
   addParticleBurst(state.hero.x, state.hero.y - 90, artifactDefs[key].color, 34, 1.18, 'rune')
   state.texts.push({ x: state.hero.x, y: state.hero.y - 108, text: label, color: artifactDefs[key].color, life: 1.3 })
+  syncArtifactMutation(key)
   if (!skillPanel.hidden) renderSkillPanel()
 }
 
@@ -2534,6 +2608,7 @@ function empowerArtifact(key: ArtifactKey, amount: number) {
   const def = artifactDefs[key]
   state.artifacts[key] = Math.min(def.max, artifactLevel(key) + amount)
   state.skills[key] = state.artifacts[key]
+  syncArtifactMutation(key)
   if (!skillPanel.hidden) renderSkillPanel()
 }
 
@@ -2700,6 +2775,7 @@ function enterDungeon(dungeonId: DungeonId = state.activeDungeon) {
   state.dungeonLootTickets = 0
   state.dungeonLootExp = 0
   state.dungeonLootSkill = 0
+  state.dungeonLootStones = 0
   state.dungeonMaterials = 0
   state.dungeonGateFound = false
   collectedMaterialCells = new Set()
@@ -3099,6 +3175,47 @@ function mutationLevelForOption(id: string) {
 function evolutionOptions(): EvolutionOption[] {
   const tier = currentEvolutionTier()
   const rank = tierRank(tier)
+  const levelFactor = Math.floor(state.hero.level / 6)
+  const attackGain = 5 + rank * 3 + levelFactor
+  const hpGain = 28 + rank * 18 + state.hero.level * 2
+  const manaGain = 6 + rank * 4 + levelFactor
+  return shuffle<EvolutionOption>([
+    {
+      id: 'stat-attack',
+      iconId: rank >= 3 ? 'blade-3' : rank >= 2 ? 'blade-2' : 'blade-1',
+      title: '淬体·攻击',
+      tier,
+      color: '#f97316',
+      desc: `攻击力 +${attackGain}。只强化角色基础，不提升法宝。`,
+      apply: () => {
+        state.hero.baseAtk += attackGain
+        state.attackCd = 0
+      },
+    },
+    {
+      id: 'stat-hp',
+      iconId: rank >= 3 ? 'shield-3' : rank >= 2 ? 'shield-2' : 'shield-1',
+      title: '淬体·生命',
+      tier,
+      color: '#22c55e',
+      desc: `生命值 +${hpGain}，并恢复到满生命。`,
+      apply: () => {
+        state.hero.baseHp += hpGain
+        state.hero.hp = maxHp()
+      },
+    },
+    {
+      id: 'stat-mana',
+      iconId: rank >= 3 ? 'nova-3' : rank >= 2 ? 'nova-2' : 'nova-1',
+      title: '凝神·法力',
+      tier,
+      color: '#38bdf8',
+      desc: `法力值 +${manaGain}。法力会提高自动法宝技能威力。`,
+      apply: () => {
+        state.hero.skillPower += manaGain
+      },
+    },
+  ]).slice(0, 3)
   const pool: EvolutionTemplate[] = [
     {
       id: 'blade',
@@ -3539,7 +3656,7 @@ function openEvolutionPanel() {
     evolutionList.appendChild(button)
   }
   evolutionPanel.hidden = false
-  toast(`魂质进化 Lv.${state.hero.level}：选择一个法宝进化方向。`)
+  toast(`魂质进化 Lv.${state.hero.level}：选择攻击、生命或法力。`)
 }
 
 function chooseEvolution(option: EvolutionOption) {
@@ -5482,8 +5599,10 @@ function updateHeroShowcase() {
 function updateHud() {
   updateHeroShowcase()
   setText('ticket-count', String(state.tickets))
+  setText('stone-count', String(state.spiritStones))
   setText('level-label', `Lv.${state.hero.level}`)
   setText('atk-label', `攻击 ${totalAtk()}`)
+  setText('mana-label', `法力 ${skillPower()}`)
   setText('kill-label', `击杀 ${state.kills}`)
   setText('soul-label', `魂Lv.${state.hero.level} ${state.soulExp}/${soulNeed()}`)
   const currentStage = worldStageNo()
@@ -5497,12 +5616,12 @@ function updateHud() {
   const dungeonKills = Math.max(0, state.kills - state.dungeonStartKills)
   const dungeonProgress = state.mode === 'dungeon'
     ? state.bossSpawned
-      ? `Boss 战 | 碎片 ${state.dungeonMaterials}/${state.dungeonMaterialGoal} | 携带 券${state.dungeonLootTickets}/经${state.dungeonLootExp}/精${state.dungeonLootSkill} | ${state.dungeonGateFound ? `撤离 ${extractDistance}m` : '找门'}`
-      : `清怪 ${dungeonKills}/${dungeon.killGoal} | 碎片 ${state.dungeonMaterials}/${state.dungeonMaterialGoal} | 携带 券${state.dungeonLootTickets}/经${state.dungeonLootExp}/精${state.dungeonLootSkill} | ${state.dungeonGateFound ? `撤离 ${extractDistance}m` : '找门'}`
+      ? `Boss 战 | 碎片 ${state.dungeonMaterials}/${state.dungeonMaterialGoal} | 携带 券${state.dungeonLootTickets}/灵${state.dungeonLootStones}/精${state.dungeonLootSkill} | ${state.dungeonGateFound ? `撤离 ${extractDistance}m` : '找门'}`
+      : `清怪 ${dungeonKills}/${dungeon.killGoal} | 碎片 ${state.dungeonMaterials}/${state.dungeonMaterialGoal} | 携带 券${state.dungeonLootTickets}/灵${state.dungeonLootStones}/精${state.dungeonLootSkill} | ${state.dungeonGateFound ? `撤离 ${extractDistance}m` : '找门'}`
     : ''
   setText('quest-label', dungeonProgress || (state.questClaimed ? `当前：第${currentStage}关 ${worldStageTitle(currentStage)}，每日副本 ${state.dungeonEntries}/3，进副本拿抽卡券和法宝` : `当前：第${currentStage}关 ${worldStageTitle(currentStage)} | 任务击杀 ${Math.min(state.kills, state.questTarget)}/${state.questTarget}`))
   const artifactCount = artifactKeys.filter((key) => hasArtifact(key)).length
-  setText('gear-label', `法宝 ${artifactCount}/${artifactKeys.length} | 精华 ${state.skills.points} | 质变：${mutationSummary()} | 装备：${state.gear.weapon?.name ?? '无武器'} | ${state.gear.armor?.name ?? '无护甲'} | ${state.gear.core?.name ?? '无核心'}`)
+  setText('gear-label', `法宝 ${artifactCount}/${artifactKeys.length} | 精华 ${state.skills.points} | 灵石 ${state.spiritStones} | 质变：${mutationSummary()} | 装备：${state.gear.weapon?.name ?? '无武器'} | ${state.gear.armor?.name ?? '无护甲'} | ${state.gear.core?.name ?? '无核心'}`)
   document.querySelector<HTMLElement>('#hp-bar')!.style.width = `${Math.max(0, state.hero.hp / maxHp()) * 100}%`
   modeBtn.textContent = state.mode === 'dungeon' ? '撤离' : '选择副本'
   autoOrb.classList.toggle('manual', !!moveTarget)
@@ -5511,6 +5630,7 @@ function updateHud() {
   pullOne.disabled = pulling || state.tickets < 1
   pullTen.disabled = pulling || state.tickets < 10
   gachaTicketCount.textContent = String(state.tickets)
+  gachaStoneCount.textContent = String(state.spiritStones)
   gachaPityCount.textContent = `${Math.min(state.pity, 10)}/10`
   gachaPityBar.style.width = `${Math.min(100, state.pity * 10)}%`
 }

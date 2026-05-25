@@ -80,8 +80,9 @@ button:disabled {
 }
 
 .currency {
-  min-width: 150px;
+  min-width: 190px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
@@ -90,9 +91,13 @@ button:disabled {
   font-size: 13px;
 }
 
+.currency span {
+  display: inline;
+}
+
 .currency b {
   color: #facc15;
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .lore-btn {
@@ -1178,7 +1183,7 @@ canvas {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -2662,7 +2667,7 @@ canvas {
 .gacha-meter {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 7px;
   margin-top: 10px;
   overflow: hidden;
