@@ -745,7 +745,10 @@ let activePage: AppPage = 'battle'
 let activeProfile: PlayerProfile | null = null
 let audioCtx: AudioContext | null = null
 let audioMaster: GainNode | null = null
+let audioMusic: GainNode | null = null
 let audioUnlocked = false
+let musicStarted = false
+let musicStep = 0
 const soundLast: Record<string, number> = {}
 
 function unlockAudio() {
@@ -756,9 +759,16 @@ function unlockAudio() {
     audioMaster = audioCtx.createGain()
     audioMaster.gain.value = 0.36
     audioMaster.connect(audioCtx.destination)
+    audioMusic = audioCtx.createGain()
+    audioMusic.gain.value = 0.22
+    audioMusic.connect(audioMaster)
   }
-  if (audioCtx.state === 'suspended') void audioCtx.resume()
   audioUnlocked = true
+  if (audioCtx.state === 'suspended') {
+    void audioCtx.resume().then(startBackgroundMusic)
+  } else {
+    startBackgroundMusic()
+  }
 }
 
 function soundReady() {
@@ -814,53 +824,158 @@ function noiseBurst(duration: number, volume: number, filterFreq = 900, delay = 
   source.start(start)
 }
 
+function musicPluck(freq: number, delay: number, volume = 0.035, duration = 1.6) {
+  if (!soundReady() || !audioCtx || !audioMusic) return
+  const start = audioCtx.currentTime + delay
+  const osc = audioCtx.createOscillator()
+  const overtone = audioCtx.createOscillator()
+  const filter = audioCtx.createBiquadFilter()
+  const gain = audioCtx.createGain()
+  osc.type = 'triangle'
+  overtone.type = 'sine'
+  osc.frequency.setValueAtTime(freq, start)
+  overtone.frequency.setValueAtTime(freq * 2.01, start)
+  filter.type = 'lowpass'
+  filter.frequency.setValueAtTime(1900, start)
+  filter.frequency.exponentialRampToValueAtTime(580, start + duration)
+  gain.gain.setValueAtTime(0.0001, start)
+  gain.gain.exponentialRampToValueAtTime(volume, start + 0.018)
+  gain.gain.exponentialRampToValueAtTime(0.0001, start + duration)
+  osc.connect(filter)
+  overtone.connect(filter)
+  filter.connect(gain)
+  gain.connect(audioMusic)
+  osc.start(start)
+  overtone.start(start)
+  osc.stop(start + duration + 0.05)
+  overtone.stop(start + duration + 0.05)
+}
+
+function musicBell(freq: number, delay: number, volume = 0.026) {
+  if (!soundReady() || !audioCtx || !audioMusic) return
+  const start = audioCtx.currentTime + delay
+  ;[1, 2.01, 2.98].forEach((mul, index) => {
+    const osc = audioCtx!.createOscillator()
+    const gain = audioCtx!.createGain()
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(freq * mul, start)
+    gain.gain.setValueAtTime(0.0001, start)
+    gain.gain.exponentialRampToValueAtTime(volume / (index + 1), start + 0.012)
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 2.4 + index * 0.32)
+    osc.connect(gain)
+    gain.connect(audioMusic!)
+    osc.start(start)
+    osc.stop(start + 2.8 + index * 0.32)
+  })
+}
+
+function startBackgroundMusic() {
+  if (!soundReady() || !audioCtx || !audioMusic || musicStarted) return
+  musicStarted = true
+  const windLength = Math.floor(audioCtx.sampleRate * 3.2)
+  const windBuffer = audioCtx.createBuffer(1, windLength, audioCtx.sampleRate)
+  const windData = windBuffer.getChannelData(0)
+  for (let i = 0; i < windLength; i += 1) {
+    const breath = Math.sin((i / windLength) * Math.PI * 2)
+    windData[i] = (Math.random() * 2 - 1) * (0.18 + breath * 0.08)
+  }
+  const wind = audioCtx.createBufferSource()
+  const windFilter = audioCtx.createBiquadFilter()
+  const windGain = audioCtx.createGain()
+  wind.buffer = windBuffer
+  wind.loop = true
+  windFilter.type = 'lowpass'
+  windFilter.frequency.value = 760
+  windGain.gain.value = 0.018
+  wind.connect(windFilter)
+  windFilter.connect(windGain)
+  windGain.connect(audioMusic)
+  wind.start()
+  const root = audioCtx.createOscillator()
+  const fifth = audioCtx.createOscillator()
+  const droneGain = audioCtx.createGain()
+  root.type = 'sine'
+  fifth.type = 'sine'
+  root.frequency.value = 110
+  fifth.frequency.value = 165
+  droneGain.gain.value = 0.012
+  root.connect(droneGain)
+  fifth.connect(droneGain)
+  droneGain.connect(audioMusic)
+  root.start()
+  fifth.start()
+  scheduleBackgroundPhrase()
+  window.setInterval(scheduleBackgroundPhrase, 4200)
+}
+
+function scheduleBackgroundPhrase() {
+  if (!soundReady()) return
+  const phrases = [
+    [220, 247, 294, 330, 294],
+    [196, 220, 294, 247, 220],
+    [247, 294, 392, 330, 294],
+    [220, 330, 294, 247, 196],
+  ]
+  const phrase = phrases[musicStep % phrases.length]
+  musicStep += 1
+  phrase.forEach((freq, index) => musicPluck(freq, 0.18 + index * 0.54, 0.026, 1.7))
+  if (musicStep % 2 === 0) musicBell(392, 2.95, 0.018)
+}
+
 const sfx = {
   slash(strong = false) {
     if (!canPlaySound(strong ? 'slash-strong' : 'slash', strong ? 120 : 72)) return
-    tone(strong ? 520 : 390, strong ? 0.16 : 0.1, 'sawtooth', strong ? 0.07 : 0.045, strong ? 96 : 150)
-    tone(strong ? 980 : 760, strong ? 0.11 : 0.07, 'triangle', strong ? 0.055 : 0.034, strong ? 360 : 420, 0.012)
-    noiseBurst(strong ? 0.09 : 0.055, strong ? 0.04 : 0.022, strong ? 1800 : 1400)
+    tone(strong ? 620 : 520, strong ? 0.18 : 0.11, 'triangle', strong ? 0.058 : 0.036, strong ? 1320 : 980)
+    tone(strong ? 1240 : 1040, strong ? 0.12 : 0.08, 'sine', strong ? 0.04 : 0.026, strong ? 680 : 620, 0.012)
+    noiseBurst(strong ? 0.11 : 0.062, strong ? 0.034 : 0.019, strong ? 3200 : 2600)
   },
   hit(power = 1, killed = false) {
     if (!canPlaySound(killed ? 'kill' : 'hit', killed ? 80 : 45)) return
-    tone(killed ? 88 : 120 + power * 24, killed ? 0.18 : 0.075, 'triangle', killed ? 0.075 : 0.035, killed ? 42 : 70)
-    noiseBurst(killed ? 0.14 : 0.065, killed ? 0.06 : 0.028, killed ? 520 : 780)
-    if (killed) tone(260, 0.12, 'sine', 0.035, 520, 0.03)
+    tone(killed ? 98 : 150 + power * 18, killed ? 0.18 : 0.07, 'triangle', killed ? 0.052 : 0.026, killed ? 46 : 82)
+    noiseBurst(killed ? 0.13 : 0.052, killed ? 0.045 : 0.018, killed ? 640 : 960)
+    if (killed) tone(330, 0.16, 'sine', 0.026, 660, 0.035)
   },
   thunder() {
     if (!canPlaySound('thunder', 180)) return
-    noiseBurst(0.18, 0.065, 2400)
-    tone(980, 0.08, 'square', 0.045, 360)
-    tone(1460, 0.1, 'sawtooth', 0.032, 620, 0.035)
+    tone(74, 0.32, 'sine', 0.052, 42)
+    noiseBurst(0.22, 0.052, 2600, 0.018)
+    tone(1320, 0.08, 'square', 0.028, 520, 0.028)
+    tone(1960, 0.06, 'triangle', 0.022, 880, 0.07)
   },
   flame() {
     if (!canPlaySound('flame', 220)) return
-    noiseBurst(0.22, 0.06, 680)
-    tone(190, 0.22, 'sawtooth', 0.05, 74)
-    tone(520, 0.14, 'triangle', 0.032, 260, 0.04)
+    noiseBurst(0.24, 0.04, 760)
+    tone(196, 0.24, 'triangle', 0.035, 88)
+    tone(660, 0.18, 'sine', 0.024, 990, 0.04)
+    tone(880, 0.12, 'triangle', 0.018, 540, 0.09)
   },
   orbit() {
     if (!canPlaySound('orbit', 180)) return
-    for (let i = 0; i < 4; i += 1) tone(520 + i * 130, 0.08, 'triangle', 0.026, 340 + i * 82, i * 0.025)
+    ;[392, 494, 587, 784].forEach((freq, i) => tone(freq, 0.12, 'sine', 0.022, freq * 1.22, i * 0.032))
+    noiseBurst(0.08, 0.016, 3600, 0.02)
   },
   heal() {
     if (!canPlaySound('heal', 1200)) return
-    tone(420, 0.16, 'sine', 0.025, 620)
-    tone(660, 0.2, 'sine', 0.022, 880, 0.08)
+    tone(330, 0.2, 'sine', 0.02, 494)
+    tone(494, 0.24, 'triangle', 0.018, 740, 0.07)
+    tone(880, 0.28, 'sine', 0.014, 1320, 0.16)
   },
   soul(count = 1) {
     if (!canPlaySound('soul', 110)) return
-    tone(520 + count * 28, 0.09, 'sine', 0.026, 840 + count * 30)
-    tone(820 + count * 24, 0.11, 'triangle', 0.018, 1180, 0.035)
+    tone(660 + count * 22, 0.11, 'sine', 0.022, 990 + count * 28)
+    tone(990 + count * 18, 0.15, 'triangle', 0.014, 1480, 0.045)
   },
   level() {
     if (!canPlaySound('level', 650)) return
-    for (let i = 0; i < 5; i += 1) tone(420 + i * 120, 0.16, 'sine', 0.034, 620 + i * 140, i * 0.055)
+    ;[294, 330, 392, 494, 587, 784].forEach((freq, i) => tone(freq, 0.22, 'sine', 0.026, freq * 1.5, i * 0.06))
+    noiseBurst(0.18, 0.018, 4200, 0.14)
   },
   gacha(rank = 1) {
     if (!canPlaySound(`gacha-${rank}`, 110)) return
-    tone(300 + rank * 70, 0.14, rank >= 3 ? 'triangle' : 'sine', 0.032 + rank * 0.008, 540 + rank * 120)
-    if (rank >= 3) tone(860 + rank * 80, 0.2, 'sine', 0.038, 1280 + rank * 120, 0.05)
+    const base = 247 + rank * 55
+    tone(base, 0.18, 'triangle', 0.024 + rank * 0.006, base * 1.8)
+    tone(base * 2, 0.32, 'sine', 0.018 + rank * 0.005, base * 2.8, 0.052)
+    if (rank >= 3) musicBell(392 + rank * 42, 0.04, 0.028)
   },
 }
 
