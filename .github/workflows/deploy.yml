@@ -1,0 +1,60 @@
+name: Deploy to Cloud Server
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install and Build
+        run: |
+          npm install
+          npm run build
+
+      - name: Deploy dist to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: 122.51.245.220
+          username: ubuntu
+          key: ${{ secrets.SERVER_KEY }}
+          source: "dist/"
+          target: "/var/www/douyin-rpg"
+          strip_components: 1
+
+      - name: Configure nginx and reload
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 122.51.245.220
+          username: ubuntu
+          key: ${{ secrets.SERVER_KEY }}
+          script: |
+            sudo mkdir -p /var/www/douyin-rpg
+            sudo tee /etc/nginx/sites-available/douyin-rpg > /dev/null <<'NGINX'
+            location /game {
+                alias /var/www/douyin-rpg;
+                index index.html;
+                try_files $uri $uri/ /game/index.html;
+            }
+            NGINX
+            # 把这个 location 块包含进主配置（如果还没有）
+            if ! grep -q "douyin-rpg" /etc/nginx/sites-enabled/default 2>/dev/null && \
+               ! grep -q "douyin-rpg" /etc/nginx/nginx.conf 2>/dev/null; then
+              sudo tee /etc/nginx/conf.d/douyin-rpg.conf > /dev/null <<'CONF'
+              location /game {
+                  alias /var/www/douyin-rpg;
+                  index index.html;
+                  try_files $uri $uri/ /game/index.html;
+              }
+            CONF
+            fi
+            sudo nginx -t && sudo nginx -s reload
+            echo "Deployed! Visit https://mcp.edcedc.cn/game"
