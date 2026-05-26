@@ -44,6 +44,14 @@ interface DungeonDef {
   threat: string
   color: string
 }
+interface MainQuest {
+  title: string
+  desc: string
+  goal: number
+  reward: string
+  progress: () => number
+  apply: () => void
+}
 interface StageTheme {
   name: string
   subtitle: string
@@ -72,6 +80,7 @@ interface SaveData {
   pity: number
   wave: number
   questClaimed: boolean
+  mainQuestIndex?: number
   lastDaily: string
   savedAt: number
   bag: Reward[]
@@ -453,6 +462,7 @@ const state = {
   lastSettlement: '',
   questTarget: 15,
   questClaimed: false,
+  mainQuestIndex: 0,
   lastDaily: '',
   guideStep: 0,
   soulExp: 0,
@@ -494,6 +504,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <section class="progress-panel">
           <div class="progress-topline"><div id="message" class="message"></div></div>
           <div id="guide-tip" class="guide-tip"></div>
+          <div id="main-quest-label" class="main-quest-label">主线：等待同步</div>
           <div id="quest-label">任务：击杀 0/15</div>
           <div id="gear-label">装备：无</div>
         </section>
@@ -678,6 +689,7 @@ const pagePanels: Record<AppPage, HTMLElement> = {
 const evolutionPanel = document.querySelector<HTMLDivElement>('#evolution-panel')!
 const evolutionList = document.querySelector<HTMLDivElement>('#evolution-list')!
 const guideTip = document.querySelector<HTMLDivElement>('#guide-tip')!
+const mainQuestLabel = document.querySelector<HTMLDivElement>('#main-quest-label')!
 const heroShowcaseImg = document.querySelector<HTMLImageElement>('#hero-showcase-img')!
 const heroShowcaseLevel = document.querySelector<HTMLElement>('#hero-showcase-level')!
 const heroShowcaseTitle = document.querySelector<HTMLElement>('#hero-showcase-title')!
@@ -1213,6 +1225,7 @@ function resetRuntimeState() {
   state.lastSettlement = ''
   state.questTarget = 15
   state.questClaimed = false
+  state.mainQuestIndex = 0
   state.lastDaily = ''
   state.guideStep = 0
   state.soulExp = 0
@@ -1287,6 +1300,86 @@ const guideTexts = [
   '每日 3 次副本入场，收集门钥碎片后找到撤离门带走收益。',
 ]
 
+const mainQuests: MainQuest[] = [
+  {
+    title: '青岚初醒',
+    desc: '在野外击杀 15 只虚境生物。',
+    goal: 15,
+    reward: '经验 60 / 灵石 80',
+    progress: () => state.kills,
+    apply: () => {
+      grantExp(60)
+      state.spiritStones += 80
+    },
+  },
+  {
+    title: '魂质淬体',
+    desc: '提升到 Lv.5，完成第一次基础成长。',
+    goal: 5,
+    reward: '法宝精华 3 / 凝露灵草 2',
+    progress: () => state.hero.level,
+    apply: () => {
+      state.skills.points += 3
+      addMaterialToBag('herb', 2)
+    },
+  },
+  {
+    title: '法宝显形',
+    desc: '从副本带回 1 件法宝。',
+    goal: 1,
+    reward: '灵石 120 / 法宝精华 2',
+    progress: () => artifactKeys.filter((key) => hasArtifact(key)).length,
+    apply: () => {
+      state.spiritStones += 120
+      state.skills.points += 2
+    },
+  },
+  {
+    title: '秘境采集',
+    desc: '带回 3 份炼材。',
+    goal: 3,
+    reward: '灵石 160 / 法宝精华 2',
+    progress: () => materialCount('herb') + materialCount('ore') + materialCount('relic'),
+    apply: () => {
+      state.spiritStones += 160
+      state.skills.points += 2
+    },
+  },
+  {
+    title: '本命淬炼',
+    desc: '任意法宝淬炼到 Lv.3。',
+    goal: 3,
+    reward: '玄铁灵矿 2 / 秘境残符 1',
+    progress: () => Math.max(0, ...artifactKeys.map((key) => artifactLevel(key))),
+    apply: () => {
+      addMaterialToBag('ore', 2)
+      addMaterialToBag('relic', 1)
+    },
+  },
+  {
+    title: '星门同伴',
+    desc: '合成第 2 名角色。',
+    goal: 2,
+    reward: '灵石 300 / 秘境残符 2',
+    progress: () => state.ownedCharacters.length,
+    apply: () => {
+      state.spiritStones += 300
+      addMaterialToBag('relic', 2)
+    },
+  },
+  {
+    title: '筑基试炼',
+    desc: '提升到 Lv.20，准备挑战高阶秘境。',
+    goal: 20,
+    reward: '灵石 500 / 法宝精华 6',
+    progress: () => state.hero.level,
+    apply: () => {
+      state.spiritStones += 500
+      state.skills.points += 6
+    },
+  },
+]
+
 function advanceGuide(target: number) {
   if (state.guideStep !== target) return
   state.guideStep += 1
@@ -1301,6 +1394,41 @@ function updateGuide() {
   }
   guideTip.hidden = false
   guideTip.textContent = `新手目标 ${state.guideStep + 1}/${guideTexts.length}：${guideTexts[state.guideStep]}`
+}
+
+function currentMainQuest() {
+  return mainQuests[state.mainQuestIndex] ?? null
+}
+
+function mainQuestProgress(quest = currentMainQuest()) {
+  if (!quest) return { current: 0, goal: 0, ready: false }
+  const current = Math.min(quest.goal, Math.max(0, Math.floor(quest.progress())))
+  return { current, goal: quest.goal, ready: current >= quest.goal }
+}
+
+function claimMainQuestIfReady() {
+  const quest = currentMainQuest()
+  if (!quest) return
+  const progress = mainQuestProgress(quest)
+  if (!progress.ready) return
+  quest.apply()
+  state.mainQuestIndex += 1
+  sfx.level()
+  flashScreen('rgba(250,204,21,.18)', 0.14, 0.18)
+  toast(`主线完成：${quest.title}，获得 ${quest.reward}。`)
+  saveGame()
+}
+
+function updateMainQuestLabel() {
+  const quest = currentMainQuest()
+  if (!quest) {
+    mainQuestLabel.classList.remove('ready')
+    mainQuestLabel.textContent = '主线已完成：继续刷副本、淬炼法宝，等待下一章开放。'
+    return
+  }
+  const progress = mainQuestProgress(quest)
+  mainQuestLabel.classList.toggle('ready', progress.ready)
+  mainQuestLabel.textContent = `主线 ${state.mainQuestIndex + 1}/${mainQuests.length}：${quest.title} ${progress.current}/${progress.goal} · ${quest.desc} · 奖励 ${quest.reward}`
 }
 
 function loadGame() {
@@ -1339,6 +1467,7 @@ function loadGame() {
     state.pity = save.pity ?? 0
     state.wave = save.wave ?? 1
     state.questClaimed = save.questClaimed ?? false
+    state.mainQuestIndex = save.mainQuestIndex ?? 0
     state.lastDaily = save.lastDaily ?? ''
     state.bag = Array.isArray(save.bag) ? save.bag : []
     state.guideStep = save.guideStep ?? 0
@@ -1375,6 +1504,7 @@ function saveGame() {
     pity: state.pity,
     wave: state.wave,
     questClaimed: state.questClaimed,
+    mainQuestIndex: state.mainQuestIndex,
     lastDaily: state.lastDaily,
     bag: state.bag.slice(0, 80),
     guideStep: state.guideStep,
@@ -3134,6 +3264,7 @@ function update(dt: number) {
     state.screenFlash.life -= dt
     if (state.screenFlash.life <= 0) state.screenFlash = null
   }
+  claimMainQuestIfReady()
   updateHud()
 }
 
@@ -5920,6 +6051,7 @@ function updateHud() {
   setText('wave-label', state.mode === 'dungeon' ? `副本 ${Math.ceil(state.dungeonTime)}s` : `第${currentStage}关`)
   setText('mode-label', state.mode === 'dungeon' ? `副本·${dungeonStageTitle()}` : `世界地图·${worldStageTitle(currentStage)}`)
   setText('message', state.message)
+  updateMainQuestLabel()
   const extractDistance = state.dungeonGateFound
     ? Math.round(Math.hypot(state.hero.x - state.dungeonExtractX, state.hero.y - state.dungeonExtractY))
     : 0

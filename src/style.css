@@ -362,7 +362,7 @@ button:disabled {
 
 .battle-view {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) 112px 88px;
+  grid-template-rows: minmax(0, 1fr) 132px 78px;
   overflow: hidden;
 }
 
@@ -544,7 +544,7 @@ canvas {
 
 .progress-panel {
   display: grid;
-  grid-template-rows: 24px 38px 18px 18px;
+  grid-template-rows: 24px 34px 30px 18px 18px;
   gap: 4px;
   align-items: stretch;
   padding: 7px 14px 8px;
@@ -577,6 +577,21 @@ canvas {
 
 #quest-label {
   color: #e0f2fe;
+}
+
+.main-quest-label {
+  border: 1px solid rgba(250, 204, 21, 0.28);
+  border-radius: 9px;
+  padding: 4px 7px;
+  color: #fef3c7;
+  background:
+    radial-gradient(circle at right, rgba(250, 204, 21, 0.12), transparent 46%),
+    rgba(69, 26, 3, 0.44);
+}
+
+.main-quest-label.ready {
+  border-color: rgba(250, 204, 21, 0.62);
+  box-shadow: 0 0 18px rgba(250, 204, 21, 0.12);
 }
 
 .progress-topline {
@@ -3080,7 +3095,7 @@ canvas {
   }
 
   .battle-view {
-    grid-template-rows: minmax(0, 1fr) 104px 78px;
+    grid-template-rows: minmax(0, 1fr) 122px 64px;
   }
 
   .topbar {
@@ -3119,6 +3134,11 @@ canvas {
   .message,
   .progress-panel {
     font-size: 9px;
+  }
+
+  .progress-panel {
+    grid-template-rows: 22px 30px 28px 16px 16px;
+    padding: 5px 10px 6px;
   }
 
   .battle-actions {
