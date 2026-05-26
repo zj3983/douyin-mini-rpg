@@ -511,7 +511,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 
         <section class="battle-actions">
           <div id="auto-orb" class="auto-orb"><i></i><span id="auto-orb-label">自动<br>探索</span></div>
-          <button id="mode-btn" type="button">副本券 3/3</button>
+          <button id="mode-btn" type="button">选择副本 3/3</button>
         </section>
       </section>
 
@@ -757,6 +757,7 @@ const vfxSprites = {
 
 let input: Vec = { x: 0, y: 0 }
 let last = performance.now()
+let lastAutoSave = performance.now()
 let enemyId = 1
 let soulId = 1
 let pulling = false
@@ -1478,8 +1479,10 @@ function loadGame() {
     const offlineMinutes = Math.min(480, Math.floor((Date.now() - (save.savedAt ?? Date.now())) / 60000))
     if (offlineMinutes >= 5) {
       const expGain = Math.floor(offlineMinutes / 3)
+      const stoneGain = Math.floor(offlineMinutes / 2)
       grantExp(expGain)
-      toast(`离线 ${offlineMinutes} 分钟，世界线沉淀了 ${expGain} 经验。抽卡券仍需进副本带出。`)
+      state.spiritStones += stoneGain
+      toast(`离线 ${offlineMinutes} 分钟，获得 ${stoneGain} 灵石。抽卡券仍需进副本带出。`)
     }
     claimDailyReward()
   } catch {
@@ -1549,12 +1552,8 @@ function skillPower() {
 }
 
 function grantExp(amount: number) {
+  // 战斗经验仅作为累计统计，不直接升级——境界晋阶由魂质修炼（魂质球）唯一驱动
   state.hero.exp += amount
-  while (state.hero.exp >= state.hero.level * 40) {
-    state.hero.exp -= state.hero.level * 40
-    state.hero.level += 1
-    state.hero.hp = maxHp()
-  }
 }
 
 function autoAttackRange() {
@@ -3100,7 +3099,7 @@ function gainSoul(amount: number) {
   if (state.soulExp >= soulNeed() && evolutionPanel.hidden) {
     levelUpSoul()
   }
-  saveGame()
+  // 不在此处存档；由游戏循环每 30 秒自动存档，避免高频 localStorage 写入
 }
 
 function levelUpSoul() {
@@ -6066,7 +6065,7 @@ function updateHud() {
   const artifactCount = artifactKeys.filter((key) => hasArtifact(key)).length
   setText('gear-label', `法宝 ${artifactCount}/${artifactKeys.length} | 精华 ${state.skills.points} | 灵石 ${state.spiritStones} | 质变：${mutationSummary()} | 装备：${state.gear.weapon?.name ?? '无武器'} | ${state.gear.armor?.name ?? '无护甲'} | ${state.gear.core?.name ?? '无核心'}`)
   document.querySelector<HTMLElement>('#hp-bar')!.style.width = `${Math.max(0, state.hero.hp / maxHp()) * 100}%`
-  modeBtn.textContent = state.mode === 'dungeon' ? '撤离' : '选择副本'
+  modeBtn.textContent = state.mode === 'dungeon' ? '撤离' : `选择副本 ${state.dungeonEntries}/3`
   autoOrb.classList.toggle('manual', !!moveTarget)
   autoOrb.classList.toggle('paused', state.mode === 'wild' && !state.autoExplore && !moveTarget)
   autoOrbLabel.innerHTML = moveTarget ? '手动<br>目标' : state.mode === 'dungeon' ? '副本<br>探索' : state.autoExplore ? '自动<br>推进' : '暂停<br>推进'
@@ -6123,6 +6122,11 @@ function loop(now: number) {
   last = now
   update(dt)
   draw()
+  // 每 30 秒自动存档一次，避免在 gainSoul 中高频写入 localStorage
+  if (now - lastAutoSave >= 30000) {
+    saveGame()
+    lastAutoSave = now
+  }
   requestAnimationFrame(loop)
 }
 
