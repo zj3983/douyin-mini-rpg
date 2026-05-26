@@ -11,6 +11,7 @@ type CharacterId = 'sword' | 'thunder' | 'flame' | 'wood'
 type ArtifactKey = 'slash' | 'burst' | 'regen' | 'chain' | 'orbit' | 'flame' | 'bell' | 'needle' | 'mirror' | 'fan' | 'banner' | 'seal'
 type DungeonId = 'mossCave' | 'starHall' | 'mistMaze' | 'crystalMine' | 'bloodRift' | 'kingTomb'
 type DungeonNodeKind = 'key' | 'herb' | 'ore' | 'chest'
+type MaterialKind = 'herb' | 'ore' | 'relic'
 
 interface Vec { x: number; y: number }
 interface Enemy extends Vec { id: number; hp: number; maxHp: number; speed: number; elite: boolean; kind: EnemyKind; boss?: boolean; hit: number }
@@ -21,7 +22,7 @@ type ParticleKind = 'spark' | 'ember' | 'soul' | 'shard' | 'rune'
 interface Particle extends Vec { vx: number; vy: number; size: number; color: string; life: number; maxLife: number; kind: ParticleKind; spin: number }
 interface ScreenFlash { color: string; life: number; maxLife: number; strength: number }
 interface SoulOrb extends Vec { id: number; value: number; life: number; phase: number }
-interface Reward { name: string; rarity: Rarity; count: number; slot?: Slot; atk?: number; hp?: number; skill?: number; characterId?: CharacterId; artifact?: ArtifactKey; forge?: number }
+interface Reward { name: string; rarity: Rarity; count: number; slot?: Slot; atk?: number; hp?: number; skill?: number; characterId?: CharacterId; artifact?: ArtifactKey; material?: MaterialKind; forge?: number }
 interface SkillTree { slash: number; burst: number; regen: number; chain: number; orbit: number; flame: number; bell: number; needle: number; mirror: number; fan: number; banner: number; seal: number; points: number }
 interface MutationTree { swordRide: number; thunderFork: number; swordDomain: number; flameLotus: number }
 interface CharacterDef { id: CharacterId; name: string; title: string; need: number; color: string; portrait: string; battle: string; starter: Partial<SkillTree>; desc: string }
@@ -114,6 +115,11 @@ const mutationMaxLevel = 3
 const baseCharacterShards: Record<CharacterId, number> = { sword: 0, thunder: 0, flame: 0, wood: 0 }
 const artifactKeys: ArtifactKey[] = ['slash', 'burst', 'chain', 'orbit', 'flame', 'regen', 'bell', 'needle', 'mirror', 'fan', 'banner', 'seal']
 const artifactRarityOrder: Rarity[] = ['传说', '史诗', '稀有', '普通']
+const materialDefs: Record<MaterialKind, { name: string; rarity: Rarity; desc: string }> = {
+  herb: { name: '凝露灵草', rarity: '普通', desc: '副本灵草采集所得，用于温养回复、护身和魂镜类法宝。' },
+  ore: { name: '玄铁灵矿', rarity: '稀有', desc: '副本灵矿采集所得，用于淬炼重兵、飞剑和破障类法宝。' },
+  relic: { name: '秘境残符', rarity: '史诗', desc: '开启秘境宝匣所得，用于淬炼雷印、符火、镇界和高阶法宝。' },
+}
 const baseArtifacts: Record<ArtifactKey, number> = {
   slash: 0,
   burst: 0,
@@ -1542,7 +1548,37 @@ function artifactUpgradeCost(key: ArtifactKey) {
   return {
     essence: nextLevel,
     stones: nextLevel * rank * 30,
+    material: materialKindForArtifact(key),
+    materialCount: Math.max(1, Math.ceil(nextLevel / 3)),
   }
+}
+
+function materialKindForArtifact(key: ArtifactKey): MaterialKind {
+  if (key === 'regen' || key === 'bell' || key === 'mirror') return 'herb'
+  if (key === 'slash' || key === 'orbit' || key === 'needle') return 'ore'
+  return 'relic'
+}
+
+function materialCount(kind: MaterialKind) {
+  return state.bag
+    .filter((item) => item.material === kind)
+    .reduce((sum, item) => sum + item.count, 0)
+}
+
+function materialCostText(kind: MaterialKind, count: number) {
+  return `${count}${materialDefs[kind].name}`
+}
+
+function consumeMaterial(kind: MaterialKind, count: number) {
+  let remaining = count
+  for (const item of state.bag) {
+    if (item.material !== kind || remaining <= 0) continue
+    const used = Math.min(item.count, remaining)
+    item.count -= used
+    remaining -= used
+  }
+  state.bag = state.bag.filter((item) => !item.material || item.count > 0)
+  return remaining === 0
 }
 
 function mutationKeyForArtifact(key: ArtifactKey): keyof MutationTree | null {
@@ -1748,6 +1784,7 @@ function itemStats(item: Reward) {
   const parts = []
   if (item.characterId) return `${characters[item.characterId].name} 碎片 +${item.count}`
   if (item.artifact) return `${artifactDefs[item.artifact].type} · 法宝等级 +${item.count}`
+  if (item.material) return `${materialDefs[item.material].desc} 数量 x${item.count}`
   if (item.atk) parts.push(`攻击 +${equipmentStat(item, 'atk')}`)
   if (item.hp) parts.push(`生命 +${equipmentStat(item, 'hp')}`)
   if (item.skill) parts.push(`法力 +${equipmentStat(item, 'skill')}`)
@@ -1782,6 +1819,9 @@ function materialIcon(item: Reward) {
 }
 
 function materialIconSrc(item: Reward) {
+  if (item.material === 'herb') return '/assets/item-icons/alchemy-herbs/PNG/without_shadow/14.png'
+  if (item.material === 'ore') return '/assets/item-icons/rpg_inventory/RPG Inventory/Crafting/Ore_03.png'
+  if (item.material === 'relic') return '/assets/item-icons/xianxia-jade-slip.png'
   if (item.name.includes('草')) return '/assets/item-icons/alchemy-herbs/PNG/without_shadow/14.png'
   if (item.name.includes('丹') || item.hp) return '/assets/item-icons/rpg_inventory/RPG Inventory/Potions/PotionHp_Big.png'
   if (item.name.includes('矿') || item.atk) return '/assets/item-icons/rpg_inventory/RPG Inventory/Crafting/Ore_03.png'
@@ -2094,6 +2134,7 @@ function renderSkillPanel() {
   skillPointsLabel.innerHTML = `
     <span>精华 <b>${state.skills.points}</b></span>
     <span>灵石 <b>${state.spiritStones}</b></span>
+    <span>炼材 <b>${materialCount('herb') + materialCount('ore') + materialCount('relic')}</b></span>
     <span>已获 <b>${ownedCount}/${artifactKeys.length}</b></span>
     <span>满阶 <b>${maxedCount}</b></span>
   `
@@ -2194,8 +2235,8 @@ function openArtifactDetail(key: ArtifactKey) {
     action.textContent = '已满阶'
     action.disabled = true
   } else {
-    action.textContent = `淬炼 · ${cost.essence}精华 / ${cost.stones}灵石`
-    action.disabled = state.skills.points < cost.essence || state.spiritStones < cost.stones
+    action.textContent = `淬炼 · ${cost.essence}精华 / ${cost.stones}灵石 / ${materialCostText(cost.material, cost.materialCount)}`
+    action.disabled = state.skills.points < cost.essence || state.spiritStones < cost.stones || materialCount(cost.material) < cost.materialCount
   }
   action.addEventListener('click', () => {
     upgradeSkill(key, def.max)
@@ -2212,13 +2253,14 @@ function upgradeSkill(key: ArtifactKey, max: number) {
   }
   const cost = artifactUpgradeCost(key)
   if (artifactLevel(key) >= max) return
-  if (state.skills.points < cost.essence || state.spiritStones < cost.stones) {
-    toast(`淬炼材料不足：需要 ${cost.essence} 精华 / ${cost.stones} 灵石。`)
+  if (state.skills.points < cost.essence || state.spiritStones < cost.stones || materialCount(cost.material) < cost.materialCount) {
+    toast(`淬炼材料不足：需要 ${cost.essence} 精华 / ${cost.stones} 灵石 / ${materialCostText(cost.material, cost.materialCount)}。`)
     return
   }
   const beforeStage = mutationStageForArtifactLevel(artifactLevel(key))
   state.skills.points -= cost.essence
   state.spiritStones -= cost.stones
+  consumeMaterial(cost.material, cost.materialCount)
   state.artifacts[key] += 1
   state.skills[key] = state.artifacts[key]
   syncArtifactMutation(key)
@@ -2414,6 +2456,7 @@ function completeDungeon() {
   state.spiritStones += stoneReward
   grantExp(expReward)
   state.skills.points += skillReward
+  const materialDrops = settleDungeonMaterials()
   if (bossDrop) {
     acceptReward(bossDrop)
   }
@@ -2429,6 +2472,7 @@ function completeDungeon() {
     lines: [
       `门钥碎片：${state.dungeonMaterials}/${state.dungeonMaterialGoal}`,
       dungeonExplorationSummary(),
+      materialSettlementText(materialDrops),
       `秘境特性：${dungeon.trait}`,
       `Boss 掉落：${bossDrop.rarity} ${bossDrop.name}`,
       `结算方式：击败守门人后自动带回全部收益`,
@@ -2463,6 +2507,7 @@ function extractDungeon() {
   state.spiritStones += stoneReward
   grantExp(expReward)
   state.skills.points += skillReward
+  const materialDrops = settleDungeonMaterials()
   if (extractDrop) acceptReward(extractDrop)
 
   renderSettlement({
@@ -2475,6 +2520,7 @@ function extractDungeon() {
     lines: [
       `门钥碎片：${state.dungeonMaterials}/${state.dungeonMaterialGoal}`,
       dungeonExplorationSummary(),
+      materialSettlementText(materialDrops),
       `当前秘境：${dungeon.subtitle}`,
       `撤离距离：已抵达撤离门`,
       extractDrop ? `撤离搜获：${extractDrop.rarity} ${extractDrop.name}` : '撤离搜获：未发现完整法宝',
@@ -2520,6 +2566,33 @@ function dungeonRank(kills: number, success: boolean, bossClear: boolean) {
 
 function dungeonExplorationSummary() {
   return `探索采集：灵草 ${state.dungeonHerbs} / 灵矿 ${state.dungeonOres} / 宝匣 ${state.dungeonChests}`
+}
+
+function materialReward(kind: MaterialKind, count: number): Reward {
+  const def = materialDefs[kind]
+  return { name: def.name, rarity: def.rarity, count, material: kind }
+}
+
+function addMaterialToBag(kind: MaterialKind, count: number) {
+  if (count <= 0) return null
+  const existing = state.bag.find((item) => item.material === kind)
+  if (existing) existing.count += count
+  else state.bag.unshift(materialReward(kind, count))
+  return materialReward(kind, count)
+}
+
+function settleDungeonMaterials() {
+  return [
+    addMaterialToBag('herb', state.dungeonHerbs),
+    addMaterialToBag('ore', state.dungeonOres),
+    addMaterialToBag('relic', state.dungeonChests),
+  ].filter((item): item is Reward => !!item)
+}
+
+function materialSettlementText(materials: Reward[]) {
+  return materials.length
+    ? `带回炼材：${materials.map((item) => `${item.name} x${item.count}`).join(' / ')}`
+    : '带回炼材：无'
 }
 
 function renderSettlement(options: {
