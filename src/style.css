@@ -95,29 +95,48 @@ button:disabled {
 }
 
 .currency {
-  min-width: 190px;
+  min-width: 0;
+  max-width: 178px;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 5px;
+  align-self: start;
+  overflow: hidden;
   text-align: right;
   color: #cbd5e1;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .currency span {
-  display: inline;
+  display: none;
 }
 
 .currency b {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  flex: 0 0 auto;
   color: #facc15;
-  font-size: 16px;
+  font-size: 14px;
+}
+
+#ticket-count::before {
+  content: '券';
+  color: #8dd7ff;
+  font-size: 10px;
+}
+
+#stone-count::before {
+  content: '灵';
+  color: #8dd7ff;
+  font-size: 10px;
 }
 
 .lore-btn {
   min-height: 30px;
-  padding: 0 9px;
+  padding: 0 8px;
   border-color: rgba(56, 189, 248, 0.32);
   border-radius: 999px;
   color: #bae6fd;
@@ -466,7 +485,7 @@ canvas {
 
 .character-meta b {
   color: #fef08a;
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1;
 }
 
@@ -489,18 +508,18 @@ canvas {
 
 .stat-line {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(68px, 1.08fr) repeat(2, minmax(0, 1fr));
   gap: 5px;
 }
 
 .stat-line span,
 .message {
-  padding: 3px 6px;
+  padding: 3px 4px;
   border: 1px solid rgba(148, 163, 184, 0.22);
   border-radius: 8px;
   background: rgba(2, 6, 23, 0.64);
   color: #dbeafe;
-  font-size: 10px;
+  font-size: 9px;
   white-space: nowrap;
   min-width: 0;
 }
@@ -508,7 +527,12 @@ canvas {
 .stat-line span {
   overflow: hidden;
   text-align: center;
-  text-overflow: clip;
+  text-overflow: ellipsis;
+}
+
+#level-label,
+#soul-label {
+  letter-spacing: 0;
 }
 
 .bar {
@@ -844,7 +868,7 @@ canvas {
   --dungeon-color: #5eead4;
   position: relative;
   display: grid;
-  grid-template-columns: 82px minmax(0, 1fr);
+  grid-template-columns: 128px minmax(0, 1fr);
   gap: 10px 12px;
   overflow: hidden;
   padding: 12px;
@@ -867,8 +891,8 @@ canvas {
 
 .dungeon-card-art {
   position: relative;
-  grid-row: 1 / 3;
-  min-height: 112px;
+  grid-row: 1 / 5;
+  min-height: 158px;
   overflow: hidden;
   border: 1px solid rgba(226, 232, 240, 0.16);
   border-radius: 13px;
@@ -878,19 +902,24 @@ canvas {
     rgba(2, 6, 23, 0.48);
 }
 
-.dungeon-card-art i {
+.dungeon-card-art img {
   position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 58px;
-  height: 92px;
-  border: 2px solid color-mix(in srgb, var(--dungeon-color), white 12%);
-  border-radius: 999px 999px 12px 12px;
-  transform: translate(-50%, -50%) rotate(12deg);
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(1.08) contrast(1.05);
+  transform: scale(1.02);
+}
+
+.dungeon-card-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
   background:
-    radial-gradient(circle at 50% 24%, rgba(255, 255, 255, 0.34), transparent 14%),
-    radial-gradient(circle at 50% 58%, color-mix(in srgb, var(--dungeon-color), transparent 36%), transparent 52%);
-  box-shadow: 0 0 28px color-mix(in srgb, var(--dungeon-color), transparent 58%);
+    linear-gradient(180deg, rgba(2, 6, 23, 0.02), rgba(2, 6, 23, 0.42)),
+    radial-gradient(circle at 45% 42%, transparent 0 56%, rgba(2, 6, 23, 0.2) 82%);
+  pointer-events: none;
 }
 
 .dungeon-card-art em {
@@ -906,6 +935,7 @@ canvas {
   font-style: normal;
   font-weight: 1000;
   text-align: center;
+  z-index: 2;
 }
 
 .dungeon-card-main {
@@ -1123,20 +1153,37 @@ canvas {
 }
 
 .settlement {
-  top: 54px;
-  bottom: 18px;
-  max-height: none;
+  left: 32px;
+  right: 32px;
+  bottom: 92px;
+  max-height: min(39svh, 304px);
+  padding: 10px;
   border-color: rgba(168, 85, 247, 0.48);
+  border-radius: 12px;
   background:
     radial-gradient(circle at 82% 10%, rgba(250, 204, 21, 0.16), transparent 28%),
     radial-gradient(circle at 12% 0%, rgba(56, 189, 248, 0.16), transparent 34%),
     rgba(2, 6, 23, 0.98);
 }
 
+.settlement .sheet-head {
+  min-height: 34px;
+}
+
+.settlement h2 {
+  font-size: 18px;
+}
+
+.settlement #close-settlement {
+  width: 34px;
+  min-height: 32px;
+  font-size: 18px;
+}
+
 .settlement .results {
-  max-height: none;
   min-height: 0;
-  height: calc(100% - 48px);
+  max-height: calc(min(39svh, 304px) - 48px);
+  overflow: hidden;
   padding: 0;
   background: transparent;
 }
@@ -1144,12 +1191,12 @@ canvas {
 .settlement-card {
   position: relative;
   display: grid;
-  gap: 12px;
-  margin-top: 12px;
+  gap: 6px;
+  margin-top: 6px;
   overflow: hidden;
-  padding: 13px;
+  padding: 9px;
   border: 1px solid rgba(148, 163, 184, 0.22);
-  border-radius: 13px;
+  border-radius: 10px;
   background:
     linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(8, 47, 73, 0.7));
 }
@@ -1173,6 +1220,16 @@ canvas {
   border-color: rgba(94, 234, 212, 0.42);
 }
 
+.settlement-card.world {
+  gap: 8px;
+  padding: 11px;
+  border-color: rgba(56, 189, 248, 0.44);
+  background:
+    radial-gradient(circle at right 12%, rgba(56, 189, 248, 0.16), transparent 36%),
+    radial-gradient(circle at left 0%, rgba(250, 204, 21, 0.1), transparent 34%),
+    linear-gradient(135deg, rgba(8, 47, 73, 0.96), rgba(15, 23, 42, 0.76));
+}
+
 .settlement-card.fail {
   border-color: rgba(251, 113, 133, 0.42);
   background:
@@ -1184,8 +1241,8 @@ canvas {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 72px;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 48px;
+  gap: 8px;
   align-items: center;
 }
 
@@ -1197,36 +1254,40 @@ canvas {
 
 .settlement-hero small {
   color: #93c5fd;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
 }
 
 .settlement-hero b {
-  margin-top: 3px;
+  margin-top: 2px;
   color: #f8fafc;
-  font-size: 24px;
+  font-size: 18px;
   line-height: 1.1;
 }
 
 .settlement-hero span {
-  margin-top: 6px;
+  margin-top: 4px;
   color: #cbd5e1;
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: 11px;
+  line-height: 1.28;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .settlement-hero i {
   display: grid;
   place-items: center;
-  width: 70px;
-  height: 70px;
+  width: 46px;
+  height: 46px;
   border: 1px solid rgba(250, 204, 21, 0.54);
   border-radius: 999px;
   color: #facc15;
   background:
     radial-gradient(circle at 35% 24%, rgba(255, 255, 255, 0.26), transparent 28%),
     rgba(66, 32, 6, 0.72);
-  font-size: 25px;
+  font-size: 18px;
   font-style: normal;
   font-weight: 1000;
   box-shadow: 0 0 28px rgba(250, 204, 21, 0.24), inset 0 0 18px rgba(250, 204, 21, 0.12);
@@ -1238,20 +1299,63 @@ canvas {
   background: rgba(136, 19, 55, 0.58);
 }
 
+.settlement-card.world .settlement-hero i {
+  border-color: rgba(56, 189, 248, 0.58);
+  color: #bae6fd;
+  background:
+    radial-gradient(circle at 36% 26%, rgba(255, 255, 255, 0.3), transparent 28%),
+    rgba(8, 47, 73, 0.76);
+  box-shadow: 0 0 28px rgba(56, 189, 248, 0.26), inset 0 0 18px rgba(125, 211, 252, 0.12);
+}
+
 .settlement-rewards {
   position: relative;
   z-index: 1;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  gap: 5px;
 }
 
 .settlement-rewards div {
   min-width: 0;
-  padding: 9px 8px;
+  padding: 5px;
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 10px;
-  background: rgba(2, 6, 23, 0.54);
+  background:
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--reward-accent, #38bdf8), transparent 78%), transparent 58%),
+    rgba(2, 6, 23, 0.54);
+}
+
+.settlement-reward-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: 0 auto 2px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--reward-accent, #38bdf8), transparent 34%);
+  border-radius: 10px;
+  color: #f8fafc;
+  background: rgba(15, 23, 42, 0.68);
+  box-shadow: inset 0 0 14px color-mix(in srgb, var(--reward-accent, #38bdf8), transparent 74%);
+  font-style: normal;
+  font-weight: 1000;
+}
+
+.settlement-reward-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 3px;
+}
+
+.settlement-reward-icon span {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-size: 15px;
+  line-height: 1;
 }
 
 .settlement-rewards small,
@@ -1265,19 +1369,19 @@ canvas {
 
 .settlement-rewards small {
   color: #94a3b8;
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .settlement-rewards b {
-  margin-top: 3px;
+  margin-top: 2px;
   color: #fef3c7;
-  font-size: 18px;
+  font-size: 15px;
 }
 
 .settlement-meter {
   position: relative;
   z-index: 1;
-  height: 7px;
+  height: 5px;
   overflow: hidden;
   border-radius: 999px;
   background: rgba(15, 23, 42, 0.82);
@@ -1295,28 +1399,43 @@ canvas {
   position: relative;
   z-index: 1;
   display: grid;
-  gap: 6px;
+  gap: 4px;
+  max-height: 72px;
+  overflow: hidden;
+}
+
+.settlement-card.world .settlement-lines {
+  gap: 4px;
 }
 
 .settlement-lines span {
   display: block;
-  padding: 7px 9px;
+  padding: 5px 7px;
   border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 9px;
   color: #dbeafe;
   background: rgba(15, 23, 42, 0.52);
-  font-size: 12px;
-  line-height: 1.35;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.settlement-lines span:nth-child(n+4) {
+  display: none;
+}
+
+.settlement-card.world .settlement-lines span {
+  padding: 5px 8px;
+  font-size: 11px;
 }
 
 .settlement-drop {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: 50px minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 7px;
   align-items: center;
-  padding: 10px;
+  padding: 6px;
   border: 1px solid var(--drop-color, #facc15);
   border-radius: 11px;
   background:
@@ -1327,7 +1446,7 @@ canvas {
 .settlement-drop b {
   display: block;
   color: var(--drop-color, #facc15);
-  font-size: 13px;
+  font-size: 11px;
 }
 
 .settlement-drop span {
@@ -1336,19 +1455,19 @@ canvas {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #f8fafc;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 900;
 }
 
 .settlement-drop small {
   display: block;
   color: #94a3b8;
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .settlement-drop .reward-icon {
-  width: 48px;
-  height: 48px;
+  width: 32px;
+  height: 32px;
 }
 
 .settlement-drop > div {
@@ -1445,13 +1564,13 @@ canvas {
 .evolution-card {
   position: relative;
   display: grid;
-  grid-template-columns: 54px minmax(0, 1fr);
+  grid-template-columns: 60px minmax(0, 1fr);
   gap: 3px 11px;
   align-items: center;
   width: 100%;
-  min-height: 78px;
+  min-height: 86px;
   overflow: hidden;
-  padding: 10px 12px 10px 10px;
+  padding: 11px 12px 11px 10px;
   text-align: left;
   border: 1px solid rgba(94, 234, 212, 0.42);
   background:
@@ -1467,34 +1586,22 @@ canvas {
   box-shadow: 0 0 20px var(--card-accent, #5eead4);
 }
 
-.evolution-card::after {
-  content: '';
-  position: absolute;
-  inset: -24px -20px auto auto;
-  width: 96px;
-  height: 96px;
-  border-radius: 999px;
-  background: var(--card-glow, rgba(94, 234, 212, 0.18));
-  pointer-events: none;
-}
-
 .evolution-card i {
   position: relative;
   z-index: 1;
   grid-row: span 2;
   display: grid;
   place-items: center;
-  width: 48px;
-  height: 48px;
-  border: 1px solid color-mix(in srgb, var(--card-accent, #5eead4), white 18%);
-  border-radius: 14px;
+  width: 56px;
+  height: 56px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 12px;
   color: var(--card-icon, #f8fafc);
-  background:
-    radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.22), transparent 34%),
-    var(--card-icon-bg, rgba(255, 255, 255, 0.08));
+  background: rgba(2, 6, 23, 0.32);
   font-style: normal;
   font-weight: 900;
-  box-shadow: inset 0 0 18px rgba(255, 255, 255, 0.08), 0 0 22px var(--card-glow, rgba(94, 234, 212, 0.15));
+  box-shadow: 0 0 24px var(--card-glow, rgba(94, 234, 212, 0.15));
 }
 
 .evolution-card i svg {
@@ -1507,6 +1614,13 @@ canvas {
   height: 38px;
   object-fit: contain;
   filter: drop-shadow(0 0 10px var(--card-glow, rgba(94, 234, 212, 0.22)));
+}
+
+.evolution-card i .evolution-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(1.08) contrast(1.08);
 }
 
 .evolution-card b,
@@ -1556,13 +1670,6 @@ canvas {
 
 .evolution-card.mutation-card::before {
   width: 8px;
-}
-
-.evolution-card.mutation-card::after {
-  inset: -32px -24px auto auto;
-  width: 128px;
-  height: 128px;
-  opacity: 0.95;
 }
 
 .evolution-card[data-kind='blade'] {
@@ -1651,16 +1758,10 @@ canvas {
 }
 
 .evolution-card.tier-2 {
-  background:
-    radial-gradient(circle at left, rgba(94, 234, 212, 0.2), transparent 42%),
-    linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(8, 47, 73, 0.78));
   box-shadow: 0 0 20px rgba(94, 234, 212, 0.12);
 }
 
 .evolution-card.tier-3 {
-  background:
-    radial-gradient(circle at left, rgba(250, 204, 21, 0.24), transparent 44%),
-    linear-gradient(135deg, rgba(30, 41, 59, 0.96), rgba(76, 29, 149, 0.56));
   box-shadow: 0 0 26px rgba(250, 204, 21, 0.16);
 }
 
@@ -3189,6 +3290,17 @@ canvas {
     padding: 10px;
   }
 
+  .settlement {
+    left: 30px;
+    right: 30px;
+    bottom: 88px;
+    max-height: min(38svh, 292px);
+  }
+
+  .settlement .results {
+    max-height: calc(min(38svh, 292px) - 48px);
+  }
+
   .sheet h2 {
     font-size: 19px;
   }
@@ -3199,15 +3311,15 @@ canvas {
   }
 
   .evolution-card {
-    grid-template-columns: 42px minmax(0, 1fr);
+    grid-template-columns: 46px minmax(0, 1fr);
     gap: 2px 8px;
-    min-height: 60px;
+    min-height: 66px;
     padding: 8px 9px 8px 8px;
   }
 
   .evolution-card i {
-    width: 36px;
-    height: 36px;
+    width: 42px;
+    height: 42px;
     border-radius: 10px;
   }
 

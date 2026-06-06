@@ -13,6 +13,8 @@ dist-ssr
 *.local
 
 # Local verification screenshots
+/tmp/
+*tempvite-log.txt
 /*-check*.png
 /*-preview.png
 /layout-check.png
