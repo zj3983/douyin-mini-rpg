@@ -166,7 +166,7 @@ const stageThemes: StageTheme[] = [
     name: '青苔丘陵',
     subtitle: '灵雾初醒',
     dungeon: '青苔丘陵·灵根洞天',
-    bg: '/assets/generated/world-moss-hills.png',
+    bg: '/assets/generated/world-moss-hills.webp',
     sky: ['#dff7ff', '#7dd3fc', '#315f6f', '#0f2a24'],
     mountain: '#1f7a6b',
     cloud: 'rgba(236,254,255,.72)',
@@ -182,7 +182,7 @@ const stageThemes: StageTheme[] = [
     name: '残星哨站',
     subtitle: '旧服残垣',
     dungeon: '残星哨站·废阵回廊',
-    bg: '/assets/generated/world-star-outpost.png',
+    bg: '/assets/generated/world-star-outpost.webp',
     sky: ['#c7d2fe', '#60a5fa', '#1e3a8a', '#111827'],
     mountain: '#334155',
     cloud: 'rgba(219,234,254,.6)',
@@ -198,7 +198,7 @@ const stageThemes: StageTheme[] = [
     name: '雾灯林道',
     subtitle: '幽灯引路',
     dungeon: '雾灯林道·迷灯幻境',
-    bg: '/assets/generated/world-mist-forest.png',
+    bg: '/assets/generated/world-mist-forest.webp',
     sky: ['#ecfeff', '#99f6e4', '#155e75', '#052e2b'],
     mountain: '#0f766e',
     cloud: 'rgba(204,251,241,.68)',
@@ -214,7 +214,7 @@ const stageThemes: StageTheme[] = [
     name: '晶脉矿坑',
     subtitle: '紫晶回响',
     dungeon: '晶脉矿坑·地心晶窟',
-    bg: '/assets/generated/world-crystal-mine.png',
+    bg: '/assets/generated/world-crystal-mine.webp',
     sky: ['#ede9fe', '#a78bfa', '#4c1d95', '#12091f'],
     mountain: '#5b21b6',
     cloud: 'rgba(221,214,254,.54)',
@@ -230,7 +230,7 @@ const stageThemes: StageTheme[] = [
     name: '裂隙前线',
     subtitle: '天痕燃烧',
     dungeon: '裂隙前线·血月断层',
-    bg: '/assets/generated/world-blood-rift.png',
+    bg: '/assets/generated/world-blood-rift.webp',
     sky: ['#fee2e2', '#fb7185', '#7f1d1d', '#1f0f12'],
     mountain: '#7f1d1d',
     cloud: 'rgba(254,202,202,.5)',
@@ -246,7 +246,7 @@ const stageThemes: StageTheme[] = [
     name: '古王庭外环',
     subtitle: '金阙残梦',
     dungeon: '古王庭外环·铜阙墓道',
-    bg: '/assets/generated/world-royal-ruins.png',
+    bg: '/assets/generated/world-royal-ruins.webp',
     sky: ['#fef3c7', '#fbbf24', '#78350f', '#17120a'],
     mountain: '#92400e',
     cloud: 'rgba(254,243,199,.52)',
@@ -262,7 +262,7 @@ const stageThemes: StageTheme[] = [
     name: '太虚星海',
     subtitle: '星门尽头',
     dungeon: '太虚星海·无垠星牢',
-    bg: '/assets/generated/world-star-sea.png',
+    bg: '/assets/generated/world-star-sea.webp',
     sky: ['#dbeafe', '#38bdf8', '#172554', '#020617'],
     mountain: '#1e40af',
     cloud: 'rgba(186,230,253,.46)',
@@ -294,7 +294,7 @@ const dungeonDefs: DungeonDef[] = [
     trait: '门钥碎片多，适合新手撤离。',
     threat: '灵草傀和青苔兽',
     color: '#5eead4',
-    image: '/assets/generated/dungeon-moss-cave.png',
+    image: '/assets/generated/dungeon-moss-cave.webp',
   },
   {
     id: 'starHall',
@@ -312,7 +312,7 @@ const dungeonDefs: DungeonDef[] = [
     trait: '抽卡券收益更高，怪潮更密。',
     threat: '裂隙飞魇和星核晶卫',
     color: '#38bdf8',
-    image: '/assets/generated/dungeon-star-hall.png',
+    image: '/assets/generated/dungeon-star-hall.webp',
   },
   {
     id: 'mistMaze',
@@ -330,7 +330,7 @@ const dungeonDefs: DungeonDef[] = [
     trait: '法宝精华更多，撤离门距离更远。',
     threat: '雾翅妖蝠和司命幻影',
     color: '#99f6e4',
-    image: '/assets/generated/dungeon-mist-maze.png',
+    image: '/assets/generated/dungeon-mist-maze.webp',
   },
   {
     id: 'crystalMine',
@@ -348,7 +348,7 @@ const dungeonDefs: DungeonDef[] = [
     trait: '精英比例更高，通关更容易出史诗法宝。',
     threat: '晶甲妖兽和紫晶镇守',
     color: '#c084fc',
-    image: '/assets/generated/dungeon-crystal-mine.png',
+    image: '/assets/generated/dungeon-crystal-mine.webp',
   },
   {
     id: 'bloodRift',
@@ -366,7 +366,7 @@ const dungeonDefs: DungeonDef[] = [
     trait: '怪物压迫最强，莲火和重尺掉落权重更高。',
     threat: '血牙魔狼和裂隙守门人',
     color: '#fb7185',
-    image: '/assets/generated/dungeon-blood-rift.png',
+    image: '/assets/generated/dungeon-blood-rift.webp',
   },
   {
     id: 'kingTomb',
@@ -384,15 +384,15 @@ const dungeonDefs: DungeonDef[] = [
     trait: '高阶副本，通关结算奖励最高。',
     threat: '铜甲影卫和古庭镇灵',
     color: '#fbbf24',
-    image: '/assets/generated/dungeon-king-tomb.png',
+    image: '/assets/generated/dungeon-king-tomb.webp',
   },
 ]
 
 const characters: Record<CharacterId, CharacterDef> = {
-  sword: { id: 'sword', name: '青岚剑修', title: '剑匣亲和 / 重尺成长', need: 20, color: '#67e8f9', portrait: '/assets/generated/portrait-sword.png', battle: '/assets/generated/character-sword.png', starter: { slash: 2, orbit: 1 }, innateSkill: '御剑术', desc: '自带御剑术，飞剑会自动出鞘穿刺再回到身边；获得剑类法宝后亲和更高。' },
-  thunder: { id: 'thunder', name: '九霄雷使', title: '雷印亲和 / 群怪压制', need: 30, color: '#38bdf8', portrait: '/assets/generated/portrait-thunder.png', battle: '/assets/generated/character-thunder.png', starter: { chain: 3, burst: 1 }, innateSkill: '雷印诀', desc: '自带雷印诀，后续会扩展为标记和弹射；获得雷印法宝后更适合处理密集怪潮。' },
-  flame: { id: 'flame', name: '莲火符师', title: '火鼎亲和 / 范围爆发', need: 30, color: '#fb923c', portrait: '/assets/generated/portrait-flame.png', battle: '/assets/generated/character-flame.png', starter: { flame: 3, burst: 1 }, innateSkill: '莲火符', desc: '自带莲火符，后续会扩展为符阵铺场；获得火鼎法宝后莲火范围更大。' },
-  wood: { id: 'wood', name: '青木灵医', title: '灵瓶亲和 / 稳定刷图', need: 25, color: '#86efac', portrait: '/assets/generated/portrait-wood.png', battle: '/assets/generated/character-wood.png', starter: { regen: 3, slash: 1 }, innateSkill: '回元息', desc: '自带回元息，后续会扩展为护身和回复；获得回复法宝后续航更强。' },
+  sword: { id: 'sword', name: '青岚剑修', title: '剑匣亲和 / 重尺成长', need: 20, color: '#67e8f9', portrait: '/assets/generated/portrait-sword.webp', battle: '/assets/generated/character-sword.png', starter: { slash: 2, orbit: 1 }, innateSkill: '御剑术', desc: '自带御剑术，飞剑会自动出鞘穿刺再回到身边；获得剑类法宝后亲和更高。' },
+  thunder: { id: 'thunder', name: '九霄雷使', title: '雷印亲和 / 群怪压制', need: 30, color: '#38bdf8', portrait: '/assets/generated/portrait-thunder.webp', battle: '/assets/generated/character-thunder.png', starter: { chain: 3, burst: 1 }, innateSkill: '雷印诀', desc: '自带雷印诀，后续会扩展为标记和弹射；获得雷印法宝后更适合处理密集怪潮。' },
+  flame: { id: 'flame', name: '莲火符师', title: '火鼎亲和 / 范围爆发', need: 30, color: '#fb923c', portrait: '/assets/generated/portrait-flame.webp', battle: '/assets/generated/character-flame.png', starter: { flame: 3, burst: 1 }, innateSkill: '莲火符', desc: '自带莲火符，后续会扩展为符阵铺场；获得火鼎法宝后莲火范围更大。' },
+  wood: { id: 'wood', name: '青木灵医', title: '灵瓶亲和 / 稳定刷图', need: 25, color: '#86efac', portrait: '/assets/generated/portrait-wood.webp', battle: '/assets/generated/character-wood.png', starter: { regen: 3, slash: 1 }, innateSkill: '回元息', desc: '自带回元息，后续会扩展为护身和回复；获得回复法宝后续航更强。' },
 }
 
 const artifactDefs: Record<ArtifactKey, ArtifactDef> = {
@@ -745,11 +745,19 @@ const LEGACY_SAVE_KEY = 'void-trial-save-v1'
 const PROFILE_INDEX_KEY = 'void-trial-profile-index-v1'
 const PROFILE_SAVE_PREFIX = `${LEGACY_SAVE_KEY}:profile:`
 
-const ASSET_VERSION = '20260603-action-sheet-v1'
+const ASSET_VERSION = '20260607-webp-assets-v1'
+
+function assetUrl(src: string) {
+  if (/^(https?:|data:|blob:)/.test(src)) return src
+  const base = import.meta.env.BASE_URL || '/'
+  const normalizedBase = base.endsWith('/') ? base : `${base}/`
+  return `${normalizedBase}${src.replace(/^\/+/, '')}`
+}
 
 function versionedAsset(src: string) {
-  const separator = src.includes('?') ? '&' : '?'
-  return `${src}${separator}v=${ASSET_VERSION}`
+  const resolved = assetUrl(src)
+  const separator = resolved.includes('?') ? '&' : '?'
+  return `${resolved}${separator}v=${ASSET_VERSION}`
 }
 
 function loadSprite(src: string) {
@@ -758,7 +766,7 @@ function loadSprite(src: string) {
   return image
 }
 
-const cultivatorAvatar = '/assets/generated/cultivator-hero.png'
+const cultivatorAvatar = '/assets/generated/cultivator-hero.webp'
 
 const sprites = {
   player: loadSprite('/assets/kenney-topdown/player.png'),
@@ -767,8 +775,8 @@ const sprites = {
   heroStand: loadSprite('/assets/kenney-topdown/hero_stand.png'),
   enemyStand: loadSprite('/assets/kenney-topdown/enemy_stand.png'),
   cultivator: loadSprite(cultivatorAvatar),
-  worldBg: loadSprite('/assets/generated/bg-world-xianxia.png'),
-  dungeonBg: loadSprite('/assets/generated/bg-dungeon-xianxia.png'),
+  worldBg: loadSprite('/assets/generated/bg-world-xianxia.webp'),
+  dungeonBg: loadSprite('/assets/generated/bg-dungeon-xianxia.webp'),
 }
 
 const characterSprites: Record<CharacterId, HTMLImageElement> = {
@@ -779,18 +787,18 @@ const characterSprites: Record<CharacterId, HTMLImageElement> = {
 }
 
 const dungeonSprites: Record<DungeonId, HTMLImageElement> = {
-  mossCave: loadSprite('/assets/generated/dungeon-moss-cave.png'),
-  starHall: loadSprite('/assets/generated/dungeon-star-hall.png'),
-  mistMaze: loadSprite('/assets/generated/dungeon-mist-maze.png'),
-  crystalMine: loadSprite('/assets/generated/dungeon-crystal-mine.png'),
-  bloodRift: loadSprite('/assets/generated/dungeon-blood-rift.png'),
-  kingTomb: loadSprite('/assets/generated/dungeon-king-tomb.png'),
+  mossCave: loadSprite('/assets/generated/dungeon-moss-cave.webp'),
+  starHall: loadSprite('/assets/generated/dungeon-star-hall.webp'),
+  mistMaze: loadSprite('/assets/generated/dungeon-mist-maze.webp'),
+  crystalMine: loadSprite('/assets/generated/dungeon-crystal-mine.webp'),
+  bloodRift: loadSprite('/assets/generated/dungeon-blood-rift.webp'),
+  kingTomb: loadSprite('/assets/generated/dungeon-king-tomb.webp'),
 }
 
 const worldSprites = stageThemes.map((theme) => loadSprite(theme.bg))
 
 const swordActionSprites = {
-  sheet: loadSprite('/assets/generated/action-sword-sheet-ai.png'),
+  sheet: loadSprite('/assets/generated/action-sword-sheet-ai.webp'),
   idle: loadSprite('/assets/generated/action-sword-idle.png'),
   fly: loadSprite('/assets/generated/action-sword-fly.png'),
   slash: loadSprite('/assets/generated/action-sword-slash.png'),
@@ -805,13 +813,13 @@ const monsterSprites: Record<EnemyKind, HTMLImageElement> = {
 }
 
 const worldMonsterSpritePaths = [
-  '/assets/generated/monster-world-moss.png',
-  '/assets/generated/monster-world-star-outpost.png',
-  '/assets/generated/monster-world-mist-forest.png',
-  '/assets/generated/monster-world-crystal-mine.png',
-  '/assets/generated/monster-world-blood-rift.png',
-  '/assets/generated/monster-world-royal-ruins.png',
-  '/assets/generated/monster-world-star-sea.png',
+  '/assets/generated/monster-world-moss.webp',
+  '/assets/generated/monster-world-star-outpost.webp',
+  '/assets/generated/monster-world-mist-forest.webp',
+  '/assets/generated/monster-world-crystal-mine.webp',
+  '/assets/generated/monster-world-blood-rift.webp',
+  '/assets/generated/monster-world-royal-ruins.webp',
+  '/assets/generated/monster-world-star-sea.webp',
 ]
 const worldMonsterSprites = worldMonsterSpritePaths.map(loadSprite)
 type EnemySpriteMotion = 'ground' | 'flying' | 'heavy'
@@ -834,7 +842,7 @@ const worldMonsterVisuals: Array<Required<EnemySpriteLayout>> = [
 ]
 
 const vfxSprites = {
-  swordWave: loadSprite('/assets/generated/vfx-sword-qi.png'),
+  swordWave: loadSprite('/assets/generated/vfx-sword-qi.webp'),
   impact: loadSprite('/assets/generated/vfx-impact-burst.png'),
   thunder: loadSprite('/assets/generated/vfx-thunder-seal.png'),
   lotus: loadSprite('/assets/generated/vfx-lotus-fire.png'),
@@ -2151,7 +2159,7 @@ function equipIcon(slot?: Slot) {
 
 function materialIcon(item: Reward) {
   const src = materialIconSrc(item)
-  return `<img src="${src}" alt="">`
+  return `<img src="${versionedAsset(src)}" alt="">`
 }
 
 function materialIconSrc(item: Reward) {
@@ -2169,7 +2177,7 @@ function materialIconSrc(item: Reward) {
 }
 
 function characterShardIcon(def: CharacterDef) {
-  return `<span class="character-shard-art" style="--role-color:${def.color}"><img src="${def.portrait}" alt=""><u>${characterSigil(def)}</u></span>`
+  return `<span class="character-shard-art" style="--role-color:${def.color}"><img src="${versionedAsset(def.portrait)}" alt=""><u>${characterSigil(def)}</u></span>`
 }
 
 function rewardIcon(reward: Reward) {
@@ -2296,7 +2304,7 @@ function renderEquipPanel() {
   summary.style.borderColor = active.color
   summary.innerHTML = `
     <div class="character-portrait" style="--role-color:${active.color}">
-      <img src="${active.portrait}" alt="">
+      <img src="${versionedAsset(active.portrait)}" alt="">
       <i>${characterSigil(active)}</i>
     </div>
     <div class="gear-card-copy">
@@ -7098,7 +7106,8 @@ function drawHeroSide(x: number, groundY: number) {
 
 function updateHeroShowcase() {
   const character = activeCharacter()
-  if (!heroShowcaseImg.src.includes(character.portrait)) heroShowcaseImg.src = versionedAsset(character.portrait)
+  const portraitUrl = versionedAsset(character.portrait)
+  if (heroShowcaseImg.getAttribute('src') !== portraitUrl) heroShowcaseImg.src = portraitUrl
   const weapon = state.gear.weapon?.name ?? '无武器'
   heroShowcaseLevel.textContent = cultivationRealm()
   heroShowcaseTitle.textContent = `${character.name} · ${state.mode === 'dungeon' ? dungeonStageTitle() : worldStageTitle()}`

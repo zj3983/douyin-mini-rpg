@@ -18,46 +18,48 @@ jobs:
       - name: Install and Build
         run: |
           npm install
-          npm run build
+          npm run build -- --base=/game/douyin-mini-rpg/
+          tar -czf dist.tar.gz -C dist .
 
-      - name: Prepare server directory
+      - name: Prepare upload directory
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: 122.51.245.220
           username: ubuntu
           key: ${{ secrets.SERVER_KEY }}
           script: |
-            sudo mkdir -p /var/www/douyin-rpg
-            sudo chown ubuntu:ubuntu /var/www/douyin-rpg
+            rm -rf /tmp/douyin-mini-rpg-dist
+            mkdir -p /tmp/douyin-mini-rpg-dist
 
-      - name: Deploy dist to server
+      - name: Upload built archive
         uses: appleboy/scp-action@v0.1.7
         with:
           host: 122.51.245.220
           username: ubuntu
           key: ${{ secrets.SERVER_KEY }}
-          source: "dist/"
-          target: "/var/www/douyin-rpg"
-          strip_components: 1
+          source: "dist.tar.gz"
+          target: "/tmp/douyin-mini-rpg-dist"
 
-      - name: Configure nginx and reload
+      - name: Deploy to live game directory
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: 122.51.245.220
           username: ubuntu
           key: ${{ secrets.SERVER_KEY }}
           script: |
-            sudo tee /etc/nginx/conf.d/douyin-rpg.conf > /dev/null <<'NGINX'
-            server {
-                listen 80;
-                server_name mcp.edcedc.cn;
-
-                location /game/ {
-                    alias /var/www/douyin-rpg/;
-                    index index.html;
-                    try_files $uri $uri/ /game/index.html;
-                }
-            }
-            NGINX
-            sudo nginx -t && sudo nginx -s reload
-            echo "Deployed! Visit http://122.51.245.220/game/"
+            set -e
+            APP_DIR="$(sudo find /var/www -type f -path '*/game/douyin-mini-rpg/index.html' -print -quit | xargs -r dirname)"
+            if [ -z "$APP_DIR" ]; then
+              APP_DIR="$(sudo find /var/www -type f -path '*/douyin-mini-rpg/index.html' -print -quit | xargs -r dirname)"
+            fi
+            if [ -z "$APP_DIR" ]; then
+              APP_DIR="/var/www/game/douyin-mini-rpg"
+            fi
+            sudo mkdir -p "$APP_DIR"
+            sudo rm -rf "$APP_DIR"/*
+            sudo tar -xzf /tmp/douyin-mini-rpg-dist/dist.tar.gz -C "$APP_DIR"
+            sudo chown -R www-data:www-data "$APP_DIR" || true
+            sudo nginx -t
+            sudo nginx -s reload || true
+            echo "Deployed to $APP_DIR"
+            echo "Visit http://mcp.edcedc.cn/game/douyin-mini-rpg/"
