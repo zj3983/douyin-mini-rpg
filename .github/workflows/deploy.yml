@@ -48,20 +48,30 @@ jobs:
             npm install
             npm run build -- --base=/game/douyin-mini-rpg/
 
-            APP_DIR="$(sudo find /var/www -type f -path '*/game/douyin-mini-rpg/index.html' -print -quit | xargs -r dirname)"
-            if [ -z "$APP_DIR" ]; then
-              APP_DIR="$(sudo find /var/www -type f -path '*/douyin-mini-rpg/index.html' -print -quit | xargs -r dirname)"
-            fi
-            if [ -z "$APP_DIR" ]; then
-              APP_DIR="/var/www/game/douyin-mini-rpg"
+            LIVE_HTML="$(curl -fsS -H 'Host: mcp.edcedc.cn' http://127.0.0.1/game/douyin-mini-rpg/ || true)"
+            LIVE_HASH="$(printf '%s' "$LIVE_HTML" | grep -oE 'index-[A-Za-z0-9_-]+\.js' | head -n 1 || true)"
+            LIVE_DIR=""
+            if [ -n "$LIVE_HASH" ]; then
+              LIVE_INDEX="$(sudo grep -Rsl "$LIVE_HASH" /var/www /usr/share/nginx/html 2>/dev/null | head -n 1 || true)"
+              if [ -n "$LIVE_INDEX" ]; then
+                LIVE_DIR="$(dirname "$LIVE_INDEX")"
+              fi
             fi
 
-            sudo mkdir -p "$APP_DIR"
-            sudo rm -rf "$APP_DIR"/*
-            sudo cp -a dist/. "$APP_DIR"/
-            sudo chown -R www-data:www-data "$APP_DIR" || true
+            FOUND_DIRS="$(sudo find /var/www /usr/share/nginx/html -type f -path '*/douyin-mini-rpg/index.html' -print 2>/dev/null | xargs -r -n1 dirname | sort -u || true)"
+            DEPLOY_TARGETS="$(printf '%s\n%s\n%s\n' "$LIVE_DIR" "$FOUND_DIRS" "/var/www/game/douyin-mini-rpg" | sed '/^$/d' | sort -u)"
+
+            printf '%s\n' "$DEPLOY_TARGETS" | while IFS= read -r APP_DIR; do
+              sudo mkdir -p "$APP_DIR"
+              sudo rm -rf "$APP_DIR"/*
+              sudo cp -a dist/. "$APP_DIR"/
+              sudo chown -R www-data:www-data "$APP_DIR" || true
+              echo "Synced $APP_DIR"
+            done
+
+            sudo rm -f /etc/nginx/conf.d/douyin-rpg.conf
             sudo nginx -t
             sudo nginx -s reload || true
 
-            echo "Deployed commit $COMMIT to $APP_DIR"
+            echo "Deployed commit $COMMIT"
             echo "Visit http://mcp.edcedc.cn/game/douyin-mini-rpg/"
