@@ -8,46 +8,46 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install and Build
-        run: |
-          npm install
-          npm run build -- --base=/game/douyin-mini-rpg/
-          tar -czf dist.tar.gz -C dist .
-
-      - name: Prepare upload directory
+      - name: Build and deploy on server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: 122.51.245.220
           username: ubuntu
           key: ${{ secrets.SERVER_KEY }}
-          script: |
-            rm -rf /tmp/douyin-mini-rpg-dist
-            mkdir -p /tmp/douyin-mini-rpg-dist
-
-      - name: Upload built archive
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: 122.51.245.220
-          username: ubuntu
-          key: ${{ secrets.SERVER_KEY }}
-          source: "dist.tar.gz"
-          target: "/tmp/douyin-mini-rpg-dist"
-
-      - name: Deploy to live game directory
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: 122.51.245.220
-          username: ubuntu
-          key: ${{ secrets.SERVER_KEY }}
+          command_timeout: 20m
           script: |
             set -e
+
+            REPO_URL="https://github.com/${{ github.repository }}.git"
+            REPO_DIR="/tmp/douyin-mini-rpg-src"
+            COMMIT="${{ github.sha }}"
+
+            if ! command -v git >/dev/null 2>&1; then
+              sudo apt-get update
+              sudo apt-get install -y git
+            fi
+
+            if ! command -v node >/dev/null 2>&1 || ! node -e "process.exit(Number(process.versions.node.split('.')[0]) >= 20 ? 0 : 1)" >/dev/null 2>&1; then
+              curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+              sudo apt-get install -y nodejs
+            fi
+
+            if [ -d "$REPO_DIR/.git" ]; then
+              cd "$REPO_DIR"
+              git remote set-url origin "$REPO_URL"
+              git fetch --depth 1 origin "$COMMIT"
+              git reset --hard FETCH_HEAD
+            else
+              rm -rf "$REPO_DIR"
+              git clone --depth 1 "$REPO_URL" "$REPO_DIR"
+              cd "$REPO_DIR"
+              git fetch --depth 1 origin "$COMMIT"
+              git reset --hard FETCH_HEAD
+            fi
+
+            npm install
+            npm run build -- --base=/game/douyin-mini-rpg/
+
             APP_DIR="$(sudo find /var/www -type f -path '*/game/douyin-mini-rpg/index.html' -print -quit | xargs -r dirname)"
             if [ -z "$APP_DIR" ]; then
               APP_DIR="$(sudo find /var/www -type f -path '*/douyin-mini-rpg/index.html' -print -quit | xargs -r dirname)"
@@ -55,11 +55,13 @@ jobs:
             if [ -z "$APP_DIR" ]; then
               APP_DIR="/var/www/game/douyin-mini-rpg"
             fi
+
             sudo mkdir -p "$APP_DIR"
             sudo rm -rf "$APP_DIR"/*
-            sudo tar -xzf /tmp/douyin-mini-rpg-dist/dist.tar.gz -C "$APP_DIR"
+            sudo cp -a dist/. "$APP_DIR"/
             sudo chown -R www-data:www-data "$APP_DIR" || true
             sudo nginx -t
             sudo nginx -s reload || true
-            echo "Deployed to $APP_DIR"
+
+            echo "Deployed commit $COMMIT to $APP_DIR"
             echo "Visit http://mcp.edcedc.cn/game/douyin-mini-rpg/"
