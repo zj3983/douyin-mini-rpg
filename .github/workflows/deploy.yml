@@ -8,88 +8,56 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Build and deploy on server
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install and build
+        run: |
+          npm install
+          npm run build -- --base=/game/douyin-mini-rpg/
+          tar -czf dist.tar.gz -C dist .
+          ls -lh dist.tar.gz
+
+      - name: Prepare upload directory
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: 122.51.245.220
           username: ubuntu
           key: ${{ secrets.SERVER_KEY }}
+          command_timeout: 5m
+          script: |
+            rm -rf /tmp/douyin-mini-rpg-dist
+            mkdir -p /tmp/douyin-mini-rpg-dist
+
+      - name: Upload built archive
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: 122.51.245.220
+          username: ubuntu
+          key: ${{ secrets.SERVER_KEY }}
+          source: "dist.tar.gz"
+          target: "/tmp/douyin-mini-rpg-dist"
           command_timeout: 20m
+
+      - name: Deploy archive and route domain
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 122.51.245.220
+          username: ubuntu
+          key: ${{ secrets.SERVER_KEY }}
+          command_timeout: 10m
           script: |
             set -e
 
-            REPO_URL="https://github.com/${{ github.repository }}.git"
-            REPO_DIR="/tmp/douyin-mini-rpg-src"
-            COMMIT="${{ github.sha }}"
-
-            retry_git_fetch() {
-              for attempt in 1 2 3 4 5; do
-                if git fetch --depth 1 origin "$COMMIT"; then
-                  return 0
-                fi
-                echo "git fetch failed, retry $attempt/5"
-                sleep $((attempt * 15))
-              done
-              return 1
-            }
-
-            retry_git_clone() {
-              for attempt in 1 2 3 4 5; do
-                rm -rf "$REPO_DIR"
-                if git clone --depth 1 "$REPO_URL" "$REPO_DIR"; then
-                  return 0
-                fi
-                echo "git clone failed, retry $attempt/5"
-                sleep $((attempt * 15))
-              done
-              return 1
-            }
-
-            if ! command -v git >/dev/null 2>&1; then
-              sudo apt-get update
-              sudo apt-get install -y git
-            fi
-
-            if ! command -v node >/dev/null 2>&1 || ! node -e "process.exit(Number(process.versions.node.split('.')[0]) >= 20 ? 0 : 1)" >/dev/null 2>&1; then
-              curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-              sudo apt-get install -y nodejs
-            fi
-
-            if [ -d "$REPO_DIR/.git" ]; then
-              cd "$REPO_DIR"
-              git remote set-url origin "$REPO_URL"
-              retry_git_fetch
-              git reset --hard FETCH_HEAD
-            else
-              retry_git_clone
-              cd "$REPO_DIR"
-              retry_git_fetch
-              git reset --hard FETCH_HEAD
-            fi
-
-            npm install
-            npm run build -- --base=/game/douyin-mini-rpg/
-
-            LIVE_HTML="$(curl -fsS -H 'Host: mcp.edcedc.cn' http://127.0.0.1/game/douyin-mini-rpg/ || true)"
-            LIVE_HASH="$(printf '%s' "$LIVE_HTML" | grep -oE 'index-[A-Za-z0-9_-]+\.js' | head -n 1 || true)"
-            LIVE_DIR=""
-            if [ -n "$LIVE_HASH" ]; then
-              LIVE_INDEX="$(sudo grep -Rsl "$LIVE_HASH" /var/www /usr/share/nginx/html 2>/dev/null | head -n 1 || true)"
-              if [ -n "$LIVE_INDEX" ]; then
-                LIVE_DIR="$(dirname "$LIVE_INDEX")"
-              fi
-            fi
-
-            FOUND_DIRS="$(sudo find /var/www /usr/share/nginx/html -type f -path '*/douyin-mini-rpg/index.html' -print 2>/dev/null | xargs -r -n1 dirname | sort -u || true)"
-            DEPLOY_TARGETS="$(printf '%s\n%s\n%s\n' "$LIVE_DIR" "$FOUND_DIRS" "/var/www/game/douyin-mini-rpg" | sed '/^$/d' | sort -u)"
-
-            printf '%s\n' "$DEPLOY_TARGETS" | while IFS= read -r APP_DIR; do
-              sudo mkdir -p "$APP_DIR"
-              sudo rm -rf "$APP_DIR"/*
-              sudo cp -a dist/. "$APP_DIR"/
-              sudo chown -R www-data:www-data "$APP_DIR" || true
-              echo "Synced $APP_DIR"
-            done
+            APP_DIR="/var/www/game/douyin-mini-rpg"
+            sudo mkdir -p "$APP_DIR"
+            sudo rm -rf "$APP_DIR"/*
+            sudo tar -xzf /tmp/douyin-mini-rpg-dist/dist.tar.gz -C "$APP_DIR"
+            sudo chown -R www-data:www-data "$APP_DIR" || true
 
             sudo rm -f /etc/nginx/conf.d/douyin-rpg.conf
             sudo tee /etc/nginx/conf.d/00-douyin-mini-rpg-live.conf > /dev/null <<'NGINX'
@@ -116,8 +84,8 @@ jobs:
                 }
             }
             NGINX
+
             sudo nginx -t
             sudo nginx -s reload || true
-
-            echo "Deployed commit $COMMIT"
-            echo "Visit http://mcp.edcedc.cn/game/douyin-mini-rpg/"
+            echo "Deployed archive to $APP_DIR"
+            curl -I -H 'Host: mcp.edcedc.cn' http://127.0.0.1/game/douyin-mini-rpg/ || true
