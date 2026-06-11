@@ -26,13 +26,18 @@ jobs:
             sudo rm -f /etc/nginx/conf.d/douyin-rpg.conf /etc/nginx/conf.d/00-douyin-mini-rpg-live.conf
             sudo rm -f /etc/nginx/sites-enabled/*.bak-douyin-mini-rpg /etc/nginx/conf.d/*.bak-douyin-mini-rpg
 
-            NGINX_CONF="$(sudo grep -RslE '^[[:space:]]*server_name[[:space:]].*mcp\.edcedc\.cn' /etc/nginx/sites-enabled /etc/nginx/conf.d 2>/dev/null | head -n 1 || true)"
-            if [ -z "$NGINX_CONF" ]; then
+            NGINX_CONFS="$(mktemp)"
+            sudo grep -RslE '^[[:space:]]*server_name[[:space:]].*mcp\.edcedc\.cn' /etc/nginx/conf.d /etc/nginx/sites-enabled 2>/dev/null | sort -u > "$NGINX_CONFS" || true
+            if [ ! -s "$NGINX_CONFS" ]; then
               echo "No existing mcp.edcedc.cn config found"
               exit 1
             fi
-            sudo cp "$NGINX_CONF" "/tmp/$(basename "$NGINX_CONF").bak-douyin-mini-rpg"
-            sudo python3 - "$NGINX_CONF" <<'PY'
+            echo "Candidate mcp.edcedc.cn configs:"
+            cat "$NGINX_CONFS"
+
+            while IFS= read -r NGINX_CONF; do
+              sudo cp "$NGINX_CONF" "/tmp/$(basename "$NGINX_CONF").bak-douyin-mini-rpg"
+              sudo python3 - "$NGINX_CONF" <<'PY'
             from pathlib import Path
             import re
             import sys
@@ -56,17 +61,24 @@ jobs:
                 }
             '''
 
-            text = re.sub(r'\n\s*location\s+\^~\s+/game/douyin-mini-rpg/assets/\s*\{.*?\n\s*\}', '', text, flags=re.S)
-            text = re.sub(r'\n\s*location\s+\^~\s+/game/douyin-mini-rpg/\s*\{.*?\n\s*\}', '', text, flags=re.S)
+            text = re.sub(r'\n\s*location\s+(?:=\s+|\^~\s+)?/game/douyin-mini-rpg/assets/?\s*\{.*?\n\s*\}', '', text, flags=re.S)
+            text = re.sub(r'\n\s*location\s+(?:=\s+|\^~\s+)?/game/douyin-mini-rpg/?\s*\{.*?\n\s*\}', '', text, flags=re.S)
             pattern = re.compile(r'(^\s*server_name\s+[^;]*mcp\.edcedc\.cn[^;]*;\s*$)', re.M)
             if not pattern.search(text):
                 raise SystemExit('mcp.edcedc.cn server_name not found')
             text = pattern.sub(r'\1' + location, text, count=1)
             path.write_text(text)
             PY
-            echo "Patched $NGINX_CONF"
+              echo "Patched $NGINX_CONF"
+            done < "$NGINX_CONFS"
+            rm -f "$NGINX_CONFS"
 
             sudo nginx -t
             sudo nginx -s reload || true
             echo "Routed mcp.edcedc.cn/game/douyin-mini-rpg/ to /var/www/game/douyin-mini-rpg"
             curl -I -H 'Host: mcp.edcedc.cn' http://127.0.0.1/game/douyin-mini-rpg/
+            EXPECTED_JS="$(grep -oE 'index-[^"]+\.js' /var/www/game/douyin-mini-rpg/index.html | head -n 1)"
+            HOST_HTML="$(curl -fsS -H 'Host: mcp.edcedc.cn' http://127.0.0.1/game/douyin-mini-rpg/?deploy-check=1)"
+            echo "$HOST_HTML" | grep -F "$EXPECTED_JS"
+            curl -fsSI -H 'Host: mcp.edcedc.cn' http://127.0.0.1/game/douyin-mini-rpg/assets/generated/world-moss-hills.webp | tee /tmp/douyin-mini-rpg-asset.headers
+            grep -qi 'content-type: image/webp' /tmp/douyin-mini-rpg-asset.headers
