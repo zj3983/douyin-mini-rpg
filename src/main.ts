@@ -6,6 +6,7 @@ type AppPage = 'battle' | 'dungeon' | 'gacha' | 'equip' | 'bag' | 'artifact'
 type Slot = 'weapon' | 'armor' | 'core'
 type AttackSource = 'manual' | 'skill'
 type EvolutionTier = '初阶' | '进阶' | '高阶'
+type ProfileAuthMode = 'login' | 'register'
 type EnemyKind = 'slime' | 'bat' | 'wolf' | 'crystal' | 'warden'
 type CharacterId = 'sword' | 'thunder' | 'flame' | 'wood'
 type ArtifactKey = 'slash' | 'burst' | 'regen' | 'chain' | 'orbit' | 'flame' | 'bell' | 'needle' | 'mirror' | 'fan' | 'banner' | 'seal'
@@ -639,14 +640,23 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 
     <section id="profile-panel" class="profile-panel" hidden>
       <form id="profile-form" class="profile-card">
+        <div class="profile-brand">
+          <small>虚境试炼</small>
+          <strong>灵契接入舱</strong>
+          <span>本机账号系统</span>
+        </div>
         <div class="profile-head">
           <div>
-            <small>本地账号</small>
-            <h2>灵契身份</h2>
+            <small>玩家认证</small>
+            <h2 id="profile-auth-title">登录档案</h2>
           </div>
           <button id="close-profile" class="profile-close" type="button">x</button>
         </div>
-        <p class="profile-note">单机版先按本机玩家保存，不联网；换浏览器或清缓存会影响本地资料。</p>
+        <div class="profile-tabs" role="tablist" aria-label="账号模式">
+          <button id="profile-mode-login" class="active" type="button">登录</button>
+          <button id="profile-mode-register" type="button">注册</button>
+        </div>
+        <p id="profile-mode-hint" class="profile-note">选择已有本机账号，继续读取玩家资料。</p>
         <div class="profile-current">
           <span id="profile-current">未登录</span>
           <button id="profile-switch" type="button">切换</button>
@@ -657,11 +667,14 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <input id="profile-name" maxlength="12" autocomplete="username" placeholder="输入玩家名">
         </label>
         <label class="profile-field">
-          <span>本机口令</span>
-          <input id="profile-pin" maxlength="18" type="password" autocomplete="current-password" placeholder="可不填">
+          <span>登录密码</span>
+          <input id="profile-pin" maxlength="18" type="password" autocomplete="current-password" placeholder="输入本机密码">
         </label>
         <div id="profile-error" class="profile-error" hidden></div>
-        <button id="profile-submit" class="profile-submit" type="submit">进入游戏</button>
+        <div class="profile-actions">
+          <button id="profile-guest" class="profile-secondary" type="button">游客进入</button>
+          <button id="profile-submit" class="profile-submit" type="submit">登录并进入</button>
+        </div>
       </form>
     </section>
   </main>
@@ -741,8 +754,15 @@ const profileList = document.querySelector<HTMLDivElement>('#profile-list')!
 const profileNameInput = document.querySelector<HTMLInputElement>('#profile-name')!
 const profilePinInput = document.querySelector<HTMLInputElement>('#profile-pin')!
 const profileError = document.querySelector<HTMLDivElement>('#profile-error')!
+const profileModeLogin = document.querySelector<HTMLButtonElement>('#profile-mode-login')!
+const profileModeRegister = document.querySelector<HTMLButtonElement>('#profile-mode-register')!
+const profileModeHint = document.querySelector<HTMLParagraphElement>('#profile-mode-hint')!
+const profileAuthTitle = document.querySelector<HTMLHeadingElement>('#profile-auth-title')!
+const profileSubmit = document.querySelector<HTMLButtonElement>('#profile-submit')!
+const profileGuest = document.querySelector<HTMLButtonElement>('#profile-guest')!
 const LEGACY_SAVE_KEY = 'void-trial-save-v1'
 const PROFILE_INDEX_KEY = 'void-trial-profile-index-v1'
+const PROFILE_SESSION_KEY = 'void-trial-profile-session-v1'
 const PROFILE_SAVE_PREFIX = `${LEGACY_SAVE_KEY}:profile:`
 
 const ASSET_VERSION = '20260607-webp-assets-v1'
@@ -868,6 +888,7 @@ let dragMovePointer: number | null = null
 let selectedArtifactKey: ArtifactKey = 'slash'
 let activePage: AppPage = 'battle'
 let activeProfile: PlayerProfile | null = null
+let profileAuthMode: ProfileAuthMode = 'login'
 let settlementAutoCloseTimer: number | null = null
 let audioCtx: AudioContext | null = null
 let audioMaster: GainNode | null = null
@@ -1224,8 +1245,22 @@ function setProfileError(message: string) {
   profileError.textContent = message
 }
 
+function setProfileAuthMode(mode: ProfileAuthMode) {
+  profileAuthMode = mode
+  profileForm.dataset.mode = mode
+  profileModeLogin.classList.toggle('active', mode === 'login')
+  profileModeRegister.classList.toggle('active', mode === 'register')
+  profilePinInput.autocomplete = mode === 'login' ? 'current-password' : 'new-password'
+  profileAuthTitle.textContent = mode === 'login' ? '登录档案' : '创建档案'
+  profileSubmit.textContent = mode === 'login' ? '登录并进入' : '注册并进入'
+  profileModeHint.textContent = mode === 'login'
+    ? '选择已有本机账号，继续读取玩家资料。'
+    : '创建新的本机账号，资料会保存在当前浏览器。'
+  setProfileError('')
+}
+
 function updateProfileUi() {
-  profileCurrent.textContent = activeProfile ? `当前玩家：${activeProfile.name}` : '请选择或创建玩家'
+  profileCurrent.textContent = activeProfile ? `本机在线：${activeProfile.name}` : '等待玩家登录'
   profileSwitch.disabled = !activeProfile
   closeProfile.hidden = !activeProfile || profilePanel.classList.contains('blocking')
   profileList.innerHTML = ''
@@ -1233,7 +1268,7 @@ function updateProfileUi() {
   if (!index.profiles.length) {
     const empty = document.createElement('div')
     empty.className = 'profile-empty'
-    empty.textContent = '还没有本地玩家，输入名字后会创建第一份档案。'
+    empty.textContent = '还没有本机账号，切到注册后创建第一份档案。'
     profileList.append(empty)
     return
   }
@@ -1253,8 +1288,10 @@ function updateProfileUi() {
       detail.textContent = `${cultivationRealm(summary.level)} | 券 ${summary.tickets} | 灵石 ${summary.spiritStones}${profile.pin ? ' | 有口令' : ''}`
       row.append(mark, meta, detail)
       row.addEventListener('click', () => {
+        setProfileAuthMode('login')
+        profileNameInput.value = profile.name
+        profilePinInput.value = ''
         if (profile.pin) {
-          profileNameInput.value = profile.name
           profilePinInput.focus()
           setProfileError('这个玩家设置了本机口令，输入后进入。')
           return
@@ -1265,11 +1302,16 @@ function updateProfileUi() {
     })
 }
 
-function showProfilePanel(blocking = false) {
+function showProfilePanel(blocking = false, mode?: ProfileAuthMode) {
+  const index = readProfileIndex()
+  setProfileAuthMode(mode ?? (index.profiles.length ? 'login' : 'register'))
   profilePanel.hidden = false
   profilePanel.classList.toggle('blocking', blocking || !activeProfile)
+  profilePanel.classList.toggle('signed-in', Boolean(activeProfile))
   setProfileError('')
   updateProfileUi()
+  const remembered = index.profiles.find((profile) => profile.id === index.activeId) ?? index.profiles[0]
+  if (!activeProfile && remembered && !profileNameInput.value) profileNameInput.value = remembered.name
   setTimeout(() => profileNameInput.focus(), 0)
 }
 
@@ -1362,6 +1404,7 @@ function activateProfile(profileId: string) {
   index.activeId = profile.id
   writeProfileIndex(index)
   activeProfile = profile
+  sessionStorage.setItem(PROFILE_SESSION_KEY, profile.id)
   profilePanel.hidden = true
   resetRuntimeState()
   loadGame()
@@ -1386,13 +1429,16 @@ function initProfiles() {
   }
   const nextIndex = readProfileIndex()
   const active = nextIndex.profiles.find((profile) => profile.id === nextIndex.activeId) ?? nextIndex.profiles[0]
-  if (active) {
+  const sessionId = sessionStorage.getItem(PROFILE_SESSION_KEY)
+  if (active && sessionId === active.id) {
     activeProfile = active
     active.lastLoginAt = Date.now()
     nextIndex.activeId = active.id
     writeProfileIndex(nextIndex)
   } else {
-    showProfilePanel(true)
+    activeProfile = null
+    showProfilePanel(true, active ? 'login' : 'register')
+    if (active) profileNameInput.value = active.name
   }
   updateProfileUi()
 }
@@ -7247,6 +7293,21 @@ function bindControls() {
   profileBtn.addEventListener('click', () => showProfilePanel(false))
   closeProfile.addEventListener('click', () => { if (activeProfile) profilePanel.hidden = true })
   profileSwitch.addEventListener('click', () => showProfilePanel(true))
+  profileModeLogin.addEventListener('click', () => setProfileAuthMode('login'))
+  profileModeRegister.addEventListener('click', () => setProfileAuthMode('register'))
+  profileGuest.addEventListener('click', () => {
+    const index = readProfileIndex()
+    const existing = index.profiles.find((profile) => profile.name === '游客')
+    if (existing) {
+      activateProfile(existing.id)
+      return
+    }
+    const profile = createProfile('游客', '')
+    index.profiles.push(profile)
+    index.activeId = profile.id
+    writeProfileIndex(index)
+    activateProfile(profile.id)
+  })
   profileForm.addEventListener('submit', (event) => {
     event.preventDefault()
     const name = normalizeProfileName(profileNameInput.value)
@@ -7258,13 +7319,28 @@ function bindControls() {
     }
     const index = readProfileIndex()
     const existing = index.profiles.find((profile) => profile.name.toLowerCase() === name.toLowerCase())
-    if (existing) {
+    if (profileAuthMode === 'login') {
+      if (!existing) {
+        setProfileError('没有找到这个账号，切到注册可创建新档案。')
+        return
+      }
       if (existing.pin && existing.pin !== pin) {
-        setProfileError('本机口令不对。')
+        setProfileError('登录密码不对。')
         profilePinInput.focus()
         return
       }
       activateProfile(existing.id)
+      return
+    }
+    if (existing) {
+      setProfileAuthMode('login')
+      setProfileError('这个账号已存在，切到登录继续。')
+      profileNameInput.focus()
+      return
+    }
+    if (pin.length < 4) {
+      setProfileError('注册密码至少 4 位；也可以用游客进入。')
+      profilePinInput.focus()
       return
     }
     const profile = createProfile(name, pin)

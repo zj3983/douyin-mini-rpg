@@ -69,12 +69,22 @@ jobs:
 
             sudo rm -f /etc/nginx/conf.d/douyin-rpg.conf /etc/nginx/conf.d/00-douyin-mini-rpg-live.conf
             sudo find /etc/nginx -type f -name '*.bak-douyin-mini-rpg' -delete
+            sudo mkdir -p /tmp/nginx-douyin-mini-rpg-backups
+            for BACKUP_CONF in /etc/nginx/conf.d/*.bak /etc/nginx/conf.d/*.bak.* /etc/nginx/conf.d/*.bak-*; do
+              if [ -f "$BACKUP_CONF" ] && sudo grep -qE '^[[:space:]]*server_name[[:space:]].*mcp\.edcedc\.cn' "$BACKUP_CONF"; then
+                sudo mv "$BACKUP_CONF" "/tmp/nginx-douyin-mini-rpg-backups/$(basename "$BACKUP_CONF")"
+              fi
+            done
 
             echo "Current matching nginx snippets:"
             sudo nginx -T 2>/dev/null | grep -nE 'server_name .*mcp\.edcedc\.cn|/game/douyin-mini-rpg|X-Game-Build' -C 2 || true
 
             NGINX_CONFS="$(mktemp)"
-            sudo grep -RslE '^[[:space:]]*server_name[[:space:]].*mcp\.edcedc\.cn' /etc/nginx 2>/dev/null | sort -u > "$NGINX_CONFS" || true
+            sudo find /etc/nginx/conf.d /etc/nginx/sites-enabled -maxdepth 1 \( -type f -o -type l \) -print | while IFS= read -r conf; do
+              if sudo grep -qE '^[[:space:]]*server_name[[:space:]].*mcp\.edcedc\.cn' "$conf"; then
+                echo "$conf"
+              fi
+            done | sort -u > "$NGINX_CONFS" || true
             if [ ! -s "$NGINX_CONFS" ]; then
               echo "No existing mcp.edcedc.cn config found"
               exit 1
@@ -124,12 +134,8 @@ jobs:
             sudo nginx -s reload || true
 
             EXPECTED_JS="$(grep -oE 'index-[^"]+\.js' "$APP_DIR/index.html" | head -n 1)"
-            HOST_HTML="$(curl -fsS -H 'Host: mcp.edcedc.cn' http://127.0.0.1/game/douyin-mini-rpg/?deploy-check=1)"
-            echo "$HOST_HTML" | grep -F "$EXPECTED_JS"
             PUBLIC_HOST_HTML="$(curl -fsS -H 'Host: mcp.edcedc.cn' http://${{ env.DEPLOY_HOST }}/game/douyin-mini-rpg/?deploy-check=1)"
             echo "$PUBLIC_HOST_HTML" | grep -F "$EXPECTED_JS"
-            curl -fsSI -H 'Host: mcp.edcedc.cn' http://127.0.0.1/game/douyin-mini-rpg/assets/generated/world-moss-hills.webp | tee /tmp/douyin-mini-rpg-asset.headers
-            grep -qi 'content-type: image/webp' /tmp/douyin-mini-rpg-asset.headers
             curl -fsSI -H 'Host: mcp.edcedc.cn' http://${{ env.DEPLOY_HOST }}/game/douyin-mini-rpg/assets/generated/world-moss-hills.webp | tee /tmp/douyin-mini-rpg-public-asset.headers
             grep -qi 'content-type: image/webp' /tmp/douyin-mini-rpg-public-asset.headers
             echo "Deployed archive to $APP_DIR on ${{ env.DEPLOY_HOST }}"
