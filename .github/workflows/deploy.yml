@@ -22,6 +22,29 @@ jobs:
             REPO_DIR="/tmp/douyin-mini-rpg-src"
             COMMIT="${{ github.sha }}"
 
+            retry_git_fetch() {
+              for attempt in 1 2 3 4 5; do
+                if git fetch --depth 1 origin "$COMMIT"; then
+                  return 0
+                fi
+                echo "git fetch failed, retry $attempt/5"
+                sleep $((attempt * 15))
+              done
+              return 1
+            }
+
+            retry_git_clone() {
+              for attempt in 1 2 3 4 5; do
+                rm -rf "$REPO_DIR"
+                if git clone --depth 1 "$REPO_URL" "$REPO_DIR"; then
+                  return 0
+                fi
+                echo "git clone failed, retry $attempt/5"
+                sleep $((attempt * 15))
+              done
+              return 1
+            }
+
             if ! command -v git >/dev/null 2>&1; then
               sudo apt-get update
               sudo apt-get install -y git
@@ -35,13 +58,12 @@ jobs:
             if [ -d "$REPO_DIR/.git" ]; then
               cd "$REPO_DIR"
               git remote set-url origin "$REPO_URL"
-              git fetch --depth 1 origin "$COMMIT"
+              retry_git_fetch
               git reset --hard FETCH_HEAD
             else
-              rm -rf "$REPO_DIR"
-              git clone --depth 1 "$REPO_URL" "$REPO_DIR"
+              retry_git_clone
               cd "$REPO_DIR"
-              git fetch --depth 1 origin "$COMMIT"
+              retry_git_fetch
               git reset --hard FETCH_HEAD
             fi
 
