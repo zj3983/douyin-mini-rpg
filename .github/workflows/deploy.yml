@@ -24,13 +24,14 @@ jobs:
 
             test -f /var/www/game/douyin-mini-rpg/index.html
             sudo rm -f /etc/nginx/conf.d/douyin-rpg.conf /etc/nginx/conf.d/00-douyin-mini-rpg-live.conf
+            sudo rm -f /etc/nginx/sites-enabled/*.bak-douyin-mini-rpg /etc/nginx/conf.d/*.bak-douyin-mini-rpg
 
             NGINX_CONF="$(sudo grep -RslE '^[[:space:]]*server_name[[:space:]].*mcp\.edcedc\.cn' /etc/nginx/sites-enabled /etc/nginx/conf.d 2>/dev/null | head -n 1 || true)"
             if [ -z "$NGINX_CONF" ]; then
               echo "No existing mcp.edcedc.cn config found"
               exit 1
             fi
-            sudo cp "$NGINX_CONF" "$NGINX_CONF.bak-douyin-mini-rpg"
+            sudo cp "$NGINX_CONF" "/tmp/$(basename "$NGINX_CONF").bak-douyin-mini-rpg"
             sudo python3 - "$NGINX_CONF" <<'PY'
             from pathlib import Path
             import re
