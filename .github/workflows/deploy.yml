@@ -4,25 +4,15 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: deploy-main
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install and build
-        run: |
-          npm install
-          npm run build -- --base=/game/douyin-mini-rpg/
-          tar -czf dist.tar.gz -C dist .
-          ls -lh dist.tar.gz
-
-      - name: Prepare upload directory
+      - name: Route live domain to deployed game
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: 122.51.245.220
@@ -30,35 +20,9 @@ jobs:
           key: ${{ secrets.SERVER_KEY }}
           command_timeout: 5m
           script: |
-            rm -rf /tmp/douyin-mini-rpg-dist
-            mkdir -p /tmp/douyin-mini-rpg-dist
-
-      - name: Upload built archive
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: 122.51.245.220
-          username: ubuntu
-          key: ${{ secrets.SERVER_KEY }}
-          source: "dist.tar.gz"
-          target: "/tmp/douyin-mini-rpg-dist"
-          command_timeout: 20m
-
-      - name: Deploy archive and route domain
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: 122.51.245.220
-          username: ubuntu
-          key: ${{ secrets.SERVER_KEY }}
-          command_timeout: 10m
-          script: |
             set -e
 
-            APP_DIR="/var/www/game/douyin-mini-rpg"
-            sudo mkdir -p "$APP_DIR"
-            sudo rm -rf "$APP_DIR"/*
-            sudo tar -xzf /tmp/douyin-mini-rpg-dist/dist.tar.gz -C "$APP_DIR"
-            sudo chown -R www-data:www-data "$APP_DIR" || true
-
+            test -f /var/www/game/douyin-mini-rpg/index.html
             sudo rm -f /etc/nginx/conf.d/douyin-rpg.conf
             sudo tee /etc/nginx/conf.d/00-douyin-mini-rpg-live.conf > /dev/null <<'NGINX'
             server {
@@ -87,5 +51,5 @@ jobs:
 
             sudo nginx -t
             sudo nginx -s reload || true
-            echo "Deployed archive to $APP_DIR"
-            curl -I -H 'Host: mcp.edcedc.cn' http://127.0.0.1/game/douyin-mini-rpg/ || true
+            echo "Routed mcp.edcedc.cn/game/douyin-mini-rpg/ to /var/www/game/douyin-mini-rpg"
+            curl -I -H 'Host: mcp.edcedc.cn' http://127.0.0.1/game/douyin-mini-rpg/
