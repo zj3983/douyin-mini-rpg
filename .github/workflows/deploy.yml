@@ -125,7 +125,7 @@ jobs:
             pattern = re.compile(r'(^\s*server_name\s+[^;]*mcp\.edcedc\.cn[^;]*;\s*$)', re.M)
             if not pattern.search(text):
                 raise SystemExit('mcp.edcedc.cn server_name not found')
-            text = pattern.sub(r'\1' + location, text, count=1)
+            text = pattern.sub(r'\1' + location, text)
             path.write_text(text)
             PY
               echo "Patched $NGINX_CONF"
@@ -136,8 +136,10 @@ jobs:
             sudo nginx -s reload || true
 
             EXPECTED_JS="$(grep -oE 'index-[^"]+\.js' "$APP_DIR/index.html" | head -n 1)"
+            EXPECTED_JS_PATH="$(grep -oE 'assets/index-[^"]+\.js' "$APP_DIR/index.html" | head -n 1)"
             PUBLIC_HOST_HTML="$(curl -fsS -H 'Host: mcp.edcedc.cn' http://${{ env.DEPLOY_HOST }}/game/douyin-mini-rpg/?deploy-check=1)"
             echo "$PUBLIC_HOST_HTML" | grep -F "$EXPECTED_JS"
+            curl -fsSI -H 'Host: mcp.edcedc.cn' "http://${{ env.DEPLOY_HOST }}/game/douyin-mini-rpg/$EXPECTED_JS_PATH" | tee /tmp/douyin-mini-rpg-js.headers
             curl -fsSI -H 'Host: mcp.edcedc.cn' http://${{ env.DEPLOY_HOST }}/game/douyin-mini-rpg/assets/generated/world-moss-hills.webp | tee /tmp/douyin-mini-rpg-public-asset.headers
             grep -qi 'content-type: image/webp' /tmp/douyin-mini-rpg-public-asset.headers
             echo "Deployed archive to $APP_DIR on ${{ env.DEPLOY_HOST }}"
