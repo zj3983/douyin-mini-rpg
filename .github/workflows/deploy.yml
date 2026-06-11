@@ -23,11 +23,22 @@ jobs:
             set -e
 
             test -f /var/www/game/douyin-mini-rpg/index.html
-            sudo rm -f /etc/nginx/conf.d/douyin-rpg.conf
-            sudo tee /etc/nginx/conf.d/00-douyin-mini-rpg-live.conf > /dev/null <<'NGINX'
-            server {
-                listen 80;
-                server_name mcp.edcedc.cn;
+            sudo rm -f /etc/nginx/conf.d/douyin-rpg.conf /etc/nginx/conf.d/00-douyin-mini-rpg-live.conf
+
+            NGINX_CONF="$(sudo grep -RslE '^[[:space:]]*server_name[[:space:]].*mcp\.edcedc\.cn' /etc/nginx/sites-enabled /etc/nginx/conf.d 2>/dev/null | head -n 1 || true)"
+            if [ -z "$NGINX_CONF" ]; then
+              echo "No existing mcp.edcedc.cn config found"
+              exit 1
+            fi
+            sudo cp "$NGINX_CONF" "$NGINX_CONF.bak-douyin-mini-rpg"
+            sudo python3 - "$NGINX_CONF" <<'PY'
+            from pathlib import Path
+            import re
+            import sys
+
+            path = Path(sys.argv[1])
+            text = path.read_text()
+            location = r'''
 
                 location ^~ /game/douyin-mini-rpg/assets/ {
                     alias /var/www/game/douyin-mini-rpg/assets/;
@@ -42,12 +53,17 @@ jobs:
                     index index.html;
                     try_files $uri $uri/ /game/douyin-mini-rpg/index.html;
                 }
+            '''
 
-                location / {
-                    return 404;
-                }
-            }
-            NGINX
+            text = re.sub(r'\n\s*location\s+\^~\s+/game/douyin-mini-rpg/assets/\s*\{.*?\n\s*\}', '', text, flags=re.S)
+            text = re.sub(r'\n\s*location\s+\^~\s+/game/douyin-mini-rpg/\s*\{.*?\n\s*\}', '', text, flags=re.S)
+            pattern = re.compile(r'(^\s*server_name\s+[^;]*mcp\.edcedc\.cn[^;]*;\s*$)', re.M)
+            if not pattern.search(text):
+                raise SystemExit('mcp.edcedc.cn server_name not found')
+            text = pattern.sub(r'\1' + location, text, count=1)
+            path.write_text(text)
+            PY
+            echo "Patched $NGINX_CONF"
 
             sudo nginx -t
             sudo nginx -s reload || true
