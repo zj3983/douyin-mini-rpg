@@ -26,8 +26,8 @@ jobs:
         run: |
           npm ci
           npm run build -- --base=/game/douyin-mini-rpg/
-          tar -czf dist.tar.gz -C dist .
-          ls -lh dist.tar.gz
+          tar -czf dist-code.tar.gz -C dist index.html $(cd dist && find assets -maxdepth 1 -type f \( -name 'index-*.js' -o -name 'index-*.css' \))
+          ls -lh dist-code.tar.gz
 
       - name: Prepare upload directory
         uses: appleboy/ssh-action@v1.0.3
@@ -47,7 +47,7 @@ jobs:
           host: ${{ env.DEPLOY_HOST }}
           username: ubuntu
           key: ${{ secrets.SERVER_KEY }}
-          source: "dist.tar.gz"
+          source: "dist-code.tar.gz"
           target: "/tmp/douyin-mini-rpg-dist"
           command_timeout: 20m
 
@@ -63,8 +63,10 @@ jobs:
 
             APP_DIR="/var/www/game/douyin-mini-rpg"
             sudo mkdir -p "$APP_DIR"
-            sudo rm -rf "$APP_DIR"/*
-            sudo tar -xzf /tmp/douyin-mini-rpg-dist/dist.tar.gz -C "$APP_DIR"
+            sudo mkdir -p "$APP_DIR/assets"
+            sudo rm -f "$APP_DIR/index.html"
+            sudo find "$APP_DIR/assets" -maxdepth 1 -type f \( -name 'index-*.js' -o -name 'index-*.css' \) -delete
+            sudo tar -xzf /tmp/douyin-mini-rpg-dist/dist-code.tar.gz -C "$APP_DIR"
             sudo chown -R www-data:www-data "$APP_DIR" || true
 
             sudo rm -f /etc/nginx/conf.d/douyin-rpg.conf /etc/nginx/conf.d/00-douyin-mini-rpg-live.conf
