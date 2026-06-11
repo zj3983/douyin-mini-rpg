@@ -70,17 +70,10 @@ jobs:
             done
 
             sudo rm -f /etc/nginx/conf.d/douyin-rpg.conf
-            NGINX_CONF="$(sudo grep -RslE 'server_name[[:space:]].*mcp\.edcedc\.cn' /etc/nginx/sites-enabled /etc/nginx/conf.d 2>/dev/null | head -n 1 || true)"
-            if [ -n "$NGINX_CONF" ]; then
-              sudo cp "$NGINX_CONF" "$NGINX_CONF.bak-douyin-mini-rpg"
-              sudo python3 - "$NGINX_CONF" <<'PY'
-            from pathlib import Path
-            import re
-            import sys
-
-            path = Path(sys.argv[1])
-            text = path.read_text()
-            location = """
+            sudo tee /etc/nginx/conf.d/00-douyin-mini-rpg-live.conf > /dev/null <<'NGINX'
+            server {
+                listen 80;
+                server_name mcp.edcedc.cn;
 
                 location ^~ /game/douyin-mini-rpg/assets/ {
                     alias /var/www/game/douyin-mini-rpg/assets/;
@@ -95,18 +88,12 @@ jobs:
                     index index.html;
                     try_files $uri $uri/ /game/douyin-mini-rpg/index.html;
                 }
-            """
 
-            text = re.sub(r'\n\s*location\s+\^~\s+/game/douyin-mini-rpg/assets/\s*\{[^{}]*\}', '', text)
-            text = re.sub(r'\n\s*location\s+\^~\s+/game/douyin-mini-rpg/\s*\{[^{}]*\}', '', text)
-            pattern = re.compile(r'(^\s*server_name\s+[^;]*mcp\.edcedc\.cn[^;]*;\s*$)', re.MULTILINE)
-            if not pattern.search(text):
-                raise SystemExit('mcp.edcedc.cn server_name not found')
-            text = pattern.sub(r'\1' + location, text, count=1)
-            path.write_text(text)
-            PY
-              echo "Patched $NGINX_CONF for /game/douyin-mini-rpg/"
-            fi
+                location / {
+                    return 404;
+                }
+            }
+            NGINX
             sudo nginx -t
             sudo nginx -s reload || true
 
