@@ -8,21 +8,65 @@ concurrency:
   group: deploy-main
   cancel-in-progress: true
 
+env:
+  DEPLOY_HOST: 81.69.45.16
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Route live domain to deployed game
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install and build
+        run: |
+          npm ci
+          npm run build -- --base=/game/douyin-mini-rpg/
+          tar -czf dist.tar.gz -C dist .
+          ls -lh dist.tar.gz
+
+      - name: Prepare upload directory
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: 122.51.245.220
+          host: ${{ env.DEPLOY_HOST }}
           username: ubuntu
           key: ${{ secrets.SERVER_KEY }}
           command_timeout: 5m
           script: |
             set -e
+            rm -rf /tmp/douyin-mini-rpg-dist
+            mkdir -p /tmp/douyin-mini-rpg-dist
 
-            test -f /var/www/game/douyin-mini-rpg/index.html
+      - name: Upload built archive
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ env.DEPLOY_HOST }}
+          username: ubuntu
+          key: ${{ secrets.SERVER_KEY }}
+          source: "dist.tar.gz"
+          target: "/tmp/douyin-mini-rpg-dist"
+          command_timeout: 20m
+
+      - name: Deploy archive and route domain
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ env.DEPLOY_HOST }}
+          username: ubuntu
+          key: ${{ secrets.SERVER_KEY }}
+          command_timeout: 10m
+          script: |
+            set -e
+
+            APP_DIR="/var/www/game/douyin-mini-rpg"
+            sudo mkdir -p "$APP_DIR"
+            sudo rm -rf "$APP_DIR"/*
+            sudo tar -xzf /tmp/douyin-mini-rpg-dist/dist.tar.gz -C "$APP_DIR"
+            sudo chown -R www-data:www-data "$APP_DIR" || true
+
             sudo rm -f /etc/nginx/conf.d/douyin-rpg.conf /etc/nginx/conf.d/00-douyin-mini-rpg-live.conf
             sudo find /etc/nginx -type f -name '*.bak-douyin-mini-rpg' -delete
 
@@ -78,14 +122,14 @@ jobs:
 
             sudo nginx -t
             sudo nginx -s reload || true
-            echo "Routed mcp.edcedc.cn/game/douyin-mini-rpg/ to /var/www/game/douyin-mini-rpg"
-            curl -I -H 'Host: mcp.edcedc.cn' http://127.0.0.1/game/douyin-mini-rpg/
-            EXPECTED_JS="$(grep -oE 'index-[^"]+\.js' /var/www/game/douyin-mini-rpg/index.html | head -n 1)"
+
+            EXPECTED_JS="$(grep -oE 'index-[^"]+\.js' "$APP_DIR/index.html" | head -n 1)"
             HOST_HTML="$(curl -fsS -H 'Host: mcp.edcedc.cn' http://127.0.0.1/game/douyin-mini-rpg/?deploy-check=1)"
             echo "$HOST_HTML" | grep -F "$EXPECTED_JS"
-            PUBLIC_HOST_HTML="$(curl -fsS -H 'Host: mcp.edcedc.cn' http://122.51.245.220/game/douyin-mini-rpg/?deploy-check=1)"
+            PUBLIC_HOST_HTML="$(curl -fsS -H 'Host: mcp.edcedc.cn' http://${{ env.DEPLOY_HOST }}/game/douyin-mini-rpg/?deploy-check=1)"
             echo "$PUBLIC_HOST_HTML" | grep -F "$EXPECTED_JS"
             curl -fsSI -H 'Host: mcp.edcedc.cn' http://127.0.0.1/game/douyin-mini-rpg/assets/generated/world-moss-hills.webp | tee /tmp/douyin-mini-rpg-asset.headers
             grep -qi 'content-type: image/webp' /tmp/douyin-mini-rpg-asset.headers
-            curl -fsSI -H 'Host: mcp.edcedc.cn' http://122.51.245.220/game/douyin-mini-rpg/assets/generated/world-moss-hills.webp | tee /tmp/douyin-mini-rpg-public-asset.headers
+            curl -fsSI -H 'Host: mcp.edcedc.cn' http://${{ env.DEPLOY_HOST }}/game/douyin-mini-rpg/assets/generated/world-moss-hills.webp | tee /tmp/douyin-mini-rpg-public-asset.headers
             grep -qi 'content-type: image/webp' /tmp/douyin-mini-rpg-public-asset.headers
+            echo "Deployed archive to $APP_DIR on ${{ env.DEPLOY_HOST }}"
