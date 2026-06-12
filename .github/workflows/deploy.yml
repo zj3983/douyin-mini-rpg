@@ -27,7 +27,8 @@ jobs:
           npm ci
           npm run build -- --base=/game/douyin-mini-rpg/
           tar -czf dist-code.tar.gz -C dist index.html $(cd dist && find assets -maxdepth 1 -type f \( -name 'index-*.js' -o -name 'index-*.css' \))
-          ls -lh dist-code.tar.gz
+          tar -czf app.tar.gz dist-code.tar.gz server package.json package-lock.json
+          ls -lh dist-code.tar.gz app.tar.gz
 
       - name: Prepare upload directory
         uses: appleboy/ssh-action@v1.0.3
@@ -47,7 +48,7 @@ jobs:
           host: ${{ env.DEPLOY_HOST }}
           username: ubuntu
           key: ${{ secrets.SERVER_KEY }}
-          source: "dist-code.tar.gz"
+          source: "app.tar.gz"
           target: "/tmp/douyin-mini-rpg-dist"
           command_timeout: 20m
 
@@ -62,12 +63,45 @@ jobs:
             set -e
 
             APP_DIR="/var/www/game/douyin-mini-rpg"
+            SERVER_DIR="/var/www/game/douyin-mini-rpg-server"
             sudo mkdir -p "$APP_DIR"
             sudo mkdir -p "$APP_DIR/assets"
+            sudo mkdir -p "$SERVER_DIR"
+            rm -rf /tmp/douyin-mini-rpg-app
+            mkdir -p /tmp/douyin-mini-rpg-app
+            tar -xzf /tmp/douyin-mini-rpg-dist/app.tar.gz -C /tmp/douyin-mini-rpg-app
             sudo rm -f "$APP_DIR/index.html"
             sudo find "$APP_DIR/assets" -maxdepth 1 -type f \( -name 'index-*.js' -o -name 'index-*.css' \) -delete
-            sudo tar -xzf /tmp/douyin-mini-rpg-dist/dist-code.tar.gz -C "$APP_DIR"
+            sudo tar -xzf /tmp/douyin-mini-rpg-app/dist-code.tar.gz -C "$APP_DIR"
             sudo chown -R www-data:www-data "$APP_DIR" || true
+            sudo rm -rf "$SERVER_DIR/server"
+            sudo cp -R /tmp/douyin-mini-rpg-app/server "$SERVER_DIR/server"
+            sudo cp /tmp/douyin-mini-rpg-app/package.json /tmp/douyin-mini-rpg-app/package-lock.json "$SERVER_DIR/"
+            sudo mkdir -p "$SERVER_DIR/data"
+            sudo chown -R ubuntu:ubuntu "$SERVER_DIR"
+
+            sudo tee /etc/systemd/system/douyin-mini-rpg-api.service > /dev/null <<'SERVICE'
+            [Unit]
+            Description=Douyin Mini RPG Account API
+            After=network.target
+
+            [Service]
+            Type=simple
+            WorkingDirectory=/var/www/game/douyin-mini-rpg-server
+            Environment=NODE_ENV=production
+            Environment=PORT=4174
+            Environment=AUTH_DATA_FILE=/var/www/game/douyin-mini-rpg-server/data/auth.json
+            ExecStart=/usr/bin/node server/index.js
+            Restart=always
+            RestartSec=3
+            User=ubuntu
+
+            [Install]
+            WantedBy=multi-user.target
+            SERVICE
+            sudo systemctl daemon-reload
+            sudo systemctl enable douyin-mini-rpg-api.service
+            sudo systemctl restart douyin-mini-rpg-api.service
 
             sudo rm -f /etc/nginx/conf.d/douyin-rpg.conf /etc/nginx/conf.d/00-douyin-mini-rpg-live.conf
             sudo find /etc/nginx -type f -name '*.bak-douyin-mini-rpg' -delete
@@ -113,6 +147,15 @@ jobs:
                     try_files $uri =404;
                 }
 
+                location ^~ /game/douyin-mini-rpg/api/ {
+                    proxy_pass http://127.0.0.1:4174/api/;
+                    proxy_http_version 1.1;
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                }
+
                 location ^~ /game/douyin-mini-rpg/ {
                     alias /var/www/game/douyin-mini-rpg/;
                     index index.html;
@@ -122,6 +165,7 @@ jobs:
 
             text = re.sub(r'\n\s*location\s+(?:=\s+|\^~\s+)?/game/douyin-mini-rpg/assets/?\s*\{.*?\n\s*\}', '', text, flags=re.S)
             text = re.sub(r'\n\s*location\s+(?:=\s+|\^~\s+)?/game/douyin-mini-rpg/?\s*\{.*?\n\s*\}', '', text, flags=re.S)
+            text = re.sub(r'\n\s*location\s+(?:=\s+|\^~\s+)?/game/douyin-mini-rpg/api/?\s*\{.*?\n\s*\}', '', text, flags=re.S)
             pattern = re.compile(r'(^\s*server_name\s+[^;]*mcp\.edcedc\.cn[^;]*;\s*$)', re.M)
             if not pattern.search(text):
                 raise SystemExit('mcp.edcedc.cn server_name not found')
@@ -142,4 +186,5 @@ jobs:
             curl -fsSI -H 'Host: mcp.edcedc.cn' "http://${{ env.DEPLOY_HOST }}/game/douyin-mini-rpg/$EXPECTED_JS_PATH" | tee /tmp/douyin-mini-rpg-js.headers
             curl -fsSI -H 'Host: mcp.edcedc.cn' http://${{ env.DEPLOY_HOST }}/game/douyin-mini-rpg/assets/generated/world-moss-hills.webp | tee /tmp/douyin-mini-rpg-public-asset.headers
             grep -qi 'content-type: image/webp' /tmp/douyin-mini-rpg-public-asset.headers
+            curl -fsS -H 'Host: mcp.edcedc.cn' http://${{ env.DEPLOY_HOST }}/game/douyin-mini-rpg/api/health | grep -F '"ok":true'
             echo "Deployed archive to $APP_DIR on ${{ env.DEPLOY_HOST }}"

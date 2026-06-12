@@ -117,6 +117,12 @@ interface PlayerProfile {
   lastLoginAt: number
 }
 
+interface ServerUser {
+  id: string
+  username: string
+  createdAt: number
+}
+
 interface ProfileIndex {
   activeId: string | null
   profiles: PlayerProfile[]
@@ -643,7 +649,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <div class="profile-brand">
           <small>虚境试炼</small>
           <strong>灵契接入舱</strong>
-          <span>本机账号系统</span>
+          <span>云端账号 / 本机兜底</span>
         </div>
         <div class="profile-head">
           <div>
@@ -656,7 +662,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <button id="profile-mode-login" class="active" type="button">登录</button>
           <button id="profile-mode-register" type="button">注册</button>
         </div>
-        <p id="profile-mode-hint" class="profile-note">选择已有本机账号，继续读取玩家资料。</p>
+        <p id="profile-mode-hint" class="profile-note">连接服务器账号，读取云端角色资料；服务器不可用时会退回本机档案。</p>
         <div class="profile-current">
           <span id="profile-current">未登录</span>
           <button id="profile-switch" type="button">切换</button>
@@ -764,6 +770,7 @@ const LEGACY_SAVE_KEY = 'void-trial-save-v1'
 const PROFILE_INDEX_KEY = 'void-trial-profile-index-v1'
 const PROFILE_SESSION_KEY = 'void-trial-profile-session-v1'
 const PROFILE_SAVE_PREFIX = `${LEGACY_SAVE_KEY}:profile:`
+const ACCOUNT_API_BASE = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/api`
 
 const ASSET_VERSION = '20260607-webp-assets-v1'
 
@@ -889,6 +896,10 @@ let selectedArtifactKey: ArtifactKey = 'slash'
 let activePage: AppPage = 'battle'
 let activeProfile: PlayerProfile | null = null
 let profileAuthMode: ProfileAuthMode = 'login'
+let cloudAccountActive = false
+let cloudSaveTimer: number | null = null
+let cloudSaveInFlight = false
+let pendingCloudSave: SaveData | null = null
 let settlementAutoCloseTimer: number | null = null
 let audioCtx: AudioContext | null = null
 let audioMaster: GainNode | null = null
@@ -1240,9 +1251,117 @@ function profileSummary(profileId: string) {
   }
 }
 
+function serverProfileId(user: ServerUser) {
+  return `server:${user.id}`
+}
+
+function isServerProfile(profileId = activeProfile?.id) {
+  return Boolean(profileId?.startsWith('server:'))
+}
+
+function upsertServerProfile(user: ServerUser) {
+  const index = readProfileIndex()
+  const id = serverProfileId(user)
+  let profile = index.profiles.find((item) => item.id === id)
+  if (!profile) {
+    profile = createProfile(user.username, '')
+    profile.id = id
+    index.profiles.push(profile)
+  }
+  profile.name = normalizeProfileName(user.username) || '云端玩家'
+  profile.pin = ''
+  profile.lastLoginAt = Date.now()
+  index.activeId = profile.id
+  writeProfileIndex(index)
+  return profile
+}
+
+async function accountRequest<T>(path: string, options: RequestInit & { json?: unknown } = {}): Promise<T> {
+  const headers = new Headers(options.headers)
+  if (options.json !== undefined) headers.set('content-type', 'application/json')
+  let response: Response
+  try {
+    response = await fetch(`${ACCOUNT_API_BASE}${path}`, {
+      ...options,
+      credentials: 'include',
+      cache: 'no-store',
+      headers,
+      body: options.json === undefined ? options.body : JSON.stringify(options.json),
+    })
+  } catch {
+    const error = new Error('服务器暂不可用，已切换本机档案模式。')
+    ;(error as Error & { code?: string }).code = 'API_UNAVAILABLE'
+    throw error
+  }
+  const contentType = response.headers.get('content-type') ?? ''
+  const jsonResponse = contentType.includes('application/json')
+  const body = jsonResponse ? await response.json() : null
+  if (!response.ok) {
+    if (!jsonResponse) {
+      const error = new Error('服务器暂不可用，已切换本机档案模式。')
+      ;(error as Error & { code?: string }).code = 'API_UNAVAILABLE'
+      throw error
+    }
+    const message = body?.error?.message ?? '服务器暂不可用，已切换本机档案模式。'
+    const error = new Error(message)
+    ;(error as Error & { code?: string }).code = body?.error?.code ?? 'API_ERROR'
+    throw error
+  }
+  return body as T
+}
+
+function apiUnavailable(error: unknown) {
+  return (error as Error & { code?: string })?.code === 'API_UNAVAILABLE'
+}
+
+async function activateServerUser(user: ServerUser) {
+  const profile = upsertServerProfile(user)
+  const remote = await accountRequest<{ save: SaveData | null }>('/save')
+  if (remote.save) localStorage.setItem(profileSaveKey(profile.id), JSON.stringify(remote.save))
+  activateProfile(profile.id, { cloud: true })
+}
+
+async function restoreServerSession() {
+  try {
+    const result = await accountRequest<{ user: ServerUser }>('/me')
+    await activateServerUser(result.user)
+  } catch {
+    // 本地开发或未登录时保持本机档案入口。
+  }
+}
+
+function queueCloudSave(save: SaveData) {
+  if (!cloudAccountActive || !isServerProfile()) return
+  pendingCloudSave = JSON.parse(JSON.stringify(save)) as SaveData
+  if (cloudSaveTimer) window.clearTimeout(cloudSaveTimer)
+  cloudSaveTimer = window.setTimeout(pushCloudSave, 900)
+}
+
+async function pushCloudSave() {
+  if (cloudSaveInFlight || !pendingCloudSave) return
+  cloudSaveInFlight = true
+  const save = pendingCloudSave
+  pendingCloudSave = null
+  try {
+    await accountRequest<{ ok: boolean }>('/save', { method: 'PUT', json: { save } })
+  } catch (error) {
+    pendingCloudSave = save
+    console.warn('cloud save failed', error)
+  } finally {
+    cloudSaveInFlight = false
+  }
+}
+
 function setProfileError(message: string) {
   profileError.hidden = !message
   profileError.textContent = message
+}
+
+function setProfileBusy(busy: boolean) {
+  profileSubmit.disabled = busy
+  profileGuest.disabled = busy
+  profileModeLogin.disabled = busy
+  profileModeRegister.disabled = busy
 }
 
 function setProfileAuthMode(mode: ProfileAuthMode) {
@@ -1254,8 +1373,8 @@ function setProfileAuthMode(mode: ProfileAuthMode) {
   profileAuthTitle.textContent = mode === 'login' ? '登录档案' : '创建档案'
   profileSubmit.textContent = mode === 'login' ? '登录并进入' : '注册并进入'
   profileModeHint.textContent = mode === 'login'
-    ? '选择已有本机账号，继续读取玩家资料。'
-    : '创建新的本机账号，资料会保存在当前浏览器。'
+    ? '连接服务器账号，读取云端角色资料；服务器不可用时会退回本机档案。'
+    : '创建服务器账号并开启云端存档；离线开发时会创建本机档案。'
   setProfileError('')
 }
 
@@ -1392,7 +1511,7 @@ function resetRuntimeState() {
   showPage('battle')
 }
 
-function activateProfile(profileId: string) {
+function activateProfile(profileId: string, options: { cloud?: boolean } = {}) {
   const index = readProfileIndex()
   const profile = index.profiles.find((item) => item.id === profileId)
   if (!profile) {
@@ -1400,6 +1519,7 @@ function activateProfile(profileId: string) {
     setProfileError('没有找到这个玩家档案。')
     return
   }
+  cloudAccountActive = Boolean(options.cloud && isServerProfile(profile.id))
   profile.lastLoginAt = Date.now()
   index.activeId = profile.id
   writeProfileIndex(index)
@@ -1409,7 +1529,7 @@ function activateProfile(profileId: string) {
   resetRuntimeState()
   loadGame()
   ensureEnemies()
-  toast(`已进入 ${profile.name} 的本地档案。`)
+  toast(`已进入 ${profile.name} 的${cloudAccountActive ? '云端账号' : '本地档案'}。`)
   updateProfileUi()
   updateHud()
   updateGuide()
@@ -1705,6 +1825,7 @@ function saveGame() {
     index.activeId = profile.id
     writeProfileIndex(index)
   }
+  queueCloudSave(save)
 }
 
 function claimDailyReward() {
@@ -7308,7 +7429,7 @@ function bindControls() {
     writeProfileIndex(index)
     activateProfile(profile.id)
   })
-  profileForm.addEventListener('submit', (event) => {
+  profileForm.addEventListener('submit', async (event) => {
     event.preventDefault()
     const name = normalizeProfileName(profileNameInput.value)
     const pin = profilePinInput.value.trim()
@@ -7317,30 +7438,70 @@ function bindControls() {
       profileNameInput.focus()
       return
     }
+    setProfileBusy(true)
+    if (profileAuthMode === 'login') {
+      try {
+        const result = await accountRequest<{ user: ServerUser }>('/login', { method: 'POST', json: { username: name, password: pin } })
+        await activateServerUser(result.user)
+        setProfileBusy(false)
+        return
+      } catch (error) {
+        if (!apiUnavailable(error)) {
+          setProfileError((error as Error).message)
+          setProfileBusy(false)
+          return
+        }
+      }
+    } else {
+      if (pin.length < 4) {
+        setProfileError('注册密码至少 4 位；也可以用游客进入。')
+        profilePinInput.focus()
+        setProfileBusy(false)
+        return
+      }
+      try {
+        const result = await accountRequest<{ user: ServerUser }>('/register', { method: 'POST', json: { username: name, password: pin } })
+        await activateServerUser(result.user)
+        setProfileBusy(false)
+        return
+      } catch (error) {
+        if (!apiUnavailable(error)) {
+          setProfileError((error as Error).message)
+          setProfileBusy(false)
+          return
+        }
+      }
+    }
+
     const index = readProfileIndex()
     const existing = index.profiles.find((profile) => profile.name.toLowerCase() === name.toLowerCase())
     if (profileAuthMode === 'login') {
       if (!existing) {
-        setProfileError('没有找到这个账号，切到注册可创建新档案。')
+        setProfileError('服务器暂不可用，且本机没有这个档案。')
+        setProfileBusy(false)
         return
       }
       if (existing.pin && existing.pin !== pin) {
         setProfileError('登录密码不对。')
         profilePinInput.focus()
+        setProfileBusy(false)
         return
       }
       activateProfile(existing.id)
+      setProfileBusy(false)
       return
     }
     if (existing) {
       setProfileAuthMode('login')
       setProfileError('这个账号已存在，切到登录继续。')
       profileNameInput.focus()
+      setProfileBusy(false)
       return
     }
     if (pin.length < 4) {
       setProfileError('注册密码至少 4 位；也可以用游客进入。')
       profilePinInput.focus()
+      setProfileBusy(false)
       return
     }
     const profile = createProfile(name, pin)
@@ -7348,6 +7509,7 @@ function bindControls() {
     index.activeId = profile.id
     writeProfileIndex(index)
     activateProfile(profile.id)
+    setProfileBusy(false)
   })
   loreBtn.addEventListener('click', () => { lorePanel.hidden = false })
   dungeonBtn.addEventListener('click', () => showPage('dungeon'))
@@ -7417,6 +7579,7 @@ function setMoveTargetFromPointer(event: PointerEvent, immediateTap: boolean) {
 bindControls()
 initProfiles()
 if (activeProfile) loadGame()
+void restoreServerSession()
 ensureEnemies()
 updateHud()
 updateGuide()
