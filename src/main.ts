@@ -667,6 +667,16 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <span id="profile-current">未登录</span>
           <button id="profile-switch" type="button">切换</button>
         </div>
+        <div class="profile-cloud">
+          <div>
+            <b id="profile-cloud-status">本机档案</b>
+            <small id="profile-cloud-detail">登录服务器账号后可同步云端存档。</small>
+          </div>
+          <div class="profile-cloud-actions">
+            <button id="profile-sync" type="button">同步</button>
+            <button id="profile-logout" type="button">退出</button>
+          </div>
+        </div>
         <div id="profile-list" class="profile-list"></div>
         <label class="profile-field">
           <span>玩家名</span>
@@ -756,6 +766,10 @@ const profileForm = document.querySelector<HTMLFormElement>('#profile-form')!
 const closeProfile = document.querySelector<HTMLButtonElement>('#close-profile')!
 const profileSwitch = document.querySelector<HTMLButtonElement>('#profile-switch')!
 const profileCurrent = document.querySelector<HTMLElement>('#profile-current')!
+const profileCloudStatus = document.querySelector<HTMLElement>('#profile-cloud-status')!
+const profileCloudDetail = document.querySelector<HTMLElement>('#profile-cloud-detail')!
+const profileSync = document.querySelector<HTMLButtonElement>('#profile-sync')!
+const profileLogout = document.querySelector<HTMLButtonElement>('#profile-logout')!
 const profileList = document.querySelector<HTMLDivElement>('#profile-list')!
 const profileNameInput = document.querySelector<HTMLInputElement>('#profile-name')!
 const profilePinInput = document.querySelector<HTMLInputElement>('#profile-pin')!
@@ -897,6 +911,9 @@ let activePage: AppPage = 'battle'
 let activeProfile: PlayerProfile | null = null
 let profileAuthMode: ProfileAuthMode = 'login'
 let cloudAccountActive = false
+let cloudSyncState: 'idle' | 'syncing' | 'error' = 'idle'
+let cloudSyncMessage = ''
+let lastCloudSyncAt = 0
 let cloudSaveTimer: number | null = null
 let cloudSaveInFlight = false
 let pendingCloudSave: SaveData | null = null
@@ -1314,11 +1331,71 @@ function apiUnavailable(error: unknown) {
   return (error as Error & { code?: string })?.code === 'API_UNAVAILABLE'
 }
 
+function readActiveProfileSave() {
+  if (!activeProfile) return null
+  const raw = localStorage.getItem(profileSaveKey(activeProfile.id))
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as SaveData
+  } catch {
+    return null
+  }
+}
+
+function clearQueuedCloudSave() {
+  if (cloudSaveTimer) window.clearTimeout(cloudSaveTimer)
+  cloudSaveTimer = null
+  pendingCloudSave = null
+}
+
+function cloudSyncTimeText() {
+  if (!lastCloudSyncAt) return '尚未同步'
+  return new Date(lastCloudSyncAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+function updateCloudStatus() {
+  const isCloud = cloudAccountActive && isServerProfile()
+  if (cloudSyncState === 'syncing') {
+    profileCloudStatus.textContent = '正在同步云端'
+    profileCloudDetail.textContent = '当前存档正在写入服务器。'
+  } else if (cloudSyncState === 'error') {
+    profileCloudStatus.textContent = '云端同步失败'
+    profileCloudDetail.textContent = cloudSyncMessage || '本机存档仍会保留，稍后可手动同步。'
+  } else if (isCloud) {
+    profileCloudStatus.textContent = '云端账号已连接'
+    profileCloudDetail.textContent = `${activeProfile?.name ?? '玩家'} | 上次同步 ${cloudSyncTimeText()}`
+  } else if (activeProfile) {
+    profileCloudStatus.textContent = '本机档案'
+    profileCloudDetail.textContent = '当前资料保存在本机，登录服务器账号后可云端保存。'
+  } else {
+    profileCloudStatus.textContent = '未登录'
+    profileCloudDetail.textContent = '登录、注册或游客进入后开始保存资料。'
+  }
+  profileSync.disabled = !isCloud || cloudSyncState === 'syncing'
+  profileLogout.disabled = !activeProfile || cloudSyncState === 'syncing'
+  profileLogout.textContent = isCloud ? '退出登录' : '退出档案'
+}
+
+async function syncCloudSaveNow(save = readActiveProfileSave()) {
+  if (!cloudAccountActive || !isServerProfile()) throw new Error('当前不是云端账号。')
+  if (!save) throw new Error('还没有可同步的存档。')
+  cloudSyncState = 'syncing'
+  cloudSyncMessage = ''
+  updateCloudStatus()
+  await accountRequest<{ ok: boolean }>('/save', { method: 'PUT', json: { save } })
+  lastCloudSyncAt = Date.now()
+  cloudSyncState = 'idle'
+  cloudSyncMessage = ''
+  updateCloudStatus()
+}
+
 async function activateServerUser(user: ServerUser) {
   const profile = upsertServerProfile(user)
   const remote = await accountRequest<{ save: SaveData | null }>('/save')
   if (remote.save) localStorage.setItem(profileSaveKey(profile.id), JSON.stringify(remote.save))
   activateProfile(profile.id, { cloud: true })
+  lastCloudSyncAt = remote.save?.savedAt ?? Date.now()
+  updateCloudStatus()
 }
 
 async function restoreServerSession() {
@@ -1343,12 +1420,16 @@ async function pushCloudSave() {
   const save = pendingCloudSave
   pendingCloudSave = null
   try {
-    await accountRequest<{ ok: boolean }>('/save', { method: 'PUT', json: { save } })
+    await syncCloudSaveNow(save)
   } catch (error) {
     pendingCloudSave = save
+    cloudSyncState = 'error'
+    cloudSyncMessage = (error as Error).message
+    updateCloudStatus()
     console.warn('cloud save failed', error)
   } finally {
     cloudSaveInFlight = false
+    updateCloudStatus()
   }
 }
 
@@ -1362,6 +1443,8 @@ function setProfileBusy(busy: boolean) {
   profileGuest.disabled = busy
   profileModeLogin.disabled = busy
   profileModeRegister.disabled = busy
+  profileSync.disabled = busy || !(cloudAccountActive && isServerProfile())
+  profileLogout.disabled = busy || !activeProfile
 }
 
 function setProfileAuthMode(mode: ProfileAuthMode) {
@@ -1379,10 +1462,11 @@ function setProfileAuthMode(mode: ProfileAuthMode) {
 }
 
 function updateProfileUi() {
-  profileCurrent.textContent = activeProfile ? `本机在线：${activeProfile.name}` : '等待玩家登录'
+  profileCurrent.textContent = activeProfile ? `${cloudAccountActive ? '云端在线' : '本机在线'}：${activeProfile.name}` : '等待玩家登录'
   profileSwitch.disabled = !activeProfile
   closeProfile.hidden = !activeProfile || profilePanel.classList.contains('blocking')
   profileList.innerHTML = ''
+  updateCloudStatus()
   const index = readProfileIndex()
   if (!index.profiles.length) {
     const empty = document.createElement('div')
@@ -1432,6 +1516,41 @@ function showProfilePanel(blocking = false, mode?: ProfileAuthMode) {
   const remembered = index.profiles.find((profile) => profile.id === index.activeId) ?? index.profiles[0]
   if (!activeProfile && remembered && !profileNameInput.value) profileNameInput.value = remembered.name
   setTimeout(() => profileNameInput.focus(), 0)
+}
+
+async function logoutProfile() {
+  if (!activeProfile) return
+  setProfileBusy(true)
+  setProfileError('')
+  const wasCloud = cloudAccountActive && isServerProfile()
+  try {
+    saveGame()
+    if (wasCloud) {
+      const save = readActiveProfileSave()
+      clearQueuedCloudSave()
+      await syncCloudSaveNow(save)
+      await accountRequest<{ ok: boolean }>('/logout', { method: 'POST' })
+    }
+  } catch (error) {
+    cloudSyncState = wasCloud ? 'error' : cloudSyncState
+    cloudSyncMessage = (error as Error).message
+    setProfileError(wasCloud ? `退出前同步失败：${cloudSyncMessage}` : cloudSyncMessage)
+    setProfileBusy(false)
+    updateCloudStatus()
+    return
+  }
+  clearQueuedCloudSave()
+  cloudAccountActive = false
+  cloudSaveInFlight = false
+  cloudSyncState = 'idle'
+  cloudSyncMessage = ''
+  lastCloudSyncAt = 0
+  activeProfile = null
+  sessionStorage.removeItem(PROFILE_SESSION_KEY)
+  setProfileBusy(false)
+  showProfilePanel(true, 'login')
+  toast(wasCloud ? '已退出云端账号。' : '已退出本机档案。')
+  updateHud()
 }
 
 function resetRuntimeState() {
@@ -1520,6 +1639,9 @@ function activateProfile(profileId: string, options: { cloud?: boolean } = {}) {
     return
   }
   cloudAccountActive = Boolean(options.cloud && isServerProfile(profile.id))
+  cloudSyncState = 'idle'
+  cloudSyncMessage = ''
+  if (!cloudAccountActive) lastCloudSyncAt = 0
   profile.lastLoginAt = Date.now()
   index.activeId = profile.id
   writeProfileIndex(index)
@@ -7416,6 +7538,28 @@ function bindControls() {
   profileSwitch.addEventListener('click', () => showProfilePanel(true))
   profileModeLogin.addEventListener('click', () => setProfileAuthMode('login'))
   profileModeRegister.addEventListener('click', () => setProfileAuthMode('register'))
+  profileSync.addEventListener('click', async () => {
+    setProfileBusy(true)
+    setProfileError('')
+    try {
+      saveGame()
+      const save = readActiveProfileSave()
+      clearQueuedCloudSave()
+      await syncCloudSaveNow(save)
+      toast('云端同步完成。')
+    } catch (error) {
+      cloudSyncState = 'error'
+      cloudSyncMessage = (error as Error).message
+      setProfileError((error as Error).message)
+      updateCloudStatus()
+    } finally {
+      setProfileBusy(false)
+      updateCloudStatus()
+    }
+  })
+  profileLogout.addEventListener('click', () => {
+    void logoutProfile()
+  })
   profileGuest.addEventListener('click', () => {
     const index = readProfileIndex()
     const existing = index.profiles.find((profile) => profile.name === '游客')

@@ -89,6 +89,27 @@ test('login rejects bad credentials with JSON error', async () => {
   })
 })
 
+test('logout clears the session cookie', async () => {
+  await withServer(async (baseUrl) => {
+    const registered = await request(baseUrl, '/api/register', {
+      method: 'POST',
+      body: JSON.stringify({ username: '青岚', password: 'secret123' }),
+    })
+
+    const logout = await request(baseUrl, '/api/logout', {
+      method: 'POST',
+      headers: { cookie: registered.cookie },
+    })
+    const me = await request(baseUrl, '/api/me', {
+      headers: { cookie: 'vt_session=' },
+    })
+
+    assert.equal(logout.response.status, 200)
+    assert.equal(me.response.status, 401)
+    assert.equal(me.body.error.code, 'NO_SESSION')
+  })
+})
+
 test('save endpoints persist save data for the logged in user', async () => {
   await withServer(async (baseUrl) => {
     const registered = await request(baseUrl, '/api/register', {

@@ -301,6 +301,60 @@ button:disabled {
   font-size: 12px;
 }
 
+.profile-cloud {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 58px;
+  padding: 10px;
+  border: 1px solid rgba(56, 189, 248, 0.24);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(94, 234, 212, 0.14), transparent 34%),
+    rgba(8, 13, 28, 0.72);
+}
+
+.profile-cloud b,
+.profile-cloud small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profile-cloud b {
+  color: #fef3c7;
+  font-size: 13px;
+}
+
+.profile-cloud small {
+  margin-top: 3px;
+  color: #93c5fd;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.profile-cloud-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(54px, auto));
+  gap: 6px;
+}
+
+.profile-cloud-actions button {
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: #dffafe;
+  background: rgba(15, 23, 42, 0.74);
+  font-size: 12px;
+}
+
+.profile-cloud-actions button:disabled {
+  color: rgba(203, 213, 225, 0.45);
+  border-color: rgba(148, 163, 184, 0.16);
+  background: rgba(15, 23, 42, 0.38);
+}
+
 .profile-list {
   display: grid;
   gap: 8px;
@@ -433,6 +487,16 @@ button:disabled {
   color: #17120a;
   background: linear-gradient(135deg, #facc15, #5eead4);
   box-shadow: 0 12px 34px rgba(250, 204, 21, 0.18);
+}
+
+@media (max-width: 390px) {
+  .profile-cloud {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-cloud-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .topbar .character-showcase {
