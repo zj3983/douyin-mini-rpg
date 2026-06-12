@@ -102,6 +102,16 @@ jobs:
             sudo systemctl daemon-reload
             sudo systemctl enable douyin-mini-rpg-api.service
             sudo systemctl restart douyin-mini-rpg-api.service
+            for i in $(seq 1 20); do
+              if curl -fsS http://127.0.0.1:4174/api/health | grep -F '"ok":true'; then
+                break
+              fi
+              if [ "$i" = "20" ]; then
+                sudo systemctl --no-pager status douyin-mini-rpg-api.service
+                exit 1
+              fi
+              sleep 1
+            done
 
             sudo rm -f /etc/nginx/conf.d/douyin-rpg.conf /etc/nginx/conf.d/00-douyin-mini-rpg-live.conf
             sudo find /etc/nginx -type f -name '*.bak-douyin-mini-rpg' -delete
@@ -186,5 +196,13 @@ jobs:
             curl -fsSI -H 'Host: mcp.edcedc.cn' "http://${{ env.DEPLOY_HOST }}/game/douyin-mini-rpg/$EXPECTED_JS_PATH" | tee /tmp/douyin-mini-rpg-js.headers
             curl -fsSI -H 'Host: mcp.edcedc.cn' http://${{ env.DEPLOY_HOST }}/game/douyin-mini-rpg/assets/generated/world-moss-hills.webp | tee /tmp/douyin-mini-rpg-public-asset.headers
             grep -qi 'content-type: image/webp' /tmp/douyin-mini-rpg-public-asset.headers
-            curl -fsS -H 'Host: mcp.edcedc.cn' http://${{ env.DEPLOY_HOST }}/game/douyin-mini-rpg/api/health | grep -F '"ok":true'
+            for i in $(seq 1 20); do
+              if curl -fsS -H 'Host: mcp.edcedc.cn' http://${{ env.DEPLOY_HOST }}/game/douyin-mini-rpg/api/health | grep -F '"ok":true'; then
+                break
+              fi
+              if [ "$i" = "20" ]; then
+                exit 1
+              fi
+              sleep 1
+            done
             echo "Deployed archive to $APP_DIR on ${{ env.DEPLOY_HOST }}"

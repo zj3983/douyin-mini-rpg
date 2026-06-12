@@ -94,8 +94,9 @@ function sendJson(response, status, body) {
 async function readJson(request) {
   const text = await readBody(request)
   if (!text) return {}
+  const normalized = text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text
   try {
-    return JSON.parse(text)
+    return JSON.parse(normalized)
   } catch {
     const error = new Error('JSON 格式不正确。')
     error.status = 400

@@ -60,6 +60,18 @@ test('register sets a session cookie and me returns the user', async () => {
   })
 })
 
+test('register accepts JSON bodies with a UTF-8 BOM', async () => {
+  await withServer(async (baseUrl) => {
+    const registered = await request(baseUrl, '/api/register', {
+      method: 'POST',
+      body: `\uFEFF${JSON.stringify({ username: 'bom-user', password: 'secret123' })}`,
+    })
+
+    assert.equal(registered.response.status, 201)
+    assert.equal(registered.body.user.username, 'bom-user')
+  })
+})
+
 test('login rejects bad credentials with JSON error', async () => {
   await withServer(async (baseUrl) => {
     await request(baseUrl, '/api/register', {
