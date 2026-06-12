@@ -52,6 +52,13 @@ export function createApiServer({ service }) {
         return
       }
 
+      if (request.method === 'PUT' && url.pathname === '/api/password') {
+        const body = await readJson(request)
+        await service.changePassword(readToken(request), body)
+        sendJson(response, 200, { ok: true })
+        return
+      }
+
       if (request.method === 'GET' && url.pathname === '/api/save') {
         const save = await service.readSave(readToken(request))
         sendJson(response, 200, { save })

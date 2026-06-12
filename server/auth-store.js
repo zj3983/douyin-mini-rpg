@@ -27,6 +27,13 @@ export function createMemoryAuthStore(initial = {}) {
     async findUserById(id) {
       return clone(state.users.get(id) ?? null)
     },
+    async updateUserPassword(id, passwordHash) {
+      const user = state.users.get(id)
+      if (!user) return null
+      user.passwordHash = passwordHash
+      state.users.set(id, clone(user))
+      return clone(user)
+    },
     async createSession(session) {
       state.sessions.set(session.token, clone(session))
       return clone(session)
@@ -73,6 +80,12 @@ export async function createFileAuthStore(filePath) {
       const created = await memory.createSession(session)
       await persist()
       return created
+    },
+    async updateUserPassword(id, passwordHash) {
+      const updated = await memory.updateUserPassword(id, passwordHash)
+      if (!updated) return null
+      await persist()
+      return updated
     },
     async deleteSession(token) {
       await memory.deleteSession(token)

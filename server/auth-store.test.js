@@ -20,10 +20,12 @@ test('file store persists users, sessions, and saves across reloads', async () =
     await first.createUser(user)
     await first.createSession({ token: 'token-1', userId: 'u1', createdAt: 2, expiresAt: Date.now() + 60_000 })
     await first.writeSave('u1', { hero: { level: 8 }, tickets: 3 })
+    await first.updateUserPassword('u1', 'new-hash')
 
     const second = await createFileAuthStore(file)
 
     assert.equal((await second.findUserByUsername('青岚')).id, 'u1')
+    assert.equal((await second.findUserById('u1')).passwordHash, 'new-hash')
     assert.equal((await second.findSession('token-1')).userId, 'u1')
     assert.deepEqual(await second.readSave('u1'), { hero: { level: 8 }, tickets: 3 })
   } finally {

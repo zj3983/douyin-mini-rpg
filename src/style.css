@@ -355,6 +355,75 @@ button:disabled {
   background: rgba(15, 23, 42, 0.38);
 }
 
+.profile-password {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(250, 204, 21, 0.22);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(250, 204, 21, 0.13), transparent 32%),
+    rgba(15, 23, 42, 0.64);
+}
+
+.profile-password[hidden] {
+  display: none !important;
+}
+
+.profile-password-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.profile-password-head b {
+  color: #fef3c7;
+  font-size: 13px;
+}
+
+.profile-password-head small {
+  overflow: hidden;
+  color: #93c5fd;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-password-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.profile-password input {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 8px;
+  color: #e0f2fe;
+  outline: none;
+  background: rgba(2, 6, 23, 0.68);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.profile-password input:focus {
+  border-color: rgba(250, 204, 21, 0.62);
+  box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.1);
+}
+
+.profile-password > button {
+  min-height: 38px;
+  border-color: rgba(250, 204, 21, 0.42);
+  border-radius: 8px;
+  color: #17120a;
+  background: linear-gradient(135deg, #facc15, #5eead4);
+  font-size: 14px;
+}
+
 .profile-list {
   display: grid;
   gap: 8px;
@@ -496,6 +565,10 @@ button:disabled {
 
   .profile-cloud-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .profile-password-fields {
+    grid-template-columns: 1fr;
   }
 }
 

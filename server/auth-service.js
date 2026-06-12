@@ -37,6 +37,18 @@ export function createAuthService({ store, tokenTtlMs = 1000 * 60 * 60 * 24 * 7 
       return publicUser(user)
     },
 
+    async changePassword(token, { currentPassword, newPassword }) {
+      const session = await requireSession(store, token)
+      const user = await store.findUserById(session.userId)
+      if (!user) throw authError(401, 'INVALID_SESSION', '登录已失效。')
+      if (!verifyPassword(currentPassword, user.passwordHash)) {
+        throw authError(401, 'INVALID_CREDENTIALS', '当前密码不正确。')
+      }
+      validatePassword(newPassword)
+      await store.updateUserPassword(user.id, hashPassword(newPassword))
+      return { ok: true }
+    },
+
     async writeSave(token, data) {
       const session = await requireSession(store, token)
       await store.writeSave(session.userId, data)

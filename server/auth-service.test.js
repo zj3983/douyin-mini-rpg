@@ -53,6 +53,25 @@ test('login rejects an invalid password', async () => {
   )
 })
 
+test('changePassword requires the current password and allows login with the new one', async () => {
+  const { service } = makeService()
+  const session = await service.register({ username: '青岚', password: 'secret123' })
+
+  await assert.rejects(
+    () => service.changePassword(session.token, { currentPassword: 'wrong-password', newPassword: 'secret456' }),
+    { status: 401, code: 'INVALID_CREDENTIALS' },
+  )
+
+  await service.changePassword(session.token, { currentPassword: 'secret123', newPassword: 'secret456' })
+
+  await assert.rejects(
+    () => service.login({ username: '青岚', password: 'secret123' }),
+    { status: 401, code: 'INVALID_CREDENTIALS' },
+  )
+  const relogin = await service.login({ username: '青岚', password: 'secret456' })
+  assert.equal(relogin.user.id, session.user.id)
+})
+
 test('getUserByToken returns the logged in user', async () => {
   const { service } = makeService()
   const session = await service.register({ username: '青岚', password: 'secret123' })

@@ -677,6 +677,17 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
             <button id="profile-logout" type="button">退出</button>
           </div>
         </div>
+        <div id="profile-password-box" class="profile-password" hidden>
+          <div class="profile-password-head">
+            <b>账号安全</b>
+            <small>修改后下次登录使用新密码</small>
+          </div>
+          <div class="profile-password-fields">
+            <input id="profile-current-pin" type="password" autocomplete="current-password" placeholder="当前密码">
+            <input id="profile-new-pin" type="password" autocomplete="new-password" placeholder="新密码">
+          </div>
+          <button id="profile-change-password" type="button">修改密码</button>
+        </div>
         <div id="profile-list" class="profile-list"></div>
         <label class="profile-field">
           <span>玩家名</span>
@@ -770,6 +781,10 @@ const profileCloudStatus = document.querySelector<HTMLElement>('#profile-cloud-s
 const profileCloudDetail = document.querySelector<HTMLElement>('#profile-cloud-detail')!
 const profileSync = document.querySelector<HTMLButtonElement>('#profile-sync')!
 const profileLogout = document.querySelector<HTMLButtonElement>('#profile-logout')!
+const profilePasswordBox = document.querySelector<HTMLDivElement>('#profile-password-box')!
+const profileCurrentPin = document.querySelector<HTMLInputElement>('#profile-current-pin')!
+const profileNewPin = document.querySelector<HTMLInputElement>('#profile-new-pin')!
+const profileChangePassword = document.querySelector<HTMLButtonElement>('#profile-change-password')!
 const profileList = document.querySelector<HTMLDivElement>('#profile-list')!
 const profileNameInput = document.querySelector<HTMLInputElement>('#profile-name')!
 const profilePinInput = document.querySelector<HTMLInputElement>('#profile-pin')!
@@ -1374,6 +1389,10 @@ function updateCloudStatus() {
   profileSync.disabled = !isCloud || cloudSyncState === 'syncing'
   profileLogout.disabled = !activeProfile || cloudSyncState === 'syncing'
   profileLogout.textContent = isCloud ? '退出登录' : '退出档案'
+  profilePasswordBox.hidden = !isCloud
+  profileCurrentPin.disabled = !isCloud || cloudSyncState === 'syncing'
+  profileNewPin.disabled = !isCloud || cloudSyncState === 'syncing'
+  profileChangePassword.disabled = !isCloud || cloudSyncState === 'syncing'
 }
 
 async function syncCloudSaveNow(save = readActiveProfileSave()) {
@@ -1387,6 +1406,44 @@ async function syncCloudSaveNow(save = readActiveProfileSave()) {
   cloudSyncState = 'idle'
   cloudSyncMessage = ''
   updateCloudStatus()
+}
+
+async function changeCloudPassword() {
+  if (!(cloudAccountActive && isServerProfile())) {
+    setProfileError('本机档案没有服务器密码。')
+    return
+  }
+  const currentPassword = profileCurrentPin.value.trim()
+  const newPassword = profileNewPin.value.trim()
+  if (currentPassword.length < 4) {
+    setProfileError('先输入当前密码。')
+    profileCurrentPin.focus()
+    return
+  }
+  if (newPassword.length < 4) {
+    setProfileError('新密码至少 4 位。')
+    profileNewPin.focus()
+    return
+  }
+  if (currentPassword === newPassword) {
+    setProfileError('新密码不能和当前密码一样。')
+    profileNewPin.focus()
+    return
+  }
+  setProfileBusy(true)
+  setProfileError('')
+  try {
+    await accountRequest<{ ok: boolean }>('/password', { method: 'PUT', json: { currentPassword, newPassword } })
+    profileCurrentPin.value = ''
+    profileNewPin.value = ''
+    toast('账号密码已更新。')
+    setProfileError('密码已修改，下次登录请使用新密码。')
+  } catch (error) {
+    setProfileError((error as Error).message)
+  } finally {
+    setProfileBusy(false)
+    updateCloudStatus()
+  }
 }
 
 async function activateServerUser(user: ServerUser) {
@@ -1445,6 +1502,9 @@ function setProfileBusy(busy: boolean) {
   profileModeRegister.disabled = busy
   profileSync.disabled = busy || !(cloudAccountActive && isServerProfile())
   profileLogout.disabled = busy || !activeProfile
+  profileCurrentPin.disabled = busy || !(cloudAccountActive && isServerProfile())
+  profileNewPin.disabled = busy || !(cloudAccountActive && isServerProfile())
+  profileChangePassword.disabled = busy || !(cloudAccountActive && isServerProfile())
 }
 
 function setProfileAuthMode(mode: ProfileAuthMode) {
@@ -7556,6 +7616,14 @@ function bindControls() {
       setProfileBusy(false)
       updateCloudStatus()
     }
+  })
+  profileChangePassword.addEventListener('click', () => {
+    void changeCloudPassword()
+  })
+  profilePasswordBox.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return
+    event.preventDefault()
+    void changeCloudPassword()
   })
   profileLogout.addEventListener('click', () => {
     void logoutProfile()

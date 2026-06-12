@@ -110,6 +110,35 @@ test('logout clears the session cookie', async () => {
   })
 })
 
+test('password endpoint changes the account password', async () => {
+  await withServer(async (baseUrl) => {
+    const registered = await request(baseUrl, '/api/register', {
+      method: 'POST',
+      body: JSON.stringify({ username: '青岚', password: 'secret123' }),
+    })
+
+    const changed = await request(baseUrl, '/api/password', {
+      method: 'PUT',
+      headers: { cookie: registered.cookie },
+      body: JSON.stringify({ currentPassword: 'secret123', newPassword: 'secret456' }),
+    })
+    const oldLogin = await request(baseUrl, '/api/login', {
+      method: 'POST',
+      body: JSON.stringify({ username: '青岚', password: 'secret123' }),
+    })
+    const newLogin = await request(baseUrl, '/api/login', {
+      method: 'POST',
+      body: JSON.stringify({ username: '青岚', password: 'secret456' }),
+    })
+
+    assert.equal(changed.response.status, 200)
+    assert.deepEqual(changed.body, { ok: true })
+    assert.equal(oldLogin.response.status, 401)
+    assert.equal(newLogin.response.status, 200)
+    assert.ok(newLogin.cookie.startsWith('vt_session='))
+  })
+})
+
 test('save endpoints persist save data for the logged in user', async () => {
   await withServer(async (baseUrl) => {
     const registered = await request(baseUrl, '/api/register', {
