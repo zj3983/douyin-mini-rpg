@@ -109,12 +109,29 @@ interface SaveData {
   activeDungeon?: DungeonId
 }
 
+type CharacterSlotId = 'slot-1' | 'slot-2' | 'slot-3'
+
+interface CloudSlotSave {
+  id: CharacterSlotId
+  label: string
+  updatedAt: number
+  save: SaveData | null
+}
+
+interface CloudSaveEnvelope {
+  kind: 'void-trial-cloud-slots'
+  version: 2
+  activeSlotId: CharacterSlotId
+  slots: CloudSlotSave[]
+}
+
 interface PlayerProfile {
   id: string
   name: string
   pin: string
   createdAt: number
   lastLoginAt: number
+  activeSlotId: CharacterSlotId
 }
 
 interface ServerUser {
@@ -667,6 +684,13 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <span id="profile-current">未登录</span>
           <button id="profile-switch" type="button">切换</button>
         </div>
+        <div id="profile-slots" class="profile-slots" hidden>
+          <div class="profile-slots-head">
+            <b>角色档案槽</b>
+            <small>同一账号可保留 3 个角色进度</small>
+          </div>
+          <div id="profile-slot-list" class="profile-slot-list"></div>
+        </div>
         <div class="profile-cloud">
           <div>
             <b id="profile-cloud-status">本机档案</b>
@@ -777,6 +801,8 @@ const profileForm = document.querySelector<HTMLFormElement>('#profile-form')!
 const closeProfile = document.querySelector<HTMLButtonElement>('#close-profile')!
 const profileSwitch = document.querySelector<HTMLButtonElement>('#profile-switch')!
 const profileCurrent = document.querySelector<HTMLElement>('#profile-current')!
+const profileSlots = document.querySelector<HTMLDivElement>('#profile-slots')!
+const profileSlotList = document.querySelector<HTMLDivElement>('#profile-slot-list')!
 const profileCloudStatus = document.querySelector<HTMLElement>('#profile-cloud-status')!
 const profileCloudDetail = document.querySelector<HTMLElement>('#profile-cloud-detail')!
 const profileSync = document.querySelector<HTMLButtonElement>('#profile-sync')!
@@ -800,6 +826,14 @@ const PROFILE_INDEX_KEY = 'void-trial-profile-index-v1'
 const PROFILE_SESSION_KEY = 'void-trial-profile-session-v1'
 const PROFILE_SAVE_PREFIX = `${LEGACY_SAVE_KEY}:profile:`
 const ACCOUNT_API_BASE = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/api`
+const DEFAULT_PROFILE_SLOT_ID: CharacterSlotId = 'slot-1'
+const PROFILE_SLOT_IDS: CharacterSlotId[] = ['slot-1', 'slot-2', 'slot-3']
+const PROFILE_SLOT_LABELS: Record<CharacterSlotId, string> = {
+  'slot-1': '一号角色',
+  'slot-2': '二号角色',
+  'slot-3': '三号角色',
+}
+const CLOUD_SAVE_KIND = 'void-trial-cloud-slots'
 
 const ASSET_VERSION = '20260607-webp-assets-v1'
 
@@ -1223,8 +1257,32 @@ function addSlashParticles(x: number, y: number, angle: number, color: string, s
   }
 }
 
-function profileSaveKey(profileId = activeProfile?.id) {
-  return profileId ? `${PROFILE_SAVE_PREFIX}${profileId}` : LEGACY_SAVE_KEY
+function safeSlotId(value: unknown): CharacterSlotId {
+  return PROFILE_SLOT_IDS.includes(value as CharacterSlotId) ? value as CharacterSlotId : DEFAULT_PROFILE_SLOT_ID
+}
+
+function legacyProfileSaveKey(profileId: string) {
+  return `${PROFILE_SAVE_PREFIX}${profileId}`
+}
+
+function activeSlotIdForProfile(profileId = activeProfile?.id) {
+  if (activeProfile && activeProfile.id === profileId) return safeSlotId(activeProfile.activeSlotId)
+  if (!profileId) return DEFAULT_PROFILE_SLOT_ID
+  const profile = readProfileIndex().profiles.find((item) => item.id === profileId)
+  return safeSlotId(profile?.activeSlotId)
+}
+
+function profileSaveKey(profileId = activeProfile?.id, slotId?: CharacterSlotId) {
+  if (!profileId) return LEGACY_SAVE_KEY
+  return `${PROFILE_SAVE_PREFIX}${profileId}:${slotId ?? activeSlotIdForProfile(profileId)}`
+}
+
+function migrateProfileSaveToSlot(profileId: string) {
+  const legacy = localStorage.getItem(legacyProfileSaveKey(profileId))
+  const firstSlotKey = profileSaveKey(profileId, DEFAULT_PROFILE_SLOT_ID)
+  if (legacy && !localStorage.getItem(firstSlotKey)) {
+    localStorage.setItem(firstSlotKey, legacy)
+  }
 }
 
 function normalizeProfileName(name: string) {
@@ -1245,6 +1303,7 @@ function readProfileIndex(): ProfileIndex {
           pin: String(profile.pin ?? ''),
           createdAt: Number(profile.createdAt) || Date.now(),
           lastLoginAt: Number(profile.lastLoginAt) || Number(profile.createdAt) || Date.now(),
+          activeSlotId: safeSlotId(profile.activeSlotId),
         }))
       : []
     const activeId = profiles.some((profile) => profile.id === parsed.activeId) ? String(parsed.activeId) : profiles[0]?.id ?? null
@@ -1264,12 +1323,13 @@ function createProfile(name: string, pin: string): PlayerProfile {
     ? crypto.randomUUID()
     : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
   const now = Date.now()
-  return { id, name, pin: pin.trim(), createdAt: now, lastLoginAt: now }
+  return { id, name, pin: pin.trim(), createdAt: now, lastLoginAt: now, activeSlotId: DEFAULT_PROFILE_SLOT_ID }
 }
 
-function profileSummary(profileId: string) {
-  const raw = localStorage.getItem(profileSaveKey(profileId))
-  if (!raw) return { level: 1, tickets: 0, spiritStones: 0, savedAt: 0 }
+function profileSummary(profileId: string, slotId = activeSlotIdForProfile(profileId)) {
+  migrateProfileSaveToSlot(profileId)
+  const raw = localStorage.getItem(profileSaveKey(profileId, slotId))
+  if (!raw) return { level: 1, tickets: 0, spiritStones: 0, savedAt: 0, activeCharacter: 'sword' as CharacterId, empty: true }
   try {
     const save = JSON.parse(raw) as Partial<SaveData>
     return {
@@ -1277,9 +1337,11 @@ function profileSummary(profileId: string) {
       tickets: save.tickets ?? 0,
       spiritStones: save.spiritStones ?? 0,
       savedAt: save.savedAt ?? 0,
+      activeCharacter: save.activeCharacter ?? 'sword' as CharacterId,
+      empty: false,
     }
   } catch {
-    return { level: 1, tickets: 0, spiritStones: 0, savedAt: 0 }
+    return { level: 1, tickets: 0, spiritStones: 0, savedAt: 0, activeCharacter: 'sword' as CharacterId, empty: true }
   }
 }
 
@@ -1346,15 +1408,28 @@ function apiUnavailable(error: unknown) {
   return (error as Error & { code?: string })?.code === 'API_UNAVAILABLE'
 }
 
-function readActiveProfileSave() {
-  if (!activeProfile) return null
-  const raw = localStorage.getItem(profileSaveKey(activeProfile.id))
+function isCloudSaveEnvelope(save: unknown): save is CloudSaveEnvelope {
+  return Boolean(
+    save
+    && typeof save === 'object'
+    && (save as CloudSaveEnvelope).kind === CLOUD_SAVE_KIND
+    && Array.isArray((save as CloudSaveEnvelope).slots),
+  )
+}
+
+function readProfileSlotSave(profileId: string, slotId: CharacterSlotId) {
+  const raw = localStorage.getItem(profileSaveKey(profileId, slotId))
   if (!raw) return null
   try {
     return JSON.parse(raw) as SaveData
   } catch {
     return null
   }
+}
+
+function readActiveProfileSave() {
+  if (!activeProfile) return null
+  return readProfileSlotSave(activeProfile.id, safeSlotId(activeProfile.activeSlotId))
 }
 
 function clearQueuedCloudSave() {
@@ -1366,6 +1441,14 @@ function clearQueuedCloudSave() {
 function cloudSyncTimeText() {
   if (!lastCloudSyncAt) return '尚未同步'
   return new Date(lastCloudSyncAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+function cloudSaveUpdatedAt(save: SaveData | CloudSaveEnvelope | null) {
+  if (!save) return 0
+  if (isCloudSaveEnvelope(save)) {
+    return Math.max(0, ...save.slots.map((slot) => Number(slot.updatedAt) || Number(slot.save?.savedAt) || 0))
+  }
+  return Number(save.savedAt) || 0
 }
 
 function updateCloudStatus() {
@@ -1401,11 +1484,51 @@ async function syncCloudSaveNow(save = readActiveProfileSave()) {
   cloudSyncState = 'syncing'
   cloudSyncMessage = ''
   updateCloudStatus()
-  await accountRequest<{ ok: boolean }>('/save', { method: 'PUT', json: { save } })
+  await accountRequest<{ ok: boolean }>('/save', { method: 'PUT', json: { save: buildCloudSaveEnvelope(save) } })
   lastCloudSyncAt = Date.now()
   cloudSyncState = 'idle'
   cloudSyncMessage = ''
   updateCloudStatus()
+}
+
+function applyRemoteCloudSave(profile: PlayerProfile, remoteSave: SaveData | CloudSaveEnvelope | null) {
+  if (!remoteSave) {
+    migrateProfileSaveToSlot(profile.id)
+    return
+  }
+  const index = readProfileIndex()
+  const target = index.profiles.find((item) => item.id === profile.id)
+  if (!target) return
+  if (isCloudSaveEnvelope(remoteSave)) {
+    remoteSave.slots.forEach((slot) => {
+      const slotId = safeSlotId(slot.id)
+      if (slot.save) localStorage.setItem(profileSaveKey(profile.id, slotId), JSON.stringify(slot.save))
+    })
+    target.activeSlotId = safeSlotId(remoteSave.activeSlotId)
+  } else {
+    localStorage.setItem(profileSaveKey(profile.id, DEFAULT_PROFILE_SLOT_ID), JSON.stringify(remoteSave))
+    target.activeSlotId = DEFAULT_PROFILE_SLOT_ID
+  }
+  writeProfileIndex(index)
+}
+
+function buildCloudSaveEnvelope(currentSlotSave: SaveData): CloudSaveEnvelope {
+  const profileId = activeProfile?.id
+  const activeSlotId = safeSlotId(activeProfile?.activeSlotId)
+  const slots = PROFILE_SLOT_IDS.map((slotId) => {
+    const save = profileId
+      ? slotId === activeSlotId
+        ? currentSlotSave
+        : readProfileSlotSave(profileId, slotId)
+      : null
+    return {
+      id: slotId,
+      label: PROFILE_SLOT_LABELS[slotId],
+      updatedAt: Number(save?.savedAt) || 0,
+      save,
+    }
+  })
+  return { kind: CLOUD_SAVE_KIND, version: 2, activeSlotId, slots }
 }
 
 async function changeCloudPassword() {
@@ -1448,10 +1571,10 @@ async function changeCloudPassword() {
 
 async function activateServerUser(user: ServerUser) {
   const profile = upsertServerProfile(user)
-  const remote = await accountRequest<{ save: SaveData | null }>('/save')
-  if (remote.save) localStorage.setItem(profileSaveKey(profile.id), JSON.stringify(remote.save))
+  const remote = await accountRequest<{ save: SaveData | CloudSaveEnvelope | null }>('/save')
+  applyRemoteCloudSave(profile, remote.save)
   activateProfile(profile.id, { cloud: true })
-  lastCloudSyncAt = remote.save?.savedAt ?? Date.now()
+  lastCloudSyncAt = cloudSaveUpdatedAt(remote.save) || Date.now()
   updateCloudStatus()
 }
 
@@ -1527,6 +1650,7 @@ function updateProfileUi() {
   closeProfile.hidden = !activeProfile || profilePanel.classList.contains('blocking')
   profileList.innerHTML = ''
   updateCloudStatus()
+  renderProfileSlots()
   const index = readProfileIndex()
   if (!index.profiles.length) {
     const empty = document.createElement('div')
@@ -1548,7 +1672,7 @@ function updateProfileUi() {
       const meta = document.createElement('span')
       meta.textContent = profile.name
       const detail = document.createElement('small')
-      detail.textContent = `${cultivationRealm(summary.level)} | 券 ${summary.tickets} | 灵石 ${summary.spiritStones}${profile.pin ? ' | 有口令' : ''}`
+      detail.textContent = `${PROFILE_SLOT_LABELS[safeSlotId(profile.activeSlotId)]} | ${cultivationRealm(summary.level)} | 券 ${summary.tickets} | 灵石 ${summary.spiritStones}${profile.pin ? ' | 有口令' : ''}`
       row.append(mark, meta, detail)
       row.addEventListener('click', () => {
         setProfileAuthMode('login')
@@ -1563,6 +1687,54 @@ function updateProfileUi() {
       })
       profileList.append(row)
     })
+}
+
+function renderProfileSlots() {
+  profileSlots.hidden = !activeProfile
+  profileSlotList.innerHTML = ''
+  if (!activeProfile) return
+  migrateProfileSaveToSlot(activeProfile.id)
+  PROFILE_SLOT_IDS.forEach((slotId) => {
+    const summary = profileSummary(activeProfile!.id, slotId)
+    const row = document.createElement('button')
+    row.type = 'button'
+    row.className = `profile-slot-row ${activeProfile!.activeSlotId === slotId ? 'active' : ''} ${summary.empty ? 'empty' : ''}`
+    row.disabled = cloudSyncState === 'syncing'
+    const mark = document.createElement('i')
+    mark.textContent = slotId.slice(-1)
+    const meta = document.createElement('span')
+    meta.textContent = summary.empty ? `${PROFILE_SLOT_LABELS[slotId]} · 空` : `${PROFILE_SLOT_LABELS[slotId]} · ${characters[summary.activeCharacter]?.name ?? '青岚剑修'}`
+    const detail = document.createElement('small')
+    detail.textContent = summary.empty
+      ? '点击创建新角色进度'
+      : `${cultivationRealm(summary.level)} | 券 ${summary.tickets} | 灵石 ${summary.spiritStones}`
+    row.append(mark, meta, detail)
+    row.addEventListener('click', () => switchProfileSlot(slotId))
+    profileSlotList.append(row)
+  })
+}
+
+function switchProfileSlot(slotId: CharacterSlotId) {
+  if (!activeProfile) return
+  const nextSlotId = safeSlotId(slotId)
+  if (activeProfile.activeSlotId === nextSlotId) return
+  saveGame()
+  const index = readProfileIndex()
+  const profile = index.profiles.find((item) => item.id === activeProfile?.id)
+  if (!profile) return
+  profile.activeSlotId = nextSlotId
+  profile.lastLoginAt = Date.now()
+  index.activeId = profile.id
+  writeProfileIndex(index)
+  activeProfile = profile
+  resetRuntimeState()
+  loadGame()
+  ensureEnemies()
+  saveGame()
+  toast(`已切换到${PROFILE_SLOT_LABELS[nextSlotId]}。`)
+  updateProfileUi()
+  updateHud()
+  updateGuide()
 }
 
 function showProfilePanel(blocking = false, mode?: ProfileAuthMode) {
@@ -1904,6 +2076,7 @@ function normalizeArtifactLevels() {
 
 function loadGame() {
   if (!activeProfile) return
+  migrateProfileSaveToSlot(activeProfile.id)
   const key = profileSaveKey(activeProfile.id)
   const raw = localStorage.getItem(key)
   if (!raw) {
