@@ -1,4 +1,5 @@
 import './style.css'
+import { techniqueSpecsForCharacter } from './progression'
 
 type Rarity = '普通' | '稀有' | '史诗' | '传说'
 type Mode = 'wild' | 'dungeon'
@@ -30,7 +31,20 @@ interface SettlementRewards { tickets?: number; passes?: number; stones?: number
 interface SettlementRewardTile { label: string; value: string; iconHtml?: string; accent?: string }
 interface SkillTree { slash: number; burst: number; regen: number; chain: number; orbit: number; flame: number; bell: number; needle: number; mirror: number; fan: number; banner: number; seal: number; points: number }
 interface MutationTree { swordRide: number; thunderFork: number; swordDomain: number; flameLotus: number }
-interface CharacterTechniqueTree { swordPierce: number; swordReturn: number; swordShadow: number }
+interface CharacterTechniqueTree {
+  swordPierce: number
+  swordReturn: number
+  swordShadow: number
+  thunderMark: number
+  thunderEcho: number
+  thunderCloud: number
+  flameFocus: number
+  flameSpread: number
+  flameSea: number
+  woodHeal: number
+  woodWard: number
+  woodBloom: number
+}
 interface CharacterDef { id: CharacterId; name: string; title: string; need: number; color: string; portrait: string; battle: string; starter: Partial<SkillTree>; innateSkill: string; desc: string }
 interface ArtifactDef { key: ArtifactKey; name: string; type: string; color: string; rarity: Rarity; iconId: string; image: string; desc: string; source: string; max: number }
 interface DungeonDef {
@@ -159,7 +173,20 @@ const levelStatGrowth = { atk: 3, hp: 12, mana: 2 }
 const cultivationRealms = ['炼气', '筑基', '金丹', '元婴', '化神', '炼虚', '合体', '大乘', '渡劫', '真仙', '玄仙', '金仙', '仙尊', '道祖']
 const cultivationStages = ['一重', '二重', '三重', '四重', '五重', '六重', '七重', '八重', '九重']
 const baseMutations: MutationTree = { swordRide: 0, thunderFork: 0, swordDomain: 0, flameLotus: 0 }
-const baseTechniques: CharacterTechniqueTree = { swordPierce: 0, swordReturn: 0, swordShadow: 0 }
+const baseTechniques: CharacterTechniqueTree = {
+  swordPierce: 0,
+  swordReturn: 0,
+  swordShadow: 0,
+  thunderMark: 0,
+  thunderEcho: 0,
+  thunderCloud: 0,
+  flameFocus: 0,
+  flameSpread: 0,
+  flameSea: 0,
+  woodHeal: 0,
+  woodWard: 0,
+  woodBloom: 0,
+}
 const techniqueMaxLevel = 6
 const mutationMaxLevel = 3
 const baseCharacterShards: Record<CharacterId, number> = { sword: 0, thunder: 0, flame: 0, wood: 0 }
@@ -4654,14 +4681,17 @@ function autoCharacterSkill() {
 
 function autoThunderInnateSkill() {
   const chainSkill = effectiveSkill('chain')
+  const markRank = state.techniques.thunderMark
+  const echoRank = state.techniques.thunderEcho
+  const cloudRank = state.techniques.thunderCloud
   const range = 360 + Math.min(90, state.hero.level * 2) + chainSkill * 10
   const targets = state.enemies
     .filter((enemy) => enemyVisibleForCombat(enemy) && Math.hypot(enemy.x - state.hero.x, enemy.y - state.hero.y) <= range)
     .sort((a, b) => Math.hypot(a.x - state.hero.x, a.y - state.hero.y) - Math.hypot(b.x - state.hero.x, b.y - state.hero.y))
-    .slice(0, Math.min(8, 3 + Math.floor(chainSkill / 3) + Math.floor(state.hero.level / 18)))
+    .slice(0, Math.min(10, 3 + markRank + Math.floor(chainSkill / 3) + Math.floor(state.hero.level / 18)))
   if (targets.length === 0) return false
 
-  state.characterSkillCd = innateCooldown(1.65 - chainSkill * 0.03, 0.76)
+  state.characterSkillCd = innateCooldown(1.65 - chainSkill * 0.03 - cloudRank * 0.1, 0.68)
   heroFacing = targets[0].x < state.hero.x ? Math.PI : 0
   lastAttackFlash = performance.now()
   sfx.thunder()
@@ -4679,10 +4709,28 @@ function autoThunderInnateSkill() {
   })
 
   let from: Vec = { x: state.hero.x, y: state.hero.y - 74 }
-  const baseDamage = Math.round(totalAtk() * 0.62 + skillPower() * 0.68 + state.hero.level * 2.1)
+  if (cloudRank >= 2) {
+    const stormRadius = 300 + cloudRank * 76 + chainSkill * 8
+    state.effects.push({
+      x: state.hero.x + 110,
+      y: state.hero.y - 56,
+      radius: stormRadius,
+      color: '#e0f2fe',
+      life: 0.48,
+      maxLife: 0.48,
+      kind: 'thunderstorm',
+      arc: cloudRank,
+    })
+    state.enemies
+      .filter((enemy) => enemyVisibleForCombat(enemy) && Math.hypot(enemy.x - state.hero.x, enemy.y - state.hero.y) <= stormRadius)
+      .slice(0, 8 + cloudRank * 3)
+      .forEach((enemy) => damageEnemy(enemy, Math.round(totalAtk() * 0.14 + skillPower() * 0.22 + cloudRank * 4)))
+  }
+
+  const baseDamage = Math.round(totalAtk() * (0.62 + markRank * 0.045) + skillPower() * (0.68 + echoRank * 0.04) + state.hero.level * 2.1)
   targets.forEach((enemy, index) => {
     const hitY = enemy.y - (enemy.boss ? 78 : enemy.kind === 'bat' ? 54 : 38)
-    const falloff = Math.max(0.52, 1 - index * 0.08)
+    const falloff = Math.max(0.52 + echoRank * 0.035, 1 - index * Math.max(0.035, 0.08 - echoRank * 0.008))
     damageEnemy(enemy, Math.round(baseDamage * falloff))
     addParticleBurst(enemy.x, hitY, index === 0 ? '#38bdf8' : '#bae6fd', index === 0 ? 12 : 7, 0.72, 'spark')
     state.effects.push({
@@ -4706,25 +4754,44 @@ function autoThunderInnateSkill() {
       angle: Math.atan2(hitY - from.y, enemy.x - from.x),
       arc: 2,
     })
+    if (echoRank > 0 && index < 4) {
+      const echoRadius = 72 + echoRank * 14
+      state.effects.push({
+        x: enemy.x,
+        y: hitY,
+        radius: echoRadius,
+        color: '#bae6fd',
+        life: 0.22,
+        maxLife: 0.22,
+        kind: 'ring',
+      })
+      state.enemies
+        .filter((other) => enemyVisibleForCombat(other) && other.id !== enemy.id && Math.hypot(other.x - enemy.x, other.y - enemy.y) <= echoRadius)
+        .slice(0, Math.min(2, echoRank))
+        .forEach((other) => damageEnemy(other, Math.round(baseDamage * 0.18 + echoRank * 3)))
+    }
     from = { x: enemy.x, y: hitY }
   })
-  announceSkill('雷印诀', '本命术发动', '#bae6fd')
+  announceSkill(cloudRank >= 2 ? '雷印诀·天罚' : echoRank > 0 ? '雷印诀·回响' : '雷印诀', '本命术发动', '#bae6fd')
   return true
 }
 
 function autoFlameInnateSkill() {
   const flameSkill = effectiveSkill('flame')
+  const focusRank = state.techniques.flameFocus
+  const spreadRank = state.techniques.flameSpread
+  const seaRank = state.techniques.flameSea
   const target = state.enemies
     .filter((enemy) => enemyVisibleForCombat(enemy))
     .map((enemy) => ({
       enemy,
-      score: state.enemies.filter((other) => enemyVisibleForCombat(other) && Math.hypot(other.x - enemy.x, other.y - enemy.y) <= 132).length + (enemy.boss ? 4 : enemy.elite ? 2 : 0),
+      score: state.enemies.filter((other) => enemyVisibleForCombat(other) && Math.hypot(other.x - enemy.x, other.y - enemy.y) <= 132 + spreadRank * 14).length + (enemy.boss ? 4 + focusRank : enemy.elite ? 2 + focusRank : 0),
     }))
     .sort((a, b) => b.score - a.score)[0]
   if (!target || Math.hypot(target.enemy.x - state.hero.x, target.enemy.y - state.hero.y) > 410) return false
 
-  const radius = 108 + flameSkill * 7 + Math.min(42, state.hero.level * 1.2)
-  state.characterSkillCd = innateCooldown(2.08 - flameSkill * 0.035, 1.02)
+  const radius = 108 + flameSkill * 7 + spreadRank * 18 + seaRank * 10 + Math.min(42, state.hero.level * 1.2)
+  state.characterSkillCd = innateCooldown(2.08 - flameSkill * 0.035 - focusRank * 0.04, 0.92)
   heroFacing = target.enemy.x < state.hero.x ? Math.PI : 0
   lastAttackFlash = performance.now()
   sfx.flame()
@@ -4744,31 +4811,69 @@ function autoFlameInnateSkill() {
     y: target.enemy.y + 14,
     radius: radius + 42,
     color: '#fed7aa',
-    life: 0.5,
-    maxLife: 0.5,
+    life: 0.5 + seaRank * 0.08,
+    maxLife: 0.5 + seaRank * 0.08,
     kind: 'firesea',
   })
-  const damage = Math.round(skillPower() * 0.82 + totalAtk() * 0.48 + state.hero.level * 2.2)
+  const damage = Math.round(skillPower() * (0.82 + focusRank * 0.08) + totalAtk() * (0.48 + focusRank * 0.035) + state.hero.level * 2.2)
   state.enemies
     .filter((enemy) => enemyVisibleForCombat(enemy) && Math.hypot(enemy.x - target.enemy.x, enemy.y - target.enemy.y) <= radius)
-    .slice(0, 10)
+    .slice(0, 10 + spreadRank * 2)
     .forEach((enemy, index) => damageEnemy(enemy, Math.round(damage * Math.max(0.55, 1 - index * 0.05))))
-  announceSkill('莲火符', '本命术发动', '#fed7aa')
+  if (spreadRank > 0) {
+    state.enemies
+      .filter((enemy) => enemyVisibleForCombat(enemy) && Math.hypot(enemy.x - target.enemy.x, enemy.y - target.enemy.y) <= radius + 84)
+      .slice(0, spreadRank * 3)
+      .forEach((enemy, index) => {
+        const angle = (Math.PI * 2 * index) / Math.max(1, spreadRank * 3)
+        state.effects.push({
+          x: enemy.x + Math.cos(angle) * 26,
+          y: enemy.y - 22 + Math.sin(angle) * 16,
+          radius: 48 + spreadRank * 10,
+          color: '#fed7aa',
+          life: 0.26,
+          maxLife: 0.26,
+          kind: 'flare',
+        })
+        damageEnemy(enemy, Math.round(damage * (0.18 + spreadRank * 0.035)))
+      })
+  }
+  if (seaRank >= 2) {
+    const seaRadius = radius + 160 + seaRank * 48
+    state.effects.push({
+      x: target.enemy.x,
+      y: target.enemy.y + 8,
+      radius: seaRadius,
+      color: '#f97316',
+      life: 0.62,
+      maxLife: 0.62,
+      kind: 'firesea',
+    })
+    state.enemies
+      .filter((enemy) => enemyVisibleForCombat(enemy) && Math.hypot(enemy.x - target.enemy.x, enemy.y - target.enemy.y) <= seaRadius)
+      .slice(0, 10 + seaRank * 4)
+      .forEach((enemy) => damageEnemy(enemy, Math.round(skillPower() * 0.18 + totalAtk() * 0.12 + seaRank * 5)))
+  }
+  announceSkill(seaRank >= 2 ? '莲火符·莲域' : spreadRank > 0 ? '莲火符·连爆' : '莲火符', '本命术发动', '#fed7aa')
   return true
 }
 
 function autoWoodInnateSkill() {
   const max = maxHp()
+  const healRank = state.techniques.woodHeal
+  const wardRank = state.techniques.woodWard
+  const bloomRank = state.techniques.woodBloom
+  const wardRadius = 190 + wardRank * 16 + bloomRank * 22
   const nearby = state.enemies
-    .filter((enemy) => enemyVisibleForCombat(enemy) && Math.hypot(enemy.x - state.hero.x, enemy.y - state.hero.y) <= 190)
-    .slice(0, 6)
-  const needsHeal = state.hero.hp < max * 0.94
+    .filter((enemy) => enemyVisibleForCombat(enemy) && Math.hypot(enemy.x - state.hero.x, enemy.y - state.hero.y) <= wardRadius)
+    .slice(0, 6 + bloomRank)
+  const needsHeal = state.hero.hp < max * Math.min(0.98, 0.94 + healRank * 0.01)
   if (!needsHeal && nearby.length < 2) return false
 
-  state.characterSkillCd = innateCooldown(2.46 - effectiveSkill('regen') * 0.04, 1.28)
+  state.characterSkillCd = innateCooldown(2.46 - effectiveSkill('regen') * 0.04 - healRank * 0.07, 1.08)
   lastAttackFlash = performance.now()
   sfx.heal()
-  const heal = Math.round(max * 0.1 + skillPower() * 1.15 + state.hero.level * 1.6)
+  const heal = Math.round(max * (0.1 + healRank * 0.018) + skillPower() * (1.15 + healRank * 0.08) + state.hero.level * 1.6)
   const before = state.hero.hp
   state.hero.hp = Math.min(max, state.hero.hp + heal)
   state.healPulse = 1
@@ -4776,7 +4881,7 @@ function autoWoodInnateSkill() {
   state.effects.push({
     x: state.hero.x,
     y: state.hero.y - 26,
-    radius: 122 + effectiveSkill('regen') * 7,
+    radius: 122 + effectiveSkill('regen') * 7 + bloomRank * 18,
     color: '#86efac',
     life: 0.52,
     maxLife: 0.52,
@@ -4785,18 +4890,18 @@ function autoWoodInnateSkill() {
   state.effects.push({
     x: state.hero.x,
     y: state.hero.y - 24,
-    radius: 154 + effectiveSkill('regen') * 9,
+    radius: 154 + effectiveSkill('regen') * 9 + wardRank * 22 + bloomRank * 20,
     color: '#bbf7d0',
-    life: 0.44,
-    maxLife: 0.44,
+    life: 0.44 + bloomRank * 0.04,
+    maxLife: 0.44 + bloomRank * 0.04,
     kind: 'ring',
   })
   if (state.hero.hp > before) state.texts.push({ x: state.hero.x, y: state.hero.y - 98, text: `+${state.hero.hp - before}`, color: '#bbf7d0', life: 0.82 })
   nearby.forEach((enemy, index) => {
-    damageEnemy(enemy, Math.round(totalAtk() * 0.24 + skillPower() * 0.38 + state.hero.level * 1.2))
+    damageEnemy(enemy, Math.round(totalAtk() * (0.24 + wardRank * 0.035) + skillPower() * (0.38 + bloomRank * 0.045) + state.hero.level * 1.2))
     if (index < 3) addParticleBurst(enemy.x, enemy.y - 34, '#bbf7d0', 5, 0.55, 'rune')
   })
-  announceSkill('回元息', '本命术发动', '#86efac')
+  announceSkill(bloomRank >= 2 ? '回元息·青华' : wardRank > 0 ? '回元息·护脉' : '回元息', '本命术发动', '#86efac')
   return true
 }
 
@@ -5086,66 +5191,49 @@ function mutationLevelForOption(id: string) {
   return 0
 }
 
+function techniqueIconId(iconBase: string, level: number) {
+  return `${iconBase}-${Math.max(1, Math.min(3, Math.ceil(level / 2)))}`
+}
+
+function resetInnateCooldownsForCharacter(characterId: CharacterId) {
+  state.characterSkillCd = 0
+  if (characterId === 'thunder') state.chainCd = 0
+  if (characterId === 'flame') state.flameCd = 0
+  if (characterId === 'sword') state.orbitCd = 0
+}
+
 function characterTechniqueTemplates(): EvolutionTemplate[] {
-  if (state.activeCharacter !== 'sword') return []
-  return [
-    {
-      id: 'tech-sword-pierce',
-      title: '御剑·穿云',
-      color: '#67e8f9',
-      build: (power: number, cardTier: EvolutionTier) => ({
-        id: 'tech-sword-pierce',
-        iconId: power >= 3 ? 'blade-3' : power >= 2 ? 'blade-2' : 'blade-1',
-        title: '御剑·穿云',
-        tier: cardTier,
-        color: '#67e8f9',
-        desc: `御剑术穿刺目标 +1，出剑距离和主剑伤害提升。`,
-        apply: () => {
-          state.techniques.swordPierce = Math.min(techniqueMaxLevel, state.techniques.swordPierce + 1)
-          state.characterSkillCd = 0
+  return techniqueSpecsForCharacter(state.activeCharacter)
+    .map((spec) => {
+      const key = spec.key as keyof CharacterTechniqueTree
+      const current = state.techniques[key] ?? 0
+      return {
+        id: spec.id,
+        title: spec.title,
+        color: spec.color,
+        build: (_power: number, cardTier: EvolutionTier) => {
+          const nextLevel = Math.min(techniqueMaxLevel, current + 1)
+          return {
+            id: spec.id,
+            iconId: techniqueIconId(spec.iconBase, nextLevel),
+            title: spec.title,
+            tier: cardTier,
+            color: spec.color,
+            desc: spec.desc,
+            apply: () => {
+              state.techniques[key] = Math.min(techniqueMaxLevel, (state.techniques[key] ?? 0) + 1)
+              resetInnateCooldownsForCharacter(state.activeCharacter)
+            },
+          }
         },
-      }),
-    },
-    {
-      id: 'tech-sword-return',
-      title: '御剑·回锋',
-      color: '#fef08a',
-      build: (power: number, cardTier: EvolutionTier) => ({
-        id: 'tech-sword-return',
-        iconId: power >= 3 ? 'sweep-3' : power >= 2 ? 'sweep-2' : 'sweep-1',
-        title: '御剑·回锋',
-        tier: cardTier,
-        color: '#fef08a',
-        desc: `飞剑回身会二次刮过敌人，御剑术冷却缩短。`,
-        apply: () => {
-          state.techniques.swordReturn = Math.min(techniqueMaxLevel, state.techniques.swordReturn + 1)
-          state.characterSkillCd = 0
-        },
-      }),
-    },
-    {
-      id: 'tech-sword-shadow',
-      title: '御剑·分光',
-      color: '#bae6fd',
-      build: (power: number, cardTier: EvolutionTier) => ({
-        id: 'tech-sword-shadow',
-        iconId: power >= 3 ? 'orbit-3' : power >= 2 ? 'orbit-2' : 'orbit-1',
-        title: '御剑·分光',
-        tier: cardTier,
-        color: '#bae6fd',
-        desc: `御剑术附带剑影，最多同时飞出 ${Math.min(3, state.techniques.swordShadow + 1)} 道分光。`,
-        apply: () => {
-          state.techniques.swordShadow = Math.min(techniqueMaxLevel, state.techniques.swordShadow + 1)
-          state.characterSkillCd = 0
-        },
-      }),
-    },
-  ].filter((option) => {
-    if (option.id === 'tech-sword-pierce') return state.techniques.swordPierce < techniqueMaxLevel
-    if (option.id === 'tech-sword-return') return state.techniques.swordReturn < techniqueMaxLevel
-    if (option.id === 'tech-sword-shadow') return state.techniques.swordShadow < techniqueMaxLevel
-    return true
-  })
+      }
+    })
+    .filter((option) => {
+      const spec = techniqueSpecsForCharacter(state.activeCharacter).find((item) => item.id === option.id)
+      if (!spec) return false
+      const key = spec.key as keyof CharacterTechniqueTree
+      return (state.techniques[key] ?? 0) < techniqueMaxLevel
+    })
 }
 
 function evolutionOptions(): EvolutionOption[] {
