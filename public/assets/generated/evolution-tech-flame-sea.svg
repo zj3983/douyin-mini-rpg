@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="flame sea">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="82%">
+      <stop offset="0" stop-color="#ffedd5"/>
+      <stop offset=".38" stop-color="#f97316"/>
+      <stop offset="1" stop-color="#150805"/>
+    </radialGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="256" height="256" rx="34" fill="url(#bg)"/>
+  <path d="M50 188c18-37 39-25 50-72 16 40 35 38 48 4 16 37 39 36 56 0 8 34 21 48 31 68-29 24-153 32-185 0Z" fill="#fff7ed" filter="url(#glow)"/>
+  <path d="M77 179c12-20 26-21 34-49 12 29 25 31 36 4 13 28 28 29 39 2 8 24 18 31 24 43-27 18-102 21-133 0Z" fill="#fb923c"/>
+  <circle cx="128" cy="126" r="83" fill="none" stroke="#fed7aa" stroke-width="5" opacity=".5"/>
+  <circle cx="128" cy="126" r="54" fill="none" stroke="#fff7ed" stroke-width="4" opacity=".38"/>
+</svg>

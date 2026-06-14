@@ -2023,7 +2023,7 @@ canvas {
 .evolution-card i {
   position: relative;
   z-index: 1;
-  grid-row: span 2;
+  grid-row: span 3;
   display: grid;
   place-items: center;
   width: 56px;
@@ -2058,6 +2058,7 @@ canvas {
 }
 
 .evolution-card b,
+.evolution-card small,
 .evolution-card span {
   display: block;
 }
@@ -2067,6 +2068,23 @@ canvas {
   z-index: 1;
   color: #f8fafc;
   font-size: 16px;
+}
+
+.evolution-card small {
+  position: relative;
+  z-index: 1;
+  grid-column: 2;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: -1px;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--card-accent, #5eead4), transparent 35%);
+  border-radius: 999px;
+  color: #ecfeff;
+  background: rgba(2, 6, 23, 0.38);
+  font-size: 10px;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .evolution-card span {
@@ -3747,7 +3765,7 @@ canvas {
   .evolution-card {
     grid-template-columns: 46px minmax(0, 1fr);
     gap: 2px 8px;
-    min-height: 66px;
+    min-height: 74px;
     padding: 8px 9px 8px 8px;
   }
 
@@ -3764,6 +3782,11 @@ canvas {
 
   .evolution-card b {
     font-size: 14px;
+  }
+
+  .evolution-card small {
+    padding: 1px 6px;
+    font-size: 9px;
   }
 
   .evolution-card span,

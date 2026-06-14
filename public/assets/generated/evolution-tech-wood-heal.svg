@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="wood heal">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="76%">
+      <stop offset="0" stop-color="#dcfce7"/>
+      <stop offset=".44" stop-color="#16a34a"/>
+      <stop offset="1" stop-color="#06130b"/>
+    </radialGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="256" height="256" rx="34" fill="url(#bg)"/>
+  <path d="M128 50c38 28 57 61 57 97 0 40-25 69-57 69s-57-29-57-69c0-36 19-69 57-97Z" fill="#ecfccb" opacity=".9" filter="url(#glow)"/>
+  <path d="M128 74v112M91 141h74M102 105c25 8 41 24 47 54M156 105c-25 8-41 24-47 54" fill="none" stroke="#15803d" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="128" cy="139" r="82" fill="none" stroke="#bbf7d0" stroke-width="5" stroke-dasharray="10 14" opacity=".6"/>
+</svg>

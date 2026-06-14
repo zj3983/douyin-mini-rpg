@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="thunder cloud">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e0f2fe"/>
+      <stop offset=".45" stop-color="#0369a1"/>
+      <stop offset="1" stop-color="#020617"/>
+    </linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="256" height="256" rx="34" fill="url(#bg)"/>
+  <path d="M61 104c8-27 34-45 63-42 20-27 63-17 72 16 24 4 39 21 39 43 0 27-23 45-54 45H79c-32 0-55-18-55-45 0-18 14-33 37-17Z" fill="#dbeafe" opacity=".9" filter="url(#glow)"/>
+  <path d="M118 119 83 197l46-28-9 54 53-94-43 25 14-35h-26Z" fill="#fef08a" filter="url(#glow)"/>
+  <path d="M45 58c50-24 113-28 170 1M40 205c48 22 118 22 174 0" fill="none" stroke="#bae6fd" stroke-width="5" stroke-linecap="round" opacity=".48"/>
+</svg>

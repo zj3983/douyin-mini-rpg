@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="flame spread">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff7ed"/>
+      <stop offset=".42" stop-color="#fb923c"/>
+      <stop offset="1" stop-color="#2a0d04"/>
+    </linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="256" height="256" rx="34" fill="url(#bg)"/>
+  <g filter="url(#glow)">
+    <path d="M128 44c20 27-5 37 19 61 10 10 14 21 14 34 0 24-15 39-33 39s-34-15-34-39c0-22 18-37 29-65 5 17 19 24 17 41 14-20-8-36-12-71Z" fill="#fff7ed"/>
+    <path d="M54 77c15 21-3 30 13 47 7 7 10 15 10 25 0 18-12 29-26 29s-26-11-26-29c0-17 13-28 21-49 3 13 13 18 12 31 10-15-5-27-4-54Z" fill="#fed7aa" opacity=".9"/>
+    <path d="M203 78c14 20-3 29 13 46 7 7 10 15 10 25 0 18-12 29-26 29s-26-11-26-29c0-17 13-28 21-49 3 13 13 18 12 31 10-15-5-27-4-53Z" fill="#fed7aa" opacity=".9"/>
+  </g>
+  <path d="M37 205c53-34 130-34 183 0" fill="none" stroke="#ffedd5" stroke-width="7" stroke-linecap="round" opacity=".65"/>
+</svg>

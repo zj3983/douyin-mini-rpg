@@ -1,5 +1,5 @@
 import './style.css'
-import { techniqueSpecsForCharacter } from './progression'
+import { techniqueArtForId, techniqueSpecsForCharacter } from './progression'
 
 type Rarity = '普通' | '稀有' | '史诗' | '传说'
 type Mode = 'wild' | 'dungeon'
@@ -89,7 +89,7 @@ interface StageTheme {
   enemyDark: string
   enemyNames: Record<EnemyKind, string>
 }
-interface EvolutionOption { id: string; iconId: string; iconHtml?: string; title: string; desc: string; color: string; tier: EvolutionTier; mutation?: boolean; apply: () => void }
+interface EvolutionOption { id: string; iconId: string; iconHtml?: string; title: string; desc: string; color: string; tier: EvolutionTier; meta?: string; mutation?: boolean; apply: () => void }
 interface EvolutionTemplate { id: string; title: string; color: string; build: (rank: number, tier: EvolutionTier) => EvolutionOption }
 interface SaveData {
   hero: { x: number; y: number; hp: number; baseHp: number; level: number; exp: number; baseAtk: number; skillPower: number }
@@ -5219,6 +5219,7 @@ function characterTechniqueTemplates(): EvolutionTemplate[] {
             title: spec.title,
             tier: cardTier,
             color: spec.color,
+            meta: `本命术 ${nextLevel}/${techniqueMaxLevel}`,
             desc: spec.desc,
             apply: () => {
               state.techniques[key] = Math.min(techniqueMaxLevel, (state.techniques[key] ?? 0) + 1)
@@ -5481,7 +5482,7 @@ function evolutionArt(optionId: string, iconId: string) {
     gate: '/assets/generated/evolution-seal.png',
   }
   const iconGroup = iconId.replace(/-\d$/, '')
-  const src = artByOption[optionId] ?? artByIcon[iconGroup]
+  const src = techniqueArtForId(optionId) ?? artByOption[optionId] ?? artByIcon[iconGroup]
   return src ? `<img class="evolution-art" src="${versionedAsset(src)}" alt="">` : evolutionIcon(iconId)
 }
 
@@ -5496,7 +5497,7 @@ function openEvolutionPanel() {
     button.style.borderColor = option.color
     button.style.setProperty('--card-accent', option.color)
     button.style.setProperty('--card-glow', `color-mix(in srgb, ${option.color}, transparent 72%)`)
-    button.innerHTML = `<i>${option.iconHtml ?? evolutionArt(option.id, option.iconId)}</i><b>${option.title}</b><span>${option.desc}</span>${option.mutation ? '<em>质变</em>' : ''}`
+    button.innerHTML = `<i>${option.iconHtml ?? evolutionArt(option.id, option.iconId)}</i><b>${option.title}</b>${option.meta ? `<small>${option.meta}</small>` : ''}<span>${option.desc}</span>${option.mutation ? '<em>质变</em>' : ''}`
     button.addEventListener('click', () => chooseEvolution(option))
     evolutionList.appendChild(button)
   }

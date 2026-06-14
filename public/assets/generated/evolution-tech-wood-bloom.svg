@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="wood bloom">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="78%">
+      <stop offset="0" stop-color="#ccfbf1"/>
+      <stop offset=".42" stop-color="#14b8a6"/>
+      <stop offset="1" stop-color="#041313"/>
+    </radialGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="256" height="256" rx="34" fill="url(#bg)"/>
+  <g filter="url(#glow)">
+    <path d="M128 130c-37-24-43-62-14-93 20 22 25 51 14 93Z" fill="#ecfccb"/>
+    <path d="M128 130c37-24 43-62 14-93-20 22-25 51-14 93Z" fill="#bbf7d0"/>
+    <path d="M128 132c-48 0-78-27-76-67 31 3 58 22 76 67Z" fill="#99f6e4"/>
+    <path d="M128 132c48 0 78-27 76-67-31 3-58 22-76 67Z" fill="#ccfbf1"/>
+  </g>
+  <path d="M128 126v83" stroke="#064e3b" stroke-width="9" stroke-linecap="round"/>
+  <path d="M64 207c43-23 85-23 128 0" fill="none" stroke="#a7f3d0" stroke-width="7" stroke-linecap="round" opacity=".72"/>
+</svg>
