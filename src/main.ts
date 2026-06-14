@@ -107,6 +107,7 @@ interface SaveData {
   characterShards?: Partial<Record<CharacterId, number>>
   artifacts?: Partial<Record<ArtifactKey, number>>
   activeDungeon?: DungeonId
+  characterName?: string
 }
 
 type CharacterSlotId = 'slot-1' | 'slot-2' | 'slot-3'
@@ -473,6 +474,7 @@ const state = {
   mutations: { ...baseMutations },
   techniques: { ...baseTechniques },
   activeDungeon: 'mossCave' as DungeonId,
+  characterName: '',
   activeCharacter: 'sword' as CharacterId,
   ownedCharacters: ['sword'] as CharacterId[],
   characterShards: { ...baseCharacterShards },
@@ -691,6 +693,25 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           </div>
           <div id="profile-slot-list" class="profile-slot-list"></div>
         </div>
+        <div id="profile-create-slot" class="profile-create-slot" hidden>
+          <div class="profile-create-head">
+            <b id="profile-create-title">创建角色</b>
+            <button id="profile-create-cancel" type="button">取消</button>
+          </div>
+          <label class="profile-field compact">
+            <span>角色名</span>
+            <input id="profile-character-name" maxlength="10" autocomplete="off" placeholder="输入角色名">
+          </label>
+          <div>
+            <small class="profile-create-label">选择职业</small>
+            <div id="profile-character-options" class="profile-choice-grid"></div>
+          </div>
+          <div>
+            <small class="profile-create-label">初始法宝倾向</small>
+            <div id="profile-artifact-options" class="profile-choice-grid"></div>
+          </div>
+          <button id="profile-create-confirm" class="profile-create-confirm" type="button">创建并进入</button>
+        </div>
         <div class="profile-cloud">
           <div>
             <b id="profile-cloud-status">本机档案</b>
@@ -803,6 +824,13 @@ const profileSwitch = document.querySelector<HTMLButtonElement>('#profile-switch
 const profileCurrent = document.querySelector<HTMLElement>('#profile-current')!
 const profileSlots = document.querySelector<HTMLDivElement>('#profile-slots')!
 const profileSlotList = document.querySelector<HTMLDivElement>('#profile-slot-list')!
+const profileCreateSlot = document.querySelector<HTMLDivElement>('#profile-create-slot')!
+const profileCreateTitle = document.querySelector<HTMLElement>('#profile-create-title')!
+const profileCreateCancel = document.querySelector<HTMLButtonElement>('#profile-create-cancel')!
+const profileCharacterName = document.querySelector<HTMLInputElement>('#profile-character-name')!
+const profileCharacterOptions = document.querySelector<HTMLDivElement>('#profile-character-options')!
+const profileArtifactOptions = document.querySelector<HTMLDivElement>('#profile-artifact-options')!
+const profileCreateConfirm = document.querySelector<HTMLButtonElement>('#profile-create-confirm')!
 const profileCloudStatus = document.querySelector<HTMLElement>('#profile-cloud-status')!
 const profileCloudDetail = document.querySelector<HTMLElement>('#profile-cloud-detail')!
 const profileSync = document.querySelector<HTMLButtonElement>('#profile-sync')!
@@ -834,6 +862,12 @@ const PROFILE_SLOT_LABELS: Record<CharacterSlotId, string> = {
   'slot-3': '三号角色',
 }
 const CLOUD_SAVE_KIND = 'void-trial-cloud-slots'
+const starterArtifactChoices: Record<CharacterId, ArtifactKey[]> = {
+  sword: ['orbit', 'slash', 'needle'],
+  thunder: ['chain', 'burst', 'seal'],
+  flame: ['flame', 'burst', 'banner'],
+  wood: ['regen', 'bell', 'mirror'],
+}
 
 const ASSET_VERSION = '20260607-webp-assets-v1'
 
@@ -966,6 +1000,9 @@ let lastCloudSyncAt = 0
 let cloudSaveTimer: number | null = null
 let cloudSaveInFlight = false
 let pendingCloudSave: SaveData | null = null
+let creatingSlotId: CharacterSlotId | null = null
+let creatingCharacterId: CharacterId = 'sword'
+let creatingArtifactKey: ArtifactKey = 'orbit'
 let settlementAutoCloseTimer: number | null = null
 let audioCtx: AudioContext | null = null
 let audioMaster: GainNode | null = null
@@ -1289,6 +1326,10 @@ function normalizeProfileName(name: string) {
   return name.trim().replace(/\s+/g, ' ').slice(0, 12)
 }
 
+function normalizeCharacterName(name: string) {
+  return name.trim().replace(/\s+/g, '').slice(0, 10)
+}
+
 function readProfileIndex(): ProfileIndex {
   const raw = localStorage.getItem(PROFILE_INDEX_KEY)
   if (!raw) return { activeId: null, profiles: [] }
@@ -1329,7 +1370,7 @@ function createProfile(name: string, pin: string): PlayerProfile {
 function profileSummary(profileId: string, slotId = activeSlotIdForProfile(profileId)) {
   migrateProfileSaveToSlot(profileId)
   const raw = localStorage.getItem(profileSaveKey(profileId, slotId))
-  if (!raw) return { level: 1, tickets: 0, spiritStones: 0, savedAt: 0, activeCharacter: 'sword' as CharacterId, empty: true }
+  if (!raw) return { level: 1, tickets: 0, spiritStones: 0, savedAt: 0, activeCharacter: 'sword' as CharacterId, characterName: '', empty: true }
   try {
     const save = JSON.parse(raw) as Partial<SaveData>
     return {
@@ -1338,10 +1379,11 @@ function profileSummary(profileId: string, slotId = activeSlotIdForProfile(profi
       spiritStones: save.spiritStones ?? 0,
       savedAt: save.savedAt ?? 0,
       activeCharacter: save.activeCharacter ?? 'sword' as CharacterId,
+      characterName: normalizeCharacterName(save.characterName ?? ''),
       empty: false,
     }
   } catch {
-    return { level: 1, tickets: 0, spiritStones: 0, savedAt: 0, activeCharacter: 'sword' as CharacterId, empty: true }
+    return { level: 1, tickets: 0, spiritStones: 0, savedAt: 0, activeCharacter: 'sword' as CharacterId, characterName: '', empty: true }
   }
 }
 
@@ -1425,6 +1467,11 @@ function readProfileSlotSave(profileId: string, slotId: CharacterSlotId) {
   } catch {
     return null
   }
+}
+
+function profileSlotHasSave(profileId: string, slotId: CharacterSlotId) {
+  migrateProfileSaveToSlot(profileId)
+  return Boolean(localStorage.getItem(profileSaveKey(profileId, slotId)))
 }
 
 function readActiveProfileSave() {
@@ -1628,6 +1675,9 @@ function setProfileBusy(busy: boolean) {
   profileCurrentPin.disabled = busy || !(cloudAccountActive && isServerProfile())
   profileNewPin.disabled = busy || !(cloudAccountActive && isServerProfile())
   profileChangePassword.disabled = busy || !(cloudAccountActive && isServerProfile())
+  profileCharacterName.disabled = busy
+  profileCreateConfirm.disabled = busy || !creatingSlotId
+  profileCreateCancel.disabled = busy
 }
 
 function setProfileAuthMode(mode: ProfileAuthMode) {
@@ -1703,22 +1753,150 @@ function renderProfileSlots() {
     const mark = document.createElement('i')
     mark.textContent = slotId.slice(-1)
     const meta = document.createElement('span')
-    meta.textContent = summary.empty ? `${PROFILE_SLOT_LABELS[slotId]} · 空` : `${PROFILE_SLOT_LABELS[slotId]} · ${characters[summary.activeCharacter]?.name ?? '青岚剑修'}`
+    meta.textContent = summary.empty
+      ? `${PROFILE_SLOT_LABELS[slotId]} · 空`
+      : `${PROFILE_SLOT_LABELS[slotId]} · ${summary.characterName || characters[summary.activeCharacter]?.name || '青岚剑修'}`
     const detail = document.createElement('small')
     detail.textContent = summary.empty
       ? '点击创建新角色进度'
-      : `${cultivationRealm(summary.level)} | 券 ${summary.tickets} | 灵石 ${summary.spiritStones}`
+      : `${characters[summary.activeCharacter]?.name ?? '青岚剑修'} | ${cultivationRealm(summary.level)} | 券 ${summary.tickets}`
     row.append(mark, meta, detail)
-    row.addEventListener('click', () => switchProfileSlot(slotId))
+    row.addEventListener('click', () => {
+      if (summary.empty) openCharacterCreator(slotId)
+      else switchProfileSlot(slotId)
+    })
     profileSlotList.append(row)
   })
 }
 
-function switchProfileSlot(slotId: CharacterSlotId) {
+function openCharacterCreator(slotId: CharacterSlotId) {
+  if (!activeProfile) return
+  creatingSlotId = slotId
+  creatingCharacterId = 'sword'
+  creatingArtifactKey = starterArtifactChoices.sword[0]
+  profileCreateSlot.hidden = false
+  profileCreateTitle.textContent = `创建${PROFILE_SLOT_LABELS[slotId]}`
+  profileCharacterName.value = `${activeProfile.name}${slotId.slice(-1)}`
+  renderCharacterCreator()
+  profileCharacterName.focus()
+}
+
+function closeCharacterCreator() {
+  creatingSlotId = null
+  profileCreateSlot.hidden = true
+  profileCharacterName.value = ''
+}
+
+function renderCharacterCreator() {
+  profileCharacterOptions.innerHTML = ''
+  ;(Object.values(characters) as CharacterDef[]).forEach((character) => {
+    const option = document.createElement('button')
+    option.type = 'button'
+    option.className = `profile-choice ${creatingCharacterId === character.id ? 'active' : ''}`
+    option.style.setProperty('--choice-color', character.color)
+    option.innerHTML = `
+      <img src="${versionedAsset(character.portrait)}" alt="">
+      <span>${character.name}</span>
+      <small>${character.innateSkill}</small>
+    `
+    option.addEventListener('click', () => {
+      creatingCharacterId = character.id
+      creatingArtifactKey = starterArtifactChoices[character.id][0]
+      renderCharacterCreator()
+    })
+    profileCharacterOptions.append(option)
+  })
+
+  profileArtifactOptions.innerHTML = ''
+  starterArtifactChoices[creatingCharacterId].forEach((key) => {
+    const artifact = artifactDefs[key]
+    const option = document.createElement('button')
+    option.type = 'button'
+    option.className = `profile-choice artifact ${creatingArtifactKey === key ? 'active' : ''}`
+    option.style.setProperty('--choice-color', artifact.color)
+    option.innerHTML = `
+      <img src="${versionedAsset(artifact.image)}" alt="">
+      <span>${artifact.name}</span>
+      <small>${artifact.type}</small>
+    `
+    option.addEventListener('click', () => {
+      creatingArtifactKey = key
+      renderCharacterCreator()
+    })
+    profileArtifactOptions.append(option)
+  })
+}
+
+function createCharacterSlotSave(characterId: CharacterId, artifactKey: ArtifactKey, characterName: string): SaveData {
+  const artifacts = { ...baseArtifacts, [artifactKey]: 1 }
+  const skills = { slash: 0, burst: 0, regen: 0, chain: 0, orbit: 0, flame: 0, bell: 0, needle: 0, mirror: 0, fan: 0, banner: 0, seal: 0, points: 0 }
+  artifactKeys.forEach((key) => { skills[key] = artifacts[key] })
+  return {
+    hero: { x: 0, y: 0, hp: baseHeroStats.hp, baseHp: baseHeroStats.hp, level: 1, exp: 0, baseAtk: baseHeroStats.atk, skillPower: baseHeroStats.mana },
+    gear: { weapon: null, armor: null, core: null },
+    skills,
+    artifacts,
+    mutations: { ...baseMutations },
+    techniques: { ...baseTechniques },
+    activeDungeon: 'mossCave',
+    kills: 0,
+    tickets: 0,
+    spiritStones: 0,
+    dungeonEntries: 3,
+    pity: 0,
+    wave: 1,
+    worldStage: 1,
+    worldStageKills: 0,
+    questClaimed: false,
+    mainQuestIndex: 0,
+    lastDaily: '',
+    bag: [],
+    guideStep: 0,
+    soulLevel: 1,
+    soulExp: 0,
+    autoHaste: 0,
+    autoExplore: true,
+    activeCharacter: characterId,
+    ownedCharacters: characterId === 'sword' ? ['sword'] : ['sword', characterId],
+    characterShards: { ...baseCharacterShards },
+    characterName,
+    savedAt: Date.now(),
+  }
+}
+
+function confirmCreateCharacterSlot() {
+  if (!activeProfile || !creatingSlotId) return
+  const characterName = normalizeCharacterName(profileCharacterName.value)
+  if (!characterName) {
+    setProfileError('先给角色起个名字。')
+    profileCharacterName.focus()
+    return
+  }
+  if (readProfileSlotSave(activeProfile.id, creatingSlotId)) {
+    setProfileError('这个槽位已经有角色了。')
+    closeCharacterCreator()
+    updateProfileUi()
+    return
+  }
+  saveGame()
+  localStorage.setItem(profileSaveKey(activeProfile.id, creatingSlotId), JSON.stringify(createCharacterSlotSave(creatingCharacterId, creatingArtifactKey, characterName)))
+  const createdSlotId = creatingSlotId
+  closeCharacterCreator()
+  switchProfileSlot(createdSlotId, true)
+  profilePanel.hidden = true
+  profilePanel.classList.remove('blocking')
+  toast(`角色创建完成：${characterName}。`)
+}
+
+function switchProfileSlot(slotId: CharacterSlotId, forceReload = false) {
   if (!activeProfile) return
   const nextSlotId = safeSlotId(slotId)
-  if (activeProfile.activeSlotId === nextSlotId) return
-  saveGame()
+  if (activeProfile.activeSlotId === nextSlotId && !forceReload) return
+  if (!profileSlotHasSave(activeProfile.id, nextSlotId)) {
+    openCharacterCreator(nextSlotId)
+    return
+  }
+  if (!(forceReload && activeProfile.activeSlotId === nextSlotId) && profileSlotHasSave(activeProfile.id, safeSlotId(activeProfile.activeSlotId))) saveGame()
   const index = readProfileIndex()
   const profile = index.profiles.find((item) => item.id === activeProfile?.id)
   if (!profile) return
@@ -1794,6 +1972,7 @@ function resetRuntimeState() {
   state.mutations = { ...baseMutations }
   state.techniques = { ...baseTechniques }
   state.activeDungeon = 'mossCave'
+  state.characterName = ''
   state.activeCharacter = 'sword'
   state.ownedCharacters = ['sword']
   state.characterShards = { ...baseCharacterShards }
@@ -1879,8 +2058,19 @@ function activateProfile(profileId: string, options: { cloud?: boolean } = {}) {
   writeProfileIndex(index)
   activeProfile = profile
   sessionStorage.setItem(PROFILE_SESSION_KEY, profile.id)
-  profilePanel.hidden = true
   resetRuntimeState()
+  const activeSlotId = safeSlotId(profile.activeSlotId)
+  if (!profileSlotHasSave(profile.id, activeSlotId)) {
+    profilePanel.hidden = false
+    profilePanel.classList.add('blocking', 'signed-in')
+    toast(`先创建${PROFILE_SLOT_LABELS[activeSlotId]}。`)
+    updateProfileUi()
+    openCharacterCreator(activeSlotId)
+    updateHud()
+    updateGuide()
+    return
+  }
+  profilePanel.hidden = true
   loadGame()
   ensureEnemies()
   toast(`已进入 ${profile.name} 的${cloudAccountActive ? '云端账号' : '本地档案'}。`)
@@ -2101,6 +2291,7 @@ function loadGame() {
     state.techniques = { ...baseTechniques, ...(save.techniques ?? {}) }
     artifactKeys.forEach((key) => syncArtifactMutation(key, true))
     state.activeDungeon = dungeonDefs.some((dungeon) => dungeon.id === save.activeDungeon) ? save.activeDungeon! : 'mossCave'
+    state.characterName = normalizeCharacterName(save.characterName ?? '')
     state.activeCharacter = save.activeCharacter ?? 'sword'
     state.ownedCharacters = save.ownedCharacters?.length ? save.ownedCharacters : ['sword']
     state.characterShards = { ...baseCharacterShards, ...(save.characterShards ?? {}) }
@@ -2170,6 +2361,7 @@ function saveGame() {
     activeCharacter: state.activeCharacter,
     ownedCharacters: state.ownedCharacters,
     characterShards: state.characterShards,
+    characterName: state.characterName,
     savedAt: Date.now(),
   }
   localStorage.setItem(profileSaveKey(activeProfile.id), JSON.stringify(save))
@@ -7631,8 +7823,9 @@ function updateHeroShowcase() {
   const portraitUrl = versionedAsset(character.portrait)
   if (heroShowcaseImg.getAttribute('src') !== portraitUrl) heroShowcaseImg.src = portraitUrl
   const weapon = state.gear.weapon?.name ?? '无武器'
+  const displayName = state.characterName || character.name
   heroShowcaseLevel.textContent = cultivationRealm()
-  heroShowcaseTitle.textContent = `${character.name} · ${state.mode === 'dungeon' ? dungeonStageTitle() : worldStageTitle()}`
+  heroShowcaseTitle.textContent = `${displayName} · ${character.name} · ${state.mode === 'dungeon' ? dungeonStageTitle() : worldStageTitle()}`
   heroShowcaseGear.textContent = `本命术·${character.innateSkill} | ${character.title} | ${weapon}`
   heroShowcaseImg.classList.toggle('facing-left', shouldFlipHeroSprite())
 }
@@ -7792,6 +7985,13 @@ function bindControls() {
   })
   profileChangePassword.addEventListener('click', () => {
     void changeCloudPassword()
+  })
+  profileCreateCancel.addEventListener('click', closeCharacterCreator)
+  profileCreateConfirm.addEventListener('click', confirmCreateCharacterSlot)
+  profileCreateSlot.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return
+    event.preventDefault()
+    confirmCreateCharacterSlot()
   })
   profilePasswordBox.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter') return
