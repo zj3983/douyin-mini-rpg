@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { characterTechniqueCatalog, techniqueSpecsForCharacter } from '../src/progression.ts'
+import { characterTechniqueCatalog, techniqueProgressForCharacter, techniqueSpecsForCharacter } from '../src/progression.ts'
 
 test('each character has three profession-specific soul evolution cards', () => {
   for (const characterId of ['sword', 'thunder', 'flame', 'wood']) {
@@ -37,4 +37,18 @@ test('profession technique art files exist for every soul evolution card', () =>
       assert.equal(existsSync(filePath), true, `${spec.art} should exist`)
     }
   }
+})
+
+test('technique progress summarizes the active character routes', () => {
+  const progress = techniqueProgressForCharacter('thunder', { thunderMark: 2, thunderEcho: 6 }, 6)
+
+  assert.deepEqual(progress.map((item) => item.id), ['tech-thunder-mark', 'tech-thunder-echo', 'tech-thunder-cloud'])
+  assert.equal(progress[0].level, 2)
+  assert.equal(progress[0].maxLevel, 6)
+  assert.equal(progress[0].percent, 33)
+  assert.equal(progress[0].label, '2/6')
+  assert.equal(progress[1].capped, true)
+  assert.equal(progress[1].percent, 100)
+  assert.equal(progress[2].level, 0)
+  assert.equal(progress[2].capped, false)
 })

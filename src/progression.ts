@@ -131,3 +131,22 @@ export function techniqueArtForId(id: string) {
   }
   return null
 }
+
+export function techniqueProgressForCharacter(
+  characterId: ProgressionCharacterId,
+  levels: Record<string, number | undefined>,
+  maxLevel = 6,
+) {
+  return techniqueSpecsForCharacter(characterId).map((spec) => {
+    const rawLevel = Math.floor(Number(levels[spec.key]) || 0)
+    const level = Math.max(0, Math.min(maxLevel, rawLevel))
+    return {
+      ...spec,
+      level,
+      maxLevel,
+      percent: Math.round((level / maxLevel) * 100),
+      label: `${level}/${maxLevel}`,
+      capped: level >= maxLevel,
+    }
+  })
+}

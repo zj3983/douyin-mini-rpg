@@ -1,5 +1,5 @@
 import './style.css'
-import { techniqueArtForId, techniqueSpecsForCharacter } from './progression'
+import { techniqueArtForId, techniqueProgressForCharacter, techniqueSpecsForCharacter } from './progression'
 
 type Rarity = '普通' | '稀有' | '史诗' | '传说'
 type Mode = 'wild' | 'dungeon'
@@ -661,6 +661,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <section id="skill-panel" class="page-view page-sheet skill-sheet" data-page="artifact" hidden>
       <div class="sheet-head skill-head"><div><h2 id="artifact-page-title">法宝匣</h2><small id="artifact-page-subtitle">副本带回的法宝会在这里显形</small></div><button id="close-skill-panel" class="page-close" type="button">x</button></div>
       <div id="skill-points" class="rates"></div>
+      <div id="technique-progress" class="technique-progress"></div>
       <div id="skill-list" class="skill-list"></div>
     </section>
     </section>
@@ -829,6 +830,7 @@ const bagList = document.querySelector<HTMLDivElement>('#bag-list')!
 const skillPanel = document.querySelector<HTMLDivElement>('#skill-panel')!
 const closeSkillPanel = document.querySelector<HTMLButtonElement>('#close-skill-panel')!
 const skillPointsLabel = document.querySelector<HTMLDivElement>('#skill-points')!
+const techniqueProgress = document.querySelector<HTMLDivElement>('#technique-progress')!
 const skillList = document.querySelector<HTMLDivElement>('#skill-list')!
 const artifactPageTitle = document.querySelector<HTMLElement>('#artifact-page-title')!
 const artifactPageSubtitle = document.querySelector<HTMLElement>('#artifact-page-subtitle')!
@@ -3236,6 +3238,7 @@ function renderSkillPanel() {
     <span>已获 <b>${ownedCount}/${artifactKeys.length}</b></span>
     <span>满阶 <b>${maxedCount}</b></span>
   `
+  renderTechniqueProgressPanel()
   skillList.innerHTML = ''
 
   artifactRarityOrder.forEach((rarity) => {
@@ -3460,6 +3463,57 @@ function spawnEnemy(elite = false) {
     castCd: nextEnemyCastCooldown({ elite, boss: false }),
     casting: 0,
   })
+}
+
+function renderTechniqueProgressPanel() {
+  const character = activeCharacter()
+  const progress = techniqueProgressForCharacter(state.activeCharacter, state.techniques, techniqueMaxLevel)
+  const totalLevel = progress.reduce((sum, item) => sum + item.level, 0)
+  techniqueProgress.innerHTML = `
+    <div class="technique-progress-head">
+      <div><small>${character.name}</small><b>本命术修行</b></div>
+      <span>${totalLevel}/${progress.length * techniqueMaxLevel}</span>
+    </div>
+    <div class="technique-route-list"></div>
+  `
+  const list = techniqueProgress.querySelector<HTMLDivElement>('.technique-route-list')!
+  progress.forEach((item) => {
+    const row = document.createElement('button')
+    row.type = 'button'
+    row.className = `technique-route ${item.level > 0 ? 'learned' : 'locked'} ${item.capped ? 'capped' : ''}`
+    row.style.setProperty('--route-color', item.color)
+    row.innerHTML = `
+      <i><img src="${versionedAsset(item.art)}" alt=""></i>
+      <b>${item.title}</b>
+      <small>${item.capped ? '圆满' : `第 ${item.label} 重`}</small>
+      <span><em style="width:${item.percent}%"></em></span>
+    `
+    row.addEventListener('click', () => {
+      openTechniqueDetail(item.title, `${character.name} · 本命术 ${item.label}${item.capped ? ' · 已圆满' : ''}`, item.desc, item.art, item.color, item.percent)
+    })
+    list.append(row)
+  })
+}
+
+function openTechniqueDetail(title: string, meta: string, desc: string, art: string, color: string, progress: number) {
+  artifactDetailPanel.hidden = false
+  artifactDetailPanel.style.setProperty('--item-color', color)
+  artifactDetailPanel.style.setProperty('--rarity-color', color)
+  artifactDetailPanel.innerHTML = `
+    <div class="artifact-focus-card artifact-modal-card owned" role="dialog" aria-modal="true" aria-label="${title}详情">
+      <button class="artifact-modal-close" type="button" aria-label="关闭本命术详情">x</button>
+      <div class="artifact-hero-art"><img class="technique-detail-art" src="${versionedAsset(art)}" alt=""></div>
+      <div class="artifact-copy">
+        <small>本命术修行</small>
+        <b>${title}</b>
+        <span>${meta}</span>
+        <p>${desc}</p>
+      </div>
+      <div class="artifact-meter"><i style="width:${Math.max(0, Math.min(100, progress))}%"></i></div>
+      <div class="artifact-source"><b>修行方式：</b><span>吸收魂质升级后，在魂质进化中选择对应本命术卡。</span></div>
+    </div>
+  `
+  artifactDetailPanel.querySelector<HTMLButtonElement>('.artifact-modal-close')?.addEventListener('click', closeArtifactDetail)
 }
 
 function ensureEnemies() {
