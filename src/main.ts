@@ -414,10 +414,17 @@ const dungeonDefs: DungeonDef[] = [
 ]
 
 const characters: Record<CharacterId, CharacterDef> = {
-  sword: { id: 'sword', name: '青岚剑修', title: '剑匣亲和 / 重尺成长', need: 20, color: '#67e8f9', portrait: '/assets/generated/portrait-sword.webp', battle: '/assets/generated/character-sword.png', starter: { slash: 2, orbit: 1 }, innateSkill: '御剑术', desc: '自带御剑术，飞剑会自动出鞘穿刺再回到身边；获得剑类法宝后亲和更高。' },
-  thunder: { id: 'thunder', name: '九霄雷使', title: '雷印亲和 / 群怪压制', need: 30, color: '#38bdf8', portrait: '/assets/generated/portrait-thunder.webp', battle: '/assets/generated/character-thunder.png', starter: { chain: 3, burst: 1 }, innateSkill: '雷印诀', desc: '自带雷印诀，后续会扩展为标记和弹射；获得雷印法宝后更适合处理密集怪潮。' },
-  flame: { id: 'flame', name: '莲火符师', title: '火鼎亲和 / 范围爆发', need: 30, color: '#fb923c', portrait: '/assets/generated/portrait-flame.webp', battle: '/assets/generated/character-flame.png', starter: { flame: 3, burst: 1 }, innateSkill: '莲火符', desc: '自带莲火符，后续会扩展为符阵铺场；获得火鼎法宝后莲火范围更大。' },
-  wood: { id: 'wood', name: '青木灵医', title: '灵瓶亲和 / 稳定刷图', need: 25, color: '#86efac', portrait: '/assets/generated/portrait-wood.webp', battle: '/assets/generated/character-wood.png', starter: { regen: 3, slash: 1 }, innateSkill: '回元息', desc: '自带回元息，后续会扩展为护身和回复；获得回复法宝后续航更强。' },
+  sword: { id: 'sword', name: '青岚剑修', title: '飞剑穿刺 / 攻速均衡', need: 20, color: '#67e8f9', portrait: '/assets/generated/portrait-sword.webp', battle: '/assets/generated/character-sword.png', starter: { slash: 2, orbit: 1 }, innateSkill: '御剑术', desc: '自带御剑术，飞剑会自动出鞘走弧线穿刺，再回到身边；获得剑类法宝后穿透更强。' },
+  thunder: { id: 'thunder', name: '九霄雷使', title: '雷印弹射 / 法力成长', need: 30, color: '#38bdf8', portrait: '/assets/generated/portrait-thunder.webp', battle: '/assets/generated/character-thunder.png', starter: { chain: 3, burst: 1 }, innateSkill: '雷印诀', desc: '自带雷印诀，自动在怪群间落下雷印并弹射；法力成长更高，适合清理密集怪潮。' },
+  flame: { id: 'flame', name: '莲火符师', title: '符火爆发 / 范围压制', need: 30, color: '#fb923c', portrait: '/assets/generated/portrait-flame.webp', battle: '/assets/generated/character-flame.png', starter: { flame: 3, burst: 1 }, innateSkill: '莲火符', desc: '自带莲火符，自动选择怪群中心引爆符火；爆发高但身板较脆，获得火鼎法宝后范围更大。' },
+  wood: { id: 'wood', name: '青木灵医', title: '回元护身 / 生命成长', need: 25, color: '#86efac', portrait: '/assets/generated/portrait-wood.webp', battle: '/assets/generated/character-wood.png', starter: { regen: 3, slash: 1 }, innateSkill: '回元息', desc: '自带回元息，血量下降或被围住时自动回元护身；生命成长更高，适合稳定推进副本。' },
+}
+
+const characterGrowth: Record<CharacterId, { atk: number; hp: number; mana: number; cd: number }> = {
+  sword: { atk: 1.08, hp: 1, mana: 1, cd: 1 },
+  thunder: { atk: 0.96, hp: 0.96, mana: 1.24, cd: 0.92 },
+  flame: { atk: 1.04, hp: 0.92, mana: 1.18, cd: 1.04 },
+  wood: { atk: 0.9, hp: 1.22, mana: 1.08, cd: 1.08 },
 }
 
 const artifactDefs: Record<ArtifactKey, ArtifactDef> = {
@@ -1790,6 +1797,8 @@ function closeCharacterCreator() {
 function renderCharacterCreator() {
   profileCharacterOptions.innerHTML = ''
   ;(Object.values(characters) as CharacterDef[]).forEach((character) => {
+    const growth = characterGrowth[character.id]
+    const growthText = `攻${Math.round(growth.atk * 100)}% 血${Math.round(growth.hp * 100)}% 法${Math.round(growth.mana * 100)}%`
     const option = document.createElement('button')
     option.type = 'button'
     option.className = `profile-choice ${creatingCharacterId === character.id ? 'active' : ''}`
@@ -1797,7 +1806,7 @@ function renderCharacterCreator() {
     option.innerHTML = `
       <img src="${versionedAsset(character.portrait)}" alt="">
       <span>${character.name}</span>
-      <small>${character.innateSkill}</small>
+      <small>${character.innateSkill} · ${growthText}</small>
     `
     option.addEventListener('click', () => {
       creatingCharacterId = character.id
@@ -2385,7 +2394,8 @@ function claimDailyReward() {
 }
 
 function totalAtk() {
-  return state.hero.baseAtk + state.hero.level * levelStatGrowth.atk + effectiveSkill('slash') * 4 + effectiveSkill('needle') * 2 + effectiveSkill('seal') * 3 + state.mutations.swordRide * 3 + equipmentStat(state.gear.weapon, 'atk')
+  const base = state.hero.baseAtk + state.hero.level * levelStatGrowth.atk + effectiveSkill('slash') * 4 + effectiveSkill('needle') * 2 + effectiveSkill('seal') * 3 + state.mutations.swordRide * 3 + equipmentStat(state.gear.weapon, 'atk')
+  return Math.round(base * characterGrowth[state.activeCharacter].atk)
 }
 
 function cultivationRealm(level = state.hero.level) {
@@ -2400,11 +2410,13 @@ function cultivationRequirement(level: number) {
 }
 
 function maxHp() {
-  return state.hero.baseHp + state.hero.level * levelStatGrowth.hp + effectiveSkill('regen') * 5 + effectiveSkill('bell') * 10 + effectiveSkill('seal') * 8 + equipmentStat(state.gear.armor, 'hp')
+  const base = state.hero.baseHp + state.hero.level * levelStatGrowth.hp + effectiveSkill('regen') * 5 + effectiveSkill('bell') * 10 + effectiveSkill('seal') * 8 + equipmentStat(state.gear.armor, 'hp')
+  return Math.round(base * characterGrowth[state.activeCharacter].hp)
 }
 
 function skillPower() {
-  return state.hero.skillPower + state.hero.level * levelStatGrowth.mana + effectiveSkill('burst') * 6 + effectiveSkill('mirror') * 4 + effectiveSkill('banner') * 3 + state.mutations.flameLotus * 4 + equipmentStat(state.gear.core, 'skill')
+  const base = state.hero.skillPower + state.hero.level * levelStatGrowth.mana + effectiveSkill('burst') * 6 + effectiveSkill('mirror') * 4 + effectiveSkill('banner') * 3 + state.mutations.flameLotus * 4 + equipmentStat(state.gear.core, 'skill')
+  return Math.round(base * characterGrowth[state.activeCharacter].mana)
 }
 
 function grantExp(amount: number) {
@@ -4540,8 +4552,16 @@ function update(dt: number) {
   updateHud()
 }
 
+function innateCooldown(base: number, min = 0.72) {
+  return Math.max(min, (base - state.autoHaste * 0.045 - effectiveSkill('fan') * 0.04) * characterGrowth[state.activeCharacter].cd)
+}
+
 function autoCharacterSkill() {
-  if (state.characterSkillCd > 0 || state.enemies.length === 0) return false
+  if (state.characterSkillCd > 0) return false
+  if (state.activeCharacter === 'wood') return autoWoodInnateSkill()
+  if (state.enemies.length === 0) return false
+  if (state.activeCharacter === 'thunder') return autoThunderInnateSkill()
+  if (state.activeCharacter === 'flame') return autoFlameInnateSkill()
   if (state.activeCharacter !== 'sword') return false
   const target = nearestEnemy()
   if (!target) return false
@@ -4568,7 +4588,7 @@ function autoCharacterSkill() {
   const arcSign = Math.sin(performance.now() * 0.0017 + enemyId) >= 0 ? 1 : -1
   heroFacing = Math.cos(angle) < 0 ? Math.PI : 0
   lastAttackFlash = performance.now()
-  state.characterSkillCd = Math.max(0.72, 1.9 - returnRank * 0.12 - state.autoHaste * 0.045 - effectiveSkill('fan') * 0.04 - effectiveSkill('slash') * 0.018)
+  state.characterSkillCd = Math.max(0.72, (1.9 - returnRank * 0.12 - state.autoHaste * 0.045 - effectiveSkill('fan') * 0.04 - effectiveSkill('slash') * 0.018) * characterGrowth.sword.cd)
   sfx.slash(true)
   addParticleBurst(start.x, start.y, '#a5f3fc', 10, 0.78, 'shard')
   state.effects.push({
@@ -4629,6 +4649,154 @@ function autoCharacterSkill() {
       .forEach((enemy) => damageEnemy(enemy, Math.round(damage * 0.34)))
   }
   announceSkill(shadowRank > 0 ? '御剑术·分光' : '御剑术', '本命术发动', '#a5f3fc')
+  return true
+}
+
+function autoThunderInnateSkill() {
+  const chainSkill = effectiveSkill('chain')
+  const range = 360 + Math.min(90, state.hero.level * 2) + chainSkill * 10
+  const targets = state.enemies
+    .filter((enemy) => enemyVisibleForCombat(enemy) && Math.hypot(enemy.x - state.hero.x, enemy.y - state.hero.y) <= range)
+    .sort((a, b) => Math.hypot(a.x - state.hero.x, a.y - state.hero.y) - Math.hypot(b.x - state.hero.x, b.y - state.hero.y))
+    .slice(0, Math.min(8, 3 + Math.floor(chainSkill / 3) + Math.floor(state.hero.level / 18)))
+  if (targets.length === 0) return false
+
+  state.characterSkillCd = innateCooldown(1.65 - chainSkill * 0.03, 0.76)
+  heroFacing = targets[0].x < state.hero.x ? Math.PI : 0
+  lastAttackFlash = performance.now()
+  sfx.thunder()
+  flashScreen('rgba(186,230,253,.2)', 0.16, 0.16)
+  addParticleBurst(state.hero.x, state.hero.y - 86, '#bae6fd', 16, 0.95, 'rune')
+  state.effects.push({
+    x: state.hero.x,
+    y: state.hero.y - 76,
+    radius: 120 + chainSkill * 5,
+    color: '#bae6fd',
+    life: 0.42,
+    maxLife: 0.42,
+    kind: 'thunderseal',
+    arc: 2,
+  })
+
+  let from: Vec = { x: state.hero.x, y: state.hero.y - 74 }
+  const baseDamage = Math.round(totalAtk() * 0.62 + skillPower() * 0.68 + state.hero.level * 2.1)
+  targets.forEach((enemy, index) => {
+    const hitY = enemy.y - (enemy.boss ? 78 : enemy.kind === 'bat' ? 54 : 38)
+    const falloff = Math.max(0.52, 1 - index * 0.08)
+    damageEnemy(enemy, Math.round(baseDamage * falloff))
+    addParticleBurst(enemy.x, hitY, index === 0 ? '#38bdf8' : '#bae6fd', index === 0 ? 12 : 7, 0.72, 'spark')
+    state.effects.push({
+      x: enemy.x,
+      y: hitY,
+      radius: 72 + chainSkill * 4,
+      color: index === 0 ? '#38bdf8' : '#e0f2fe',
+      life: 0.3,
+      maxLife: 0.3,
+      kind: 'thunderseal',
+      arc: 2,
+    })
+    state.effects.push({
+      x: (from.x + enemy.x) / 2,
+      y: (from.y + hitY) / 2 - 18,
+      radius: Math.hypot(enemy.x - from.x, hitY - from.y),
+      color: index === 0 ? '#38bdf8' : '#bae6fd',
+      life: 0.18,
+      maxLife: 0.18,
+      kind: 'bolt',
+      angle: Math.atan2(hitY - from.y, enemy.x - from.x),
+      arc: 2,
+    })
+    from = { x: enemy.x, y: hitY }
+  })
+  announceSkill('雷印诀', '本命术发动', '#bae6fd')
+  return true
+}
+
+function autoFlameInnateSkill() {
+  const flameSkill = effectiveSkill('flame')
+  const target = state.enemies
+    .filter((enemy) => enemyVisibleForCombat(enemy))
+    .map((enemy) => ({
+      enemy,
+      score: state.enemies.filter((other) => enemyVisibleForCombat(other) && Math.hypot(other.x - enemy.x, other.y - enemy.y) <= 132).length + (enemy.boss ? 4 : enemy.elite ? 2 : 0),
+    }))
+    .sort((a, b) => b.score - a.score)[0]
+  if (!target || Math.hypot(target.enemy.x - state.hero.x, target.enemy.y - state.hero.y) > 410) return false
+
+  const radius = 108 + flameSkill * 7 + Math.min(42, state.hero.level * 1.2)
+  state.characterSkillCd = innateCooldown(2.08 - flameSkill * 0.035, 1.02)
+  heroFacing = target.enemy.x < state.hero.x ? Math.PI : 0
+  lastAttackFlash = performance.now()
+  sfx.flame()
+  flashScreen('rgba(251,146,60,.18)', 0.14, 0.16)
+  addParticleBurst(target.enemy.x, target.enemy.y - 44, '#fb923c', 20, 0.9, 'ember')
+  state.effects.push({
+    x: target.enemy.x,
+    y: target.enemy.y - 6,
+    radius,
+    color: '#fb923c',
+    life: 0.42,
+    maxLife: 0.42,
+    kind: 'flare',
+  })
+  state.effects.push({
+    x: target.enemy.x,
+    y: target.enemy.y + 14,
+    radius: radius + 42,
+    color: '#fed7aa',
+    life: 0.5,
+    maxLife: 0.5,
+    kind: 'firesea',
+  })
+  const damage = Math.round(skillPower() * 0.82 + totalAtk() * 0.48 + state.hero.level * 2.2)
+  state.enemies
+    .filter((enemy) => enemyVisibleForCombat(enemy) && Math.hypot(enemy.x - target.enemy.x, enemy.y - target.enemy.y) <= radius)
+    .slice(0, 10)
+    .forEach((enemy, index) => damageEnemy(enemy, Math.round(damage * Math.max(0.55, 1 - index * 0.05))))
+  announceSkill('莲火符', '本命术发动', '#fed7aa')
+  return true
+}
+
+function autoWoodInnateSkill() {
+  const max = maxHp()
+  const nearby = state.enemies
+    .filter((enemy) => enemyVisibleForCombat(enemy) && Math.hypot(enemy.x - state.hero.x, enemy.y - state.hero.y) <= 190)
+    .slice(0, 6)
+  const needsHeal = state.hero.hp < max * 0.94
+  if (!needsHeal && nearby.length < 2) return false
+
+  state.characterSkillCd = innateCooldown(2.46 - effectiveSkill('regen') * 0.04, 1.28)
+  lastAttackFlash = performance.now()
+  sfx.heal()
+  const heal = Math.round(max * 0.1 + skillPower() * 1.15 + state.hero.level * 1.6)
+  const before = state.hero.hp
+  state.hero.hp = Math.min(max, state.hero.hp + heal)
+  state.healPulse = 1
+  addParticleBurst(state.hero.x, state.hero.y - 54, '#86efac', 18, 0.82, 'rune')
+  state.effects.push({
+    x: state.hero.x,
+    y: state.hero.y - 26,
+    radius: 122 + effectiveSkill('regen') * 7,
+    color: '#86efac',
+    life: 0.52,
+    maxLife: 0.52,
+    kind: 'heal',
+  })
+  state.effects.push({
+    x: state.hero.x,
+    y: state.hero.y - 24,
+    radius: 154 + effectiveSkill('regen') * 9,
+    color: '#bbf7d0',
+    life: 0.44,
+    maxLife: 0.44,
+    kind: 'ring',
+  })
+  if (state.hero.hp > before) state.texts.push({ x: state.hero.x, y: state.hero.y - 98, text: `+${state.hero.hp - before}`, color: '#bbf7d0', life: 0.82 })
+  nearby.forEach((enemy, index) => {
+    damageEnemy(enemy, Math.round(totalAtk() * 0.24 + skillPower() * 0.38 + state.hero.level * 1.2))
+    if (index < 3) addParticleBurst(enemy.x, enemy.y - 34, '#bbf7d0', 5, 0.55, 'rune')
+  })
+  announceSkill('回元息', '本命术发动', '#86efac')
   return true
 }
 
