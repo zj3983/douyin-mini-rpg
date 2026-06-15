@@ -830,7 +830,7 @@ button:disabled {
 
 .battle-view {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) 132px 78px;
+  grid-template-rows: minmax(0, 1fr) 184px 78px;
   overflow: hidden;
 }
 
@@ -1017,7 +1017,7 @@ canvas {
 
 .progress-panel {
   display: grid;
-  grid-template-rows: 24px 34px 30px 18px 18px;
+  grid-template-rows: 22px 38px 28px 28px 16px 16px;
   gap: 4px;
   align-items: stretch;
   padding: 7px 14px 8px;
@@ -1028,13 +1028,85 @@ canvas {
   line-height: 1.25;
 }
 
-.progress-panel > div:not(.progress-topline) {
+.progress-panel > div:not(.progress-topline):not(.skill-status) {
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   min-height: 13px;
   overflow-wrap: anywhere;
+}
+
+.skill-status {
+  --skill-color: #67e8f9;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: 17px 14px;
+  gap: 1px 8px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--skill-color) 45%, rgba(148, 163, 184, 0.2));
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 96% 50%, color-mix(in srgb, var(--skill-color) 22%, transparent), transparent 34%),
+    linear-gradient(90deg, rgba(2, 6, 23, 0.92), rgba(15, 23, 42, 0.76));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.skill-status.active {
+  border-color: color-mix(in srgb, var(--skill-color) 74%, rgba(255, 255, 255, 0.2));
+  box-shadow:
+    0 0 16px color-mix(in srgb, var(--skill-color) 22%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.skill-status div {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.skill-status small {
+  color: #9ca3af;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.skill-status b {
+  min-width: 0;
+  overflow: hidden;
+  color: #ecfeff;
+  font-size: 10.5px;
+  line-height: 1;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.skill-status span {
+  align-self: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: #07111f;
+  background: color-mix(in srgb, var(--skill-color) 72%, #ffffff);
+  font-size: 10px;
+  font-weight: 1000;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.skill-status em {
+  grid-column: 1 / -1;
+  min-width: 0;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--skill-color) 60%, #dbeafe);
+  font-size: 10px;
+  font-style: normal;
+  line-height: 1.1;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .guide-tip {
@@ -3797,7 +3869,7 @@ canvas {
   }
 
   .battle-view {
-    grid-template-rows: minmax(0, 1fr) 122px 64px;
+    grid-template-rows: minmax(0, 1fr) 160px 64px;
   }
 
   .topbar {
@@ -3839,8 +3911,24 @@ canvas {
   }
 
   .progress-panel {
-    grid-template-rows: 22px 30px 28px 16px 16px;
+    grid-template-rows: 20px 34px 22px 24px 14px 14px;
     padding: 5px 10px 6px;
+  }
+
+  .skill-status {
+    grid-template-rows: 15px 14px;
+    gap: 1px 6px;
+    padding: 3px 7px;
+  }
+
+  .skill-status b {
+    font-size: 10px;
+  }
+
+  .skill-status small,
+  .skill-status span,
+  .skill-status em {
+    font-size: 9px;
   }
 
   .battle-actions {

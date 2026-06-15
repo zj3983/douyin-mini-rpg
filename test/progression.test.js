@@ -3,7 +3,12 @@ import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { characterTechniqueCatalog, techniqueProgressForCharacter, techniqueSpecsForCharacter } from '../src/progression.ts'
+import {
+  characterTechniqueCatalog,
+  techniqueProgressForCharacter,
+  techniqueProgressTotal,
+  techniqueSpecsForCharacter,
+} from '../src/progression.ts'
 
 test('each character has three profession-specific soul evolution cards', () => {
   for (const characterId of ['sword', 'thunder', 'flame', 'wood']) {
@@ -51,4 +56,15 @@ test('technique progress summarizes the active character routes', () => {
   assert.equal(progress[1].percent, 100)
   assert.equal(progress[2].level, 0)
   assert.equal(progress[2].capped, false)
+})
+
+test('technique progress total rolls active character routes into one battle label', () => {
+  const total = techniqueProgressTotal('flame', { flameFocus: 2, flameSea: 1, thunderMark: 6 }, 6)
+
+  assert.deepEqual(total, {
+    level: 3,
+    maxLevel: 18,
+    percent: 17,
+    label: '3/18',
+  })
 })

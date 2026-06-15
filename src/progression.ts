@@ -150,3 +150,19 @@ export function techniqueProgressForCharacter(
     }
   })
 }
+
+export function techniqueProgressTotal(
+  characterId: ProgressionCharacterId,
+  levels: Record<string, number | undefined>,
+  maxLevel = 6,
+) {
+  const progress = techniqueProgressForCharacter(characterId, levels, maxLevel)
+  const level = progress.reduce((sum, item) => sum + item.level, 0)
+  const totalMaxLevel = progress.length * maxLevel
+  return {
+    level,
+    maxLevel: totalMaxLevel,
+    percent: totalMaxLevel > 0 ? Math.round((level / totalMaxLevel) * 100) : 0,
+    label: `${level}/${totalMaxLevel}`,
+  }
+}

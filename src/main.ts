@@ -1,5 +1,5 @@
 import './style.css'
-import { techniqueArtForId, techniqueProgressForCharacter, techniqueSpecsForCharacter } from './progression'
+import { techniqueArtForId, techniqueProgressForCharacter, techniqueProgressTotal, techniqueSpecsForCharacter } from './progression'
 
 type Rarity = '普通' | '稀有' | '史诗' | '传说'
 type Mode = 'wild' | 'dungeon'
@@ -537,6 +537,10 @@ const state = {
   flameCd: 0,
   characterSkillCd: 0,
   attackCd: 0,
+  recentSkillName: '',
+  recentSkillDesc: '',
+  recentSkillColor: '#67e8f9',
+  recentSkillPulse: 0,
   dungeonTime: 0,
   dungeonGoal: 12,
   dungeonStartKills: 0,
@@ -600,6 +604,11 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 
         <section class="progress-panel">
           <div class="progress-topline"><div id="message" class="message"></div></div>
+          <div id="skill-status" class="skill-status">
+            <div><small>本命术</small><b id="skill-status-name">御剑术</b></div>
+            <span id="skill-status-level">0/18</span>
+            <em id="skill-status-recent">等待灵息流转</em>
+          </div>
           <div id="guide-tip" class="guide-tip"></div>
           <div id="main-quest-label" class="main-quest-label">主线：等待同步</div>
           <div id="quest-label">任务：击杀 0/15</div>
@@ -847,6 +856,10 @@ const pagePanels: Record<AppPage, HTMLElement> = {
 }
 const evolutionPanel = document.querySelector<HTMLDivElement>('#evolution-panel')!
 const evolutionList = document.querySelector<HTMLDivElement>('#evolution-list')!
+const skillStatus = document.querySelector<HTMLDivElement>('#skill-status')!
+const skillStatusName = document.querySelector<HTMLElement>('#skill-status-name')!
+const skillStatusLevel = document.querySelector<HTMLElement>('#skill-status-level')!
+const skillStatusRecent = document.querySelector<HTMLElement>('#skill-status-recent')!
 const guideTip = document.querySelector<HTMLDivElement>('#guide-tip')!
 const mainQuestLabel = document.querySelector<HTMLDivElement>('#main-quest-label')!
 const heroShowcaseImg = document.querySelector<HTMLImageElement>('#hero-showcase-img')!
@@ -2039,6 +2052,10 @@ function resetRuntimeState() {
   state.flameCd = 0
   state.characterSkillCd = 0
   state.attackCd = 0
+  state.recentSkillName = ''
+  state.recentSkillDesc = ''
+  state.recentSkillColor = '#67e8f9'
+  state.recentSkillPulse = 0
   state.dungeonTime = 0
   state.dungeonGoal = 12
   state.dungeonStartKills = 0
@@ -3468,11 +3485,11 @@ function spawnEnemy(elite = false) {
 function renderTechniqueProgressPanel() {
   const character = activeCharacter()
   const progress = techniqueProgressForCharacter(state.activeCharacter, state.techniques, techniqueMaxLevel)
-  const totalLevel = progress.reduce((sum, item) => sum + item.level, 0)
+  const totalProgress = techniqueProgressTotal(state.activeCharacter, state.techniques, techniqueMaxLevel)
   techniqueProgress.innerHTML = `
     <div class="technique-progress-head">
       <div><small>${character.name}</small><b>本命术修行</b></div>
-      <span>${totalLevel}/${progress.length * techniqueMaxLevel}</span>
+      <span>${totalProgress.label}</span>
     </div>
     <div class="technique-route-list"></div>
   `
@@ -4629,6 +4646,7 @@ function update(dt: number) {
     state.screenFlash.life -= dt
     if (state.screenFlash.life <= 0) state.screenFlash = null
   }
+  state.recentSkillPulse = Math.max(0, state.recentSkillPulse - dt * 1.35)
   claimMainQuestIfReady()
   updateHud()
 }
@@ -8143,6 +8161,8 @@ function updateHeroShowcase() {
 
 function updateHud() {
   updateHeroShowcase()
+  const character = activeCharacter()
+  const techniqueTotal = techniqueProgressTotal(state.activeCharacter, state.techniques, techniqueMaxLevel)
   setText('ticket-count', String(state.tickets))
   setText('stone-count', String(state.spiritStones))
   setText('level-label', cultivationRealm())
@@ -8158,6 +8178,13 @@ function updateHud() {
   setText('wave-label', state.mode === 'dungeon' ? `第${state.dungeonFloor}/${state.dungeonMaxFloors}层 ${Math.ceil(state.dungeonTime)}s` : `第${currentStage}关`)
   setText('mode-label', state.mode === 'dungeon' ? `副本·${dungeonStageTitle()}` : `世界地图·${worldStageTitle(currentStage)}`)
   setText('message', state.message)
+  skillStatus.style.setProperty('--skill-color', state.recentSkillColor || character.color)
+  skillStatus.classList.toggle('active', state.recentSkillPulse > 0)
+  skillStatusName.textContent = `本命术·${character.innateSkill}`
+  skillStatusLevel.textContent = techniqueTotal.label
+  skillStatusRecent.textContent = state.recentSkillName
+    ? `${state.recentSkillName}｜${state.recentSkillDesc}`
+    : '自动施法准备中'
   updateMainQuestLabel()
   const extractDistance = state.dungeonGateFound
     ? Math.round(Math.hypot(state.hero.x - state.dungeonExtractX, state.hero.y - state.dungeonExtractY))
@@ -8201,6 +8228,10 @@ function toast(text: string) {
 }
 
 function announceSkill(name: string, desc: string, color = '#67e8f9') {
+  state.recentSkillName = name
+  state.recentSkillDesc = desc
+  state.recentSkillColor = color
+  state.recentSkillPulse = 1
   state.texts.push({ x: state.hero.x, y: state.hero.y - 126, text: `${name}·${desc}`, color, life: 0.82 })
 }
 
