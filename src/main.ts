@@ -1,4 +1,11 @@
 import './style.css'
+import {
+  DEFAULT_DUNGEON_MAX_FLOORS,
+  dungeonFloorKillGoal as plannedDungeonFloorKillGoal,
+  dungeonFloorMaterialGoal,
+  dungeonFloorName as plannedDungeonFloorName,
+  dungeonFloorPlan,
+} from './dungeonProgression'
 import { techniqueArtForId, techniqueProgressForCharacter, techniqueProgressTotal, techniqueSpecsForCharacter } from './progression'
 
 type Rarity = '普通' | '稀有' | '史诗' | '传说'
@@ -557,7 +564,7 @@ const state = {
   dungeonMaterials: 0,
   dungeonMaterialGoal: 3,
   dungeonFloor: 1,
-  dungeonMaxFloors: 3,
+  dungeonMaxFloors: DEFAULT_DUNGEON_MAX_FLOORS,
   dungeonGateFound: false,
   bossSpawned: false,
   lastSettlement: '',
@@ -629,7 +636,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <div class="dungeon-brief">
         <small>每日基础 3 张，世界 Boss 可掉落</small>
         <b>选择秘境，带回抽卡券、法宝和材料</b>
-        <span id="dungeon-brief-copy">副本分 3 层推进：前两层收集门钥进入下层，最终层可撤离或击败 Boss 带走完整收益。</span>
+        <span id="dungeon-brief-copy">副本分 5 层推进：清怪、门钥、精英、藏宝、守门 Boss 逐层深入，最终层击败 Boss 带走完整收益。</span>
       </div>
       <div id="dungeon-list" class="dungeon-list"></div>
     </section>
@@ -2072,7 +2079,7 @@ function resetRuntimeState() {
   state.dungeonMaterials = 0
   state.dungeonMaterialGoal = 3
   state.dungeonFloor = 1
-  state.dungeonMaxFloors = 3
+  state.dungeonMaxFloors = DEFAULT_DUNGEON_MAX_FLOORS
   state.dungeonGateFound = false
   state.bossSpawned = false
   state.lastSettlement = ''
@@ -2994,6 +3001,7 @@ function dungeonRewardPreview(dungeon: DungeonDef) {
     `券 ${dungeon.ticketBonus}+`,
     `灵石 ${minStones}+`,
     `精华 ${dungeon.skillBonus}+`,
+    '5层结算',
   ].join(' / ')
 }
 
@@ -3011,7 +3019,7 @@ function renderDungeonPanel() {
   dungeonEntrySummary.textContent = `入场卷 ${state.dungeonEntries}张 | 当前 ${cultivationRealm()}`
   dungeonBriefCopy.textContent = state.mode === 'dungeon'
     ? `正在挑战 ${activeDungeonDef().name}，回到战斗页可继续探索或靠近撤离门。`
-    : '副本会消耗 1 张入场卷；每日补足到 3 张，世界地图 Boss 有机会额外掉落。'
+    : '副本会消耗 1 张入场卷；每个副本 5 层推进，每日补足到 3 张，世界地图 Boss 有机会额外掉落。'
   dungeonList.innerHTML = ''
   dungeonDefs.forEach((dungeon) => {
     const theme = stageThemes[dungeon.themeIndex] ?? stageThemes[0]
@@ -3035,9 +3043,10 @@ function renderDungeonPanel() {
         <p>${dungeon.subtitle}</p>
       </div>
       <div class="dungeon-stats">
-        <span><small>时间</small><b>${dungeon.timeLimit}s</b></span>
-        <span><small>目标</small><b>${dungeon.killGoal}怪</b></span>
-        <span><small>门钥</small><b>${dungeon.materialGoal}</b></span>
+        <span><small>时间</small><b>${dungeon.timeLimit + DEFAULT_DUNGEON_MAX_FLOORS * 28}s</b></span>
+        <span><small>层数</small><b>${DEFAULT_DUNGEON_MAX_FLOORS}层</b></span>
+        <span><small>首层目标</small><b>${plannedDungeonFloorKillGoal(dungeon, 1, DEFAULT_DUNGEON_MAX_FLOORS)}怪</b></span>
+        <span><small>首层门钥</small><b>${dungeonFloorMaterialGoal(dungeon, 1, DEFAULT_DUNGEON_MAX_FLOORS)}</b></span>
       </div>
       <div class="dungeon-reward-row"><small>主要收益</small><b>${dungeonRewardPreview(dungeon)}</b></div>
       <div class="dungeon-drop-row">${drops}</div>
@@ -3543,8 +3552,9 @@ function ensureEnemies() {
   if (state.mode === 'wild') {
     state.enemies = state.enemies.filter((enemy) => enemy.x > state.hero.x - 260)
   }
-  const target = state.mode === 'dungeon' ? Math.min(7, 4 + dungeonTier() + state.dungeonFloor) : 6
-  while (state.enemies.length < target) spawnEnemy(state.mode === 'dungeon' && Math.random() < 0.25)
+  const floorPlan = state.mode === 'dungeon' ? currentDungeonFloorPlan() : null
+  const target = state.mode === 'dungeon' ? Math.min(9, 4 + dungeonTier() + Math.ceil(state.dungeonFloor * 0.75)) : 6
+  while (state.enemies.length < target) spawnEnemy(state.mode === 'dungeon' && Math.random() < (floorPlan?.eliteBias ?? 0.25))
 }
 
 function spawnBoss() {
@@ -3576,7 +3586,7 @@ function spawnBoss() {
     state.texts.push({ x: state.hero.x, y: state.hero.y - 126, text: `第${stage}关 Boss`, color: '#facc15', life: 1.2 })
     flashScreen('rgba(250,204,21,.18)', 0.16, 0.18)
   } else {
-    toast('副本 Boss 已出现，击败它完成结算。')
+    toast(`${dungeonFloorName()}守门 Boss 已出现，击败它完成副本结算。`)
   }
 }
 
@@ -3739,6 +3749,19 @@ function worldBossMaterialDrop(stage: number) {
   return addMaterialToBag(kind, count)
 }
 
+function dungeonMaterialKind(dungeon = activeDungeonDef()): MaterialKind {
+  const stageIndex = dungeon.themeIndex % stageThemes.length
+  if ([0, 2].includes(stageIndex)) return 'herb'
+  if ([3, 5].includes(stageIndex)) return 'ore'
+  return 'relic'
+}
+
+function addCarriedDungeonMaterial(kind: MaterialKind, count: number) {
+  if (kind === 'herb') state.dungeonHerbs += count
+  else if (kind === 'ore') state.dungeonOres += count
+  else state.dungeonChests += count
+}
+
 function worldBossSettlementRank(stage: number, passDrop: number) {
   if (stage % 10 === 0 && passDrop > 0) return 'SS'
   if (passDrop > 0 || stage % 5 === 0) return 'S'
@@ -3781,11 +3804,13 @@ function damageEnemy(enemy: Enemy, amount: number) {
   }
   state.kills += 1
   if (state.mode === 'dungeon') {
+    const floorPlan = currentDungeonFloorPlan()
     const dungeonKillNo = state.kills - state.dungeonStartKills
-    const expGain = enemy.elite ? 22 : 10
-    const ticketGain = enemy.elite || dungeonKillNo % 2 === 0 || Math.random() < 0.28 ? 1 : 0
-    const skillGain = enemy.elite && Math.random() < 0.55 ? 1 : 0
-    const stoneGain = enemy.elite ? 18 + Math.floor(dungeonKillNo / 2) : 7 + Math.floor(Math.random() * 6)
+    const rewardMultiplier = floorPlan.rewardMultiplier
+    const expGain = Math.round((enemy.elite ? 22 : 10) * rewardMultiplier)
+    const ticketGain = enemy.elite || dungeonKillNo % 2 === 0 || Math.random() < (floorPlan.role === 'treasure' ? 0.48 : 0.28) ? 1 : 0
+    const skillGain = enemy.elite && Math.random() < (floorPlan.role === 'treasure' ? 0.74 : 0.55) ? 1 : 0
+    const stoneGain = Math.round((enemy.elite ? 18 + Math.floor(dungeonKillNo / 2) : 7 + Math.floor(Math.random() * 6)) * rewardMultiplier)
     state.dungeonLootExp += expGain
     state.dungeonLootTickets += ticketGain
     state.dungeonLootSkill += skillGain
@@ -3794,6 +3819,13 @@ function damageEnemy(enemy: Enemy, amount: number) {
     if (ticketGain > 0) state.texts.push({ x: enemy.x + 18, y: enemy.y - 66, text: '抽卡券+1', color: '#facc15', life: 0.9 })
     if (skillGain > 0) state.texts.push({ x: enemy.x - 18, y: enemy.y - 86, text: '法宝精华+1', color: '#c084fc', life: 0.9 })
     state.texts.push({ x: enemy.x + 6, y: enemy.y - 104, text: `灵石+${stoneGain}`, color: '#fef08a', life: 0.85 })
+    if (floorPlan.role === 'treasure' && (enemy.elite || Math.random() < 0.42)) {
+      const materialKind = dungeonMaterialKind()
+      const materialCount = enemy.elite ? 2 : 1
+      addCarriedDungeonMaterial(materialKind, materialCount)
+      const materialName = materialDefs[materialKind].name
+      state.texts.push({ x: enemy.x - 8, y: enemy.y - 124, text: `${materialName}+${materialCount}`, color: rarityColor[materialDefs[materialKind].rarity], life: 0.95 })
+    }
     if (!state.dungeonGateFound && (enemy.elite || dungeonKillNo % 3 === 0 || Math.random() < 0.35)) {
       gainDungeonMaterial(enemy.x, enemy.y, enemy.elite ? '完整门钥' : '门钥碎片')
     }
@@ -4027,17 +4059,19 @@ function dungeonRank(kills: number, success: boolean, bossClear: boolean) {
 }
 
 function dungeonFloorName(floor = state.dungeonFloor) {
-  const names = ['外层', '中层', '深层', '核心层']
-  return names[Math.min(names.length - 1, Math.max(0, floor - 1))]
+  return plannedDungeonFloorName(floor)
 }
 
 function dungeonIsFinalFloor() {
   return state.dungeonFloor >= state.dungeonMaxFloors
 }
 
+function currentDungeonFloorPlan() {
+  return dungeonFloorPlan(activeDungeonDef(), state.dungeonFloor, state.dungeonMaxFloors)
+}
+
 function dungeonFloorKillGoal(dungeon = activeDungeonDef(), floor = state.dungeonFloor) {
-  if (dungeonTier(dungeon) <= 1) return Math.max(3, 2 + floor)
-  return Math.max(4, Math.ceil(dungeon.killGoal / state.dungeonMaxFloors) + floor)
+  return plannedDungeonFloorKillGoal(dungeon, floor, state.dungeonMaxFloors)
 }
 
 function dungeonFloorKills() {
@@ -4059,7 +4093,7 @@ function prepareDungeonFloor(floor: number) {
   const dungeon = activeDungeonDef()
   state.dungeonFloor = Math.max(1, Math.min(state.dungeonMaxFloors, floor))
   state.dungeonFloorStartKills = state.kills
-  state.dungeonMaterialGoal = Math.max(2, dungeon.materialGoal + state.dungeonFloor - 2)
+  state.dungeonMaterialGoal = dungeonFloorMaterialGoal(dungeon, state.dungeonFloor, state.dungeonMaxFloors)
   state.dungeonMaterials = 0
   state.dungeonGateFound = false
   state.bossSpawned = false
@@ -4080,13 +4114,31 @@ function advanceDungeonFloor() {
   sfx.gacha(2)
   flashScreen('rgba(56,189,248,.2)', 0.16, 0.22)
   addParticleBurst(state.hero.x, state.hero.y - 62, activeStageTheme().accent, 34, 1.05, 'rune')
-  toast(`进入${activeDungeonDef().name}第${state.dungeonFloor}/${state.dungeonMaxFloors}层：${dungeonFloorName()}。携带收益继续累计。`)
+  const plan = currentDungeonFloorPlan()
+  const roleHint = plan.role === 'boss'
+    ? '守门 Boss 即将出现'
+    : plan.role === 'treasure'
+      ? '藏宝层材料更多'
+      : plan.role === 'elite'
+        ? '精英层怪物更强'
+        : '继续收集门钥'
+  toast(`进入${activeDungeonDef().name}第${state.dungeonFloor}/${state.dungeonMaxFloors}层：${dungeonFloorName()}，${roleHint}。携带收益继续累计。`)
   saveGame()
   return true
 }
 
 function dungeonExplorationSummary() {
-  return `${dungeonFloorName()}门钥：${state.dungeonMaterials}/${state.dungeonMaterialGoal}，层数 ${state.dungeonFloor}/${state.dungeonMaxFloors}`
+  const plan = currentDungeonFloorPlan()
+  const roleLabel = plan.role === 'boss'
+    ? '守门Boss'
+    : plan.role === 'treasure'
+      ? '藏宝层'
+      : plan.role === 'elite'
+        ? '精英层'
+        : plan.role === 'key'
+          ? '灵脉门钥'
+          : '清怪推进'
+  return `${dungeonFloorName()}·${roleLabel}：门钥 ${state.dungeonMaterials}/${state.dungeonMaterialGoal}，层数 ${state.dungeonFloor}/${state.dungeonMaxFloors}`
 }
 
 function materialReward(kind: MaterialKind, count: number): Reward {
@@ -4195,7 +4247,7 @@ function leaveDungeon(message: string) {
   state.dungeonChests = 0
   state.dungeonMaterials = 0
   state.dungeonFloor = 1
-  state.dungeonMaxFloors = 3
+  state.dungeonMaxFloors = DEFAULT_DUNGEON_MAX_FLOORS
   state.dungeonFloorStartKills = state.kills
   state.dungeonGateFound = false
   toast(message)
@@ -4498,9 +4550,9 @@ function enterDungeon(dungeonId: DungeonId = state.activeDungeon) {
   state.enemies = []
   state.enemySkills = []
   state.soulOrbs = []
-  state.dungeonTime = dungeon.timeLimit + 54
+  state.dungeonMaxFloors = DEFAULT_DUNGEON_MAX_FLOORS
+  state.dungeonTime = dungeon.timeLimit + state.dungeonMaxFloors * 28
   state.dungeonStartKills = state.kills
-  state.dungeonMaxFloors = 3
   state.dungeonLootTickets = 0
   state.dungeonLootExp = 0
   state.dungeonLootSkill = 0
@@ -4512,7 +4564,7 @@ function enterDungeon(dungeonId: DungeonId = state.activeDungeon) {
   prepareDungeonFloor(1)
   sfx.gacha(3)
   flashScreen('rgba(56,189,248,.18)', 0.16, 0.2)
-  toast(`${dungeon.name}开启：第1/${state.dungeonMaxFloors}层。收集门钥逐层深入，最终层击败 Boss 后带走法宝。`)
+  toast(`${dungeon.name}开启：第1/${state.dungeonMaxFloors}层。前进、精英、藏宝、守门逐层推进，最终层击败 Boss 后带走法宝。`)
   advanceGuide(4)
   showPage('battle')
   saveGame()
@@ -8193,11 +8245,23 @@ function updateHud() {
   const dungeonKills = dungeonFloorKills()
   const floorGoal = dungeonFloorKillGoal(dungeon)
   const floorKillLabel = `${Math.min(dungeonKills, floorGoal)}/${floorGoal}`
+  const floorPlan = state.mode === 'dungeon' ? currentDungeonFloorPlan() : null
+  const floorRoleLabel = floorPlan
+    ? floorPlan.role === 'boss'
+      ? '守门Boss'
+      : floorPlan.role === 'treasure'
+        ? '藏宝'
+        : floorPlan.role === 'elite'
+          ? '精英'
+          : floorPlan.role === 'key'
+            ? '门钥'
+            : '清怪'
+    : ''
   const gateProgress = state.dungeonGateFound ? `${dungeonGateLabel()} ${extractDistance}m` : `找${dungeonIsFinalFloor() ? '撤离门' : '下层入口'}`
   const dungeonProgress = state.mode === 'dungeon'
     ? state.bossSpawned
-      ? `${dungeonFloorName()} ${state.dungeonFloor}/${state.dungeonMaxFloors} | Boss 战 | 门钥 ${state.dungeonMaterials}/${state.dungeonMaterialGoal} | 携带 券${state.dungeonLootTickets}/灵${state.dungeonLootStones}/精${state.dungeonLootSkill} | ${gateProgress}`
-      : `${dungeonFloorName()} ${state.dungeonFloor}/${state.dungeonMaxFloors} | 清怪 ${floorKillLabel} | 门钥 ${state.dungeonMaterials}/${state.dungeonMaterialGoal} | 携带 券${state.dungeonLootTickets}/灵${state.dungeonLootStones}/精${state.dungeonLootSkill} | ${gateProgress}`
+      ? `${dungeonFloorName()}·${floorRoleLabel} ${state.dungeonFloor}/${state.dungeonMaxFloors} | Boss 战 | 门钥 ${state.dungeonMaterials}/${state.dungeonMaterialGoal} | 携带 券${state.dungeonLootTickets}/灵${state.dungeonLootStones}/精${state.dungeonLootSkill} | ${gateProgress}`
+      : `${dungeonFloorName()}·${floorRoleLabel} ${state.dungeonFloor}/${state.dungeonMaxFloors} | 清怪 ${floorKillLabel} | 门钥 ${state.dungeonMaterials}/${state.dungeonMaterialGoal} | 携带 券${state.dungeonLootTickets}/灵${state.dungeonLootStones}/精${state.dungeonLootSkill} | ${gateProgress}`
     : ''
   setText('quest-label', dungeonProgress || (state.questClaimed ? `${stageStatus} | 副本卷 ${state.dungeonEntries}张，世界Boss可掉落` : `${stageStatus} | 主线击杀 ${Math.min(state.kills, state.questTarget)}/${state.questTarget}`))
   const artifactCount = artifactKeys.filter((key) => hasArtifact(key)).length
