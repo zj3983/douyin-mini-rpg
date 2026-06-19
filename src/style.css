@@ -1512,6 +1512,7 @@ canvas {
 }
 
 .dungeon-drop-row,
+.dungeon-floor-route,
 .dungeon-reward-row,
 .dungeon-trait,
 .dungeon-enter {
@@ -1544,6 +1545,62 @@ canvas {
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.dungeon-floor-route {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid color-mix(in srgb, var(--dungeon-color), transparent 68%);
+  border-radius: 10px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--dungeon-color), transparent 86%), rgba(2, 6, 23, 0.42)),
+    rgba(2, 6, 23, 0.32);
+}
+
+.dungeon-floor-route span {
+  min-width: 0;
+  padding: 4px 2px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 8px;
+  text-align: center;
+  background: rgba(2, 6, 23, 0.45);
+}
+
+.dungeon-floor-route span.role-elite {
+  border-color: rgba(251, 146, 60, 0.48);
+  background: rgba(67, 20, 7, 0.48);
+}
+
+.dungeon-floor-route span.role-treasure {
+  border-color: rgba(250, 204, 21, 0.5);
+  background: rgba(69, 26, 3, 0.46);
+}
+
+.dungeon-floor-route span.role-boss {
+  border-color: rgba(251, 113, 133, 0.52);
+  background: rgba(76, 5, 25, 0.46);
+}
+
+.dungeon-floor-route b,
+.dungeon-floor-route small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dungeon-floor-route b {
+  color: #f8fafc;
+  font-size: 9px;
+}
+
+.dungeon-floor-route small {
+  margin-top: 1px;
+  color: #93c5fd;
+  font-size: 7.5px;
 }
 
 .dungeon-drop-row {

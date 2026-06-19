@@ -5,6 +5,7 @@ import {
   dungeonFloorMaterialGoal,
   dungeonFloorName as plannedDungeonFloorName,
   dungeonFloorPlan,
+  dungeonFloorRoute,
 } from './dungeonProgression'
 import { techniqueArtForId, techniqueProgressForCharacter, techniqueProgressTotal, techniqueSpecsForCharacter } from './progression'
 
@@ -3032,6 +3033,9 @@ function renderDungeonPanel() {
     const drops = dungeon.artifactFocus
       .map((key) => `<span style="--item-color:${artifactDefs[key].color}">${artifactIcon(key)}<b>${artifactDefs[key].name}</b></span>`)
       .join('')
+    const floorRoute = dungeonFloorRoute(dungeon, DEFAULT_DUNGEON_MAX_FLOORS)
+      .map((floor) => `<span class="role-${floor.role}"><b>${floor.label}</b><small>${floor.hint}</small></span>`)
+      .join('')
     card.innerHTML = `
       <div class="dungeon-card-art">
         <img src="${versionedAsset(dungeon.image)}" alt="${dungeon.name}场景">
@@ -3049,6 +3053,7 @@ function renderDungeonPanel() {
         <span><small>首层门钥</small><b>${dungeonFloorMaterialGoal(dungeon, 1, DEFAULT_DUNGEON_MAX_FLOORS)}</b></span>
       </div>
       <div class="dungeon-reward-row"><small>主要收益</small><b>${dungeonRewardPreview(dungeon)}</b></div>
+      <div class="dungeon-floor-route" aria-label="${dungeon.name}五层路线">${floorRoute}</div>
       <div class="dungeon-drop-row">${drops}</div>
       <p class="dungeon-trait">${dungeon.trait}</p>
     `

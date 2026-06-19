@@ -10,6 +10,14 @@ export interface DungeonProgressionSource {
 
 const floorNames = ['外层', '灵脉层', '精英层', '藏宝层', '守门层'] as const
 const floorRoles: DungeonFloorRole[] = ['clear', 'key', 'elite', 'treasure', 'boss']
+const floorRouteLabels = ['外层', '灵脉', '精英', '藏宝', 'Boss'] as const
+const floorRouteHints: Record<DungeonFloorRole, string> = {
+  clear: '清怪推进',
+  key: '门钥成形',
+  elite: '精英压境',
+  treasure: '材料增幅',
+  boss: '守门结算',
+}
 
 export function dungeonFloorName(floor: number) {
   const index = Math.max(0, Math.min(floorNames.length - 1, Math.floor(floor) - 1))
@@ -63,4 +71,18 @@ export function dungeonFloorPlan(
     rewardMultiplier,
     requiresBoss: role === 'boss' || safeFloor >= maxFloors,
   }
+}
+
+export function dungeonFloorRoute(
+  dungeon: DungeonProgressionSource,
+  maxFloors = DEFAULT_DUNGEON_MAX_FLOORS,
+) {
+  return Array.from({ length: maxFloors }, (_, index) => {
+    const plan = dungeonFloorPlan(dungeon, index + 1, maxFloors)
+    return {
+      ...plan,
+      label: floorRouteLabels[Math.min(floorRouteLabels.length - 1, index)] ?? plan.name,
+      hint: floorRouteHints[plan.role],
+    }
+  })
 }
