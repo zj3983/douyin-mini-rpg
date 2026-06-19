@@ -7,6 +7,16 @@ import {
   dungeonFloorPlan,
   dungeonFloorRoute,
 } from './dungeonProgression'
+import {
+  profileAuthHintText,
+  profileAuthTitleText,
+  profileBusyText,
+  profileGuestBusyText,
+  profileSubmitText,
+  type ProfileAuthMode,
+  type ProfileBusyKind,
+  type ProfileFeedbackTone,
+} from './profileFeedback'
 import { techniqueArtForId, techniqueProgressForCharacter, techniqueProgressTotal, techniqueSpecsForCharacter } from './progression'
 
 type Rarity = '普通' | '稀有' | '史诗' | '传说'
@@ -15,7 +25,6 @@ type AppPage = 'battle' | 'dungeon' | 'gacha' | 'equip' | 'bag' | 'artifact'
 type Slot = 'weapon' | 'armor' | 'core'
 type AttackSource = 'manual' | 'skill'
 type EvolutionTier = '初阶' | '进阶' | '高阶'
-type ProfileAuthMode = 'login' | 'register'
 type EnemyKind = 'slime' | 'bat' | 'wolf' | 'crystal' | 'warden'
 type CharacterId = 'sword' | 'thunder' | 'flame' | 'wood'
 type ArtifactKey = 'slash' | 'burst' | 'regen' | 'chain' | 'orbit' | 'flame' | 'bell' | 'needle' | 'mirror' | 'fan' | 'banner' | 'seal'
@@ -719,13 +728,13 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <form id="profile-form" class="profile-card">
         <div class="profile-brand">
           <small>虚境试炼</small>
-          <strong>灵契接入舱</strong>
-          <span>云端账号 / 本机兜底</span>
+          <strong>进入虚境</strong>
+          <span>登录保存进度，游客可直接试玩</span>
         </div>
         <div class="profile-head">
           <div>
             <small>玩家认证</small>
-            <h2 id="profile-auth-title">登录档案</h2>
+            <h2 id="profile-auth-title">登录游戏</h2>
           </div>
           <button id="close-profile" class="profile-close" type="button">x</button>
         </div>
@@ -733,7 +742,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <button id="profile-mode-login" class="active" type="button">登录</button>
           <button id="profile-mode-register" type="button">注册</button>
         </div>
-        <p id="profile-mode-hint" class="profile-note">连接服务器账号，读取云端角色资料；服务器不可用时会退回本机档案。</p>
+        <p id="profile-mode-hint" class="profile-note">输入玩家名和密码读取存档；没有账号可切到注册，或游客试玩。</p>
         <div class="profile-current">
           <span id="profile-current">未登录</span>
           <button id="profile-switch" type="button">切换</button>
@@ -792,12 +801,12 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         </label>
         <label class="profile-field">
           <span>登录密码</span>
-          <input id="profile-pin" maxlength="18" type="password" autocomplete="current-password" placeholder="输入本机密码">
+          <input id="profile-pin" maxlength="18" type="password" autocomplete="current-password" placeholder="输入密码">
         </label>
-        <div id="profile-error" class="profile-error" hidden></div>
+        <div id="profile-error" class="profile-error" role="status" aria-live="polite" hidden></div>
         <div class="profile-actions">
-          <button id="profile-guest" class="profile-secondary" type="button">游客进入</button>
-          <button id="profile-submit" class="profile-submit" type="submit">登录并进入</button>
+          <button id="profile-guest" class="profile-secondary" type="button">游客试玩</button>
+          <button id="profile-submit" class="profile-submit" type="submit">登录进入</button>
         </div>
       </form>
     </section>
@@ -1657,14 +1666,14 @@ async function changeCloudPassword() {
     profileNewPin.focus()
     return
   }
-  setProfileBusy(true)
-  setProfileError('')
+  setProfileBusy(true, 'password')
+  setProfileError('正在修改账号密码...', 'info')
   try {
     await accountRequest<{ ok: boolean }>('/password', { method: 'PUT', json: { currentPassword, newPassword } })
     profileCurrentPin.value = ''
     profileNewPin.value = ''
     toast('账号密码已更新。')
-    setProfileError('密码已修改，下次登录请使用新密码。')
+    setProfileError('密码已修改，下次登录请使用新密码。', 'success')
   } catch (error) {
     setProfileError((error as Error).message)
   } finally {
@@ -1717,14 +1726,17 @@ async function pushCloudSave() {
   }
 }
 
-function setProfileError(message: string) {
+function setProfileError(message: string, tone: ProfileFeedbackTone = 'error') {
   profileError.hidden = !message
   profileError.textContent = message
+  profileError.dataset.tone = tone
 }
 
-function setProfileBusy(busy: boolean) {
+function setProfileBusy(busy: boolean, kind: ProfileBusyKind = profileAuthMode) {
   profileSubmit.disabled = busy
   profileGuest.disabled = busy
+  profileNameInput.disabled = busy
+  profilePinInput.disabled = busy
   profileModeLogin.disabled = busy
   profileModeRegister.disabled = busy
   profileSync.disabled = busy || !(cloudAccountActive && isServerProfile())
@@ -1735,6 +1747,11 @@ function setProfileBusy(busy: boolean) {
   profileCharacterName.disabled = busy
   profileCreateConfirm.disabled = busy || !creatingSlotId
   profileCreateCancel.disabled = busy
+  profileSubmit.textContent = profileSubmitText(
+    profileAuthMode,
+    busy && (kind === 'login' || kind === 'register') ? kind === profileAuthMode : false,
+  )
+  profileGuest.textContent = busy && kind === 'guest' ? '进入中...' : '游客试玩'
 }
 
 function setProfileAuthMode(mode: ProfileAuthMode) {
@@ -1743,11 +1760,9 @@ function setProfileAuthMode(mode: ProfileAuthMode) {
   profileModeLogin.classList.toggle('active', mode === 'login')
   profileModeRegister.classList.toggle('active', mode === 'register')
   profilePinInput.autocomplete = mode === 'login' ? 'current-password' : 'new-password'
-  profileAuthTitle.textContent = mode === 'login' ? '登录档案' : '创建档案'
-  profileSubmit.textContent = mode === 'login' ? '登录并进入' : '注册并进入'
-  profileModeHint.textContent = mode === 'login'
-    ? '连接服务器账号，读取云端角色资料；服务器不可用时会退回本机档案。'
-    : '创建服务器账号并开启云端存档；离线开发时会创建本机档案。'
+  profileAuthTitle.textContent = profileAuthTitleText(mode)
+  profileSubmit.textContent = profileSubmitText(mode)
+  profileModeHint.textContent = profileAuthHintText(mode)
   setProfileError('')
 }
 
@@ -1980,6 +1995,7 @@ function showProfilePanel(blocking = false, mode?: ProfileAuthMode) {
   profilePanel.hidden = false
   profilePanel.classList.toggle('blocking', blocking || !activeProfile)
   profilePanel.classList.toggle('signed-in', Boolean(activeProfile))
+  profilePanel.classList.toggle('auth-simple', !activeProfile)
   setProfileError('')
   updateProfileUi()
   const remembered = index.profiles.find((profile) => profile.id === index.activeId) ?? index.profiles[0]
@@ -1989,8 +2005,8 @@ function showProfilePanel(blocking = false, mode?: ProfileAuthMode) {
 
 async function logoutProfile() {
   if (!activeProfile) return
-  setProfileBusy(true)
-  setProfileError('')
+  setProfileBusy(true, 'logout')
+  setProfileError('正在保存并退出当前档案...', 'info')
   const wasCloud = cloudAccountActive && isServerProfile()
   try {
     saveGame()
@@ -2126,6 +2142,7 @@ function activateProfile(profileId: string, options: { cloud?: boolean } = {}) {
   if (!profileSlotHasSave(profile.id, activeSlotId)) {
     profilePanel.hidden = false
     profilePanel.classList.add('blocking', 'signed-in')
+    profilePanel.classList.remove('auth-simple')
     toast(`先创建${PROFILE_SLOT_LABELS[activeSlotId]}。`)
     updateProfileUi()
     openCharacterCreator(activeSlotId)
@@ -8376,14 +8393,15 @@ function bindControls() {
   profileModeLogin.addEventListener('click', () => setProfileAuthMode('login'))
   profileModeRegister.addEventListener('click', () => setProfileAuthMode('register'))
   profileSync.addEventListener('click', async () => {
-    setProfileBusy(true)
-    setProfileError('')
+    setProfileBusy(true, 'sync')
+    setProfileError('正在同步云端存档...', 'info')
     try {
       saveGame()
       const save = readActiveProfileSave()
       clearQueuedCloudSave()
       await syncCloudSaveNow(save)
       toast('云端同步完成。')
+      setProfileError('云端同步完成。', 'success')
     } catch (error) {
       cloudSyncState = 'error'
       cloudSyncMessage = (error as Error).message
@@ -8413,10 +8431,13 @@ function bindControls() {
     void logoutProfile()
   })
   profileGuest.addEventListener('click', () => {
+    setProfileBusy(true, 'guest')
+    setProfileError(profileGuestBusyText(), 'info')
     const index = readProfileIndex()
     const existing = index.profiles.find((profile) => profile.name === '游客')
     if (existing) {
       activateProfile(existing.id)
+      setProfileBusy(false)
       return
     }
     const profile = createProfile('游客', '')
@@ -8424,6 +8445,7 @@ function bindControls() {
     index.activeId = profile.id
     writeProfileIndex(index)
     activateProfile(profile.id)
+    setProfileBusy(false)
   })
   profileForm.addEventListener('submit', async (event) => {
     event.preventDefault()
@@ -8434,10 +8456,12 @@ function bindControls() {
       profileNameInput.focus()
       return
     }
-    setProfileBusy(true)
+    setProfileBusy(true, profileAuthMode)
+    setProfileError(profileBusyText(profileAuthMode), 'info')
     if (profileAuthMode === 'login') {
       try {
         const result = await accountRequest<{ user: ServerUser }>('/login', { method: 'POST', json: { username: name, password: pin } })
+        setProfileError('登录成功，正在进入游戏...', 'success')
         await activateServerUser(result.user)
         setProfileBusy(false)
         return
@@ -8447,6 +8471,7 @@ function bindControls() {
           setProfileBusy(false)
           return
         }
+        setProfileError('服务器暂不可用，正在检查本机档案...', 'info')
       }
     } else {
       if (pin.length < 4) {
@@ -8457,6 +8482,7 @@ function bindControls() {
       }
       try {
         const result = await accountRequest<{ user: ServerUser }>('/register', { method: 'POST', json: { username: name, password: pin } })
+        setProfileError('账号创建成功，正在进入游戏...', 'success')
         await activateServerUser(result.user)
         setProfileBusy(false)
         return
@@ -8466,6 +8492,7 @@ function bindControls() {
           setProfileBusy(false)
           return
         }
+        setProfileError('服务器暂不可用，正在创建本机档案...', 'info')
       }
     }
 
@@ -8483,6 +8510,7 @@ function bindControls() {
         setProfileBusy(false)
         return
       }
+      setProfileError('已找到本机档案，正在进入游戏...', 'success')
       activateProfile(existing.id)
       setProfileBusy(false)
       return
@@ -8504,6 +8532,7 @@ function bindControls() {
     index.profiles.push(profile)
     index.activeId = profile.id
     writeProfileIndex(index)
+    setProfileError('本机账号创建完成，正在进入游戏...', 'success')
     activateProfile(profile.id)
     setProfileBusy(false)
   })

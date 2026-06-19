@@ -181,6 +181,22 @@ button:disabled {
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.48), inset 0 0 28px rgba(250, 204, 21, 0.04);
 }
 
+.profile-panel.auth-simple .profile-card {
+  width: min(100%, 372px);
+  gap: 12px;
+  overflow: visible;
+  padding: 16px;
+}
+
+.profile-panel.auth-simple .profile-current,
+.profile-panel.auth-simple .profile-slots,
+.profile-panel.auth-simple .profile-create-slot,
+.profile-panel.auth-simple .profile-cloud,
+.profile-panel.auth-simple .profile-password,
+.profile-panel.auth-simple .profile-list {
+  display: none !important;
+}
+
 .profile-card::-webkit-scrollbar,
 .profile-list::-webkit-scrollbar {
   width: 0;
@@ -213,6 +229,19 @@ button:disabled {
   font-size: 25px;
   line-height: 1;
   letter-spacing: 0;
+}
+
+.profile-panel.auth-simple .profile-brand {
+  min-height: 94px;
+  border-color: rgba(250, 204, 21, 0.34);
+  background:
+    radial-gradient(circle at 82% 18%, rgba(250, 204, 21, 0.28), transparent 26%),
+    radial-gradient(circle at 16% 74%, rgba(94, 234, 212, 0.24), transparent 30%),
+    linear-gradient(135deg, rgba(8, 47, 73, 0.92), rgba(2, 6, 23, 0.72));
+}
+
+.profile-panel.auth-simple .profile-brand strong {
+  font-size: 28px;
 }
 
 .profile-head,
@@ -743,6 +772,18 @@ button:disabled {
   background: rgba(136, 19, 55, 0.26);
   font-size: 12px;
   font-weight: 800;
+}
+
+.profile-error[data-tone='info'] {
+  border-color: rgba(94, 234, 212, 0.44);
+  color: #ccfbf1;
+  background: rgba(13, 148, 136, 0.18);
+}
+
+.profile-error[data-tone='success'] {
+  border-color: rgba(250, 204, 21, 0.46);
+  color: #fef3c7;
+  background: rgba(133, 77, 14, 0.24);
 }
 
 .profile-actions {
