@@ -8,6 +8,14 @@ import {
   dungeonFloorRoute,
 } from './dungeonProgression'
 import {
+  profileAccountBadge,
+  profileCenterSections,
+  profileCenterTabs,
+  type ProfileCenterTabId,
+  type ProfileServerState,
+  profileServerBadge,
+} from './profileCenter'
+import {
   profileAuthHintText,
   profileAuthTitleText,
   profileBusyText,
@@ -738,14 +746,31 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           </div>
           <button id="close-profile" class="profile-close" type="button">x</button>
         </div>
-        <div class="profile-tabs" role="tablist" aria-label="账号模式">
+        <div class="profile-tabs profile-auth-only" role="tablist" aria-label="账号模式">
           <button id="profile-mode-login" class="active" type="button">登录</button>
           <button id="profile-mode-register" type="button">注册</button>
         </div>
-        <p id="profile-mode-hint" class="profile-note">输入玩家名和密码读取存档；没有账号可切到注册，或游客试玩。</p>
+        <p id="profile-mode-hint" class="profile-note profile-auth-only">输入玩家名和密码读取存档；没有账号可切到注册，或游客试玩。</p>
+        <div id="profile-entry-status" class="profile-entry-status profile-auth-only" data-tone="info">
+          <i></i>
+          <span id="profile-entry-status-title">服务器检测中</span>
+          <small id="profile-entry-status-detail">正在确认云端登录服务。</small>
+        </div>
+        <div id="profile-recent" class="profile-recent profile-auth-only" hidden>
+          <div>
+            <b id="profile-recent-title">最近档案</b>
+            <small id="profile-recent-detail">继续上次的本机进度。</small>
+          </div>
+          <button id="profile-recent-use" type="button">填入</button>
+        </div>
         <div class="profile-current">
           <span id="profile-current">未登录</span>
           <button id="profile-switch" type="button">切换</button>
+        </div>
+        <div id="profile-center-tabs" class="profile-center-tabs" role="tablist" aria-label="账号中心" hidden>
+          <button class="active" type="button" data-profile-tab="slots">角色档案</button>
+          <button type="button" data-profile-tab="cloud">云端同步</button>
+          <button type="button" data-profile-tab="security">账号安全</button>
         </div>
         <div id="profile-slots" class="profile-slots" hidden>
           <div class="profile-slots-head">
@@ -794,17 +819,21 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           </div>
           <button id="profile-change-password" type="button">修改密码</button>
         </div>
+        <div id="profile-local-security" class="profile-local-security" hidden>
+          <b>绑定云端账号</b>
+          <small>当前是本机或游客档案，资料只保存在这台设备。正式账号绑定会在后续开放；现在可以退出后注册云端账号。</small>
+        </div>
         <div id="profile-list" class="profile-list"></div>
-        <label class="profile-field">
+        <label class="profile-field profile-auth-only">
           <span>玩家名</span>
-          <input id="profile-name" maxlength="12" autocomplete="username" placeholder="输入玩家名">
+          <input id="profile-name" maxlength="12" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="输入玩家名">
         </label>
-        <label class="profile-field">
+        <label class="profile-field profile-auth-only">
           <span>登录密码</span>
           <input id="profile-pin" maxlength="18" type="password" autocomplete="current-password" placeholder="输入密码">
         </label>
         <div id="profile-error" class="profile-error" role="status" aria-live="polite" hidden></div>
-        <div class="profile-actions">
+        <div class="profile-actions profile-auth-only">
           <button id="profile-guest" class="profile-secondary" type="button">游客试玩</button>
           <button id="profile-submit" class="profile-submit" type="submit">登录进入</button>
         </div>
@@ -885,6 +914,8 @@ const heroShowcaseTitle = document.querySelector<HTMLElement>('#hero-showcase-ti
 const heroShowcaseGear = document.querySelector<HTMLElement>('#hero-showcase-gear')!
 const profilePanel = document.querySelector<HTMLDivElement>('#profile-panel')!
 const profileForm = document.querySelector<HTMLFormElement>('#profile-form')!
+const profileBrandTitle = document.querySelector<HTMLElement>('.profile-brand strong')!
+const profileBrandCaption = document.querySelector<HTMLElement>('.profile-brand span')!
 const closeProfile = document.querySelector<HTMLButtonElement>('#close-profile')!
 const profileSwitch = document.querySelector<HTMLButtonElement>('#profile-switch')!
 const profileCurrent = document.querySelector<HTMLElement>('#profile-current')!
@@ -897,11 +928,22 @@ const profileCharacterName = document.querySelector<HTMLInputElement>('#profile-
 const profileCharacterOptions = document.querySelector<HTMLDivElement>('#profile-character-options')!
 const profileArtifactOptions = document.querySelector<HTMLDivElement>('#profile-artifact-options')!
 const profileCreateConfirm = document.querySelector<HTMLButtonElement>('#profile-create-confirm')!
+const profileEntryStatus = document.querySelector<HTMLDivElement>('#profile-entry-status')!
+const profileEntryStatusTitle = document.querySelector<HTMLElement>('#profile-entry-status-title')!
+const profileEntryStatusDetail = document.querySelector<HTMLElement>('#profile-entry-status-detail')!
+const profileRecent = document.querySelector<HTMLDivElement>('#profile-recent')!
+const profileRecentTitle = document.querySelector<HTMLElement>('#profile-recent-title')!
+const profileRecentDetail = document.querySelector<HTMLElement>('#profile-recent-detail')!
+const profileRecentUse = document.querySelector<HTMLButtonElement>('#profile-recent-use')!
+const profileCenterTabsBox = document.querySelector<HTMLDivElement>('#profile-center-tabs')!
+const profileCenterTabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-profile-tab]'))
+const profileCloudBox = document.querySelector<HTMLDivElement>('.profile-cloud')!
 const profileCloudStatus = document.querySelector<HTMLElement>('#profile-cloud-status')!
 const profileCloudDetail = document.querySelector<HTMLElement>('#profile-cloud-detail')!
 const profileSync = document.querySelector<HTMLButtonElement>('#profile-sync')!
 const profileLogout = document.querySelector<HTMLButtonElement>('#profile-logout')!
 const profilePasswordBox = document.querySelector<HTMLDivElement>('#profile-password-box')!
+const profileLocalSecurity = document.querySelector<HTMLDivElement>('#profile-local-security')!
 const profileCurrentPin = document.querySelector<HTMLInputElement>('#profile-current-pin')!
 const profileNewPin = document.querySelector<HTMLInputElement>('#profile-new-pin')!
 const profileChangePassword = document.querySelector<HTMLButtonElement>('#profile-change-password')!
@@ -1059,6 +1101,8 @@ let selectedArtifactKey: ArtifactKey = 'slash'
 let activePage: AppPage = 'battle'
 let activeProfile: PlayerProfile | null = null
 let profileAuthMode: ProfileAuthMode = 'login'
+let profileCenterTab: ProfileCenterTabId = 'slots'
+let profileServerState: ProfileServerState = 'checking'
 let cloudAccountActive = false
 let cloudSyncState: 'idle' | 'syncing' | 'error' = 'idle'
 let cloudSyncMessage = ''
@@ -1516,6 +1560,18 @@ function apiUnavailable(error: unknown) {
   return (error as Error & { code?: string })?.code === 'API_UNAVAILABLE'
 }
 
+async function checkProfileServer() {
+  profileServerState = 'checking'
+  updateProfileEntryStatus()
+  try {
+    await accountRequest<{ ok: boolean }>('/health')
+    profileServerState = 'online'
+  } catch {
+    profileServerState = 'offline'
+  }
+  updateProfileEntryStatus()
+}
+
 function isCloudSaveEnvelope(save: unknown): save is CloudSaveEnvelope {
   return Boolean(
     save
@@ -1575,6 +1631,9 @@ function updateCloudStatus() {
   } else if (isCloud) {
     profileCloudStatus.textContent = '云端账号已连接'
     profileCloudDetail.textContent = `${activeProfile?.name ?? '玩家'} | 上次同步 ${cloudSyncTimeText()}`
+  } else if (activeProfile && guestProfile()) {
+    profileCloudStatus.textContent = '游客档案'
+    profileCloudDetail.textContent = '当前进度只保存在本机，注册云端账号后再做绑定入口。'
   } else if (activeProfile) {
     profileCloudStatus.textContent = '本机档案'
     profileCloudDetail.textContent = '当前资料保存在本机，登录服务器账号后可云端保存。'
@@ -1585,7 +1644,6 @@ function updateCloudStatus() {
   profileSync.disabled = !isCloud || cloudSyncState === 'syncing'
   profileLogout.disabled = !activeProfile || cloudSyncState === 'syncing'
   profileLogout.textContent = isCloud ? '退出登录' : '退出档案'
-  profilePasswordBox.hidden = !isCloud
   profileCurrentPin.disabled = !isCloud || cloudSyncState === 'syncing'
   profileNewPin.disabled = !isCloud || cloudSyncState === 'syncing'
   profileChangePassword.disabled = !isCloud || cloudSyncState === 'syncing'
@@ -1766,14 +1824,71 @@ function setProfileAuthMode(mode: ProfileAuthMode) {
   setProfileError('')
 }
 
+function guestProfile(profile = activeProfile) {
+  return Boolean(profile && profile.name === '游客' && !isServerProfile(profile.id))
+}
+
+function updateProfileEntryStatus() {
+  const badge = profileServerBadge(profileServerState)
+  profileEntryStatus.dataset.tone = badge.tone
+  profileEntryStatusTitle.textContent = badge.title
+  profileEntryStatusDetail.textContent = badge.detail
+}
+
+function updateRecentProfile(index = readProfileIndex()) {
+  const remembered = index.profiles.find((profile) => profile.id === index.activeId) ?? index.profiles[0]
+  profileRecent.hidden = !remembered || Boolean(activeProfile)
+  if (!remembered) return
+  const summary = profileSummary(remembered.id)
+  profileRecentTitle.textContent = `最近档案：${remembered.name}`
+  profileRecentDetail.textContent = `${PROFILE_SLOT_LABELS[safeSlotId(remembered.activeSlotId)]} | ${cultivationRealm(summary.level)} | 券 ${summary.tickets} | 灵石 ${summary.spiritStones}`
+  profileRecentUse.disabled = false
+}
+
+function setProfileCenterTab(tab: ProfileCenterTabId) {
+  profileCenterTab = tab
+  closeCharacterCreator()
+  setProfileError('')
+  updateProfileUi()
+}
+
+function updateProfileCenterUi() {
+  const isCloud = cloudAccountActive && isServerProfile()
+  const account = profileAccountBadge(isCloud, guestProfile())
+  const sections = profileCenterSections(Boolean(activeProfile), profileCenterTab, isCloud)
+  profilePanel.classList.toggle('auth-simple', sections.auth)
+  profilePanel.classList.toggle('account-center', sections.centerTabs)
+  profileBrandTitle.textContent = activeProfile ? '账号中心' : '进入虚境'
+  profileBrandCaption.textContent = activeProfile ? account.detail : '登录保存进度，游客可直接试玩'
+  if (activeProfile) profileAuthTitle.textContent = account.title
+  profileCenterTabsBox.hidden = !sections.centerTabs
+  profileCenterTabButtons.forEach((button) => {
+    const tab = button.dataset.profileTab as ProfileCenterTabId
+    const spec = profileCenterTabs.find((item) => item.id === tab)
+    button.classList.toggle('active', tab === profileCenterTab)
+    button.disabled = !activeProfile
+    if (spec) button.title = spec.hint
+  })
+  profileSlots.hidden = !sections.slots
+  if (!sections.slots) closeCharacterCreator()
+  profileCloudBox.hidden = !sections.cloud
+  profilePasswordBox.hidden = !sections.security
+  profileLocalSecurity.hidden = !sections.localSecurity
+  profileList.hidden = sections.centerTabs
+}
+
 function updateProfileUi() {
-  profileCurrent.textContent = activeProfile ? `${cloudAccountActive ? '云端在线' : '本机在线'}：${activeProfile.name}` : '等待玩家登录'
+  const account = profileAccountBadge(cloudAccountActive && isServerProfile(), guestProfile())
+  profileCurrent.textContent = activeProfile ? `${account.title}：${activeProfile.name}｜${account.detail}` : '等待玩家登录'
   profileSwitch.disabled = !activeProfile
   closeProfile.hidden = !activeProfile || profilePanel.classList.contains('blocking')
   profileList.innerHTML = ''
   updateCloudStatus()
+  updateProfileEntryStatus()
+  updateProfileCenterUi()
   renderProfileSlots()
   const index = readProfileIndex()
+  updateRecentProfile(index)
   if (!index.profiles.length) {
     const empty = document.createElement('div')
     empty.className = 'profile-empty'
@@ -1812,7 +1927,7 @@ function updateProfileUi() {
 }
 
 function renderProfileSlots() {
-  profileSlots.hidden = !activeProfile
+  profileSlots.hidden = !activeProfile || profileCenterTab !== 'slots'
   profileSlotList.innerHTML = ''
   if (!activeProfile) return
   migrateProfileSaveToSlot(activeProfile.id)
@@ -2140,6 +2255,7 @@ function activateProfile(profileId: string, options: { cloud?: boolean } = {}) {
   resetRuntimeState()
   const activeSlotId = safeSlotId(profile.activeSlotId)
   if (!profileSlotHasSave(profile.id, activeSlotId)) {
+    profileCenterTab = 'slots'
     profilePanel.hidden = false
     profilePanel.classList.add('blocking', 'signed-in')
     profilePanel.classList.remove('auth-simple')
@@ -8392,6 +8508,22 @@ function bindControls() {
   profileSwitch.addEventListener('click', () => showProfilePanel(true))
   profileModeLogin.addEventListener('click', () => setProfileAuthMode('login'))
   profileModeRegister.addEventListener('click', () => setProfileAuthMode('register'))
+  profileCenterTabButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      const tab = button.dataset.profileTab as ProfileCenterTabId | undefined
+      if (tab) setProfileCenterTab(tab)
+    })
+  })
+  profileRecentUse.addEventListener('click', () => {
+    const index = readProfileIndex()
+    const remembered = index.profiles.find((profile) => profile.id === index.activeId) ?? index.profiles[0]
+    if (!remembered) return
+    setProfileAuthMode('login')
+    profileNameInput.value = remembered.name
+    profilePinInput.value = ''
+    profilePinInput.focus()
+    setProfileError(remembered.pin ? '已填入最近档案，输入密码后进入。' : '已填入最近档案，直接点击登录进入。', remembered.pin ? 'info' : 'success')
+  })
   profileSync.addEventListener('click', async () => {
     setProfileBusy(true, 'sync')
     setProfileError('正在同步云端存档...', 'info')
@@ -8604,6 +8736,7 @@ function setMoveTargetFromPointer(event: PointerEvent, immediateTap: boolean) {
 bindControls()
 initProfiles()
 if (activeProfile) loadGame()
+void checkProfileServer()
 void restoreServerSession()
 ensureEnemies()
 updateHud()
