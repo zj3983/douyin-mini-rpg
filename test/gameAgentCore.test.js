@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { canvasHealth, summarizeAgentRun } from '../scripts/game-agent-core.mjs'
+import { canvasAspectHealth, canvasHealth, summarizeAgentRun } from '../scripts/game-agent-core.mjs'
 
 test('game agent summary fails on failed checks or runtime issues', () => {
   const summary = summarizeAgentRun({
@@ -27,5 +27,13 @@ test('canvas health requires visual content and motion', () => {
   assert.deepEqual(canvasHealth({ coloredPixels: 20000, uniqueColors: 80, diffRatio: 0.02 }), {
     ok: true,
     detail: 'colored=20000 unique=80 motion=2.00%',
+  })
+})
+
+test('canvas aspect health catches CSS-stretched game canvas', () => {
+  assert.equal(canvasAspectHealth({ intrinsicWidth: 540, intrinsicHeight: 720, cssWidth: 430, cssHeight: 326 }).ok, false)
+  assert.deepEqual(canvasAspectHealth({ intrinsicWidth: 430, intrinsicHeight: 326, cssWidth: 430, cssHeight: 326 }), {
+    ok: true,
+    detail: 'intrinsic=430x326 css=430x326 mismatch=0.00%',
   })
 })

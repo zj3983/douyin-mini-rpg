@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 
 import { chromium } from 'playwright'
 
-import { canvasHealth, reportMarkdown } from './game-agent-core.mjs'
+import { canvasAspectHealth, canvasHealth, reportMarkdown } from './game-agent-core.mjs'
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const runId = new Date().toISOString().replace(/[:.]/g, '-')
@@ -247,6 +247,19 @@ async function sampleCanvasHealth() {
   })
   const health = canvasHealth(stats)
   addCheck('画面内容和动态', health.ok, health.detail)
+
+  const aspect = await page.evaluate(() => {
+    const canvas = document.querySelector('#game')
+    const rect = canvas?.getBoundingClientRect()
+    return {
+      intrinsicWidth: canvas?.width ?? 0,
+      intrinsicHeight: canvas?.height ?? 0,
+      cssWidth: rect?.width ?? 0,
+      cssHeight: rect?.height ?? 0,
+    }
+  })
+  const aspectHealth = canvasAspectHealth(aspect)
+  addCheck('画面比例未拉伸', aspectHealth.ok, aspectHealth.detail)
 }
 
 async function measureFrames(sampleCount = 90) {

@@ -9,6 +9,21 @@ export function canvasHealth(stats) {
   }
 }
 
+export function canvasAspectHealth(stats) {
+  const intrinsicWidth = Number(stats.intrinsicWidth) || 0
+  const intrinsicHeight = Number(stats.intrinsicHeight) || 0
+  const cssWidth = Number(stats.cssWidth) || 0
+  const cssHeight = Number(stats.cssHeight) || 0
+  const intrinsicRatio = intrinsicHeight > 0 ? intrinsicWidth / intrinsicHeight : 0
+  const cssRatio = cssHeight > 0 ? cssWidth / cssHeight : 0
+  const mismatch = cssRatio > 0 ? Math.abs(intrinsicRatio - cssRatio) / cssRatio : 1
+  const detail = `intrinsic=${intrinsicWidth}x${intrinsicHeight} css=${cssWidth.toFixed(0)}x${cssHeight.toFixed(0)} mismatch=${(mismatch * 100).toFixed(2)}%`
+  return {
+    ok: intrinsicRatio > 0 && cssRatio > 0 && mismatch <= 0.03,
+    detail,
+  }
+}
+
 export function summarizeAgentRun({ checks, consoleIssues, pageErrors, requestFailures }) {
   const lines = []
   let passed = 0

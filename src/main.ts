@@ -5785,7 +5785,33 @@ function heroScreenX(width: number) {
   return Math.max(118, Math.min(desired, width * 0.46))
 }
 
+function actorRenderScale() {
+  if (!Number.isFinite(canvas.height) || canvas.height <= 0) return 1
+  return Math.max(0.58, Math.min(1, canvas.height / 440))
+}
+
+function scaledEnemySpriteLayout(layout: EnemySpriteLayout, scale = actorRenderScale()): EnemySpriteLayout {
+  return {
+    ...layout,
+    width: layout.width * scale,
+    height: layout.height * scale,
+    lift: layout.lift * scale,
+    barWidth: layout.barWidth * scale,
+    barY: layout.barY * scale,
+  }
+}
+
+function syncCanvasSize() {
+  const rect = canvas.getBoundingClientRect()
+  const width = Math.round(rect.width)
+  const height = Math.round(rect.height)
+  if (width < 10 || height < 10) return
+  if (canvas.width !== width) canvas.width = width
+  if (canvas.height !== height) canvas.height = height
+}
+
 function draw() {
+  syncCanvasSize()
   const w = canvas.width
   const h = canvas.height
   ctx.clearRect(0, 0, w, h)
@@ -7554,7 +7580,7 @@ function drawEnemySprite(enemy: Enemy, x: number, groundY: number) {
   if (!sprite?.complete || sprite.naturalWidth <= 0) return false
   const theme = activeStageTheme()
   const worldVisual = worldEnemyVisual(enemy)
-  const layout = enemySpriteLayout(enemy, worldVisual)
+  const layout = scaledEnemySpriteLayout(enemySpriteLayout(enemy, worldVisual))
   const motion = layout.motion ?? (enemy.kind === 'bat' ? 'flying' : enemy.kind === 'crystal' || enemy.kind === 'warden' || enemy.boss ? 'heavy' : 'ground')
   const now = performance.now()
   const phase = now * (motion === 'flying' ? 0.014 : motion === 'ground' ? 0.012 : 0.008) + enemy.id
@@ -8221,12 +8247,14 @@ function drawHeroSide(x: number, groundY: number) {
   const actionSheet = actionFrame >= 0 ? swordActionSprites.sheet : null
   const useActionSheet = !!actionSheet?.complete && actionSheet.naturalWidth > 0
   const heroSprite = useActionSheet ? actionSheet : actionSprite ?? characterSprites[state.activeCharacter] ?? sprites.cultivator
+  const renderScale = actorRenderScale()
   if (heroSprite.complete && heroSprite.naturalWidth > 0) {
     const usingActionSprite = heroSprite === actionSprite
     const usingActionSheet = useActionSheet && heroSprite === actionSheet
     const bob = isMoving ? Math.sin(t * 0.42) * 2.4 : Math.sin(t * 0.35) * 1.2
     ctx.save()
     ctx.translate(x, groundY + bob)
+    ctx.scale(renderScale, renderScale)
     if (shouldFlipHeroSprite()) ctx.scale(-1, 1)
     if (!usingActionSheet) drawRideSword(t, true)
     drawHeroMotionAura(t, isMoving, attackPulse)
@@ -8252,6 +8280,7 @@ function drawHeroSide(x: number, groundY: number) {
   }
   ctx.save()
   ctx.translate(x, groundY)
+  ctx.scale(renderScale, renderScale)
   if (shouldFlipHeroSprite()) ctx.scale(-1, 1)
   drawRideSword(t, state.mutations.swordRide > 0)
   ctx.fillStyle = 'rgba(0,0,0,.38)'
