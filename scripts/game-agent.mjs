@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 
 import { chromium } from 'playwright'
 
-import { canvasAspectHealth, canvasHealth, reportMarkdown } from './game-agent-core.mjs'
+import { canvasAspectHealth, canvasHealth, playtestReview, reportMarkdown } from './game-agent-core.mjs'
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const runId = new Date().toISOString().replace(/[:.]/g, '-')
@@ -18,6 +18,7 @@ const apiPort = Number(process.env.GAME_AGENT_API_PORT || 4174)
 const baseUrl = process.env.GAME_AGENT_URL || `http://127.0.0.1:${port}/`
 const apiHealthUrl = `http://127.0.0.1:${apiPort}/api/health`
 const randomMs = Number(process.env.GAME_AGENT_RANDOM_MS || 20000)
+const playtestMs = Number(process.env.GAME_AGENT_PLAYTEST_MS || 24000)
 const headless = process.env.GAME_AGENT_HEADLESS !== '0'
 const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 const chromeCandidates = process.platform === 'win32'
@@ -46,6 +47,7 @@ let browser
 let page
 let startedAt = new Date().toISOString()
 let performance = { averageFrameMs: 0, slowFrames: 0 }
+let playtest = null
 
 function addCheck(name, ok, detail = '') {
   checks.push({ name, ok: Boolean(ok), detail })
@@ -278,6 +280,53 @@ async function measureFrames(sampleCount = 90) {
   addCheck('帧循环', performance.averageFrameMs > 0 && performance.averageFrameMs < 80 && performance.slowFrames < sampleCount * 0.7, `${performance.averageFrameMs.toFixed(2)}ms avg, slow=${performance.slowFrames}`)
 }
 
+async function collectPlaytestSample(startMs) {
+  return page.evaluate((started) => {
+    const text = (selector) => document.querySelector(selector)?.textContent?.trim() ?? ''
+    const number = (selector) => {
+      const match = text(selector).match(/-?\d+/)
+      return match ? Number(match[0]) : 0
+    }
+    return {
+      elapsedMs: Date.now() - started,
+      level: text('#level-label'),
+      kills: number('#kill-label'),
+      killText: text('#kill-label'),
+      soul: text('#soul-label'),
+      quest: text('#quest-label'),
+      message: text('#message'),
+      skill: text('#skill-status-recent'),
+      mode: text('#mode-label'),
+      wave: text('#wave-label'),
+    }
+  }, startMs)
+}
+
+async function playtestCombat() {
+  await page.locator('#battle-btn').click({ timeout: 3000 }).catch(() => {})
+  await expectVisible('#game', '试玩战斗页可见')
+  await shot('playtest-start', false)
+
+  const samples = []
+  const started = Date.now()
+  const endAt = started + playtestMs
+  while (Date.now() <= endAt) {
+    samples.push(await collectPlaytestSample(started))
+    const tapX = viewport.width * (0.58 + Math.random() * 0.22)
+    const tapY = 310 + Math.random() * 150
+    await page.mouse.click(tapX, tapY).catch(() => {})
+    await page.waitForTimeout(Math.min(3000, Math.max(800, endAt - Date.now())))
+  }
+  samples.push(await collectPlaytestSample(started))
+  playtest = playtestReview({
+    samples,
+    durationMs: Date.now() - started,
+    performance,
+  })
+  addCheck('试玩评测生成', samples.length >= 3, `score=${playtest.score}/100 kills=+${playtest.metrics.killDelta} skills=${playtest.metrics.skillEventCount}`)
+  await shot('playtest-end', false)
+}
+
 async function completeGuestEntry() {
   await expectVisible('#profile-panel', '登录面板出现')
   await expectVisible('#profile-entry-status', '服务器状态卡出现')
@@ -380,6 +429,7 @@ try {
   await measureFrames()
   await exerciseAccountCenter()
   await exercisePages()
+  await playtestCombat()
   await randomExplore()
 } catch (error) {
   addCheck('Agent 致命错误', false, error.stack || error.message)
@@ -403,6 +453,7 @@ try {
     requestFailures,
     screenshots,
     performance,
+    playtest,
   })
   const reportFile = join(outDir, 'report.md')
   await writeFile(reportFile, markdown, 'utf8')
