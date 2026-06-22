@@ -1,7 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { canvasAspectHealth, canvasHealth, playtestReview, summarizeAgentRun } from '../scripts/game-agent-core.mjs'
+import {
+  canvasAspectHealth,
+  canvasHealth,
+  dungeonLoopReview,
+  playtestReview,
+  summarizeAgentRun,
+} from '../scripts/game-agent-core.mjs'
 
 test('game agent summary fails on failed checks or runtime issues', () => {
   const summary = summarizeAgentRun({
@@ -129,4 +135,67 @@ test('playtest review calls out stale loops and performance risk', () => {
   assert.ok(review.score < 55)
   assert.match(review.markdown, /长时间无击杀/)
   assert.ok(review.recommendations.some((item) => item.includes('怪物密度') || item.includes('掉落反馈')))
+})
+
+test('dungeon loop review passes when combat, settlement, reward, and artifact progress all change', () => {
+  const review = dungeonLoopReview({
+    entered: true,
+    before: {
+      tickets: 0,
+      stones: 0,
+      artifactOwned: 1,
+      artifactProgress: ['御剑·穿云 1/6', '御剑·回锋 0/6', '御剑·分光 0/6'],
+    },
+    after: {
+      tickets: 2,
+      stones: 88,
+      artifactOwned: 1,
+      artifactProgress: ['御剑·穿云 2/6', '御剑·回锋 0/6', '御剑·分光 0/6'],
+    },
+    samples: [
+      { mode: '副本·灵根洞天', kills: 9, wave: '第1/5层', quest: '清怪 2/3', message: '门钥碎片靠近' },
+      { mode: '副本·灵根洞天', kills: 15, wave: '第2/5层', quest: '门钥 3/3', message: '下层门已找到' },
+    ],
+    settlementText: '副本结算 奖励 券 +2 灵石 +88 法宝精华 +1',
+  })
+
+  assert.equal(review.ok, true)
+  assert.equal(review.reason, 'passed')
+  assert.deepEqual(review.changedResources.sort(), ['artifactProgress', 'stones', 'tickets'])
+  assert.match(review.markdown, /Dungeon Loop Review/)
+  assert.match(review.markdown, /PASS/)
+})
+
+test('dungeon loop review fails as settlement when dungeon advances but never settles', () => {
+  const review = dungeonLoopReview({
+    entered: true,
+    before: { tickets: 0, stones: 0, artifactOwned: 1, artifactProgress: ['御剑·穿云 1/6'] },
+    after: { tickets: 0, stones: 0, artifactOwned: 1, artifactProgress: ['御剑·穿云 1/6'] },
+    samples: [
+      { mode: '副本·灵根洞天', kills: 4, wave: '第1/5层', quest: '清怪 1/3', message: '新的怪物潮正在靠近' },
+      { mode: '副本·灵根洞天', kills: 9, wave: '第1/5层', quest: '清怪 3/3', message: '下层门已找到' },
+    ],
+    settlementText: '',
+  })
+
+  assert.equal(review.ok, false)
+  assert.equal(review.reason, 'settlement')
+  assert.match(review.markdown, /settlement/)
+})
+
+test('dungeon loop review fails as reward when settlement has no resource change', () => {
+  const review = dungeonLoopReview({
+    entered: true,
+    before: { tickets: 1, stones: 20, artifactOwned: 1, artifactProgress: ['御剑·穿云 1/6'] },
+    after: { tickets: 1, stones: 20, artifactOwned: 1, artifactProgress: ['御剑·穿云 1/6'] },
+    samples: [
+      { mode: '副本·灵根洞天', kills: 4, wave: '第1/5层', quest: '清怪 1/3', message: '新的怪物潮正在靠近' },
+      { mode: '副本·灵根洞天', kills: 11, wave: '第2/5层', quest: '清怪 1/4', message: '副本结算' },
+    ],
+    settlementText: '副本结算 无掉落',
+  })
+
+  assert.equal(review.ok, false)
+  assert.equal(review.reason, 'reward')
+  assert.deepEqual(review.changedResources, [])
 })

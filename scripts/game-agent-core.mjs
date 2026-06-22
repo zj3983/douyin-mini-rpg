@@ -259,7 +259,72 @@ export function playtestReview({ samples = [], durationMs = 0, performance = {} 
   }
 }
 
-export function reportMarkdown({ startedAt, durationMs, baseUrl, viewport, checks, consoleIssues, pageErrors, requestFailures, screenshots, performance, playtest }) {
+function numericDelta(before = {}, after = {}, key) {
+  return (Number(after[key]) || 0) - (Number(before[key]) || 0)
+}
+
+function listChanged(beforeList = [], afterList = []) {
+  return JSON.stringify(beforeList ?? []) !== JSON.stringify(afterList ?? [])
+}
+
+function dungeonProgressed(samples = []) {
+  const safeSamples = Array.isArray(samples) ? samples.filter(Boolean) : []
+  if (safeSamples.length < 2) return false
+  const first = safeSamples[0]
+  const last = safeSamples.at(-1)
+  return firstNumber(last.kills) > firstNumber(first.kills)
+    || uniqueCount(safeSamples.map((sample) => sample.wave)) > 1
+    || uniqueCount(safeSamples.map((sample) => sample.quest)) > 1
+    || /Boss|门|撤离|下层|结算/.test(safeSamples.map((sample) => `${sample.message ?? ''} ${sample.quest ?? ''}`).join(' '))
+}
+
+export function dungeonLoopReview({ before = {}, after = {}, samples = [], settlementText = '', entered = true, runtimeOk = true } = {}) {
+  const changedResources = []
+  for (const key of ['passes', 'tickets', 'stones', 'essence', 'materials', 'artifactOwned']) {
+    if (numericDelta(before, after, key) !== 0) changedResources.push(key)
+  }
+  if (listChanged(before.artifactProgress, after.artifactProgress)) changedResources.push('artifactProgress')
+
+  const progressed = dungeonProgressed(samples)
+  const hasSettlement = String(settlementText || '').trim().length > 0
+  const rewardText = /奖励|券|灵石|精华|材料|法宝|碎片|\+\d+/i.test(String(settlementText || ''))
+
+  let reason = 'passed'
+  if (!runtimeOk) reason = 'runtime'
+  else if (!entered) reason = 'entry'
+  else if (!progressed) reason = 'combat'
+  else if (!hasSettlement) reason = 'settlement'
+  else if (!rewardText || changedResources.length === 0) reason = 'reward'
+  else if (!changedResources.includes('artifactProgress') && !changedResources.includes('artifactOwned') && !changedResources.includes('essence')) reason = 'artifact'
+
+  const ok = reason === 'passed'
+  const markdown = [
+    '## Dungeon Loop Review',
+    '',
+    `- Status: ${ok ? 'PASS' : 'FAIL'}`,
+    `- Reason: ${reason}`,
+    `- Samples: ${Array.isArray(samples) ? samples.length : 0}`,
+    `- Settlement: ${hasSettlement ? 'seen' : 'missing'}`,
+    `- Changed resources: ${changedResources.length ? changedResources.join(', ') : 'none'}`,
+    '',
+    '### Settlement Text',
+    '',
+    String(settlementText || '未捕获结算文本').trim(),
+    '',
+  ].join('\n')
+
+  return {
+    ok,
+    reason,
+    changedResources,
+    progressed,
+    hasSettlement,
+    rewardText,
+    markdown,
+  }
+}
+
+export function reportMarkdown({ startedAt, durationMs, baseUrl, viewport, checks, consoleIssues, pageErrors, requestFailures, screenshots, performance, playtest, dungeonReview }) {
   const summary = summarizeAgentRun({ checks, consoleIssues, pageErrors, requestFailures })
   const lines = [
     '# Game Agent Report',
@@ -281,6 +346,7 @@ export function reportMarkdown({ startedAt, durationMs, baseUrl, viewport, check
     `- Slow frames over 50ms: ${performance.slowFrames}`,
     '',
     ...(playtest?.markdown ? [playtest.markdown.trim(), ''] : []),
+    ...(dungeonReview?.markdown ? [dungeonReview.markdown.trim(), ''] : []),
     '## Screenshots',
     '',
     ...screenshots.map((shot) => `- ${shot.label}: ${shot.file}`),
