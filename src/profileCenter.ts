@@ -40,3 +40,9 @@ export function profileAccountBadge(cloudAccount: boolean, guest: boolean) {
   if (guest) return { title: '游客试玩', detail: '当前只保存在本机，后续可注册正式账号。' }
   return { title: '本机档案', detail: '当前资料保存在这台设备。' }
 }
+
+export function profileCloseVisible({ signedIn, blocking, accountCenter }: { signedIn: boolean; blocking: boolean; accountCenter: boolean }) {
+  if (!signedIn) return false
+  if (accountCenter) return true
+  return !blocking
+}

@@ -11,6 +11,7 @@ import {
   profileAccountBadge,
   profileCenterSections,
   profileCenterTabs,
+  profileCloseVisible,
   type ProfileCenterTabId,
   type ProfileServerState,
   profileServerBadge,
@@ -25,6 +26,16 @@ import {
   type ProfileBusyKind,
   type ProfileFeedbackTone,
 } from './profileFeedback'
+import {
+  skillAnnouncementText,
+  wildBossHp,
+  wildBossSpawnOffset,
+  wildEnemyHpMultiplier,
+  wildEnemyTarget,
+  wildInnateCooldownMultiplier,
+  wildSkillDamageMultiplier,
+  wildSpawnDistance,
+} from './combatTuning'
 import { techniqueArtForId, techniqueProgressForCharacter, techniqueProgressTotal, techniqueSpecsForCharacter } from './progression'
 
 type Rarity = '普通' | '稀有' | '史诗' | '传说'
@@ -1087,6 +1098,7 @@ let lastAutoSave = performance.now()
 let enemyId = 1
 let enemySkillId = 1
 let soulId = 1
+let skillAnnouncementSequence = 1
 let pulling = false
 let heroFacing = -Math.PI / 2
 let lastAttackFlash = 0
@@ -1881,7 +1893,11 @@ function updateProfileUi() {
   const account = profileAccountBadge(cloudAccountActive && isServerProfile(), guestProfile())
   profileCurrent.textContent = activeProfile ? `${account.title}：${activeProfile.name}｜${account.detail}` : '等待玩家登录'
   profileSwitch.disabled = !activeProfile
-  closeProfile.hidden = !activeProfile || profilePanel.classList.contains('blocking')
+  closeProfile.hidden = !profileCloseVisible({
+    signedIn: Boolean(activeProfile),
+    blocking: profilePanel.classList.contains('blocking'),
+    accountCenter: profilePanel.classList.contains('account-center'),
+  })
   profileList.innerHTML = ''
   updateCloudStatus()
   updateProfileEntryStatus()
@@ -3595,7 +3611,7 @@ function spawnEnemy(elite = false) {
   const side = state.mode === 'wild' ? 1 : Math.random() < 0.5 ? -1 : 1
   const visibleRight = canvas.width - heroScreenX(canvas.width)
   const distance = state.mode === 'wild'
-    ? Math.max(260, visibleRight * 0.72) + Math.random() * 150
+    ? wildSpawnDistance(visibleRight)
     : 230 + Math.random() * 220
   const stageBonus = state.mode === 'wild' ? worldStageNo() * 5 : 0
   const scale = state.mode === 'dungeon' ? dungeonCombatScale() : state.wave
@@ -3610,8 +3626,8 @@ function spawnEnemy(elite = false) {
         ? 42 + scale * 8
         : 18 + scale * 3.6
     : elite
-      ? 88 + scale * 13 + stageBonus * 2
-      : 38 + scale * 6 + stageBonus
+      ? (88 + scale * 13 + stageBonus * 2) * wildEnemyHpMultiplier(worldStageNo())
+      : (38 + scale * 6 + stageBonus) * wildEnemyHpMultiplier(worldStageNo())
   const hp = Math.round(baseHp * profile.hp)
   state.enemies.push({
     id: enemyId++,
@@ -3691,7 +3707,7 @@ function ensureEnemies() {
     state.enemies = state.enemies.filter((enemy) => enemy.x > state.hero.x - 260)
   }
   const floorPlan = state.mode === 'dungeon' ? currentDungeonFloorPlan() : null
-  const target = state.mode === 'dungeon' ? Math.min(9, 4 + dungeonTier() + Math.ceil(state.dungeonFloor * 0.75)) : 6
+  const target = state.mode === 'dungeon' ? Math.min(9, 4 + dungeonTier() + Math.ceil(state.dungeonFloor * 0.75)) : wildEnemyTarget(worldStageNo())
   while (state.enemies.length < target) spawnEnemy(state.mode === 'dungeon' && Math.random() < (floorPlan?.eliteBias ?? 0.25))
 }
 
@@ -3703,11 +3719,11 @@ function spawnBoss() {
     ? dungeonTier() <= 1
       ? 180 + dungeonCombatScale() * 6 + state.hero.level * 5 + state.dungeonFloor * 42
       : 180 + dungeonCombatScale() * 16 + state.hero.level * 6 + state.dungeonFloor * 36
-    : 460 + stage * 74 + state.hero.level * 28
+    : wildBossHp(stage, state.hero.level)
   state.enemies = state.mode === 'wild' ? [] : state.enemies.filter((enemy) => !enemy.boss)
   state.enemies.push({
     id: enemyId++,
-    x: state.hero.x + 420,
+    x: state.hero.x + (state.mode === 'wild' ? wildBossSpawnOffset(stage) : 420),
     y: state.hero.y,
     hp,
     maxHp: hp,
@@ -4842,7 +4858,12 @@ function update(dt: number) {
 }
 
 function innateCooldown(base: number, min = 0.72) {
-  return Math.max(min, (base - state.autoHaste * 0.045 - effectiveSkill('fan') * 0.04) * characterGrowth[state.activeCharacter].cd)
+  const wildMultiplier = state.mode === 'wild' ? wildInnateCooldownMultiplier(worldStageNo()) : 1
+  return Math.max(min * wildMultiplier, (base - state.autoHaste * 0.045 - effectiveSkill('fan') * 0.04) * characterGrowth[state.activeCharacter].cd * wildMultiplier)
+}
+
+function wildSkillDamageBoost() {
+  return state.mode === 'wild' ? wildSkillDamageMultiplier(worldStageNo()) : 1
 }
 
 function autoCharacterSkill() {
@@ -4877,7 +4898,9 @@ function autoCharacterSkill() {
   const arcSign = Math.sin(performance.now() * 0.0017 + enemyId) >= 0 ? 1 : -1
   heroFacing = Math.cos(angle) < 0 ? Math.PI : 0
   lastAttackFlash = performance.now()
-  state.characterSkillCd = Math.max(0.72, (1.9 - returnRank * 0.12 - state.autoHaste * 0.045 - effectiveSkill('fan') * 0.04 - effectiveSkill('slash') * 0.018) * characterGrowth.sword.cd)
+  const wildCooldownMultiplier = state.mode === 'wild' ? wildInnateCooldownMultiplier(worldStageNo()) : 1
+  const swordCooldown = (1.9 - returnRank * 0.12 - state.autoHaste * 0.045 - effectiveSkill('fan') * 0.04 - effectiveSkill('slash') * 0.018) * characterGrowth.sword.cd
+  state.characterSkillCd = Math.max(0.72 * wildCooldownMultiplier, swordCooldown * wildCooldownMultiplier)
   sfx.slash(true)
   addParticleBurst(start.x, start.y, '#a5f3fc', 10, 0.78, 'shard')
   state.effects.push({
@@ -4895,7 +4918,7 @@ function autoCharacterSkill() {
   })
 
   const slashLevel = effectiveSkill('slash')
-  const damage = Math.round(totalAtk() * (1.05 + slashLevel * 0.045 + pierceRank * 0.06) + skillPower() * 0.16 + state.hero.level * 2.4)
+  const damage = Math.round((totalAtk() * (1.05 + slashLevel * 0.045 + pierceRank * 0.06) + skillPower() * 0.16 + state.hero.level * 2.4) * wildSkillDamageBoost())
   const pierceWidth = 50 + slashLevel * 2.2 + pierceRank * 4
   const maxPierce = 2 + pierceRank + Math.min(5, Math.floor(slashLevel / 2))
   const pierced = state.enemies
@@ -4989,7 +5012,7 @@ function autoThunderInnateSkill() {
       .forEach((enemy) => damageEnemy(enemy, Math.round(totalAtk() * 0.14 + skillPower() * 0.22 + cloudRank * 4)))
   }
 
-  const baseDamage = Math.round(totalAtk() * (0.62 + markRank * 0.045) + skillPower() * (0.68 + echoRank * 0.04) + state.hero.level * 2.1)
+  const baseDamage = Math.round((totalAtk() * (0.62 + markRank * 0.045) + skillPower() * (0.68 + echoRank * 0.04) + state.hero.level * 2.1) * wildSkillDamageBoost())
   targets.forEach((enemy, index) => {
     const hitY = enemy.y - (enemy.boss ? 78 : enemy.kind === 'bat' ? 54 : 38)
     const falloff = Math.max(0.52 + echoRank * 0.035, 1 - index * Math.max(0.035, 0.08 - echoRank * 0.008))
@@ -5077,7 +5100,7 @@ function autoFlameInnateSkill() {
     maxLife: 0.5 + seaRank * 0.08,
     kind: 'firesea',
   })
-  const damage = Math.round(skillPower() * (0.82 + focusRank * 0.08) + totalAtk() * (0.48 + focusRank * 0.035) + state.hero.level * 2.2)
+  const damage = Math.round((skillPower() * (0.82 + focusRank * 0.08) + totalAtk() * (0.48 + focusRank * 0.035) + state.hero.level * 2.2) * wildSkillDamageBoost())
   state.enemies
     .filter((enemy) => enemyVisibleForCombat(enemy) && Math.hypot(enemy.x - target.enemy.x, enemy.y - target.enemy.y) <= radius)
     .slice(0, 10 + spreadRank * 2)
@@ -5114,7 +5137,7 @@ function autoFlameInnateSkill() {
     state.enemies
       .filter((enemy) => enemyVisibleForCombat(enemy) && Math.hypot(enemy.x - target.enemy.x, enemy.y - target.enemy.y) <= seaRadius)
       .slice(0, 10 + seaRank * 4)
-      .forEach((enemy) => damageEnemy(enemy, Math.round(skillPower() * 0.18 + totalAtk() * 0.12 + seaRank * 5)))
+      .forEach((enemy) => damageEnemy(enemy, Math.round((skillPower() * 0.18 + totalAtk() * 0.12 + seaRank * 5) * wildSkillDamageBoost())))
   }
   announceSkill(seaRank >= 2 ? '莲火符·莲域' : spreadRank > 0 ? '莲火符·连爆' : '莲火符', '本命术发动', '#fed7aa')
   return true
@@ -5160,7 +5183,7 @@ function autoWoodInnateSkill() {
   })
   if (state.hero.hp > before) state.texts.push({ x: state.hero.x, y: state.hero.y - 98, text: `+${state.hero.hp - before}`, color: '#bbf7d0', life: 0.82 })
   nearby.forEach((enemy, index) => {
-    damageEnemy(enemy, Math.round(totalAtk() * (0.24 + wardRank * 0.035) + skillPower() * (0.38 + bloomRank * 0.045) + state.hero.level * 1.2))
+    damageEnemy(enemy, Math.round((totalAtk() * (0.24 + wardRank * 0.035) + skillPower() * (0.38 + bloomRank * 0.045) + state.hero.level * 1.2) * wildSkillDamageBoost()))
     if (index < 3) addParticleBurst(enemy.x, enemy.y - 34, '#bbf7d0', 5, 0.55, 'rune')
   })
   announceSkill(bloomRank >= 2 ? '回元息·青华' : wardRank > 0 ? '回元息·护脉' : '回元息', '本命术发动', '#86efac')
@@ -8460,10 +8483,11 @@ function toast(text: string) {
 
 function announceSkill(name: string, desc: string, color = '#67e8f9') {
   state.recentSkillName = name
-  state.recentSkillDesc = desc
+  state.recentSkillDesc = `${desc} #${skillAnnouncementSequence}`
   state.recentSkillColor = color
   state.recentSkillPulse = 1
-  state.texts.push({ x: state.hero.x, y: state.hero.y - 126, text: `${name}·${desc}`, color, life: 0.82 })
+  state.texts.push({ x: state.hero.x, y: state.hero.y - 126, text: skillAnnouncementText(name, desc, skillAnnouncementSequence), color, life: 0.82 })
+  skillAnnouncementSequence += 1
 }
 
 function prepareGachaPage() {

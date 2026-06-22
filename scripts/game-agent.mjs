@@ -298,8 +298,18 @@ async function collectPlaytestSample(startMs) {
       skill: text('#skill-status-recent'),
       mode: text('#mode-label'),
       wave: text('#wave-label'),
+      control: text('#auto-orb-label'),
     }
   }, startMs)
+}
+
+async function chooseEvolutionIfOpen() {
+  const card = page.locator('.evolution-card').first()
+  if (!await card.isVisible({ timeout: 300 }).catch(() => false)) return false
+  const title = await card.locator('b').textContent({ timeout: 300 }).catch(() => '')
+  await card.click({ timeout: 1500 })
+  await page.waitForTimeout(400)
+  return title?.trim() || true
 }
 
 async function playtestCombat() {
@@ -310,20 +320,22 @@ async function playtestCombat() {
   const samples = []
   const started = Date.now()
   const endAt = started + playtestMs
+  const evolutionChoices = []
   while (Date.now() <= endAt) {
+    const choice = await chooseEvolutionIfOpen()
+    if (choice) evolutionChoices.push(choice)
     samples.push(await collectPlaytestSample(started))
-    const tapX = viewport.width * (0.58 + Math.random() * 0.22)
-    const tapY = 310 + Math.random() * 150
-    await page.mouse.click(tapX, tapY).catch(() => {})
     await page.waitForTimeout(Math.min(3000, Math.max(800, endAt - Date.now())))
   }
+  const finalChoice = await chooseEvolutionIfOpen()
+  if (finalChoice) evolutionChoices.push(finalChoice)
   samples.push(await collectPlaytestSample(started))
   playtest = playtestReview({
     samples,
     durationMs: Date.now() - started,
     performance,
   })
-  addCheck('试玩评测生成', samples.length >= 3, `score=${playtest.score}/100 kills=+${playtest.metrics.killDelta} skills=${playtest.metrics.skillEventCount}`)
+  addCheck('试玩评测生成', samples.length >= 3, `score=${playtest.score}/100 kills=+${playtest.metrics.killDelta} skills=${playtest.metrics.skillEventCount} evolutions=${evolutionChoices.length}`)
   await shot('playtest-end', false)
 }
 
@@ -342,13 +354,18 @@ async function completeGuestEntry() {
     await click('#profile-create-confirm', '创建游客角色')
   }
 
-  const hidden = await waitHidden('#profile-panel')
+  let hidden = await waitHidden('#profile-panel')
+  if (!hidden && await visible('#close-profile')) {
+    await page.locator('#close-profile').click({ timeout: 3000 }).catch(() => {})
+    hidden = await waitHidden('#profile-panel', 4000)
+  }
   addCheck('进入战斗主界面', hidden, hidden ? '账号面板已关闭' : '账号面板仍显示')
   await expectVisible('#game', '战斗画布存在')
   await shot('battle-view')
 }
 
 async function exerciseAccountCenter() {
+  await chooseEvolutionIfOpen()
   await click('#profile-btn', '打开账号中心')
   await expectVisible('#profile-center-tabs', '账号中心页签出现')
   await expectVisible('#profile-slots', '角色档案页显示')
@@ -360,6 +377,7 @@ async function exerciseAccountCenter() {
   await shot('account-center')
   await page.locator('#close-profile').click({ timeout: 5000 })
   await waitHidden('#profile-panel')
+  await chooseEvolutionIfOpen()
 }
 
 async function exercisePages() {
@@ -371,10 +389,13 @@ async function exercisePages() {
     ['#train-btn', '#skill-panel', '法宝页'],
   ]
   for (const [button, panel, name] of pages) {
+    await chooseEvolutionIfOpen()
     await click(button, `打开${name}`)
+    await chooseEvolutionIfOpen()
     await expectVisible(panel, `${name}显示`)
     await shot(name)
   }
+  await chooseEvolutionIfOpen()
   await click('#battle-btn', '回到战斗页')
 }
 
@@ -382,6 +403,7 @@ async function randomExplore() {
   const endAt = Date.now() + randomMs
   const actions = ['canvas', 'dungeon', 'gacha', 'bag', 'artifact', 'battle']
   while (Date.now() < endAt) {
+    await chooseEvolutionIfOpen()
     const action = actions[Math.floor(Math.random() * actions.length)]
     if (action === 'canvas') {
       const x = 90 + Math.random() * 250
@@ -393,6 +415,7 @@ async function randomExplore() {
     }
     await page.waitForTimeout(450 + Math.random() * 350)
   }
+  await chooseEvolutionIfOpen()
   addCheck('随机探索', true, `${(randomMs / 1000).toFixed(0)}s`)
   await shot('random-explore-end', false)
 }
