@@ -36,7 +36,10 @@ import {
   wildSkillDamageMultiplier,
   wildSpawnDistance,
 } from './combatTuning'
+import { setElementHtml, setElementStyle, setElementText } from './domUpdate'
+import { nextHudRefresh } from './hudRefresh'
 import { techniqueArtForId, techniqueProgressForCharacter, techniqueProgressTotal, techniqueSpecsForCharacter } from './progression'
+import { scaledParticleCount, vfxBudgetForLoad } from './vfxBudget'
 
 type Rarity = '普通' | '稀有' | '史诗' | '传说'
 type Mode = 'wild' | 'dungeon'
@@ -913,6 +916,7 @@ const pagePanels: Record<AppPage, HTMLElement> = {
 }
 const evolutionPanel = document.querySelector<HTMLDivElement>('#evolution-panel')!
 const evolutionList = document.querySelector<HTMLDivElement>('#evolution-list')!
+const hpBar = document.querySelector<HTMLElement>('#hp-bar')!
 const skillStatus = document.querySelector<HTMLDivElement>('#skill-status')!
 const skillStatusName = document.querySelector<HTMLElement>('#skill-status-name')!
 const skillStatusLevel = document.querySelector<HTMLElement>('#skill-status-level')!
@@ -968,6 +972,7 @@ const profileModeHint = document.querySelector<HTMLParagraphElement>('#profile-m
 const profileAuthTitle = document.querySelector<HTMLHeadingElement>('#profile-auth-title')!
 const profileSubmit = document.querySelector<HTMLButtonElement>('#profile-submit')!
 const profileGuest = document.querySelector<HTMLButtonElement>('#profile-guest')!
+const hudTextCache = new Map<string, HTMLElement>()
 const LEGACY_SAVE_KEY = 'void-trial-save-v1'
 const PROFILE_INDEX_KEY = 'void-trial-profile-index-v1'
 const PROFILE_SESSION_KEY = 'void-trial-profile-session-v1'
@@ -1105,6 +1110,7 @@ let lastAttackFlash = 0
 let autoWorldWalk = 0
 let autoSkillCastGap = 0
 let lastFrameWorkMs = 0
+let hudRefreshTimer = 0
 let moveTarget: Vec | null = null
 let moveTargetPulse = 0
 let lastMoveTargetSetAt = 0
@@ -1369,9 +1375,20 @@ function flashScreen(color: string, strength = 0.14, life = 0.16) {
   state.screenFlash = { color, strength, life, maxLife: life }
 }
 
+function currentVfxBudget() {
+  return vfxBudgetForLoad({
+    frameMs: lastFrameWorkMs,
+    effects: state.effects.length,
+    particles: state.particles.length,
+    enemySkills: state.enemySkills.length,
+  })
+}
+
 function addParticleBurst(x: number, y: number, color: string, count: number, power = 1, kind: ParticleKind = 'spark') {
-  if (state.particles.length > 190) state.particles.splice(0, state.particles.length - 160)
-  for (let i = 0; i < count; i += 1) {
+  const budget = currentVfxBudget()
+  if (state.particles.length > budget.maxParticles) state.particles.splice(0, state.particles.length - Math.floor(budget.maxParticles * 0.82))
+  const particleCount = scaledParticleCount(count, budget)
+  for (let i = 0; i < particleCount; i += 1) {
     const angle = Math.random() * Math.PI * 2
     const speed = (90 + Math.random() * 260) * power
     const lift = kind === 'ember' ? -70 : kind === 'soul' ? -130 : -35
@@ -1392,9 +1409,10 @@ function addParticleBurst(x: number, y: number, color: string, count: number, po
 }
 
 function addSlashParticles(x: number, y: number, angle: number, color: string, strong = false) {
-  const count = strong ? 28 : 14
+  const budget = currentVfxBudget()
+  const count = scaledParticleCount(strong ? 28 : 14, budget)
   const length = strong ? 190 : 92
-  if (state.particles.length > 190) state.particles.splice(0, state.particles.length - 160)
+  if (state.particles.length > budget.maxParticles) state.particles.splice(0, state.particles.length - Math.floor(budget.maxParticles * 0.82))
   for (let i = 0; i < count; i += 1) {
     const along = (i / Math.max(1, count - 1) - 0.5) * length
     const side = (Math.random() - 0.5) * (strong ? 64 : 34)
@@ -4838,8 +4856,9 @@ function update(dt: number) {
     text.life -= dt
   })
   state.texts = state.texts.filter((text) => text.life > 0)
+  const vfxBudget = currentVfxBudget()
   state.effects.forEach((effect) => { effect.life -= dt })
-  state.effects = state.effects.filter((effect) => effect.life > 0).slice(-58)
+  state.effects = state.effects.filter((effect) => effect.life > 0).slice(-vfxBudget.maxEffects)
   state.particles.forEach((particle) => {
     particle.x += particle.vx * dt
     particle.y += particle.vy * dt
@@ -4847,14 +4866,14 @@ function update(dt: number) {
     particle.vy += (particle.kind === 'ember' ? -8 : particle.kind === 'soul' ? -24 : 62) * dt
     particle.life -= dt
   })
-  state.particles = state.particles.filter((particle) => particle.life > 0).slice(-140)
+  state.particles = state.particles.filter((particle) => particle.life > 0).slice(-vfxBudget.maxParticles)
   if (state.screenFlash) {
     state.screenFlash.life -= dt
     if (state.screenFlash.life <= 0) state.screenFlash = null
   }
   state.recentSkillPulse = Math.max(0, state.recentSkillPulse - dt * 1.35)
   claimMainQuestIfReady()
-  updateHud()
+  updateHudThrottled(dt)
 }
 
 function innateCooldown(base: number, min = 0.72) {
@@ -5856,9 +5875,9 @@ function draw() {
   if (state.mode === 'dungeon') drawDungeonFloorAtmosphere(w, groundY)
 
   drawWorldDetails(ox, oy)
-  const perfMode = vfxPerformanceMode()
-  const effectsToDraw = perfMode ? state.effects.slice(-32) : state.effects
-  const particlesToDraw = perfMode ? state.particles.slice(-92) : state.particles
+  const vfxBudget = currentVfxBudget()
+  const effectsToDraw = state.effects.slice(-vfxBudget.drawEffects)
+  const particlesToDraw = state.particles.slice(-vfxBudget.drawParticles)
   for (const skill of state.enemySkills) drawEnemySkill(skill, ox, oy)
   for (const orb of state.soulOrbs) drawSoulOrb(orb, ox, oy)
   for (const effect of effectsToDraw) drawEffect(effect, ox, oy)
@@ -5888,7 +5907,7 @@ function draw() {
 }
 
 function vfxPerformanceMode() {
-  return lastFrameWorkMs > 17 || state.effects.length > 28 || state.particles.length > 94 || state.enemySkills.length > 4
+  return currentVfxBudget().tier !== 'normal'
 }
 
 function drawSideTerrain(w: number, h: number, ox: number, groundY: number) {
@@ -8395,10 +8414,16 @@ function updateHeroShowcase() {
   if (heroShowcaseImg.getAttribute('src') !== portraitUrl) heroShowcaseImg.src = portraitUrl
   const weapon = state.gear.weapon?.name ?? '无武器'
   const displayName = state.characterName || character.name
-  heroShowcaseLevel.textContent = cultivationRealm()
-  heroShowcaseTitle.textContent = `${displayName} · ${character.name} · ${state.mode === 'dungeon' ? dungeonStageTitle() : worldStageTitle()}`
-  heroShowcaseGear.textContent = `本命术·${character.innateSkill} | ${character.title} | ${weapon}`
+  setElementText(heroShowcaseLevel, cultivationRealm())
+  setElementText(heroShowcaseTitle, `${displayName} · ${character.name} · ${state.mode === 'dungeon' ? dungeonStageTitle() : worldStageTitle()}`)
+  setElementText(heroShowcaseGear, `本命术·${character.innateSkill} | ${character.title} | ${weapon}`)
   heroShowcaseImg.classList.toggle('facing-left', shouldFlipHeroSprite())
+}
+
+function updateHudThrottled(dt: number) {
+  const result = nextHudRefresh(hudRefreshTimer, dt, 0.1)
+  hudRefreshTimer = result.timer
+  if (result.refresh) updateHud()
 }
 
 function updateHud() {
@@ -8420,13 +8445,13 @@ function updateHud() {
   setText('wave-label', state.mode === 'dungeon' ? `第${state.dungeonFloor}/${state.dungeonMaxFloors}层 ${Math.ceil(state.dungeonTime)}s` : `第${currentStage}关`)
   setText('mode-label', state.mode === 'dungeon' ? `副本·${dungeonStageTitle()}` : `世界地图·${worldStageTitle(currentStage)}`)
   setText('message', state.message)
-  skillStatus.style.setProperty('--skill-color', state.recentSkillColor || character.color)
+  setElementStyle(skillStatus, '--skill-color', state.recentSkillColor || character.color)
   skillStatus.classList.toggle('active', state.recentSkillPulse > 0)
-  skillStatusName.textContent = `本命术·${character.innateSkill}`
-  skillStatusLevel.textContent = techniqueTotal.label
-  skillStatusRecent.textContent = state.recentSkillName
+  setElementText(skillStatusName, `本命术·${character.innateSkill}`)
+  setElementText(skillStatusLevel, techniqueTotal.label)
+  setElementText(skillStatusRecent, state.recentSkillName
     ? `${state.recentSkillName}｜${state.recentSkillDesc}`
-    : '自动施法准备中'
+    : '自动施法准备中')
   updateMainQuestLabel()
   const extractDistance = state.dungeonGateFound
     ? Math.round(Math.hypot(state.hero.x - state.dungeonExtractX, state.hero.y - state.dungeonExtractY))
@@ -8456,25 +8481,30 @@ function updateHud() {
   setText('quest-label', dungeonProgress || (state.questClaimed ? `${stageStatus} | 副本卷 ${state.dungeonEntries}张，世界Boss可掉落` : `${stageStatus} | 主线击杀 ${Math.min(state.kills, state.questTarget)}/${state.questTarget}`))
   const artifactCount = artifactKeys.filter((key) => hasArtifact(key)).length
   setText('gear-label', `法宝 ${artifactCount}/${artifactKeys.length} | 精华 ${state.skills.points} | 灵石 ${state.spiritStones} | 质变：${mutationSummary()} | 装备：${state.gear.weapon?.name ?? '无武器'} | ${state.gear.armor?.name ?? '无护甲'} | ${state.gear.core?.name ?? '无核心'}`)
-  document.querySelector<HTMLElement>('#hp-bar')!.style.width = `${Math.max(0, state.hero.hp / maxHp()) * 100}%`
-  modeBtn.textContent = state.mode === 'dungeon'
+  setElementStyle(hpBar, 'width', `${Math.max(0, state.hero.hp / maxHp()) * 100}%`)
+  setElementText(modeBtn, state.mode === 'dungeon'
     ? state.dungeonGateFound
       ? (dungeonIsFinalFloor() ? '撤离' : '进下一层')
       : (dungeonIsFinalFloor() ? '找撤离门' : '找下层门')
-    : `选择副本 ${state.dungeonEntries}张`
+    : `选择副本 ${state.dungeonEntries}张`)
   autoOrb.classList.toggle('manual', !!moveTarget)
   autoOrb.classList.toggle('paused', state.mode === 'wild' && !state.autoExplore && !moveTarget)
-  autoOrbLabel.innerHTML = moveTarget ? '手动<br>目标' : state.mode === 'dungeon' ? '副本<br>探索' : state.autoExplore ? '自动<br>推进' : '暂停<br>推进'
+  setElementHtml(autoOrbLabel, moveTarget ? '手动<br>目标' : state.mode === 'dungeon' ? '副本<br>探索' : state.autoExplore ? '自动<br>推进' : '暂停<br>推进')
   pullOne.disabled = pulling || state.tickets < 1
   pullTen.disabled = pulling || state.tickets < 10
-  gachaTicketCount.textContent = String(state.tickets)
-  gachaStoneCount.textContent = String(state.spiritStones)
-  gachaPityCount.textContent = `${Math.min(state.pity, 10)}/10`
-  gachaPityBar.style.width = `${Math.min(100, state.pity * 10)}%`
+  setElementText(gachaTicketCount, String(state.tickets))
+  setElementText(gachaStoneCount, String(state.spiritStones))
+  setElementText(gachaPityCount, `${Math.min(state.pity, 10)}/10`)
+  setElementStyle(gachaPityBar, 'width', `${Math.min(100, state.pity * 10)}%`)
 }
 
 function setText(id: string, text: string) {
-  document.querySelector<HTMLElement>(`#${id}`)!.textContent = text
+  let element = hudTextCache.get(id)
+  if (!element) {
+    element = document.querySelector<HTMLElement>(`#${id}`)!
+    hudTextCache.set(id, element)
+  }
+  setElementText(element, text)
 }
 
 function toast(text: string) {

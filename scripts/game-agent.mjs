@@ -339,7 +339,7 @@ async function playtestCombat() {
   await shot('playtest-end', false)
 }
 
-async function completeGuestEntry() {
+async function completeGuestEntry(captureBattle = true) {
   await expectVisible('#profile-panel', '登录面板出现')
   await expectVisible('#profile-entry-status', '服务器状态卡出现')
   await expectVisible('#profile-guest', '游客试玩按钮出现')
@@ -361,7 +361,7 @@ async function completeGuestEntry() {
   }
   addCheck('进入战斗主界面', hidden, hidden ? '账号面板已关闭' : '账号面板仍显示')
   await expectVisible('#game', '战斗画布存在')
-  await shot('battle-view')
+  if (captureBattle) await shot('battle-view')
 }
 
 async function exerciseAccountCenter() {
@@ -447,9 +447,10 @@ try {
   })
 
   await page.goto(`${baseUrl}?gameAgent=${Date.now()}`, { waitUntil: 'domcontentloaded', timeout: 30000 })
-  await completeGuestEntry()
-  await sampleCanvasHealth()
+  await completeGuestEntry(false)
   await measureFrames()
+  await sampleCanvasHealth()
+  await shot('battle-view')
   await exerciseAccountCenter()
   await exercisePages()
   await playtestCombat()
