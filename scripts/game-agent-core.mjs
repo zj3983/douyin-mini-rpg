@@ -324,7 +324,7 @@ export function dungeonLoopReview({ before = {}, after = {}, samples = [], settl
   }
 }
 
-export function reportMarkdown({ startedAt, durationMs, baseUrl, viewport, checks, consoleIssues, pageErrors, requestFailures, screenshots, performance, playtest }) {
+export function reportMarkdown({ startedAt, durationMs, baseUrl, viewport, checks, consoleIssues, pageErrors, requestFailures, screenshots, performance, playtest, dungeonReview }) {
   const summary = summarizeAgentRun({ checks, consoleIssues, pageErrors, requestFailures })
   const lines = [
     '# Game Agent Report',
@@ -346,6 +346,7 @@ export function reportMarkdown({ startedAt, durationMs, baseUrl, viewport, check
     `- Slow frames over 50ms: ${performance.slowFrames}`,
     '',
     ...(playtest?.markdown ? [playtest.markdown.trim(), ''] : []),
+    ...(dungeonReview?.markdown ? [dungeonReview.markdown.trim(), ''] : []),
     '## Screenshots',
     '',
     ...screenshots.map((shot) => `- ${shot.label}: ${shot.file}`),

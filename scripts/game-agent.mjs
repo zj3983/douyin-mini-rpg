@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 
 import { chromium } from 'playwright'
 
-import { canvasAspectHealth, canvasHealth, playtestReview, reportMarkdown } from './game-agent-core.mjs'
+import { canvasAspectHealth, canvasHealth, dungeonLoopReview, playtestReview, reportMarkdown } from './game-agent-core.mjs'
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const runId = new Date().toISOString().replace(/[:.]/g, '-')
@@ -19,6 +19,7 @@ const baseUrl = process.env.GAME_AGENT_URL || `http://127.0.0.1:${port}/`
 const apiHealthUrl = `http://127.0.0.1:${apiPort}/api/health`
 const randomMs = Number(process.env.GAME_AGENT_RANDOM_MS || 20000)
 const playtestMs = Number(process.env.GAME_AGENT_PLAYTEST_MS || 24000)
+const scenario = String(process.env.GAME_AGENT_SCENARIO || 'default').toLowerCase()
 const headless = process.env.GAME_AGENT_HEADLESS !== '0'
 const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 const chromeCandidates = process.platform === 'win32'
@@ -48,6 +49,7 @@ let page
 let startedAt = new Date().toISOString()
 let performance = { averageFrameMs: 0, slowFrames: 0 }
 let playtest = null
+let dungeonReview = null
 
 function addCheck(name, ok, detail = '') {
   checks.push({ name, ok: Boolean(ok), detail })
@@ -303,6 +305,46 @@ async function collectPlaytestSample(startMs) {
   }, startMs)
 }
 
+async function collectDungeonState() {
+  return page.evaluate(() => {
+    const text = (selector) => document.querySelector(selector)?.textContent?.trim() ?? ''
+    const number = (value) => {
+      const match = String(value ?? '').match(/-?\d+/)
+      return match ? Number(match[0]) : 0
+    }
+    const progress = Array.from(document.querySelectorAll('#technique-progress .technique-card, #technique-progress [class*="technique"]'))
+      .map((item) => item.textContent?.replace(/\s+/g, ' ').trim() ?? '')
+      .filter(Boolean)
+      .slice(0, 6)
+    const artifactTitle = text('#artifact-page-title')
+    const artifactOwnedMatch = artifactTitle.match(/(\d+)\/(\d+)/)
+    const resourceText = `${text('#ticket-count')} ${text('#stone-count')} ${text('#gear-label')} ${document.querySelector('#skill-points')?.textContent ?? ''}`
+    return {
+      mode: text('#mode-label'),
+      wave: text('#wave-label'),
+      quest: text('#quest-label'),
+      message: text('#message'),
+      kills: number(text('#kill-label')),
+      passes: number(text('#mode-btn')),
+      tickets: number(text('#ticket-count')),
+      stones: number(text('#stone-count')),
+      essence: number(resourceText.match(/精华\s*(\d+)/)?.[1] ?? 0),
+      materials: number(resourceText.match(/材料\s*(\d+)/)?.[1] ?? 0),
+      artifactSummary: artifactTitle,
+      artifactOwned: artifactOwnedMatch ? Number(artifactOwnedMatch[1]) : 0,
+      artifactProgress: progress,
+    }
+  })
+}
+
+async function collectSettlementText() {
+  return page.evaluate(() => {
+    const panel = document.querySelector('#settlement-panel')
+    if (!panel || panel.hidden) return ''
+    return panel.textContent?.replace(/\s+/g, ' ').trim() ?? ''
+  })
+}
+
 async function chooseEvolutionIfOpen() {
   const card = page.locator('.evolution-card').first()
   if (!await card.isVisible({ timeout: 300 }).catch(() => false)) return false
@@ -310,6 +352,13 @@ async function chooseEvolutionIfOpen() {
   await card.click({ timeout: 1500 })
   await page.waitForTimeout(400)
   return title?.trim() || true
+}
+
+async function clearEvolutionChoices(max = 4) {
+  for (let i = 0; i < max; i += 1) {
+    const choice = await chooseEvolutionIfOpen()
+    if (!choice) return
+  }
 }
 
 async function playtestCombat() {
@@ -420,6 +469,77 @@ async function randomExplore() {
   await shot('random-explore-end', false)
 }
 
+async function enterFirstDungeon() {
+  await clearEvolutionChoices()
+  await click('#dungeon-btn', '打开副本页')
+  await expectVisible('#dungeon-panel', '副本页显示')
+  await shot('dungeon-scenario-entry')
+  const entryButtons = page.locator('#dungeon-panel button').filter({ hasText: /进入副本|可进入|进入/ })
+  const entered = await entryButtons.first().click({ timeout: 5000 }).then(() => true).catch(() => false)
+  addCheck('副本专项进入按钮', entered, entered ? '已点击可进入副本' : '没有找到可进入按钮')
+  if (!entered) return false
+  await page.waitForTimeout(800)
+  await click('#battle-btn', '副本专项回到战斗页')
+  await expectVisible('#game', '副本专项战斗画布可见')
+  return true
+}
+
+async function runDungeonScenario() {
+  await completeGuestEntry(false)
+  await measureFrames()
+  await sampleCanvasHealth()
+  await shot('battle-view')
+
+  await clearEvolutionChoices()
+  await click('#train-btn', '副本专项打开法宝页')
+  await expectVisible('#skill-panel', '副本专项法宝页显示')
+  const before = await collectDungeonState()
+  await shot('dungeon-artifact-before')
+
+  const entered = await enterFirstDungeon()
+  const samples = []
+  let settlementText = ''
+  const started = Date.now()
+  const endAt = started + playtestMs
+
+  while (entered && Date.now() <= endAt) {
+    await chooseEvolutionIfOpen()
+    const text = await collectSettlementText()
+    if (text) {
+      settlementText = text
+      break
+    }
+    const sample = await collectDungeonState()
+    samples.push(sample)
+    const gateReady = /撤离|下层|进下一层|找撤离门|找下层门/.test(`${sample.quest} ${sample.message} ${sample.wave}`)
+    if (gateReady) {
+      await page.locator('#mode-btn').click({ timeout: 1500 }).catch(() => {})
+      await page.waitForTimeout(900)
+      const afterGateText = await collectSettlementText()
+      if (afterGateText) {
+        settlementText = afterGateText
+        break
+      }
+    }
+    await page.waitForTimeout(900)
+  }
+
+  if (!settlementText) settlementText = await collectSettlementText()
+  if (settlementText) {
+    await shot('dungeon-settlement')
+    await page.locator('#close-settlement').click({ timeout: 3000 }).catch(() => {})
+    await page.waitForTimeout(600)
+  }
+
+  await click('#train-btn', '副本专项回到法宝页')
+  await expectVisible('#skill-panel', '副本专项法宝页复查')
+  const after = await collectDungeonState()
+  await shot('dungeon-artifact-after')
+
+  dungeonReview = dungeonLoopReview({ before, after, samples, settlementText, entered })
+  addCheck('副本闭环专项评测', dungeonReview.ok, `${dungeonReview.reason}; changed=${dungeonReview.changedResources.join(',') || 'none'}`)
+}
+
 try {
   await ensureApiServer()
   await ensureGameServer()
@@ -447,14 +567,18 @@ try {
   })
 
   await page.goto(`${baseUrl}?gameAgent=${Date.now()}`, { waitUntil: 'domcontentloaded', timeout: 30000 })
-  await completeGuestEntry(false)
-  await measureFrames()
-  await sampleCanvasHealth()
-  await shot('battle-view')
-  await exerciseAccountCenter()
-  await exercisePages()
-  await playtestCombat()
-  await randomExplore()
+  if (scenario === 'dungeon') {
+    await runDungeonScenario()
+  } else {
+    await completeGuestEntry(false)
+    await measureFrames()
+    await sampleCanvasHealth()
+    await shot('battle-view')
+    await exerciseAccountCenter()
+    await exercisePages()
+    await playtestCombat()
+    await randomExplore()
+  }
 } catch (error) {
   addCheck('Agent 致命错误', false, error.stack || error.message)
   if (page) {
@@ -478,6 +602,7 @@ try {
     screenshots,
     performance,
     playtest,
+    dungeonReview,
   })
   const reportFile = join(outDir, 'report.md')
   await writeFile(reportFile, markdown, 'utf8')
