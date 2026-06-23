@@ -27,7 +27,7 @@ jobs:
           npm ci
           npm run build -- --base=/game/douyin-mini-rpg/
           INDEX_ASSETS="$(cd dist && find assets -maxdepth 1 -type f \( -name 'index-*.js' -o -name 'index-*.css' \) | sort)"
-          PUBLIC_ASSETS="$(cd dist && find assets/generated -maxdepth 1 -type f -name 'evolution-tech-*.svg' | sort)"
+          PUBLIC_ASSETS="$(cd dist && { find assets/generated -maxdepth 1 -type f -name 'evolution-tech-*.svg'; find assets/login -maxdepth 1 -type f \( -name '*.png' -o -name '*.webp' -o -name '*.jpg' -o -name '*.jpeg' \) 2>/dev/null || true; } | sort)"
           tar -czf dist-code.tar.gz -C dist index.html $INDEX_ASSETS $PUBLIC_ASSETS
           tar -czf app.tar.gz dist-code.tar.gz server package.json package-lock.json
           ls -lh dist-code.tar.gz app.tar.gz
@@ -200,6 +200,8 @@ jobs:
             grep -qi 'content-type: image/webp' /tmp/douyin-mini-rpg-public-asset.headers
             curl -fsSI -H 'Host: mcp.edcedc.cn' http://${{ env.DEPLOY_HOST }}/game/douyin-mini-rpg/assets/generated/evolution-tech-thunder-cloud.svg | tee /tmp/douyin-mini-rpg-evolution-asset.headers
             grep -qi 'content-type: image/svg' /tmp/douyin-mini-rpg-evolution-asset.headers
+            curl -fsSI -H 'Host: mcp.edcedc.cn' http://${{ env.DEPLOY_HOST }}/game/douyin-mini-rpg/assets/login/login-bg-xianxia.png | tee /tmp/douyin-mini-rpg-login-asset.headers
+            grep -qi 'content-type: image/png' /tmp/douyin-mini-rpg-login-asset.headers
             for i in $(seq 1 20); do
               if curl -fsS -H 'Host: mcp.edcedc.cn' http://${{ env.DEPLOY_HOST }}/game/douyin-mini-rpg/api/health | grep -F '"ok":true'; then
                 break
