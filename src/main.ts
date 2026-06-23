@@ -1891,7 +1891,7 @@ function updateProfileCenterUi() {
   profilePanel.classList.toggle('auth-simple', sections.auth)
   profilePanel.classList.toggle('account-center', sections.centerTabs)
   profileBrandTitle.textContent = activeProfile ? '账号中心' : '进入虚境'
-  profileBrandCaption.textContent = activeProfile ? account.detail : '登录保存进度，游客可直接试玩'
+  profileBrandCaption.textContent = activeProfile ? account.detail : '登录保存进度，游客可本机试玩'
   if (activeProfile) profileAuthTitle.textContent = account.title
   profileCenterTabsBox.hidden = !sections.centerTabs
   profileCenterTabButtons.forEach((button) => {
