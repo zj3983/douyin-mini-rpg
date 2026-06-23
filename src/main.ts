@@ -26,6 +26,7 @@ import {
   type ProfileBusyKind,
   type ProfileFeedbackTone,
 } from './profileFeedback'
+import { profileLoginSceneMarkup } from './profileLoginScene'
 import {
   skillAnnouncementText,
   wildBossHp,
@@ -748,15 +749,16 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 
     <section id="profile-panel" class="profile-panel" hidden>
       <form id="profile-form" class="profile-card">
+        ${profileLoginSceneMarkup()}
         <div class="profile-brand">
           <small>虚境试炼</small>
           <strong>进入虚境</strong>
-          <span>登录保存进度，游客可直接试玩</span>
+          <span>登录保存进度，游客可本机试玩</span>
         </div>
         <div class="profile-head">
           <div>
             <small>玩家认证</small>
-            <h2 id="profile-auth-title">登录游戏</h2>
+            <h2 id="profile-auth-title">账号登录</h2>
           </div>
           <button id="close-profile" class="profile-close" type="button">x</button>
         </div>
@@ -764,7 +766,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <button id="profile-mode-login" class="active" type="button">登录</button>
           <button id="profile-mode-register" type="button">注册</button>
         </div>
-        <p id="profile-mode-hint" class="profile-note profile-auth-only">输入玩家名和密码读取存档；没有账号可切到注册，或游客试玩。</p>
+        <p id="profile-mode-hint" class="profile-note profile-auth-only">输入账号和密码读取云端存档；也可以选择游客试玩，本机进度不会同步到云端。</p>
         <div id="profile-entry-status" class="profile-entry-status profile-auth-only" data-tone="info">
           <i></i>
           <span id="profile-entry-status-title">服务器检测中</span>
