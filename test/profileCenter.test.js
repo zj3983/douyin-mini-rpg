@@ -6,7 +6,6 @@ import {
   profileCenterSections,
   profileCenterTabs,
   profileCloseVisible,
-  profileServerBadge,
 } from '../src/profileCenter.ts'
 
 test('profile center keeps login entry and signed-in account center separate', () => {
@@ -38,16 +37,6 @@ test('profile center exposes cloud and security as separate tabs', () => {
 })
 
 test('profile center badges explain server and account state', () => {
-  assert.deepEqual(profileServerBadge('checking'), {
-    title: '服务器检测中',
-    detail: '正在确认云端登录服务。',
-    tone: 'info',
-  })
-  assert.deepEqual(profileServerBadge('online'), {
-    title: '服务器在线',
-    detail: '登录后可读取云端存档。',
-    tone: 'success',
-  })
   assert.deepEqual(profileAccountBadge(true, false), {
     title: '云端账号',
     detail: '资料会同步到服务器。',

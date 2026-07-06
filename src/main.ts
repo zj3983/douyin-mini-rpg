@@ -13,11 +13,8 @@ import {
   profileCenterTabs,
   profileCloseVisible,
   type ProfileCenterTabId,
-  type ProfileServerState,
-  profileServerBadge,
 } from './profileCenter'
 import {
-  profileAuthHintText,
   profileAuthTitleText,
   profileBusyText,
   profileGuestBusyText,
@@ -41,6 +38,12 @@ import { setElementHtml, setElementStyle, setElementText } from './domUpdate'
 import { nextHudRefresh } from './hudRefresh'
 import { techniqueArtForId, techniqueProgressForCharacter, techniqueProgressTotal, techniqueSpecsForCharacter } from './progression'
 import { scaledParticleCount, vfxBudgetForLoad } from './vfxBudget'
+import {
+  characterVisuals,
+  dungeonMonsterVisuals,
+  skillVfxVisuals,
+  worldMonsterVisuals as worldMonsterVisualCatalog,
+} from './visualAssets.ts'
 
 type Rarity = '普通' | '稀有' | '史诗' | '传说'
 type Mode = 'wild' | 'dungeon'
@@ -481,10 +484,10 @@ const dungeonDefs: DungeonDef[] = [
 ]
 
 const characters: Record<CharacterId, CharacterDef> = {
-  sword: { id: 'sword', name: '青岚剑修', title: '飞剑穿刺 / 攻速均衡', need: 20, color: '#67e8f9', portrait: '/assets/generated/portrait-sword.webp', battle: '/assets/generated/character-sword.png', starter: { slash: 2, orbit: 1 }, innateSkill: '御剑术', desc: '自带御剑术，飞剑会自动出鞘走弧线穿刺，再回到身边；获得剑类法宝后穿透更强。' },
-  thunder: { id: 'thunder', name: '九霄雷使', title: '雷印弹射 / 法力成长', need: 30, color: '#38bdf8', portrait: '/assets/generated/portrait-thunder.webp', battle: '/assets/generated/character-thunder.png', starter: { chain: 3, burst: 1 }, innateSkill: '雷印诀', desc: '自带雷印诀，自动在怪群间落下雷印并弹射；法力成长更高，适合清理密集怪潮。' },
-  flame: { id: 'flame', name: '莲火符师', title: '符火爆发 / 范围压制', need: 30, color: '#fb923c', portrait: '/assets/generated/portrait-flame.webp', battle: '/assets/generated/character-flame.png', starter: { flame: 3, burst: 1 }, innateSkill: '莲火符', desc: '自带莲火符，自动选择怪群中心引爆符火；爆发高但身板较脆，获得火鼎法宝后范围更大。' },
-  wood: { id: 'wood', name: '青木灵医', title: '回元护身 / 生命成长', need: 25, color: '#86efac', portrait: '/assets/generated/portrait-wood.webp', battle: '/assets/generated/character-wood.png', starter: { regen: 3, slash: 1 }, innateSkill: '回元息', desc: '自带回元息，血量下降或被围住时自动回元护身；生命成长更高，适合稳定推进副本。' },
+  sword: { id: 'sword', name: '青岚剑修', title: '飞剑穿刺 / 攻速均衡', need: 20, color: '#67e8f9', portrait: characterVisuals.sword.portrait, battle: characterVisuals.sword.battle, starter: { slash: 2, orbit: 1 }, innateSkill: '御剑术', desc: '自带御剑术，飞剑会自动出鞘走弧线穿刺，再回到身边；获得剑类法宝后穿透更强。' },
+  thunder: { id: 'thunder', name: '九霄雷使', title: '雷印弹射 / 法力成长', need: 30, color: '#38bdf8', portrait: characterVisuals.thunder.portrait, battle: characterVisuals.thunder.battle, starter: { chain: 3, burst: 1 }, innateSkill: '雷印诀', desc: '自带雷印诀，自动在怪群间落下雷印并弹射；法力成长更高，适合清理密集怪潮。' },
+  flame: { id: 'flame', name: '莲火符师', title: '符火爆发 / 范围压制', need: 30, color: '#fb923c', portrait: characterVisuals.flame.portrait, battle: characterVisuals.flame.battle, starter: { flame: 3, burst: 1 }, innateSkill: '莲火符', desc: '自带莲火符，自动选择怪群中心引爆符火；爆发高但身板较脆，获得火鼎法宝后范围更大。' },
+  wood: { id: 'wood', name: '青木灵医', title: '回元护身 / 生命成长', need: 25, color: '#86efac', portrait: characterVisuals.wood.portrait, battle: characterVisuals.wood.battle, starter: { regen: 3, slash: 1 }, innateSkill: '回元息', desc: '自带回元息，血量下降或被围住时自动回元护身；生命成长更高，适合稳定推进副本。' },
 }
 
 const characterGrowth: Record<CharacterId, { atk: number; hp: number; mana: number; cd: number }> = {
@@ -751,13 +754,10 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <form id="profile-form" class="profile-card">
         ${profileLoginSceneMarkup()}
         <div class="profile-brand">
-          <small>虚境试炼</small>
           <strong>进入虚境</strong>
-          <span>登录保存进度，游客可本机试玩</span>
         </div>
         <div class="profile-head">
           <div>
-            <small>玩家认证</small>
             <h2 id="profile-auth-title">账号登录</h2>
           </div>
           <button id="close-profile" class="profile-close" type="button">x</button>
@@ -765,19 +765,6 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <div class="profile-tabs profile-auth-only" role="tablist" aria-label="账号模式">
           <button id="profile-mode-login" class="active" type="button">登录</button>
           <button id="profile-mode-register" type="button">注册</button>
-        </div>
-        <p id="profile-mode-hint" class="profile-note profile-auth-only">输入账号和密码读取云端存档；也可以选择游客试玩，本机进度不会同步到云端。</p>
-        <div id="profile-entry-status" class="profile-entry-status profile-auth-only" data-tone="info">
-          <i></i>
-          <span id="profile-entry-status-title">服务器检测中</span>
-          <small id="profile-entry-status-detail">正在确认云端登录服务。</small>
-        </div>
-        <div id="profile-recent" class="profile-recent profile-auth-only" hidden>
-          <div>
-            <b id="profile-recent-title">最近档案</b>
-            <small id="profile-recent-detail">继续上次的本机进度。</small>
-          </div>
-          <button id="profile-recent-use" type="button">填入</button>
         </div>
         <div class="profile-current">
           <span id="profile-current">未登录</span>
@@ -932,7 +919,6 @@ const heroShowcaseGear = document.querySelector<HTMLElement>('#hero-showcase-gea
 const profilePanel = document.querySelector<HTMLDivElement>('#profile-panel')!
 const profileForm = document.querySelector<HTMLFormElement>('#profile-form')!
 const profileBrandTitle = document.querySelector<HTMLElement>('.profile-brand strong')!
-const profileBrandCaption = document.querySelector<HTMLElement>('.profile-brand span')!
 const closeProfile = document.querySelector<HTMLButtonElement>('#close-profile')!
 const profileSwitch = document.querySelector<HTMLButtonElement>('#profile-switch')!
 const profileCurrent = document.querySelector<HTMLElement>('#profile-current')!
@@ -945,13 +931,6 @@ const profileCharacterName = document.querySelector<HTMLInputElement>('#profile-
 const profileCharacterOptions = document.querySelector<HTMLDivElement>('#profile-character-options')!
 const profileArtifactOptions = document.querySelector<HTMLDivElement>('#profile-artifact-options')!
 const profileCreateConfirm = document.querySelector<HTMLButtonElement>('#profile-create-confirm')!
-const profileEntryStatus = document.querySelector<HTMLDivElement>('#profile-entry-status')!
-const profileEntryStatusTitle = document.querySelector<HTMLElement>('#profile-entry-status-title')!
-const profileEntryStatusDetail = document.querySelector<HTMLElement>('#profile-entry-status-detail')!
-const profileRecent = document.querySelector<HTMLDivElement>('#profile-recent')!
-const profileRecentTitle = document.querySelector<HTMLElement>('#profile-recent-title')!
-const profileRecentDetail = document.querySelector<HTMLElement>('#profile-recent-detail')!
-const profileRecentUse = document.querySelector<HTMLButtonElement>('#profile-recent-use')!
 const profileCenterTabsBox = document.querySelector<HTMLDivElement>('#profile-center-tabs')!
 const profileCenterTabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-profile-tab]'))
 const profileCloudBox = document.querySelector<HTMLDivElement>('.profile-cloud')!
@@ -970,7 +949,6 @@ const profilePinInput = document.querySelector<HTMLInputElement>('#profile-pin')
 const profileError = document.querySelector<HTMLDivElement>('#profile-error')!
 const profileModeLogin = document.querySelector<HTMLButtonElement>('#profile-mode-login')!
 const profileModeRegister = document.querySelector<HTMLButtonElement>('#profile-mode-register')!
-const profileModeHint = document.querySelector<HTMLParagraphElement>('#profile-mode-hint')!
 const profileAuthTitle = document.querySelector<HTMLHeadingElement>('#profile-auth-title')!
 const profileSubmit = document.querySelector<HTMLButtonElement>('#profile-submit')!
 const profileGuest = document.querySelector<HTMLButtonElement>('#profile-guest')!
@@ -1047,31 +1025,23 @@ const dungeonSprites: Record<DungeonId, HTMLImageElement> = {
 
 const worldSprites = stageThemes.map((theme) => loadSprite(theme.bg))
 
+const swordActionVisuals = characterVisuals.sword.actions ?? {}
 const swordActionSprites = {
-  sheet: loadSprite('/assets/generated/action-sword-sheet-ai.webp'),
-  idle: loadSprite('/assets/generated/action-sword-idle.png'),
-  fly: loadSprite('/assets/generated/action-sword-fly.png'),
-  slash: loadSprite('/assets/generated/action-sword-slash.png'),
+  sheet: loadSprite(swordActionVisuals.sheet ?? characterVisuals.sword.battle),
+  idle: loadSprite(swordActionVisuals.idle ?? characterVisuals.sword.battle),
+  fly: loadSprite(swordActionVisuals.fly ?? characterVisuals.sword.battle),
+  slash: loadSprite(swordActionVisuals.slash ?? characterVisuals.sword.battle),
 }
 
 const monsterSprites: Record<EnemyKind, HTMLImageElement> = {
-  slime: loadSprite('/assets/generated/monster-spirit-fox.png'),
-  bat: loadSprite('/assets/generated/monster-bone-bat.png'),
-  wolf: loadSprite('/assets/generated/monster-crystal-beast.png'),
-  crystal: loadSprite('/assets/generated/monster-crystal-beast.png'),
-  warden: loadSprite('/assets/generated/monster-gatekeeper.png'),
+  slime: loadSprite(dungeonMonsterVisuals.slime.image),
+  bat: loadSprite(dungeonMonsterVisuals.bat.image),
+  wolf: loadSprite(dungeonMonsterVisuals.wolf.image),
+  crystal: loadSprite(dungeonMonsterVisuals.crystal.image),
+  warden: loadSprite(dungeonMonsterVisuals.warden.image),
 }
 
-const worldMonsterSpritePaths = [
-  '/assets/generated/monster-world-moss.webp',
-  '/assets/generated/monster-world-star-outpost.webp',
-  '/assets/generated/monster-world-mist-forest.webp',
-  '/assets/generated/monster-world-crystal-mine.webp',
-  '/assets/generated/monster-world-blood-rift.webp',
-  '/assets/generated/monster-world-royal-ruins.webp',
-  '/assets/generated/monster-world-star-sea.webp',
-]
-const worldMonsterSprites = worldMonsterSpritePaths.map(loadSprite)
+const worldMonsterSprites = worldMonsterVisualCatalog.map((monster) => loadSprite(monster.image))
 type EnemySpriteMotion = 'ground' | 'flying' | 'heavy'
 interface EnemySpriteLayout {
   width: number
@@ -1081,22 +1051,14 @@ interface EnemySpriteLayout {
   barY: number
   motion?: EnemySpriteMotion
 }
-const worldMonsterVisuals: Array<Required<EnemySpriteLayout>> = [
-  { width: 138, height: 164, lift: 0, barWidth: 86, barY: 146, motion: 'ground' },
-  { width: 146, height: 142, lift: 4, barWidth: 88, barY: 126, motion: 'heavy' },
-  { width: 168, height: 124, lift: 58, barWidth: 86, barY: 110, motion: 'flying' },
-  { width: 178, height: 108, lift: 2, barWidth: 94, barY: 98, motion: 'heavy' },
-  { width: 176, height: 106, lift: 2, barWidth: 94, barY: 98, motion: 'ground' },
-  { width: 168, height: 126, lift: 2, barWidth: 96, barY: 114, motion: 'heavy' },
-  { width: 190, height: 130, lift: 50, barWidth: 98, barY: 112, motion: 'flying' },
-]
+const worldMonsterVisuals: Array<Required<EnemySpriteLayout>> = worldMonsterVisualCatalog.map((monster) => monster.layout)
 
 const vfxSprites = {
-  swordWave: loadSprite('/assets/generated/vfx-sword-qi.webp'),
-  impact: loadSprite('/assets/generated/vfx-impact-burst.png'),
-  thunder: loadSprite('/assets/generated/vfx-thunder-seal.png'),
-  lotus: loadSprite('/assets/generated/vfx-lotus-fire.png'),
-  heal: loadSprite('/assets/generated/vfx-heal-aura.png'),
+  swordWave: loadSprite(skillVfxVisuals.swordWave),
+  impact: loadSprite(skillVfxVisuals.impact),
+  thunder: loadSprite(skillVfxVisuals.thunder),
+  lotus: loadSprite(skillVfxVisuals.lotus),
+  heal: loadSprite(skillVfxVisuals.heal),
 }
 
 let input: Vec = { x: 0, y: 0 }
@@ -1122,7 +1084,6 @@ let activePage: AppPage = 'battle'
 let activeProfile: PlayerProfile | null = null
 let profileAuthMode: ProfileAuthMode = 'login'
 let profileCenterTab: ProfileCenterTabId = 'slots'
-let profileServerState: ProfileServerState = 'checking'
 let cloudAccountActive = false
 let cloudSyncState: 'idle' | 'syncing' | 'error' = 'idle'
 let cloudSyncMessage = ''
@@ -1592,18 +1553,6 @@ function apiUnavailable(error: unknown) {
   return (error as Error & { code?: string })?.code === 'API_UNAVAILABLE'
 }
 
-async function checkProfileServer() {
-  profileServerState = 'checking'
-  updateProfileEntryStatus()
-  try {
-    await accountRequest<{ ok: boolean }>('/health')
-    profileServerState = 'online'
-  } catch {
-    profileServerState = 'offline'
-  }
-  updateProfileEntryStatus()
-}
-
 function isCloudSaveEnvelope(save: unknown): save is CloudSaveEnvelope {
   return Boolean(
     save
@@ -1852,29 +1801,11 @@ function setProfileAuthMode(mode: ProfileAuthMode) {
   profilePinInput.autocomplete = mode === 'login' ? 'current-password' : 'new-password'
   profileAuthTitle.textContent = profileAuthTitleText(mode)
   profileSubmit.textContent = profileSubmitText(mode)
-  profileModeHint.textContent = profileAuthHintText(mode)
   setProfileError('')
 }
 
 function guestProfile(profile = activeProfile) {
   return Boolean(profile && profile.name === '游客' && !isServerProfile(profile.id))
-}
-
-function updateProfileEntryStatus() {
-  const badge = profileServerBadge(profileServerState)
-  profileEntryStatus.dataset.tone = badge.tone
-  profileEntryStatusTitle.textContent = badge.title
-  profileEntryStatusDetail.textContent = badge.detail
-}
-
-function updateRecentProfile(index = readProfileIndex()) {
-  const remembered = index.profiles.find((profile) => profile.id === index.activeId) ?? index.profiles[0]
-  profileRecent.hidden = !remembered || Boolean(activeProfile)
-  if (!remembered) return
-  const summary = profileSummary(remembered.id)
-  profileRecentTitle.textContent = `最近档案：${remembered.name}`
-  profileRecentDetail.textContent = `${PROFILE_SLOT_LABELS[safeSlotId(remembered.activeSlotId)]} | ${cultivationRealm(summary.level)} | 券 ${summary.tickets} | 灵石 ${summary.spiritStones}`
-  profileRecentUse.disabled = false
 }
 
 function setProfileCenterTab(tab: ProfileCenterTabId) {
@@ -1891,7 +1822,6 @@ function updateProfileCenterUi() {
   profilePanel.classList.toggle('auth-simple', sections.auth)
   profilePanel.classList.toggle('account-center', sections.centerTabs)
   profileBrandTitle.textContent = activeProfile ? '账号中心' : '进入虚境'
-  profileBrandCaption.textContent = activeProfile ? account.detail : '登录保存进度，游客可本机试玩'
   if (activeProfile) profileAuthTitle.textContent = account.title
   profileCenterTabsBox.hidden = !sections.centerTabs
   profileCenterTabButtons.forEach((button) => {
@@ -1920,11 +1850,9 @@ function updateProfileUi() {
   })
   profileList.innerHTML = ''
   updateCloudStatus()
-  updateProfileEntryStatus()
   updateProfileCenterUi()
   renderProfileSlots()
   const index = readProfileIndex()
-  updateRecentProfile(index)
   if (!index.profiles.length) {
     const empty = document.createElement('div')
     empty.className = 'profile-empty'
@@ -8599,16 +8527,6 @@ function bindControls() {
       if (tab) setProfileCenterTab(tab)
     })
   })
-  profileRecentUse.addEventListener('click', () => {
-    const index = readProfileIndex()
-    const remembered = index.profiles.find((profile) => profile.id === index.activeId) ?? index.profiles[0]
-    if (!remembered) return
-    setProfileAuthMode('login')
-    profileNameInput.value = remembered.name
-    profilePinInput.value = ''
-    profilePinInput.focus()
-    setProfileError(remembered.pin ? '已填入最近档案，输入密码后进入。' : '已填入最近档案，直接点击登录进入。', remembered.pin ? 'info' : 'success')
-  })
   profileSync.addEventListener('click', async () => {
     setProfileBusy(true, 'sync')
     setProfileError('正在同步云端存档...', 'info')
@@ -8821,7 +8739,6 @@ function setMoveTargetFromPointer(event: PointerEvent, immediateTap: boolean) {
 bindControls()
 initProfiles()
 if (activeProfile) loadGame()
-void checkProfileServer()
 void restoreServerSession()
 ensureEnemies()
 updateHud()

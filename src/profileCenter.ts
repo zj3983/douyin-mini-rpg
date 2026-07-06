@@ -1,6 +1,4 @@
 export type ProfileCenterTabId = 'slots' | 'cloud' | 'security'
-export type ProfileServerState = 'checking' | 'online' | 'offline'
-export type ProfileBadgeTone = 'info' | 'success' | 'error'
 
 export interface ProfileCenterTab {
   id: ProfileCenterTabId
@@ -23,16 +21,6 @@ export function profileCenterSections(signedIn: boolean, tab: ProfileCenterTabId
     security: signedIn && tab === 'security' && cloudAccount,
     localSecurity: signedIn && tab === 'security' && !cloudAccount,
   }
-}
-
-export function profileServerBadge(state: ProfileServerState): { title: string; detail: string; tone: ProfileBadgeTone } {
-  if (state === 'online') {
-    return { title: '服务器在线', detail: '登录后可读取云端存档。', tone: 'success' }
-  }
-  if (state === 'offline') {
-    return { title: '服务器离线', detail: '可以使用本机档案或游客试玩。', tone: 'error' }
-  }
-  return { title: '服务器检测中', detail: '正在确认云端登录服务。', tone: 'info' }
 }
 
 export function profileAccountBadge(cloudAccount: boolean, guest: boolean) {

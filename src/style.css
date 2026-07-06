@@ -169,130 +169,83 @@ button:disabled {
 .profile-login-scene {
   position: absolute;
   inset: 0;
+  z-index: 0;
   overflow: hidden;
   border-radius: 8px;
   pointer-events: none;
   background: #06111d;
 }
 
-.profile-login-bg {
+.profile-login-layer {
   position: absolute;
-  inset: -4% -10% -2% -18%;
-  width: 128%;
-  height: 108%;
+  display: block;
+  pointer-events: none;
+  user-select: none;
+  will-change: transform;
+}
+
+.profile-login-bg {
+  inset: -5% -12% -4% -20%;
+  z-index: 1;
+  width: 132%;
+  height: 112%;
   object-fit: cover;
   object-position: center top;
-  transform: translate3d(0, 0, 0);
-  animation: loginHeroFloat 7s ease-in-out infinite alternate;
+  transform: translate3d(0, 0, 0) scale(1.02);
+  animation: login-bg-depth 18s ease-in-out infinite alternate;
+}
+
+.profile-login-hero-body,
+.profile-login-hero-flow {
+  right: -24%;
+  bottom: -10%;
+  z-index: 2;
+  width: 104%;
+  height: auto;
+  object-fit: contain;
+  transform-origin: 58% 66%;
+}
+
+.profile-login-hero-body {
+  animation: login-hero-breathe 7.5s ease-in-out infinite;
+}
+
+.profile-login-hero-flow {
+  z-index: 3;
+  opacity: 0.92;
+  mix-blend-mode: normal;
+  animation: login-cloth-wind 5.8s ease-in-out infinite;
 }
 
 .profile-login-scene::after {
   content: "";
   position: absolute;
   inset: 0;
+  z-index: 2;
   background:
-    linear-gradient(180deg, rgba(2, 6, 23, 0.1) 0%, rgba(2, 6, 23, 0.18) 44%, rgba(2, 6, 23, 0.88) 78%, rgba(2, 6, 23, 0.96) 100%),
-    radial-gradient(circle at 18% 18%, rgba(250, 204, 21, 0.14), transparent 30%),
-    radial-gradient(circle at 82% 50%, rgba(94, 234, 212, 0.08), transparent 32%);
+    linear-gradient(180deg, rgba(2, 6, 23, 0) 0%, rgba(2, 6, 23, 0.1) 54%, rgba(2, 6, 23, 0.52) 100%);
 }
 
-.profile-login-cloud {
-  position: absolute;
-  left: -35%;
-  right: -35%;
-  height: 36%;
-  background:
-    radial-gradient(ellipse at 12% 60%, rgba(226, 246, 255, 0.18), transparent 46%),
-    radial-gradient(ellipse at 42% 50%, rgba(186, 230, 253, 0.16), transparent 42%),
-    radial-gradient(ellipse at 76% 66%, rgba(255, 255, 255, 0.13), transparent 48%);
-  filter: blur(1px);
-  opacity: 0.75;
-  transform: translate3d(0, 0, 0);
+@keyframes login-bg-depth {
+  from { transform: translate3d(-0.8%, -0.3%, 0) scale(1.035); }
+  to { transform: translate3d(0.8%, 0.2%, 0) scale(1.055); }
 }
 
-.profile-login-cloud--far {
-  top: 22%;
-  animation: loginCloudFar 50s linear infinite;
+@keyframes login-hero-breathe {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(0, -0.45%, 0) scale(1.004); }
 }
 
-.profile-login-cloud--near {
-  top: 48%;
-  height: 42%;
-  opacity: 0.58;
-  animation: loginCloudNear 34s linear infinite;
-}
-
-.profile-login-cloud--front {
-  bottom: 18%;
-  height: 26%;
-  opacity: 0.46;
-  animation: loginCloudFront 24s linear infinite;
-}
-
-.profile-login-robe-flow {
-  position: absolute;
-  right: 0;
-  top: 34%;
-  width: 58%;
-  height: 44%;
-  opacity: 0.32;
-  mix-blend-mode: screen;
-  background:
-    linear-gradient(110deg, transparent 0%, rgba(224, 242, 254, 0.22) 34%, transparent 52%),
-    radial-gradient(ellipse at 42% 62%, rgba(94, 234, 212, 0.24), transparent 48%);
-  clip-path: polygon(20% 16%, 76% 12%, 100% 52%, 82% 100%, 18% 88%, 0% 44%);
-  animation: loginRobeFlow 2.6s ease-in-out infinite alternate;
-}
-
-.profile-login-sword-glow {
-  position: absolute;
-  right: 5%;
-  bottom: 20%;
-  width: 64%;
-  height: 9%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, transparent, rgba(125, 211, 252, 0.16), rgba(250, 204, 21, 0.12), transparent);
-  filter: blur(8px);
-  transform: rotate(-8deg);
-  animation: loginSwordGlow 1.9s ease-in-out infinite alternate;
-}
-
-@keyframes loginHeroFloat {
-  from { transform: translate3d(0, 0, 0) scale(1); }
-  to { transform: translate3d(0, -4px, 0) scale(1.006); }
-}
-
-@keyframes loginCloudFar {
-  from { transform: translate3d(-4%, 0, 0); }
-  to { transform: translate3d(10%, 0, 0); }
-}
-
-@keyframes loginCloudNear {
-  from { transform: translate3d(8%, 0, 0); }
-  to { transform: translate3d(-8%, 0, 0); }
-}
-
-@keyframes loginCloudFront {
-  from { transform: translate3d(-2%, 0, 0); }
-  to { transform: translate3d(12%, 0, 0); }
-}
-
-@keyframes loginRobeFlow {
-  from { transform: translate3d(-4px, 2px, 0) skewX(-1deg); opacity: 0.22; }
-  to { transform: translate3d(5px, -3px, 0) skewX(1deg); opacity: 0.42; }
-}
-
-@keyframes loginSwordGlow {
-  from { opacity: 0.28; transform: rotate(-8deg) translateX(-4px); }
-  to { opacity: 0.58; transform: rotate(-8deg) translateX(7px); }
+@keyframes login-cloth-wind {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(-0.12deg) scale(1); }
+  50% { transform: translate3d(-0.95%, -0.35%, 0) rotate(0.18deg) scale(1.006); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .profile-login-bg,
-  .profile-login-cloud,
-  .profile-login-robe-flow,
-  .profile-login-sword-glow {
-    animation: none !important;
+  .profile-login-hero-body,
+  .profile-login-hero-flow {
+    animation: none;
   }
 }
 
@@ -314,23 +267,24 @@ button:disabled {
 .profile-panel.auth-simple .profile-card {
   position: relative;
   width: min(100%, 430px);
-  min-height: min(860px, calc(100vh - 20px));
-  max-height: calc(100vh - 20px);
+  min-height: min(860px, calc(100svh - 16px));
+  max-height: calc(100svh - 16px);
   align-content: end;
   gap: 10px;
   overflow: hidden;
   padding: 18px;
-  border-color: rgba(94, 234, 212, 0.46);
-  background: rgba(2, 6, 23, 0.98);
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.56);
+  border-color: rgba(94, 234, 212, 0.34);
+  background: rgba(2, 6, 23, 0.08);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.32), inset 0 0 42px rgba(2, 6, 23, 0.18);
+}
+
+.profile-panel.auth-simple {
+  overflow: hidden;
+  padding: 8px;
 }
 
 .profile-panel.auth-simple .profile-brand,
-.profile-panel.auth-simple .profile-head,
 .profile-panel.auth-simple .profile-tabs,
-.profile-panel.auth-simple .profile-note,
-.profile-panel.auth-simple .profile-entry-status,
-.profile-panel.auth-simple .profile-recent,
 .profile-panel.auth-simple .profile-field,
 .profile-panel.auth-simple .profile-error,
 .profile-panel.auth-simple .profile-actions {
@@ -359,18 +313,17 @@ button:disabled {
   text-shadow: 0 5px 24px rgba(2, 6, 23, 0.72);
 }
 
-.profile-panel.auth-simple .profile-brand span {
-  color: #dffafe;
-  font-size: 14px;
+.profile-panel.auth-simple .profile-head {
+  display: none;
 }
 
 .profile-panel.auth-simple .profile-head {
   align-items: end;
   margin-top: auto;
-  padding: 14px 14px 0;
-  border-radius: 8px 8px 0 0;
-  background: rgba(2, 6, 23, 0.72);
-  backdrop-filter: blur(10px);
+  padding: 6px 14px 0;
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(2, 6, 23, 0.36), rgba(2, 6, 23, 0.08));
+  backdrop-filter: blur(3px);
 }
 
 .profile-panel.auth-simple .profile-head h2 {
@@ -379,9 +332,6 @@ button:disabled {
 }
 
 .profile-panel.auth-simple .profile-tabs,
-.profile-panel.auth-simple .profile-note,
-.profile-panel.auth-simple .profile-entry-status,
-.profile-panel.auth-simple .profile-recent,
 .profile-panel.auth-simple .profile-field,
 .profile-panel.auth-simple .profile-error,
 .profile-panel.auth-simple .profile-actions {
@@ -390,14 +340,18 @@ button:disabled {
 
 .profile-panel.auth-simple .profile-tabs {
   border-radius: 8px;
-  background: rgba(2, 6, 23, 0.78);
-  backdrop-filter: blur(10px);
+  border-color: rgba(226, 246, 255, 0.2);
+  background: rgba(2, 6, 23, 0.2);
+  backdrop-filter: blur(4px);
 }
 
 .profile-panel.auth-simple .profile-field input {
   min-height: 48px;
   border-radius: 10px;
-  background: rgba(15, 23, 42, 0.78);
+  border-color: rgba(226, 246, 255, 0.28);
+  background: rgba(2, 6, 23, 0.24);
+  backdrop-filter: blur(3px);
+  box-shadow: inset 0 0 18px rgba(2, 6, 23, 0.18);
 }
 
 .profile-panel.auth-simple .profile-actions {
@@ -409,10 +363,16 @@ button:disabled {
 .profile-panel.auth-simple .profile-secondary {
   min-height: 54px;
   border-radius: 10px;
+  backdrop-filter: blur(4px);
 }
 
 .profile-panel.auth-simple .profile-submit {
-  box-shadow: 0 16px 42px rgba(94, 234, 212, 0.22);
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.88), rgba(94, 234, 212, 0.82));
+  box-shadow: 0 16px 42px rgba(94, 234, 212, 0.18);
+}
+
+.profile-panel.auth-simple .profile-secondary {
+  background: rgba(2, 6, 23, 0.24);
 }
 
 .profile-panel.account-center .profile-card {
@@ -451,13 +411,6 @@ button:disabled {
     linear-gradient(135deg, rgba(8, 47, 73, 0.88), rgba(2, 6, 23, 0.64));
 }
 
-.profile-brand small,
-.profile-brand span {
-  color: #bae6fd;
-  font-size: 11px;
-  font-weight: 900;
-}
-
 .profile-brand strong {
   color: #fef3c7;
   font-size: 25px;
@@ -473,13 +426,6 @@ button:disabled {
   gap: 12px;
 }
 
-.profile-head small {
-  display: block;
-  color: #67e8f9;
-  font-size: 12px;
-  font-weight: 900;
-}
-
 .profile-head h2 {
   margin: 2px 0 0;
   color: #facc15;
@@ -491,13 +437,6 @@ button:disabled {
   width: 38px;
   min-height: 38px;
   border-radius: 999px;
-}
-
-.profile-note {
-  margin: 0;
-  color: #cbd5e1;
-  font-size: 12px;
-  line-height: 1.45;
 }
 
 .profile-tabs {
@@ -558,93 +497,6 @@ button:disabled {
 .profile-panel.account-center .profile-current span {
   white-space: normal;
   line-height: 1.35;
-}
-
-.profile-entry-status,
-.profile-recent {
-  display: grid;
-  align-items: center;
-  min-height: 56px;
-  padding: 10px;
-  border-radius: 8px;
-  background: rgba(2, 6, 23, 0.52);
-}
-
-.profile-entry-status {
-  grid-template-columns: 28px minmax(0, 1fr);
-  grid-template-rows: 18px 16px;
-  gap: 2px 8px;
-  border: 1px solid rgba(94, 234, 212, 0.26);
-}
-
-.profile-entry-status i {
-  grid-row: 1 / 3;
-  width: 12px;
-  height: 12px;
-  justify-self: center;
-  border-radius: 999px;
-  background: #67e8f9;
-  box-shadow: 0 0 18px rgba(103, 232, 249, 0.65);
-}
-
-.profile-entry-status[data-tone='success'] {
-  border-color: rgba(74, 222, 128, 0.36);
-}
-
-.profile-entry-status[data-tone='success'] i {
-  background: #86efac;
-  box-shadow: 0 0 18px rgba(134, 239, 172, 0.7);
-}
-
-.profile-entry-status[data-tone='error'] {
-  border-color: rgba(251, 113, 133, 0.38);
-}
-
-.profile-entry-status[data-tone='error'] i {
-  background: #fb7185;
-  box-shadow: 0 0 18px rgba(251, 113, 133, 0.72);
-}
-
-.profile-entry-status span,
-.profile-recent b {
-  overflow: hidden;
-  color: #f8fafc;
-  font-size: 13px;
-  font-weight: 1000;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.profile-entry-status small,
-.profile-recent small {
-  overflow: hidden;
-  color: #bae6fd;
-  font-size: 11px;
-  line-height: 1.3;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.profile-recent {
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  border: 1px solid rgba(250, 204, 21, 0.24);
-  background:
-    radial-gradient(circle at 0% 50%, rgba(250, 204, 21, 0.14), transparent 48%),
-    rgba(15, 23, 42, 0.62);
-}
-
-.profile-recent[hidden] {
-  display: none !important;
-}
-
-.profile-recent button {
-  min-height: 32px;
-  padding: 0 12px;
-  border-radius: 999px;
-  color: #17120a;
-  background: linear-gradient(135deg, #facc15, #5eead4);
-  font-size: 12px;
 }
 
 .profile-center-tabs {
