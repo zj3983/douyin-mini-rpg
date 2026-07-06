@@ -25,6 +25,11 @@ import {
 } from './profileFeedback'
 import { profileLoginSceneMarkup } from './profileLoginScene'
 import {
+  actorRenderScaleForHeight,
+  battleGroundY,
+  heroScreenXForWidth,
+} from './combatLayout'
+import {
   skillAnnouncementText,
   wildBossHp,
   wildBossSpawnOffset,
@@ -5753,13 +5758,11 @@ function chooseEvolution(option: EvolutionOption) {
 }
 
 function heroScreenX(width: number) {
-  const desired = width * 0.38
-  return Math.max(118, Math.min(desired, width * 0.46))
+  return heroScreenXForWidth(width)
 }
 
 function actorRenderScale() {
-  if (!Number.isFinite(canvas.height) || canvas.height <= 0) return 1
-  return Math.max(0.58, Math.min(1, canvas.height / 440))
+  return actorRenderScaleForHeight(canvas.height)
 }
 
 function scaledEnemySpriteLayout(layout: EnemySpriteLayout, scale = actorRenderScale()): EnemySpriteLayout {
@@ -5796,7 +5799,7 @@ function draw() {
 
   ctx.save()
 
-  const groundY = h * 0.72
+  const groundY = battleGroundY(h)
   const heroX = heroScreenX(w)
   const ox = heroX - state.hero.x
   const oy = groundY - state.hero.y
@@ -8724,7 +8727,7 @@ function setMoveTargetFromPointer(event: PointerEvent, immediateTap: boolean) {
   const rect = canvas.getBoundingClientRect()
   const sx = ((event.clientX - rect.left) / rect.width) * canvas.width
   const sy = ((event.clientY - rect.top) / rect.height) * canvas.height
-  const groundY = canvas.height * 0.72
+  const groundY = battleGroundY(canvas.height)
   const ox = heroScreenX(canvas.width) - state.hero.x
   const oy = groundY - state.hero.y
   moveTarget = {
