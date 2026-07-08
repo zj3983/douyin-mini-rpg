@@ -8,6 +8,7 @@ const requiredComponents = [
   ['assets/Scripts/Game/EnemyController.ts', 'class EnemyController'],
   ['assets/Scripts/Game/DungeonRunController.ts', 'class DungeonRunController'],
   ['assets/Scripts/Game/SoulOrbController.ts', 'class SoulOrbController'],
+  ['assets/Scripts/Game/AssetBindingController.ts', 'class AssetBindingController'],
 ]
 
 test('Cocos game layer has dedicated battle-loop components', () => {

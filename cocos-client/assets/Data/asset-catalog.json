@@ -1,0 +1,328 @@
+{
+  "rarityPalette": {
+    "rare": "#4FC3FF",
+    "epic": "#A66BFF",
+    "legendary": "#FFB23F",
+    "mythic": "#FF4F8B"
+  },
+  "characters": [
+    {
+      "id": "qinglan-sword-cultivator",
+      "name": "青岚剑修",
+      "portrait": "Assets/Characters/QinglanSwordCultivator/portrait.png",
+      "combatSprite": "Assets/Characters/QinglanSwordCultivator/combat.png",
+      "motions": {
+        "idle": "Assets/Characters/QinglanSwordCultivator/idle.anim",
+        "move": "Assets/Characters/QinglanSwordCultivator/sword_ride.anim",
+        "cast": "Assets/Characters/QinglanSwordCultivator/hand_seal.anim",
+        "hurt": "Assets/Characters/QinglanSwordCultivator/hurt.anim"
+      },
+      "innateSkill": "flying-sword-art",
+      "startingArtifact": "qing-shuang-sword-case"
+    },
+    {
+      "id": "xuanyan-fire-cultivator",
+      "name": "玄焰尺修",
+      "portrait": "Assets/Characters/XuanyanFireCultivator/portrait.png",
+      "combatSprite": "Assets/Characters/XuanyanFireCultivator/combat.png",
+      "motions": {
+        "idle": "Assets/Characters/XuanyanFireCultivator/idle.anim",
+        "move": "Assets/Characters/XuanyanFireCultivator/sword_ride.anim",
+        "cast": "Assets/Characters/XuanyanFireCultivator/hand_seal.anim",
+        "hurt": "Assets/Characters/XuanyanFireCultivator/hurt.anim"
+      },
+      "innateSkill": "flame-ruler-wave",
+      "startingArtifact": "flame-devouring-ruler"
+    },
+    {
+      "id": "jiuxiao-thunder-cultivator",
+      "name": "九霄雷修",
+      "portrait": "Assets/Characters/JiuxiaoThunderCultivator/portrait.png",
+      "combatSprite": "Assets/Characters/JiuxiaoThunderCultivator/combat.png",
+      "motions": {
+        "idle": "Assets/Characters/JiuxiaoThunderCultivator/idle.anim",
+        "move": "Assets/Characters/JiuxiaoThunderCultivator/sword_ride.anim",
+        "cast": "Assets/Characters/JiuxiaoThunderCultivator/hand_seal.anim",
+        "hurt": "Assets/Characters/JiuxiaoThunderCultivator/hurt.anim"
+      },
+      "innateSkill": "nine-heaven-thunder-seal",
+      "startingArtifact": "jiuxiao-thunder-seal"
+    },
+    {
+      "id": "soul-bell-cultivator",
+      "name": "镇魂铃修",
+      "portrait": "Assets/Characters/SoulBellCultivator/portrait.png",
+      "combatSprite": "Assets/Characters/SoulBellCultivator/combat.png",
+      "motions": {
+        "idle": "Assets/Characters/SoulBellCultivator/idle.anim",
+        "move": "Assets/Characters/SoulBellCultivator/sword_ride.anim",
+        "cast": "Assets/Characters/SoulBellCultivator/hand_seal.anim",
+        "hurt": "Assets/Characters/SoulBellCultivator/hurt.anim"
+      },
+      "innateSkill": "soul-bell-field",
+      "startingArtifact": "ancient-soul-bell"
+    }
+  ],
+  "monsters": [
+    {
+      "id": "moss-wolf",
+      "name": "苔纹狼妖",
+      "theme": "mist-bamboo",
+      "sprite": "Assets/Monsters/MistBamboo/MossWolf/body.png",
+      "motions": {
+        "idle": "Assets/Monsters/MistBamboo/MossWolf/idle.anim",
+        "move": "Assets/Monsters/MistBamboo/MossWolf/run.anim",
+        "attack": "Assets/Monsters/MistBamboo/MossWolf/bite.anim",
+        "hurt": "Assets/Monsters/MistBamboo/MossWolf/hurt.anim",
+        "death": "Assets/Monsters/MistBamboo/MossWolf/death.anim"
+      },
+      "skillCue": "ground-pounce"
+    },
+    {
+      "id": "green-wing-moth",
+      "name": "青翼蛾妖",
+      "theme": "mist-bamboo",
+      "sprite": "Assets/Monsters/MistBamboo/GreenWingMoth/body.png",
+      "motions": {
+        "idle": "Assets/Monsters/MistBamboo/GreenWingMoth/wing_idle.anim",
+        "move": "Assets/Monsters/MistBamboo/GreenWingMoth/wing_fly.anim",
+        "attack": "Assets/Monsters/MistBamboo/GreenWingMoth/spore_cast.anim",
+        "hurt": "Assets/Monsters/MistBamboo/GreenWingMoth/hurt.anim",
+        "death": "Assets/Monsters/MistBamboo/GreenWingMoth/death.anim"
+      },
+      "skillCue": "poison-spore"
+    },
+    {
+      "id": "bamboo-warden",
+      "name": "竹林守山兽",
+      "theme": "mist-bamboo",
+      "sprite": "Assets/Monsters/MistBamboo/BambooWarden/body.png",
+      "motions": {
+        "idle": "Assets/Monsters/MistBamboo/BambooWarden/idle.anim",
+        "move": "Assets/Monsters/MistBamboo/BambooWarden/walk.anim",
+        "attack": "Assets/Monsters/MistBamboo/BambooWarden/vine_slam.anim",
+        "hurt": "Assets/Monsters/MistBamboo/BambooWarden/hurt.anim",
+        "death": "Assets/Monsters/MistBamboo/BambooWarden/death.anim"
+      },
+      "skillCue": "vine-root"
+    },
+    {
+      "id": "fog-spider",
+      "name": "雾蛛",
+      "theme": "mist-bamboo",
+      "sprite": "Assets/Monsters/MistBamboo/FogSpider/body.png",
+      "motions": {
+        "idle": "Assets/Monsters/MistBamboo/FogSpider/idle.anim",
+        "move": "Assets/Monsters/MistBamboo/FogSpider/crawl.anim",
+        "attack": "Assets/Monsters/MistBamboo/FogSpider/web_cast.anim",
+        "hurt": "Assets/Monsters/MistBamboo/FogSpider/hurt.anim",
+        "death": "Assets/Monsters/MistBamboo/FogSpider/death.anim"
+      },
+      "skillCue": "web-snare"
+    },
+    {
+      "id": "lantern-wraith",
+      "name": "灯影魅",
+      "theme": "mist-bamboo",
+      "sprite": "Assets/Monsters/MistBamboo/LanternWraith/body.png",
+      "motions": {
+        "idle": "Assets/Monsters/MistBamboo/LanternWraith/float_idle.anim",
+        "move": "Assets/Monsters/MistBamboo/LanternWraith/float_move.anim",
+        "attack": "Assets/Monsters/MistBamboo/LanternWraith/soul_lantern.anim",
+        "hurt": "Assets/Monsters/MistBamboo/LanternWraith/hurt.anim",
+        "death": "Assets/Monsters/MistBamboo/LanternWraith/death.anim"
+      },
+      "skillCue": "soul-flame"
+    },
+    {
+      "id": "mist-deer-king",
+      "name": "雾鹿妖王",
+      "theme": "mist-bamboo",
+      "sprite": "Assets/Monsters/MistBamboo/MistDeerKing/body.png",
+      "motions": {
+        "idle": "Assets/Monsters/MistBamboo/MistDeerKing/idle.anim",
+        "move": "Assets/Monsters/MistBamboo/MistDeerKing/step.anim",
+        "attack": "Assets/Monsters/MistBamboo/MistDeerKing/fog_domain.anim",
+        "hurt": "Assets/Monsters/MistBamboo/MistDeerKing/hurt.anim",
+        "death": "Assets/Monsters/MistBamboo/MistDeerKing/death.anim"
+      },
+      "skillCue": "mist-domain"
+    },
+    {
+      "id": "lava-lizard",
+      "name": "熔甲蜥",
+      "theme": "flame-cave",
+      "sprite": "Assets/Monsters/FlameCave/LavaLizard/body.png",
+      "motions": {
+        "idle": "Assets/Monsters/FlameCave/LavaLizard/idle.anim",
+        "move": "Assets/Monsters/FlameCave/LavaLizard/run.anim",
+        "attack": "Assets/Monsters/FlameCave/LavaLizard/lava_bite.anim",
+        "hurt": "Assets/Monsters/FlameCave/LavaLizard/hurt.anim",
+        "death": "Assets/Monsters/FlameCave/LavaLizard/death.anim"
+      },
+      "skillCue": "lava-bite"
+    },
+    {
+      "id": "ember-crow",
+      "name": "赤羽火鸦",
+      "theme": "flame-cave",
+      "sprite": "Assets/Monsters/FlameCave/EmberCrow/body.png",
+      "motions": {
+        "idle": "Assets/Monsters/FlameCave/EmberCrow/wing_idle.anim",
+        "move": "Assets/Monsters/FlameCave/EmberCrow/wing_fly.anim",
+        "attack": "Assets/Monsters/FlameCave/EmberCrow/fire_feather.anim",
+        "hurt": "Assets/Monsters/FlameCave/EmberCrow/hurt.anim",
+        "death": "Assets/Monsters/FlameCave/EmberCrow/death.anim"
+      },
+      "skillCue": "fire-feather"
+    },
+    {
+      "id": "flame-ogre",
+      "name": "地火巨妖",
+      "theme": "flame-cave",
+      "sprite": "Assets/Monsters/FlameCave/FlameOgre/body.png",
+      "motions": {
+        "idle": "Assets/Monsters/FlameCave/FlameOgre/idle.anim",
+        "move": "Assets/Monsters/FlameCave/FlameOgre/stomp.anim",
+        "attack": "Assets/Monsters/FlameCave/FlameOgre/fire_slam.anim",
+        "hurt": "Assets/Monsters/FlameCave/FlameOgre/hurt.anim",
+        "death": "Assets/Monsters/FlameCave/FlameOgre/death.anim"
+      },
+      "skillCue": "fire-slam"
+    },
+    {
+      "id": "star-armored-beast",
+      "name": "星甲兽",
+      "theme": "starlight-ruin",
+      "sprite": "Assets/Monsters/StarlightRuin/StarArmoredBeast/body.png",
+      "motions": {
+        "idle": "Assets/Monsters/StarlightRuin/StarArmoredBeast/idle.anim",
+        "move": "Assets/Monsters/StarlightRuin/StarArmoredBeast/charge.anim",
+        "attack": "Assets/Monsters/StarlightRuin/StarArmoredBeast/star_charge.anim",
+        "hurt": "Assets/Monsters/StarlightRuin/StarArmoredBeast/hurt.anim",
+        "death": "Assets/Monsters/StarlightRuin/StarArmoredBeast/death.anim"
+      },
+      "skillCue": "star-charge"
+    },
+    {
+      "id": "void-wing-spirit",
+      "name": "虚翼灵",
+      "theme": "starlight-ruin",
+      "sprite": "Assets/Monsters/StarlightRuin/VoidWingSpirit/body.png",
+      "motions": {
+        "idle": "Assets/Monsters/StarlightRuin/VoidWingSpirit/wing_idle.anim",
+        "move": "Assets/Monsters/StarlightRuin/VoidWingSpirit/wing_phase.anim",
+        "attack": "Assets/Monsters/StarlightRuin/VoidWingSpirit/void_ray.anim",
+        "hurt": "Assets/Monsters/StarlightRuin/VoidWingSpirit/hurt.anim",
+        "death": "Assets/Monsters/StarlightRuin/VoidWingSpirit/death.anim"
+      },
+      "skillCue": "void-ray"
+    },
+    {
+      "id": "meteor-guardian",
+      "name": "陨星镇守",
+      "theme": "starlight-ruin",
+      "sprite": "Assets/Monsters/StarlightRuin/MeteorGuardian/body.png",
+      "motions": {
+        "idle": "Assets/Monsters/StarlightRuin/MeteorGuardian/idle.anim",
+        "move": "Assets/Monsters/StarlightRuin/MeteorGuardian/hover.anim",
+        "attack": "Assets/Monsters/StarlightRuin/MeteorGuardian/meteor_fall.anim",
+        "hurt": "Assets/Monsters/StarlightRuin/MeteorGuardian/hurt.anim",
+        "death": "Assets/Monsters/StarlightRuin/MeteorGuardian/death.anim"
+      },
+      "skillCue": "meteor-fall"
+    }
+  ],
+  "skills": [
+    {
+      "id": "flying-sword-art",
+      "name": "御剑术",
+      "icon": "Assets/Skills/FlyingSword/icon.png",
+      "projectile": "Assets/Skills/FlyingSword/sword_projectile.png",
+      "impact": "Assets/Skills/FlyingSword/sword_impact.png",
+      "fullScreen": "Assets/Skills/FlyingSword/sword_rain_fullscreen.png"
+    },
+    {
+      "id": "flying-sword-split",
+      "name": "御剑·分光",
+      "icon": "Assets/Skills/FlyingSwordSplit/icon.png",
+      "projectile": "Assets/Skills/FlyingSwordSplit/split_sword.png",
+      "impact": "Assets/Skills/FlyingSwordSplit/light_cut.png",
+      "fullScreen": "Assets/Skills/FlyingSwordSplit/sword_array_fullscreen.png"
+    },
+    {
+      "id": "flame-ruler-wave",
+      "name": "焰分噬浪尺",
+      "icon": "Assets/Skills/FlameRuler/icon.png",
+      "projectile": "Assets/Skills/FlameRuler/flame_wave.png",
+      "impact": "Assets/Skills/FlameRuler/flame_burst.png",
+      "fullScreen": "Assets/Skills/FlameRuler/fire_sea_fullscreen.png"
+    },
+    {
+      "id": "nine-heaven-thunder-seal",
+      "name": "九霄引雷印",
+      "icon": "Assets/Skills/ThunderSeal/icon.png",
+      "projectile": "Assets/Skills/ThunderSeal/thunder_mark.png",
+      "impact": "Assets/Skills/ThunderSeal/lightning_impact.png",
+      "fullScreen": "Assets/Skills/ThunderSeal/thunder_cloud_fullscreen.png"
+    },
+    {
+      "id": "soul-bell-field",
+      "name": "镇魂铃域",
+      "icon": "Assets/Skills/SoulBell/icon.png",
+      "projectile": "Assets/Skills/SoulBell/bell_wave.png",
+      "impact": "Assets/Skills/SoulBell/soul_pulse.png",
+      "fullScreen": "Assets/Skills/SoulBell/soul_domain_fullscreen.png"
+    },
+    {
+      "id": "boss-domain-warning",
+      "name": "妖王领域预警",
+      "icon": "Assets/Skills/BossDomain/icon.png",
+      "projectile": "Assets/Skills/BossDomain/warning_line.png",
+      "impact": "Assets/Skills/BossDomain/domain_impact.png",
+      "fullScreen": "Assets/Skills/BossDomain/boss_domain_fullscreen.png"
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "qing-shuang-sword-case",
+      "name": "青霜御剑匣",
+      "rarity": "epic",
+      "color": "#A66BFF",
+      "icon": "Assets/Artifacts/QingShuangSwordCase/icon.png",
+      "sourceDungeon": "mist-bamboo-secret"
+    },
+    {
+      "id": "flame-devouring-ruler",
+      "name": "焰分噬浪尺",
+      "rarity": "legendary",
+      "color": "#FFB23F",
+      "icon": "Assets/Artifacts/FlameDevouringRuler/icon.png",
+      "sourceDungeon": "flame-cave"
+    },
+    {
+      "id": "jiuxiao-thunder-seal",
+      "name": "九霄引雷印",
+      "rarity": "legendary",
+      "color": "#FFB23F",
+      "icon": "Assets/Artifacts/JiuxiaoThunderSeal/icon.png",
+      "sourceDungeon": "star-gate-ruins"
+    },
+    {
+      "id": "ancient-soul-bell",
+      "name": "镇魂古铃",
+      "rarity": "epic",
+      "color": "#A66BFF",
+      "icon": "Assets/Artifacts/AncientSoulBell/icon.png",
+      "sourceDungeon": "soul-bell-valley"
+    },
+    {
+      "id": "void-heart-core",
+      "name": "虚境核心",
+      "rarity": "mythic",
+      "color": "#FF4F8B",
+      "icon": "Assets/Artifacts/VoidHeartCore/icon.png",
+      "sourceDungeon": "star-gate-ruins"
+    }
+  ]
+}
