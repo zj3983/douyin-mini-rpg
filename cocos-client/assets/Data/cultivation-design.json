@@ -1,0 +1,33 @@
+{
+  "prototype": {
+    "camera": "side-scrolling",
+    "playerMount": "flying-sword",
+    "basicAttack": false,
+    "defaultSkill": "御剑术"
+  },
+  "levelUp": {
+    "allowedStats": ["attack", "health", "mana"],
+    "cardsCanGrantBaseStats": false,
+    "notes": "角色境界提升只增加基础攻击、生命、法力。卡牌只改变技能形态、法宝机制或战斗节奏。"
+  },
+  "artifacts": {
+    "maxLevel": 18,
+    "mutationLevels": [6, 12, 18],
+    "unlockSource": "dungeon-boss",
+    "upgradeCurrencies": ["法宝精华", "灵石", "炼器材料"]
+  },
+  "dungeons": {
+    "dailyEntries": 3,
+    "floorsPerDungeon": 5,
+    "drops": {
+      "gachaTickets": true,
+      "artifacts": true,
+      "artifactEssence": true,
+      "materials": true
+    }
+  },
+  "worldBoss": {
+    "requiredForNextStage": true,
+    "dropsDungeonPasses": true
+  }
+}

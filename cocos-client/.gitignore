@@ -1,0 +1,6 @@
+temp/
+library/
+local/
+profiles/
+build/
+node_modules/

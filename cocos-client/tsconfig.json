@@ -1,0 +1,7 @@
+{
+  "extends": "./temp/tsconfig.cocos.json",
+  "compilerOptions": {
+    "strictNullChecks": false,
+    "allowSyntheticDefaultImports": true
+  }
+}
