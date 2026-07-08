@@ -42,6 +42,14 @@ Cocos Creator 更适合后续目标：
    - 击败怪物掉魂球。
    - 升级只加攻击、生命、法力。
    - 法宝升级触发技能质变卡。
+   - 每一关拥有独立背景、怪物族群和 Boss。
+   - 副本按 5 层推进，中途可撤离，最终 Boss 掉法宝。
+
+4. 当前已落地组件
+   - `StageDirector`：世界关卡和 Boss 推进。
+   - `EnemyController`：怪物移动、接近后释放技能。
+   - `DungeonRunController`：副本层数、撤离、结算奖励。
+   - `SoulOrbController`：魂球磁吸拾取。
 
 ## 第二阶段
 
