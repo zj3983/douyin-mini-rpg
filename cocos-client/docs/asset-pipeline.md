@@ -68,17 +68,17 @@ python tools/build-actor-atlases.py
 ## 运行时性能约束
 
 - 多动作角色使用 `AtlasAnimator`，一个 actor 只加载一张 atlas。
-- 怪物、魂球、飞剑和技能特效使用 `NodePoolController` 复用节点。
+- 怪物、魂球、飞剑、伤害数字和技能特效使用 `NodePoolController` 复用节点。
 - 拾取魂球时只触发回收，不直接 `destroy()`。
 - 离屏或距离过远的动画通过 `StripAnimationRuntime` 降低更新频率。
 
 ## 战斗运行时接入
 
-- `BattleRuntime` 负责纯规则：刷怪、飞剑命中、死亡、魂球掉落。
+- `BattleRuntime` 负责纯规则：刷怪、飞剑命中、伤害事件、死亡、魂球掉落。
 - `EnemySpawner` 负责把规则里的怪物生成事件映射成 Cocos 节点。
-- `BattleRuntimeController` 负责把御剑命中和魂球对象池串起来。
+- `BattleRuntimeController` 负责把御剑命中、伤害飘字和魂球对象池串起来。
 - 御剑命中按飞剑线段轨迹、怪物坐标和碰撞半径计算，不再简单取前几个活怪。
-- 当前仍是第一版闭环，后续需要接真实碰撞、伤害飘字、Boss 技能和关卡胜负条件。
+- 当前仍是第一版闭环，后续需要继续接 Boss 技能、关卡胜负条件和更强命中特效。
 
 ## 验证
 

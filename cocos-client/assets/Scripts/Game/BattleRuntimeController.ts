@@ -1,6 +1,7 @@
-import { _decorator, Component, JsonAsset, Label } from 'cc'
+import { _decorator, Component, JsonAsset, Label, Vec3 } from 'cc'
 import { applyFlyingSwordHit, BattleRuntime, createBattleRuntime, nextSpawn, runtimeStats } from '../Core/BattleRuntime'
 import { CultivationDesignData, stageProfileFromDesign } from '../Core/CultivationRuntime'
+import { DamageNumberController } from './DamageNumberController'
 import { NodePoolController } from './NodePoolController'
 
 const { ccclass, property } = _decorator
@@ -12,6 +13,9 @@ export class BattleRuntimeController extends Component {
 
   @property(NodePoolController)
   soulOrbPool: NodePoolController | null = null
+
+  @property(NodePoolController)
+  damageNumberPool: NodePoolController | null = null
 
   @property(Label)
   statusLabel: Label | null = null
@@ -49,13 +53,19 @@ export class BattleRuntimeController extends Component {
   }
 
   castFlyingSword() {
-    if (!this.runtime) return { hitCount: 0 }
+    if (!this.runtime) return { hitCount: 0, damageEvents: [], defeatedEnemyIds: [] }
     const result = applyFlyingSwordHit(this.runtime, 3, 1, {
       from: { x: this.swordStartX, y: this.swordY },
       to: { x: this.swordEndX, y: this.swordY },
       width: this.swordHitWidth,
     })
-    for (let index = 0; index < result.hitCount; index += 1) {
+    for (const event of result.damageEvents) {
+      const damageNode = this.damageNumberPool?.spawn()
+      if (!damageNode) continue
+      damageNode.setPosition(new Vec3(event.position.x, event.position.y + 54, 0))
+      damageNode.getComponent(DamageNumberController)?.show(event.damage)
+    }
+    for (let index = 0; index < result.defeatedEnemyIds.length; index += 1) {
       this.soulOrbPool?.spawn()
     }
     this.refresh()

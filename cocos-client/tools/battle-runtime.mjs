@@ -46,11 +46,22 @@ export function applyFlyingSwordHit(runtime, { pierce, damageScale, path }) {
   const targets = path
     ? segmentHitEnemies(runtime, { ...path, pierce })
     : runtime.enemies.filter((enemy) => enemy.alive).slice(0, Math.max(0, pierce))
+  const damage = Math.round(runtime.heroAttack * damageScale)
+  const damageEvents = []
+  const defeatedEnemyIds = []
   for (const enemy of targets) {
-    enemy.hp -= runtime.heroAttack * damageScale
-    if (enemy.hp <= 0) defeatEnemy(runtime, enemy.id)
+    enemy.hp -= damage
+    damageEvents.push({
+      enemyId: enemy.id,
+      damage,
+      remainingHp: Math.max(0, enemy.hp),
+      position: { ...enemy.position },
+    })
+    if (enemy.hp <= 0 && defeatEnemy(runtime, enemy.id)) {
+      defeatedEnemyIds.push(enemy.id)
+    }
   }
-  return { hitCount: targets.length }
+  return { hitCount: targets.length, damageEvents, defeatedEnemyIds }
 }
 
 export function segmentHitEnemies(runtime, { from, to, width, pierce }) {

@@ -29,8 +29,23 @@ test('flying sword pierces multiple enemies and queues soul drops on defeat', ()
   const hit = applyFlyingSwordHit(runtime, { pierce: 2, damageScale: 1 })
 
   assert.equal(hit.hitCount, 2)
+  assert.deepEqual(hit.damageEvents.map((event) => event.damage), [120, 120])
+  assert.equal(hit.defeatedEnemyIds.length, 2)
   assert.equal(runtimeStats(runtime).aliveEnemies, 0)
   assert.equal(runtimeStats(runtime).soulDrops, 2)
+})
+
+test('flying sword hit reports nonlethal damage without soul drops', () => {
+  const runtime = createBattleRuntime({ stageId: 1, heroAttack: 35 })
+  nextSpawn(runtime, 1.1)
+
+  const hit = applyFlyingSwordHit(runtime, { pierce: 1, damageScale: 1 })
+
+  assert.equal(hit.hitCount, 1)
+  assert.deepEqual(hit.damageEvents.map((event) => event.damage), [35])
+  assert.deepEqual(hit.defeatedEnemyIds, [])
+  assert.equal(runtimeStats(runtime).aliveEnemies, 1)
+  assert.equal(runtimeStats(runtime).soulDrops, 0)
 })
 
 test('defeated enemy can only drop once', () => {
