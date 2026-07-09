@@ -4,9 +4,9 @@
 
 第一批 PNG 资源来自三张 AI 生成素材板：
 
-- `assets/Assets/Generated/Atlases/characters-atlas.png`
-- `assets/Assets/Generated/Atlases/monsters-atlas.png`
-- `assets/Assets/Generated/Atlases/artifacts-skills-atlas.png`
+- `assets/resources/Assets/Generated/Atlases/characters-atlas.png`
+- `assets/resources/Assets/Generated/Atlases/monsters-atlas.png`
+- `assets/resources/Assets/Generated/Atlases/artifacts-skills-atlas.png`
 
 素材板已经切到 `asset-catalog.json` 引用的目录里，当前可被 Cocos 直接导入。
 
@@ -21,10 +21,10 @@
 
 ## 目录约定
 
-- `Assets/Characters/*`：角色立绘和战斗图。
-- `Assets/Monsters/*`：怪物身体图，按场景主题拆分。
-- `Assets/Artifacts/*`：法宝图标。
-- `Assets/Skills/*`：技能图标、飞行物、命中特效、满屏特效。
+- `assets/resources/Assets/Characters/*`：角色立绘和战斗图。
+- `assets/resources/Assets/Monsters/*`：怪物身体图，按场景主题拆分。
+- `assets/resources/Assets/Artifacts/*`：法宝图标。
+- `assets/resources/Assets/Skills/*`：技能图标、飞行物、命中特效、满屏特效。
 
 ## 后续替换顺序
 

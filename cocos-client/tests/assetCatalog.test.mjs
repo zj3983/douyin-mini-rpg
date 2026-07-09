@@ -6,9 +6,10 @@ import { resolve } from 'node:path'
 import { findCharacter, findArtifact, monstersForTheme, skillsForCharacter } from '../tools/asset-catalog-runtime.mjs'
 
 const catalog = JSON.parse(readFileSync(resolve('assets/Data/asset-catalog.json'), 'utf8'))
+const resourceRoot = 'assets/resources'
 
 function pngSize(assetPath) {
-  const buffer = readFileSync(resolve('assets', assetPath))
+  const buffer = readFileSync(resolve(resourceRoot, assetPath))
   return {
     width: buffer.readUInt32BE(16),
     height: buffer.readUInt32BE(20),
@@ -87,8 +88,9 @@ test('catalog image paths exist under Cocos assets', () => {
   ]
 
   for (const assetPath of imagePaths) {
-    assert.equal(existsSync(resolve('assets', assetPath)), true, `${assetPath} should exist`)
+    assert.equal(existsSync(resolve(resourceRoot, assetPath)), true, `${assetPath} should exist`)
   }
+  assert.equal(existsSync(resolve('assets/Assets')), false, 'runtime assets should live under assets/resources')
 })
 
 test('motion frame images are four-frame horizontal strips', () => {

@@ -43,12 +43,12 @@
 
 ## 资源目录约定
 
-- `Assets/Characters/*`：角色立绘、战斗图、待机、移动、掐诀、受击动画。
-- `Assets/Monsters/*`：按场景主题拆分怪物身体图和动作动画。
-- `Assets/Skills/*`：技能图标、飞行物、命中特效、满屏质变特效。
-- `Assets/Artifacts/*`：法宝图标和品质展示。
+- `assets/resources/Assets/Characters/*`：角色立绘、战斗图、待机、移动、掐诀、受击动画。
+- `assets/resources/Assets/Monsters/*`：按场景主题拆分怪物身体图和动作动画。
+- `assets/resources/Assets/Skills/*`：技能图标、飞行物、命中特效、满屏质变特效。
+- `assets/resources/Assets/Artifacts/*`：法宝图标和品质展示。
 
-第一批 PNG 已经落在 `assets/Assets` 下，来源和替换顺序见 `docs/asset-pipeline.md`。
+第一批 PNG 已经落在 `assets/resources/Assets` 下，来源和替换顺序见 `docs/asset-pipeline.md`。
 角色和怪物也已经有第一版 4 帧动作 strip，可用于 Cocos 预览。
 
 ## 验证
