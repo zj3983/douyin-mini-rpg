@@ -48,6 +48,7 @@
 - `EnemySpawner`：按世界关卡主题生成怪物，并从对象池取节点。
 - `DamageNumberController`：显示命中伤害飘字，播放完后回收到对象池。
 - `BattleRuntimeController`：串联生成、Boss 出场、Boss 技能、御剑命中、伤害飘字、怪物死亡、魂球掉落和破关结算。
+- `StageClearPanelController`：显示破关标题、奖励明细和下一关按钮。
 
 ## 资源目录约定
 

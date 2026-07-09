@@ -77,8 +77,9 @@ python tools/build-actor-atlases.py
 - `BattleRuntime` 负责纯规则：刷怪、Boss 出场、Boss 技能事件、飞剑命中、伤害事件、死亡、魂球掉落、关卡通关、结算领奖。
 - `EnemySpawner` 负责把规则里的怪物生成事件映射成 Cocos 节点。
 - `BattleRuntimeController` 负责把 Boss 技能、御剑命中、伤害飘字、魂球对象池和破关结算串起来。
+- `StageClearPanelController` 负责把破关结算结果渲染到 Cocos 面板，后续只需要在编辑器里绑定 prefab 字段。
 - 御剑命中按飞剑线段轨迹、怪物坐标和碰撞半径计算，不再简单取前几个活怪。
-- 当前仍是第一版闭环，后续需要继续接 Boss 技能 prefab 表现、关卡结算 UI 面板和更强命中特效。
+- 当前仍是第一版闭环，后续需要继续接 Boss 技能 prefab 表现、结算面板美术 prefab 和更强命中特效。
 
 ## 验证
 

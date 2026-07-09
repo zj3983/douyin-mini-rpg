@@ -12,6 +12,7 @@ import {
 import { CultivationDesignData, stageProfileFromDesign } from '../Core/CultivationRuntime'
 import { DamageNumberController } from './DamageNumberController'
 import { NodePoolController } from './NodePoolController'
+import { StageClearPanelController } from './StageClearPanelController'
 
 const { ccclass, property } = _decorator
 
@@ -31,6 +32,9 @@ export class BattleRuntimeController extends Component {
 
   @property(Label)
   statusLabel: Label | null = null
+
+  @property(StageClearPanelController)
+  stageClearPanel: StageClearPanelController | null = null
 
   @property
   stageNumber = 1
@@ -84,6 +88,9 @@ export class BattleRuntimeController extends Component {
   claimStageClear() {
     if (!this.runtime) return { ok: false, reason: 'not-cleared', result: null }
     const result = claimStageClearRuntime(this.runtime)
+    if (result.ok && result.result) {
+      this.stageClearPanel?.showResult(result.result)
+    }
     this.refresh()
     return result
   }

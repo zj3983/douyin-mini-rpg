@@ -17,6 +17,7 @@ const requiredComponents = [
   ['assets/Scripts/Game/EnemySpawner.ts', 'class EnemySpawner'],
   ['assets/Scripts/Game/BattleRuntimeController.ts', 'class BattleRuntimeController'],
   ['assets/Scripts/Game/DamageNumberController.ts', 'class DamageNumberController'],
+  ['assets/Scripts/Game/StageClearPanelController.ts', 'class StageClearPanelController'],
 ]
 
 test('Cocos game layer has dedicated battle-loop components', () => {
@@ -33,4 +34,17 @@ test('battle runtime controller exposes boss stage hooks', () => {
   assert.equal(source.includes('tickBossSkill'), true)
   assert.equal(source.includes('claimStageClear'), true)
   assert.equal(source.includes('bossSkillEffectPool'), true)
+  assert.equal(source.includes('stageClearPanel'), true)
+  assert.equal(source.includes('showResult'), true)
+})
+
+test('stage clear panel renders reward fields and next stage action', () => {
+  const source = readFileSync(resolve('assets/Scripts/Game/StageClearPanelController.ts'), 'utf8')
+
+  assert.equal(source.includes('titleLabel'), true)
+  assert.equal(source.includes('rewardLabel'), true)
+  assert.equal(source.includes('nextStageButton'), true)
+  assert.equal(source.includes('spiritStones'), true)
+  assert.equal(source.includes('artifactEssence'), true)
+  assert.equal(source.includes('dungeonPass'), true)
 })
