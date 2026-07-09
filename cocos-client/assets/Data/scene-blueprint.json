@@ -1,0 +1,164 @@
+{
+  "scene": {
+    "name": "MainBattle",
+    "orientation": "landscape",
+    "target": "douyin-mini-game",
+    "notes": "Blueprint for assembling the first Cocos battle scene in Creator."
+  },
+  "nodes": [
+    {
+      "path": "Canvas",
+      "components": ["Canvas"],
+      "children": ["BattleRoot", "Pools"]
+    },
+    {
+      "path": "Canvas/BattleRoot",
+      "components": [],
+      "children": ["Runtime", "WorldLayer", "ActorLayer", "EffectLayer", "DropLayer", "HudLayer"]
+    },
+    {
+      "path": "Canvas/BattleRoot/Runtime",
+      "components": ["BattleRuntimeController"],
+      "bindings": {
+        "designData": "assets/Data/cultivation-design.json",
+        "statusLabel": "Canvas/BattleRoot/HudLayer/StatusLabel",
+        "stageClearPanel": "Canvas/BattleRoot/HudLayer/StageClearPanel",
+        "soulOrbPool": "Canvas/Pools/SoulOrbPool",
+        "damageNumberPool": "Canvas/Pools/DamageNumberPool",
+        "bossSkillEffectPool": "Canvas/Pools/BossSkillEffectPool"
+      },
+      "defaults": {
+        "stageNumber": 1,
+        "heroAttack": 40,
+        "swordStartX": -180,
+        "swordEndX": 300,
+        "swordY": -30,
+        "swordHitWidth": 18
+      }
+    },
+    {
+      "path": "Canvas/BattleRoot/WorldLayer",
+      "components": ["StageDirector"],
+      "purpose": "Background, stage theme, and scene transitions."
+    },
+    {
+      "path": "Canvas/BattleRoot/ActorLayer",
+      "components": [],
+      "purpose": "Player and enemy runtime nodes."
+    },
+    {
+      "path": "Canvas/BattleRoot/EffectLayer",
+      "components": [],
+      "purpose": "Flying sword, boss skill, and impact effects."
+    },
+    {
+      "path": "Canvas/BattleRoot/DropLayer",
+      "components": [],
+      "purpose": "Soul orbs and pickup feedback."
+    },
+    {
+      "path": "Canvas/BattleRoot/HudLayer",
+      "components": [],
+      "children": ["StatusLabel", "StageClearPanel"]
+    },
+    {
+      "path": "Canvas/BattleRoot/HudLayer/StatusLabel",
+      "components": ["Label"],
+      "text": "敌 0 | 魂球 0 | 巡游"
+    },
+    {
+      "path": "Canvas/BattleRoot/HudLayer/StageClearPanel",
+      "components": ["StageClearPanelController"],
+      "bindings": {
+        "panelRoot": "Canvas/BattleRoot/HudLayer/StageClearPanel",
+        "titleLabel": "Canvas/BattleRoot/HudLayer/StageClearPanel/TitleLabel",
+        "rewardLabel": "Canvas/BattleRoot/HudLayer/StageClearPanel/RewardLabel",
+        "nextStageLabel": "Canvas/BattleRoot/HudLayer/StageClearPanel/NextStageLabel",
+        "nextStageButton": "Canvas/BattleRoot/HudLayer/StageClearPanel/NextStageButton"
+      },
+      "buttonEvents": [
+        {
+          "node": "Canvas/BattleRoot/HudLayer/StageClearPanel/NextStageButton",
+          "target": "Canvas/BattleRoot/Runtime",
+          "component": "BattleRuntimeController",
+          "handler": "advanceToNextStageFromPanel"
+        }
+      ]
+    },
+    {
+      "path": "Canvas/BattleRoot/HudLayer/StageClearPanel/TitleLabel",
+      "components": ["Label"]
+    },
+    {
+      "path": "Canvas/BattleRoot/HudLayer/StageClearPanel/RewardLabel",
+      "components": ["Label"]
+    },
+    {
+      "path": "Canvas/BattleRoot/HudLayer/StageClearPanel/NextStageLabel",
+      "components": ["Label"]
+    },
+    {
+      "path": "Canvas/BattleRoot/HudLayer/StageClearPanel/NextStageButton",
+      "components": ["Button"]
+    },
+    {
+      "path": "Canvas/Pools",
+      "components": [],
+      "children": ["SoulOrbPool", "DamageNumberPool", "BossSkillEffectPool", "EnemyPool"]
+    },
+    {
+      "path": "Canvas/Pools/SoulOrbPool",
+      "components": ["NodePoolController"],
+      "pool": {
+        "poolKey": "soul-orb",
+        "capacity": 80,
+        "prefab": "prefabs/SoulOrb.prefab"
+      }
+    },
+    {
+      "path": "Canvas/Pools/DamageNumberPool",
+      "components": ["NodePoolController"],
+      "pool": {
+        "poolKey": "damage-number",
+        "capacity": 120,
+        "prefab": "prefabs/DamageNumber.prefab"
+      }
+    },
+    {
+      "path": "Canvas/Pools/BossSkillEffectPool",
+      "components": ["NodePoolController"],
+      "pool": {
+        "poolKey": "boss-skill-effect",
+        "capacity": 24,
+        "prefab": "prefabs/BossSkillEffect.prefab"
+      }
+    },
+    {
+      "path": "Canvas/Pools/EnemyPool",
+      "components": ["NodePoolController"],
+      "pool": {
+        "poolKey": "enemy",
+        "capacity": 80,
+        "prefab": "prefabs/Enemy.prefab"
+      }
+    }
+  ],
+  "prefabs": [
+    {
+      "path": "prefabs/SoulOrb.prefab",
+      "components": ["PoolableActor", "SoulOrbController"]
+    },
+    {
+      "path": "prefabs/DamageNumber.prefab",
+      "components": ["PoolableActor", "DamageNumberController", "Label"]
+    },
+    {
+      "path": "prefabs/BossSkillEffect.prefab",
+      "components": ["PoolableActor"]
+    },
+    {
+      "path": "prefabs/Enemy.prefab",
+      "components": ["PoolableActor", "EnemyController", "AtlasAnimator"]
+    }
+  ]
+}

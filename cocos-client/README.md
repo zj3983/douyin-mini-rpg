@@ -61,7 +61,7 @@
 第一批 PNG 已经落在 `assets/resources/Assets` 下，来源和替换顺序见 `docs/asset-pipeline.md`。
 角色和怪物也已经有第一版 4 帧动作 strip，可用于 Cocos 预览。
 运行时优先使用 `assets/resources/Assets/ActorAtlases/*/atlas.png` 和 `assets/Data/animation-atlas.json`，避免多动作角色拆成大量散图。
-场景节点和 prefab 字段绑定见 `docs/scene-assembly.md`。
+场景节点和 prefab 字段绑定见 `docs/scene-assembly.md`，机器可读蓝图见 `assets/Data/scene-blueprint.json`。
 
 ## 验证
 

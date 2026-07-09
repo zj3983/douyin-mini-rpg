@@ -2,6 +2,8 @@
 
 这份清单用于在 Cocos Creator 里把第一条横版修仙战斗线装起来。当前代码已经有规则、对象池、Boss、结算和下一关切换，编辑器里重点是把节点和字段拖对。
 
+机器可读蓝图位于 `assets/Data/scene-blueprint.json`，可用测试里的 `validate-scene-blueprint.mjs` 校验关键节点、组件和绑定没有遗漏。
+
 ## 推荐节点树
 
 ```text
