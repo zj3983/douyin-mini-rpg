@@ -22,6 +22,18 @@ export class BattleRuntimeController extends Component {
   @property
   heroAttack = 40
 
+  @property
+  swordStartX = -180
+
+  @property
+  swordEndX = 300
+
+  @property
+  swordY = -30
+
+  @property
+  swordHitWidth = 18
+
   private runtime: BattleRuntime | null = null
 
   start() {
@@ -38,7 +50,11 @@ export class BattleRuntimeController extends Component {
 
   castFlyingSword() {
     if (!this.runtime) return { hitCount: 0 }
-    const result = applyFlyingSwordHit(this.runtime, 3, 1)
+    const result = applyFlyingSwordHit(this.runtime, 3, 1, {
+      from: { x: this.swordStartX, y: this.swordY },
+      to: { x: this.swordEndX, y: this.swordY },
+      width: this.swordHitWidth,
+    })
     for (let index = 0; index < result.hitCount; index += 1) {
       this.soulOrbPool?.spawn()
     }

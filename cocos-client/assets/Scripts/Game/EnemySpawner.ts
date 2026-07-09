@@ -26,6 +26,9 @@ export class EnemySpawner extends Component {
   @property
   groundY = -60
 
+  @property
+  flyingY = 70
+
   private runtime: BattleRuntime | null = null
 
   start() {
@@ -42,9 +45,11 @@ export class EnemySpawner extends Component {
     const node = this.enemyPool.spawn()
     if (!node) return
 
-    node.setPosition(new Vec3(this.spawnX, this.groundY, 0))
+    const spawnY = spawn.enemy.profile.role === 'flying' ? this.flyingY : this.groundY
+    node.setPosition(new Vec3(this.spawnX, spawnY, 0))
+    spawn.enemy.position = { x: this.spawnX, y: spawnY }
     const controller = node.getComponent(EnemyController)
-    if (controller) controller.setTarget(new Vec3(-180, this.groundY, 0))
+    if (controller) controller.setTarget(new Vec3(-180, spawnY, 0))
     node.emit('enemy-runtime-spawned', spawn.enemy.id, spawn.enemy.profile)
   }
 }

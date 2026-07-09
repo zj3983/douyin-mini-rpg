@@ -77,6 +77,7 @@ python tools/build-actor-atlases.py
 - `BattleRuntime` 负责纯规则：刷怪、飞剑命中、死亡、魂球掉落。
 - `EnemySpawner` 负责把规则里的怪物生成事件映射成 Cocos 节点。
 - `BattleRuntimeController` 负责把御剑命中和魂球对象池串起来。
+- 御剑命中按飞剑线段轨迹、怪物坐标和碰撞半径计算，不再简单取前几个活怪。
 - 当前仍是第一版闭环，后续需要接真实碰撞、伤害飘字、Boss 技能和关卡胜负条件。
 
 ## 验证
