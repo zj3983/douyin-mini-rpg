@@ -41,6 +41,8 @@
 - `FlyingSwordSkill`：御剑术自动释放和弧线飞行。
 - `AssetBindingController`：按角色、怪物、技能、法宝 id 查询资源路径。
 - `AtlasAnimator`：按统一 atlas 和 manifest 播放多动作序列帧。
+- `NodePoolController`：复用怪物、魂球、飞剑和技能特效节点，避免频繁创建销毁。
+- `PoolableActor`：节点回收入口，供掉落物、怪物和特效主动归还对象池。
 
 ## 资源目录约定
 

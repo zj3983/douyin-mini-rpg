@@ -1,4 +1,5 @@
 import { _decorator, Component, Node, Vec3 } from 'cc'
+import { PoolableActor } from './PoolableActor'
 
 const { ccclass, property } = _decorator
 
@@ -28,7 +29,9 @@ export class SoulOrbController extends Component {
 
     if (distance <= this.pickupRadius) {
       this.node.emit('soul-orb-picked')
-      this.node.destroy()
+      const poolable = this.node.getComponent(PoolableActor)
+      if (poolable) poolable.despawn()
+      else this.node.active = false
       return
     }
 

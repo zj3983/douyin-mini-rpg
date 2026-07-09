@@ -65,6 +65,13 @@ python tools/build-actor-atlases.py
 
 这个脚本会读取 `asset-catalog.json` 里的动作帧路径，生成每个角色/怪物自己的 atlas 和 `animation-atlas.json`。
 
+## 运行时性能约束
+
+- 多动作角色使用 `AtlasAnimator`，一个 actor 只加载一张 atlas。
+- 怪物、魂球、飞剑和技能特效使用 `NodePoolController` 复用节点。
+- 拾取魂球时只触发回收，不直接 `destroy()`。
+- 离屏或距离过远的动画通过 `StripAnimationRuntime` 降低更新频率。
+
 ## 验证
 
 `tests/assetCatalog.test.mjs` 会检查清单中所有图片路径真实存在。
