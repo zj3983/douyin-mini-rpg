@@ -2,6 +2,7 @@ import { _decorator, Component, JsonAsset, Label, Vec3 } from 'cc'
 import {
   applyFlyingSwordHit,
   BattleRuntime,
+  claimStageClear as claimStageClearRuntime,
   createBattleRuntime,
   nextSpawn,
   runtimeStats,
@@ -80,6 +81,13 @@ export class BattleRuntimeController extends Component {
     return result
   }
 
+  claimStageClear() {
+    if (!this.runtime) return { ok: false, reason: 'not-cleared', result: null }
+    const result = claimStageClearRuntime(this.runtime)
+    this.refresh()
+    return result
+  }
+
   castFlyingSword() {
     if (!this.runtime) return { hitCount: 0, damageEvents: [], defeatedEnemyIds: [] }
     const result = applyFlyingSwordHit(this.runtime, 3, 1, {
@@ -103,7 +111,7 @@ export class BattleRuntimeController extends Component {
   private refresh() {
     if (!this.statusLabel || !this.runtime) return
     const stats = runtimeStats(this.runtime)
-    const bossText = stats.stageCleared ? '已破关' : stats.bossAlive ? 'Boss' : '巡游'
+    const bossText = stats.stageClearClaimed ? '已结算' : stats.stageCleared ? '已破关' : stats.bossAlive ? 'Boss' : '巡游'
     this.statusLabel.string = `敌 ${stats.aliveEnemies} | 魂球 ${stats.soulDrops} | ${bossText}`
   }
 }

@@ -31,5 +31,6 @@ test('battle runtime controller exposes boss stage hooks', () => {
 
   assert.equal(source.includes('summonWorldBoss'), true)
   assert.equal(source.includes('tickBossSkill'), true)
+  assert.equal(source.includes('claimStageClear'), true)
   assert.equal(source.includes('bossSkillEffectPool'), true)
 })

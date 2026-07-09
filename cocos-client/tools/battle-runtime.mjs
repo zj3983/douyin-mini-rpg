@@ -22,6 +22,7 @@ export function createBattleRuntime({ stageId, heroAttack }) {
     bossSkillTimer: 0,
     bossSkillInterval: 2.6,
     stageCleared: false,
+    stageClearClaimed: false,
   }
 }
 
@@ -116,6 +117,34 @@ export function tickBossSkill(runtime, deltaTime) {
   }
 }
 
+export function claimStageClear(runtime) {
+  if (!runtime.stageCleared) return { ok: false, reason: 'not-cleared', result: null }
+  if (runtime.stageClearClaimed) return { ok: false, reason: 'already-claimed', result: null }
+
+  runtime.stageClearClaimed = true
+  const stageId = runtime.stage.id
+  const passCycle = [
+    { id: 'mist-bamboo-secret', name: '青竹令' },
+    { id: 'flame-cave', name: '赤焰符券' },
+    { id: 'soul-bell-valley', name: '摄魂残铃' },
+    { id: 'star-gate-ruins', name: '星门残券' },
+  ]
+  return {
+    ok: true,
+    reason: null,
+    result: {
+      title: `第${stageId}关突破`,
+      stageId,
+      nextStageId: stageId + 1,
+      reward: {
+        spiritStones: 180 + stageId * 20,
+        artifactEssence: 2 + stageId,
+        dungeonPass: passCycle[(stageId - 1) % passCycle.length],
+      },
+    },
+  }
+}
+
 export function segmentHitEnemies(runtime, { from, to, width, pierce }) {
   return runtime.enemies
     .filter((enemy) => enemy.alive)
@@ -162,5 +191,6 @@ export function runtimeStats(runtime) {
     soulDrops: runtime.soulDrops.length,
     bossAlive: runtime.enemies.some((enemy) => enemy.role === 'boss' && enemy.alive),
     stageCleared: runtime.stageCleared,
+    stageClearClaimed: runtime.stageClearClaimed,
   }
 }

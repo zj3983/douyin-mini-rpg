@@ -22,6 +22,7 @@ export interface BattleRuntime {
   bossSkillTimer: number
   bossSkillInterval: number
   stageCleared: boolean
+  stageClearClaimed: boolean
 }
 
 export interface DamageEvent {
@@ -39,6 +40,19 @@ export interface BossSkillEvent {
   position: { x: number; y: number }
 }
 
+export interface StageClearReward {
+  spiritStones: number
+  artifactEssence: number
+  dungeonPass: { id: string; name: string }
+}
+
+export interface StageClearResult {
+  title: string
+  stageId: number
+  nextStageId: number
+  reward: StageClearReward
+}
+
 export function createBattleRuntime(stage: StageProfile, heroAttack: number): BattleRuntime {
   return {
     stage,
@@ -52,6 +66,7 @@ export function createBattleRuntime(stage: StageProfile, heroAttack: number): Ba
     bossSkillTimer: 0,
     bossSkillInterval: 2.6,
     stageCleared: false,
+    stageClearClaimed: false,
   }
 }
 
@@ -147,6 +162,36 @@ export function tickBossSkill(runtime: BattleRuntime, deltaTime: number): { ok: 
   }
 }
 
+export function claimStageClear(
+  runtime: BattleRuntime,
+): { ok: boolean; reason: 'not-cleared' | 'already-claimed' | null; result: StageClearResult | null } {
+  if (!runtime.stageCleared) return { ok: false, reason: 'not-cleared', result: null }
+  if (runtime.stageClearClaimed) return { ok: false, reason: 'already-claimed', result: null }
+
+  runtime.stageClearClaimed = true
+  const stageId = runtime.stage.id
+  const passCycle = [
+    { id: 'mist-bamboo-secret', name: '青竹令' },
+    { id: 'flame-cave', name: '赤焰符券' },
+    { id: 'soul-bell-valley', name: '摄魂残铃' },
+    { id: 'star-gate-ruins', name: '星门残券' },
+  ]
+  return {
+    ok: true,
+    reason: null,
+    result: {
+      title: `第${stageId}关突破`,
+      stageId,
+      nextStageId: stageId + 1,
+      reward: {
+        spiritStones: 180 + stageId * 20,
+        artifactEssence: 2 + stageId,
+        dungeonPass: passCycle[(stageId - 1) % passCycle.length],
+      },
+    },
+  }
+}
+
 export function segmentHitEnemies(
   runtime: BattleRuntime,
   input: { from: { x: number; y: number }; to: { x: number; y: number }; width: number; pierce: number },
@@ -196,5 +241,6 @@ export function runtimeStats(runtime: BattleRuntime) {
     soulDrops: runtime.soulDrops.length,
     bossAlive: runtime.enemies.some((enemy) => enemy.profile.role === 'boss' && enemy.alive),
     stageCleared: runtime.stageCleared,
+    stageClearClaimed: runtime.stageClearClaimed,
   }
 }

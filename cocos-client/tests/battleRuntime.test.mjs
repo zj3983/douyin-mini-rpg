@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   applyFlyingSwordHit,
+  claimStageClear,
   createBattleRuntime,
   defeatEnemy,
   nextSpawn,
@@ -137,4 +138,22 @@ test('defeating the world boss clears the stage', () => {
   assert.equal(hit.stageClear, true)
   assert.equal(runtimeStats(runtime).stageCleared, true)
   assert.equal(runtimeStats(runtime).soulDrops, 1)
+})
+
+test('stage clear reward can only be claimed once after boss defeat', () => {
+  const runtime = createBattleRuntime({ stageId: 4, heroAttack: 520 })
+  spawnBoss(runtime)
+  applyFlyingSwordHit(runtime, { pierce: 1, damageScale: 1 })
+
+  const first = claimStageClear(runtime)
+  const second = claimStageClear(runtime)
+
+  assert.equal(first.ok, true)
+  assert.equal(first.result.stageId, 4)
+  assert.equal(first.result.nextStageId, 5)
+  assert.equal(first.result.reward.spiritStones, 260)
+  assert.equal(first.result.reward.artifactEssence, 6)
+  assert.equal(first.result.reward.dungeonPass.name, '星门残券')
+  assert.equal(second.ok, false)
+  assert.equal(second.reason, 'already-claimed')
 })
