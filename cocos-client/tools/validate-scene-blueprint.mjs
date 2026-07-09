@@ -1,6 +1,7 @@
 const requiredNodes = [
   'Canvas/BattleRoot/Runtime',
   'Canvas/BattleRoot/ActorLayer/EnemySpawner',
+  'Canvas/BattleRoot/EffectLayer/FlyingSwordSkill',
   'Canvas/BattleRoot/HudLayer/StatusLabel',
   'Canvas/BattleRoot/HudLayer/StageClearPanel',
   'Canvas/Pools/SoulOrbPool',
@@ -12,6 +13,7 @@ const requiredNodes = [
 const requiredComponents = [
   'BattleRuntimeController',
   'EnemySpawner',
+  'FlyingSwordSkill',
   'StageClearPanelController',
   'NodePoolController',
 ]
@@ -24,6 +26,11 @@ const requiredRuntimeBindings = [
   'soulOrbPool',
   'damageNumberPool',
   'bossSkillEffectPool',
+]
+
+const requiredFlyingSwordBindings = [
+  'battleRuntime',
+  'sword',
 ]
 
 export function validateSceneBlueprint(blueprint) {
@@ -44,6 +51,12 @@ export function validateSceneBlueprint(blueprint) {
   const runtimeBindings = runtimeNode?.bindings ?? {}
   for (const binding of requiredRuntimeBindings) {
     if (!runtimeBindings[binding]) errors.push(`missing BattleRuntimeController binding: ${binding}`)
+  }
+
+  const flyingSwordNode = nodes.find((node) => node.path === 'Canvas/BattleRoot/EffectLayer/FlyingSwordSkill')
+  const flyingSwordBindings = flyingSwordNode?.bindings ?? {}
+  for (const binding of requiredFlyingSwordBindings) {
+    if (!flyingSwordBindings[binding]) errors.push(`missing FlyingSwordSkill binding: ${binding}`)
   }
 
   return { ok: errors.length === 0, errors }

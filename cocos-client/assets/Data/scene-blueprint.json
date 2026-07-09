@@ -66,7 +66,28 @@
     {
       "path": "Canvas/BattleRoot/EffectLayer",
       "components": [],
+      "children": ["FlyingSwordSkill"],
       "purpose": "Flying sword, boss skill, and impact effects."
+    },
+    {
+      "path": "Canvas/BattleRoot/EffectLayer/FlyingSwordSkill",
+      "components": ["FlyingSwordSkill"],
+      "bindings": {
+        "battleRuntime": "Canvas/BattleRoot/Runtime",
+        "sword": "Canvas/BattleRoot/EffectLayer/FlyingSwordSkill/Sword"
+      },
+      "defaults": {
+        "cooldown": 1.2,
+        "flightDuration": 0.62,
+        "arcHeight": 38
+      },
+      "children": ["Sword"],
+      "purpose": "御剑术自动施放节点，视觉轨迹和 BattleRuntimeController 的飞剑命中路径保持一致。"
+    },
+    {
+      "path": "Canvas/BattleRoot/EffectLayer/FlyingSwordSkill/Sword",
+      "components": ["Sprite"],
+      "purpose": "飞剑贴图节点，后续替换为法宝飞剑序列帧或粒子拖尾。"
     },
     {
       "path": "Canvas/BattleRoot/DropLayer",

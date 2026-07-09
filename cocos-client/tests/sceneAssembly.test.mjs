@@ -14,6 +14,9 @@ test('scene assembly guide documents battle node bindings', () => {
     'bossSkillEffectPool',
     'damageNumberPool',
     'soulOrbPool',
+    'FlyingSwordSkill',
+    'battleRuntime',
+    'sword',
     'advanceToNextStageFromPanel',
   ]) {
     assert.equal(guide.includes(marker), true, `scene assembly guide should mention ${marker}`)

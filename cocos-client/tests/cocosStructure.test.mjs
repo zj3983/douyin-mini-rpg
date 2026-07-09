@@ -72,6 +72,17 @@ test('enemy visual controller reacts to hit and defeat events', () => {
   assert.equal(source.includes('enemy-visual-death'), true)
 })
 
+test('flying sword skill uses battle runtime path and hit resolution', () => {
+  const source = readFileSync(resolve('assets/Scripts/Game/FlyingSwordSkill.ts'), 'utf8')
+
+  assert.equal(source.includes('battleRuntime'), true)
+  assert.equal(source.includes('castFlyingSword'), true)
+  assert.equal(source.includes('swordStartX'), true)
+  assert.equal(source.includes('swordEndX'), true)
+  assert.equal(source.includes('swordY'), true)
+  assert.equal(source.includes('sword-cast-started'), true)
+})
+
 test('stage clear panel renders reward fields and next stage action', () => {
   const source = readFileSync(resolve('assets/Scripts/Game/StageClearPanelController.ts'), 'utf8')
 

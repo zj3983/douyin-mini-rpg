@@ -163,3 +163,19 @@ Boss 技能 prefab：
 - 这里是编辑器装配清单，不是最终 UI 美术规范。
 - Boss 技能已有事件和对象池入口，但 prefab 美术表现仍需要单独做。
 - 怪物节点已经有运行时 id 绑定和受击/死亡事件入口，后续重点是替换真实 prefab 美术和动画。
+
+## FlyingSwordSkill 节点
+
+在 `BattleRoot/EffectLayer` 下创建 `FlyingSwordSkill` 节点，并在它下面创建 `Sword` 子节点。
+
+字段绑定：
+- `battleRuntime`：拖入 `BattleRoot/Runtime` 上的 `BattleRuntimeController`。
+- `sword`：拖入 `BattleRoot/EffectLayer/FlyingSwordSkill/Sword`。
+- `cooldown`：默认 `1.2`。
+- `flightDuration`：默认 `0.62`。
+- `arcHeight`：默认 `38`。
+
+运行时行为：
+- `FlyingSwordSkill` 自动调用 `BattleRuntimeController.castFlyingSword()`，不要在技能脚本里单独计算伤害。
+- 飞剑视觉路径读取 `swordStartX`、`swordEndX`、`swordY`，和运行时命中路径保持一致。
+- 每次施法会发出 `sword-cast-started` 事件，后续音效、拖尾、屏幕震动都从这个事件接入。
