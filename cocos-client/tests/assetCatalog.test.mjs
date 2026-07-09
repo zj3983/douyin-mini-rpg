@@ -7,6 +7,14 @@ import { findCharacter, findArtifact, monstersForTheme, skillsForCharacter } fro
 
 const catalog = JSON.parse(readFileSync(resolve('assets/Data/asset-catalog.json'), 'utf8'))
 
+function pngSize(assetPath) {
+  const buffer = readFileSync(resolve('assets', assetPath))
+  return {
+    width: buffer.readUInt32BE(16),
+    height: buffer.readUInt32BE(20),
+  }
+}
+
 test('character catalog defines portraits, motion sets, artifacts, and innate skills', () => {
   assert.equal(catalog.characters.length >= 4, true)
 
@@ -14,6 +22,7 @@ test('character catalog defines portraits, motion sets, artifacts, and innate sk
     assert.equal(Boolean(character.portrait), true)
     assert.equal(Boolean(character.combatSprite), true)
     assert.deepEqual(Object.keys(character.motions), ['idle', 'move', 'cast', 'hurt'])
+    assert.deepEqual(Object.keys(character.motionFrames), ['idle', 'move', 'cast', 'hurt'])
     assert.equal(Boolean(character.innateSkill), true)
     assert.equal(Boolean(character.startingArtifact), true)
   }
@@ -26,6 +35,7 @@ test('monster catalog is grouped by scene theme and includes animation slots', (
     assert.equal(Boolean(monster.theme), true)
     assert.equal(Boolean(monster.sprite), true)
     assert.deepEqual(Object.keys(monster.motions), ['idle', 'move', 'attack', 'hurt', 'death'])
+    assert.deepEqual(Object.keys(monster.motionFrames), ['idle', 'move', 'attack', 'hurt', 'death'])
     assert.equal(Boolean(monster.skillCue), true)
   }
 })
@@ -69,12 +79,26 @@ test('asset runtime resolves character, skills, monsters, and artifact sources',
 test('catalog image paths exist under Cocos assets', () => {
   const imagePaths = [
     ...catalog.characters.flatMap((character) => [character.portrait, character.combatSprite]),
+    ...catalog.characters.flatMap((character) => Object.values(character.motionFrames)),
     ...catalog.monsters.map((monster) => monster.sprite),
+    ...catalog.monsters.flatMap((monster) => Object.values(monster.motionFrames)),
     ...catalog.skills.flatMap((skill) => [skill.icon, skill.projectile, skill.impact, skill.fullScreen]),
     ...catalog.artifacts.map((artifact) => artifact.icon),
   ]
 
   for (const assetPath of imagePaths) {
     assert.equal(existsSync(resolve('assets', assetPath)), true, `${assetPath} should exist`)
+  }
+})
+
+test('motion frame images are four-frame horizontal strips', () => {
+  const framePaths = [
+    ...catalog.characters.flatMap((character) => Object.values(character.motionFrames)),
+    ...catalog.monsters.flatMap((monster) => Object.values(monster.motionFrames)),
+  ]
+
+  for (const assetPath of framePaths) {
+    const size = pngSize(assetPath)
+    assert.equal(size.width, size.height * 4, `${assetPath} should be a 4-frame strip`)
   }
 })

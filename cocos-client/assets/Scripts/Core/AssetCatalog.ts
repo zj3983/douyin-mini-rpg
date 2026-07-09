@@ -4,6 +4,7 @@ export interface CharacterAsset {
   portrait: string
   combatSprite: string
   motions: Record<'idle' | 'move' | 'cast' | 'hurt', string>
+  motionFrames: Record<'idle' | 'move' | 'cast' | 'hurt', string>
   innateSkill: string
   startingArtifact: string
 }
@@ -14,6 +15,7 @@ export interface MonsterAsset {
   theme: string
   sprite: string
   motions: Record<'idle' | 'move' | 'attack' | 'hurt' | 'death', string>
+  motionFrames: Record<'idle' | 'move' | 'attack' | 'hurt' | 'death', string>
   skillCue: string
 }
 

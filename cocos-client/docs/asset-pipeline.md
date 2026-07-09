@@ -10,6 +10,15 @@
 
 素材板已经切到 `asset-catalog.json` 引用的目录里，当前可被 Cocos 直接导入。
 
+## 当前动作帧批次
+
+角色和怪物已经生成第一版 4 帧 PNG strip：
+
+- 角色：`idle`、`move`、`cast`、`hurt`
+- 怪物：`idle`、`move`、`attack`、`hurt`、`death`
+
+这批帧表用于 Cocos 预览和节点挂载，不是最终美术。它们从现有 PNG 派生，能先解决“完全不会动”的问题；后续需要替换成透明全身横版动作帧。
+
 ## 目录约定
 
 - `Assets/Characters/*`：角色立绘和战斗图。

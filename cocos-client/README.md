@@ -49,6 +49,7 @@
 - `Assets/Artifacts/*`：法宝图标和品质展示。
 
 第一批 PNG 已经落在 `assets/Assets` 下，来源和替换顺序见 `docs/asset-pipeline.md`。
+角色和怪物也已经有第一版 4 帧动作 strip，可用于 Cocos 预览。
 
 ## 验证
 

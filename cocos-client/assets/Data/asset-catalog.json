@@ -18,7 +18,13 @@
         "hurt": "Assets/Characters/QinglanSwordCultivator/hurt.anim"
       },
       "innateSkill": "flying-sword-art",
-      "startingArtifact": "qing-shuang-sword-case"
+      "startingArtifact": "qing-shuang-sword-case",
+      "motionFrames": {
+        "idle": "Assets/Characters/QinglanSwordCultivator/Frames/idle.png",
+        "move": "Assets/Characters/QinglanSwordCultivator/Frames/sword_ride.png",
+        "cast": "Assets/Characters/QinglanSwordCultivator/Frames/hand_seal.png",
+        "hurt": "Assets/Characters/QinglanSwordCultivator/Frames/hurt.png"
+      }
     },
     {
       "id": "xuanyan-fire-cultivator",
@@ -32,7 +38,13 @@
         "hurt": "Assets/Characters/XuanyanFireCultivator/hurt.anim"
       },
       "innateSkill": "flame-ruler-wave",
-      "startingArtifact": "flame-devouring-ruler"
+      "startingArtifact": "flame-devouring-ruler",
+      "motionFrames": {
+        "idle": "Assets/Characters/XuanyanFireCultivator/Frames/idle.png",
+        "move": "Assets/Characters/XuanyanFireCultivator/Frames/sword_ride.png",
+        "cast": "Assets/Characters/XuanyanFireCultivator/Frames/hand_seal.png",
+        "hurt": "Assets/Characters/XuanyanFireCultivator/Frames/hurt.png"
+      }
     },
     {
       "id": "jiuxiao-thunder-cultivator",
@@ -46,7 +58,13 @@
         "hurt": "Assets/Characters/JiuxiaoThunderCultivator/hurt.anim"
       },
       "innateSkill": "nine-heaven-thunder-seal",
-      "startingArtifact": "jiuxiao-thunder-seal"
+      "startingArtifact": "jiuxiao-thunder-seal",
+      "motionFrames": {
+        "idle": "Assets/Characters/JiuxiaoThunderCultivator/Frames/idle.png",
+        "move": "Assets/Characters/JiuxiaoThunderCultivator/Frames/sword_ride.png",
+        "cast": "Assets/Characters/JiuxiaoThunderCultivator/Frames/hand_seal.png",
+        "hurt": "Assets/Characters/JiuxiaoThunderCultivator/Frames/hurt.png"
+      }
     },
     {
       "id": "soul-bell-cultivator",
@@ -60,7 +78,13 @@
         "hurt": "Assets/Characters/SoulBellCultivator/hurt.anim"
       },
       "innateSkill": "soul-bell-field",
-      "startingArtifact": "ancient-soul-bell"
+      "startingArtifact": "ancient-soul-bell",
+      "motionFrames": {
+        "idle": "Assets/Characters/SoulBellCultivator/Frames/idle.png",
+        "move": "Assets/Characters/SoulBellCultivator/Frames/sword_ride.png",
+        "cast": "Assets/Characters/SoulBellCultivator/Frames/hand_seal.png",
+        "hurt": "Assets/Characters/SoulBellCultivator/Frames/hurt.png"
+      }
     }
   ],
   "monsters": [
@@ -76,7 +100,14 @@
         "hurt": "Assets/Monsters/MistBamboo/MossWolf/hurt.anim",
         "death": "Assets/Monsters/MistBamboo/MossWolf/death.anim"
       },
-      "skillCue": "ground-pounce"
+      "skillCue": "ground-pounce",
+      "motionFrames": {
+        "idle": "Assets/Monsters/MistBamboo/MossWolf/Frames/idle.png",
+        "move": "Assets/Monsters/MistBamboo/MossWolf/Frames/move.png",
+        "attack": "Assets/Monsters/MistBamboo/MossWolf/Frames/attack.png",
+        "hurt": "Assets/Monsters/MistBamboo/MossWolf/Frames/hurt.png",
+        "death": "Assets/Monsters/MistBamboo/MossWolf/Frames/death.png"
+      }
     },
     {
       "id": "green-wing-moth",
@@ -90,7 +121,14 @@
         "hurt": "Assets/Monsters/MistBamboo/GreenWingMoth/hurt.anim",
         "death": "Assets/Monsters/MistBamboo/GreenWingMoth/death.anim"
       },
-      "skillCue": "poison-spore"
+      "skillCue": "poison-spore",
+      "motionFrames": {
+        "idle": "Assets/Monsters/MistBamboo/GreenWingMoth/Frames/idle.png",
+        "move": "Assets/Monsters/MistBamboo/GreenWingMoth/Frames/move.png",
+        "attack": "Assets/Monsters/MistBamboo/GreenWingMoth/Frames/attack.png",
+        "hurt": "Assets/Monsters/MistBamboo/GreenWingMoth/Frames/hurt.png",
+        "death": "Assets/Monsters/MistBamboo/GreenWingMoth/Frames/death.png"
+      }
     },
     {
       "id": "bamboo-warden",
@@ -104,7 +142,14 @@
         "hurt": "Assets/Monsters/MistBamboo/BambooWarden/hurt.anim",
         "death": "Assets/Monsters/MistBamboo/BambooWarden/death.anim"
       },
-      "skillCue": "vine-root"
+      "skillCue": "vine-root",
+      "motionFrames": {
+        "idle": "Assets/Monsters/MistBamboo/BambooWarden/Frames/idle.png",
+        "move": "Assets/Monsters/MistBamboo/BambooWarden/Frames/move.png",
+        "attack": "Assets/Monsters/MistBamboo/BambooWarden/Frames/attack.png",
+        "hurt": "Assets/Monsters/MistBamboo/BambooWarden/Frames/hurt.png",
+        "death": "Assets/Monsters/MistBamboo/BambooWarden/Frames/death.png"
+      }
     },
     {
       "id": "fog-spider",
@@ -118,7 +163,14 @@
         "hurt": "Assets/Monsters/MistBamboo/FogSpider/hurt.anim",
         "death": "Assets/Monsters/MistBamboo/FogSpider/death.anim"
       },
-      "skillCue": "web-snare"
+      "skillCue": "web-snare",
+      "motionFrames": {
+        "idle": "Assets/Monsters/MistBamboo/FogSpider/Frames/idle.png",
+        "move": "Assets/Monsters/MistBamboo/FogSpider/Frames/move.png",
+        "attack": "Assets/Monsters/MistBamboo/FogSpider/Frames/attack.png",
+        "hurt": "Assets/Monsters/MistBamboo/FogSpider/Frames/hurt.png",
+        "death": "Assets/Monsters/MistBamboo/FogSpider/Frames/death.png"
+      }
     },
     {
       "id": "lantern-wraith",
@@ -132,7 +184,14 @@
         "hurt": "Assets/Monsters/MistBamboo/LanternWraith/hurt.anim",
         "death": "Assets/Monsters/MistBamboo/LanternWraith/death.anim"
       },
-      "skillCue": "soul-flame"
+      "skillCue": "soul-flame",
+      "motionFrames": {
+        "idle": "Assets/Monsters/MistBamboo/LanternWraith/Frames/idle.png",
+        "move": "Assets/Monsters/MistBamboo/LanternWraith/Frames/move.png",
+        "attack": "Assets/Monsters/MistBamboo/LanternWraith/Frames/attack.png",
+        "hurt": "Assets/Monsters/MistBamboo/LanternWraith/Frames/hurt.png",
+        "death": "Assets/Monsters/MistBamboo/LanternWraith/Frames/death.png"
+      }
     },
     {
       "id": "mist-deer-king",
@@ -146,7 +205,14 @@
         "hurt": "Assets/Monsters/MistBamboo/MistDeerKing/hurt.anim",
         "death": "Assets/Monsters/MistBamboo/MistDeerKing/death.anim"
       },
-      "skillCue": "mist-domain"
+      "skillCue": "mist-domain",
+      "motionFrames": {
+        "idle": "Assets/Monsters/MistBamboo/MistDeerKing/Frames/idle.png",
+        "move": "Assets/Monsters/MistBamboo/MistDeerKing/Frames/move.png",
+        "attack": "Assets/Monsters/MistBamboo/MistDeerKing/Frames/attack.png",
+        "hurt": "Assets/Monsters/MistBamboo/MistDeerKing/Frames/hurt.png",
+        "death": "Assets/Monsters/MistBamboo/MistDeerKing/Frames/death.png"
+      }
     },
     {
       "id": "lava-lizard",
@@ -160,7 +226,14 @@
         "hurt": "Assets/Monsters/FlameCave/LavaLizard/hurt.anim",
         "death": "Assets/Monsters/FlameCave/LavaLizard/death.anim"
       },
-      "skillCue": "lava-bite"
+      "skillCue": "lava-bite",
+      "motionFrames": {
+        "idle": "Assets/Monsters/FlameCave/LavaLizard/Frames/idle.png",
+        "move": "Assets/Monsters/FlameCave/LavaLizard/Frames/move.png",
+        "attack": "Assets/Monsters/FlameCave/LavaLizard/Frames/attack.png",
+        "hurt": "Assets/Monsters/FlameCave/LavaLizard/Frames/hurt.png",
+        "death": "Assets/Monsters/FlameCave/LavaLizard/Frames/death.png"
+      }
     },
     {
       "id": "ember-crow",
@@ -174,7 +247,14 @@
         "hurt": "Assets/Monsters/FlameCave/EmberCrow/hurt.anim",
         "death": "Assets/Monsters/FlameCave/EmberCrow/death.anim"
       },
-      "skillCue": "fire-feather"
+      "skillCue": "fire-feather",
+      "motionFrames": {
+        "idle": "Assets/Monsters/FlameCave/EmberCrow/Frames/idle.png",
+        "move": "Assets/Monsters/FlameCave/EmberCrow/Frames/move.png",
+        "attack": "Assets/Monsters/FlameCave/EmberCrow/Frames/attack.png",
+        "hurt": "Assets/Monsters/FlameCave/EmberCrow/Frames/hurt.png",
+        "death": "Assets/Monsters/FlameCave/EmberCrow/Frames/death.png"
+      }
     },
     {
       "id": "flame-ogre",
@@ -188,7 +268,14 @@
         "hurt": "Assets/Monsters/FlameCave/FlameOgre/hurt.anim",
         "death": "Assets/Monsters/FlameCave/FlameOgre/death.anim"
       },
-      "skillCue": "fire-slam"
+      "skillCue": "fire-slam",
+      "motionFrames": {
+        "idle": "Assets/Monsters/FlameCave/FlameOgre/Frames/idle.png",
+        "move": "Assets/Monsters/FlameCave/FlameOgre/Frames/move.png",
+        "attack": "Assets/Monsters/FlameCave/FlameOgre/Frames/attack.png",
+        "hurt": "Assets/Monsters/FlameCave/FlameOgre/Frames/hurt.png",
+        "death": "Assets/Monsters/FlameCave/FlameOgre/Frames/death.png"
+      }
     },
     {
       "id": "star-armored-beast",
@@ -202,7 +289,14 @@
         "hurt": "Assets/Monsters/StarlightRuin/StarArmoredBeast/hurt.anim",
         "death": "Assets/Monsters/StarlightRuin/StarArmoredBeast/death.anim"
       },
-      "skillCue": "star-charge"
+      "skillCue": "star-charge",
+      "motionFrames": {
+        "idle": "Assets/Monsters/StarlightRuin/StarArmoredBeast/Frames/idle.png",
+        "move": "Assets/Monsters/StarlightRuin/StarArmoredBeast/Frames/move.png",
+        "attack": "Assets/Monsters/StarlightRuin/StarArmoredBeast/Frames/attack.png",
+        "hurt": "Assets/Monsters/StarlightRuin/StarArmoredBeast/Frames/hurt.png",
+        "death": "Assets/Monsters/StarlightRuin/StarArmoredBeast/Frames/death.png"
+      }
     },
     {
       "id": "void-wing-spirit",
@@ -216,7 +310,14 @@
         "hurt": "Assets/Monsters/StarlightRuin/VoidWingSpirit/hurt.anim",
         "death": "Assets/Monsters/StarlightRuin/VoidWingSpirit/death.anim"
       },
-      "skillCue": "void-ray"
+      "skillCue": "void-ray",
+      "motionFrames": {
+        "idle": "Assets/Monsters/StarlightRuin/VoidWingSpirit/Frames/idle.png",
+        "move": "Assets/Monsters/StarlightRuin/VoidWingSpirit/Frames/move.png",
+        "attack": "Assets/Monsters/StarlightRuin/VoidWingSpirit/Frames/attack.png",
+        "hurt": "Assets/Monsters/StarlightRuin/VoidWingSpirit/Frames/hurt.png",
+        "death": "Assets/Monsters/StarlightRuin/VoidWingSpirit/Frames/death.png"
+      }
     },
     {
       "id": "meteor-guardian",
@@ -230,7 +331,14 @@
         "hurt": "Assets/Monsters/StarlightRuin/MeteorGuardian/hurt.anim",
         "death": "Assets/Monsters/StarlightRuin/MeteorGuardian/death.anim"
       },
-      "skillCue": "meteor-fall"
+      "skillCue": "meteor-fall",
+      "motionFrames": {
+        "idle": "Assets/Monsters/StarlightRuin/MeteorGuardian/Frames/idle.png",
+        "move": "Assets/Monsters/StarlightRuin/MeteorGuardian/Frames/move.png",
+        "attack": "Assets/Monsters/StarlightRuin/MeteorGuardian/Frames/attack.png",
+        "hurt": "Assets/Monsters/StarlightRuin/MeteorGuardian/Frames/hurt.png",
+        "death": "Assets/Monsters/StarlightRuin/MeteorGuardian/Frames/death.png"
+      }
     }
   ],
   "skills": [
