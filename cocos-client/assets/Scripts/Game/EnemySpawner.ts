@@ -1,4 +1,4 @@
-import { _decorator, Component, Vec3 } from 'cc'
+import { _decorator, Component, Node, Vec3 } from 'cc'
 import { BattleEnemy } from '../Core/BattleRuntime'
 import { EnemyController } from './EnemyController'
 import { NodePoolController } from './NodePoolController'
@@ -43,5 +43,9 @@ export class EnemySpawner extends Component {
     if (controller) controller.setTarget(new Vec3(-180, spawnY, 0))
     node.emit('enemy-runtime-spawned', enemy.id, enemy.profile)
     return node
+  }
+
+  despawnEnemy(node: Node) {
+    this.enemyPool?.despawn(node)
   }
 }

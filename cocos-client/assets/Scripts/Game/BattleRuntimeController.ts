@@ -1,4 +1,4 @@
-import { _decorator, Component, JsonAsset, Label, Vec3 } from 'cc'
+import { _decorator, Component, JsonAsset, Label, Node, Vec3 } from 'cc'
 import {
   applyFlyingSwordHit,
   BattleRuntime,
@@ -59,6 +59,7 @@ export class BattleRuntimeController extends Component {
   swordHitWidth = 18
 
   private runtime: BattleRuntime | null = null
+  private enemyNodes = new Map<number, Node>()
 
   start() {
     this.rebuildRuntime(this.stageNumber)
@@ -81,6 +82,7 @@ export class BattleRuntimeController extends Component {
     this.stageNumber = Math.max(1, Math.floor(stageNumber || 1))
     const stage = stageProfileFromDesign(this.designData.json as CultivationDesignData, this.stageNumber)
     this.runtime = createBattleRuntime(stage, this.heroAttack)
+    this.enemyNodes.clear()
     this.refresh()
   }
 
@@ -92,7 +94,8 @@ export class BattleRuntimeController extends Component {
   update(deltaTime: number) {
     const spawn = this.tickSpawn(deltaTime)
     if (spawn.ok && spawn.enemy) {
-      this.enemySpawner?.spawnEnemy(spawn.enemy)
+      const node = this.enemySpawner?.spawnEnemy(spawn.enemy)
+      this.registerEnemyNode(spawn.enemy.id, node)
       this.refresh()
     }
   }
@@ -101,7 +104,8 @@ export class BattleRuntimeController extends Component {
     if (!this.runtime) return { ok: false, enemy: null }
     const result = spawnBoss(this.runtime)
     if (result.ok && result.enemy) {
-      this.enemySpawner?.spawnEnemy(result.enemy)
+      const node = this.enemySpawner?.spawnEnemy(result.enemy)
+      this.registerEnemyNode(result.enemy.id, node)
     }
     this.refresh()
     return result
@@ -135,16 +139,27 @@ export class BattleRuntimeController extends Component {
       width: this.swordHitWidth,
     })
     for (const event of result.damageEvents) {
+      const enemyNode = this.enemyNodes.get(event.enemyId)
+      enemyNode?.emit('enemy-hit', event)
       const damageNode = this.damageNumberPool?.spawn()
       if (!damageNode) continue
       damageNode.setPosition(new Vec3(event.position.x, event.position.y + 54, 0))
       damageNode.getComponent(DamageNumberController)?.show(event.damage)
     }
-    for (let index = 0; index < result.defeatedEnemyIds.length; index += 1) {
+    for (const enemyId of result.defeatedEnemyIds) {
+      const enemyNode = this.enemyNodes.get(enemyId)
+      enemyNode?.emit('enemy-defeated', enemyId)
+      if (enemyNode) this.enemySpawner?.despawnEnemy(enemyNode)
+      this.enemyNodes.delete(enemyId)
       this.soulOrbPool?.spawn()
     }
     this.refresh()
     return result
+  }
+
+  private registerEnemyNode(enemyId: number, node: Node | null | undefined) {
+    if (!node) return
+    this.enemyNodes.set(enemyId, node)
   }
 
   private refresh() {

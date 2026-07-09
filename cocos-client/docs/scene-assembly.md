@@ -73,6 +73,7 @@ Canvas
 - `BattleRuntimeController.update(deltaTime)` 统一调用规则层刷怪。
 - 生成成功后调用 `EnemySpawner.spawnEnemy(enemy)`，从对象池取怪物节点并设置位置。
 - `summonWorldBoss()` 成功后同样调用 `EnemySpawner.spawnEnemy(result.enemy)`，Boss 会使用单独的坐标和缩放。
+- `BattleRuntimeController` 会登记生成出的节点；飞剑命中时节点收到 `enemy-hit` 事件，死亡时收到 `enemy-defeated` 事件并回收到 `EnemyPool`。
 - `EnemySpawner` 不再创建自己的 `BattleRuntime`，避免和 Boss/结算状态分裂。
 
 在 `HudLayer/StageClearPanel` 挂 `StageClearPanelController`。

@@ -31,6 +31,11 @@ test('battle runtime controller exposes boss stage hooks', () => {
   const source = readFileSync(resolve('assets/Scripts/Game/BattleRuntimeController.ts'), 'utf8')
 
   assert.equal(source.includes('enemySpawner'), true)
+  assert.equal(source.includes('enemyNodes'), true)
+  assert.equal(source.includes('registerEnemyNode'), true)
+  assert.equal(source.includes('enemy-hit'), true)
+  assert.equal(source.includes('enemy-defeated'), true)
+  assert.equal(source.includes('despawnEnemy'), true)
   assert.equal(source.includes('this.enemySpawner?.spawnEnemy(result.enemy)'), true)
   assert.equal(source.includes('update(deltaTime'), true)
   assert.equal(source.includes('summonWorldBoss'), true)
@@ -47,6 +52,7 @@ test('enemy spawner only maps runtime spawns to pooled nodes', () => {
   const source = readFileSync(resolve('assets/Scripts/Game/EnemySpawner.ts'), 'utf8')
 
   assert.equal(source.includes('spawnEnemy'), true)
+  assert.equal(source.includes('despawnEnemy'), true)
   assert.equal(source.includes('bossSpawnX'), true)
   assert.equal(source.includes('bossY'), true)
   assert.equal(source.includes('bossScale'), true)
