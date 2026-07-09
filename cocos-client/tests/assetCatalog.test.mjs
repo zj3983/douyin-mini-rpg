@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { findCharacter, findArtifact, monstersForTheme, skillsForCharacter } from '../tools/asset-catalog-runtime.mjs'
 
@@ -63,4 +64,17 @@ test('asset runtime resolves character, skills, monsters, and artifact sources',
   assert.equal(skills[0].id, 'flying-sword-art')
   assert.equal(monsters.length >= 3, true)
   assert.equal(artifact.sourceDungeon, 'mist-bamboo-secret')
+})
+
+test('catalog image paths exist under Cocos assets', () => {
+  const imagePaths = [
+    ...catalog.characters.flatMap((character) => [character.portrait, character.combatSprite]),
+    ...catalog.monsters.map((monster) => monster.sprite),
+    ...catalog.skills.flatMap((skill) => [skill.icon, skill.projectile, skill.impact, skill.fullScreen]),
+    ...catalog.artifacts.map((artifact) => artifact.icon),
+  ]
+
+  for (const assetPath of imagePaths) {
+    assert.equal(existsSync(resolve('assets', assetPath)), true, `${assetPath} should exist`)
+  }
 })

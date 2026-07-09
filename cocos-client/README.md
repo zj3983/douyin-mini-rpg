@@ -48,6 +48,8 @@
 - `Assets/Skills/*`：技能图标、飞行物、命中特效、满屏质变特效。
 - `Assets/Artifacts/*`：法宝图标和品质展示。
 
+第一批 PNG 已经落在 `assets/Assets` 下，来源和替换顺序见 `docs/asset-pipeline.md`。
+
 ## 验证
 
 ```bash
