@@ -36,6 +36,8 @@ test('battle runtime controller exposes boss stage hooks', () => {
   assert.equal(source.includes('bossSkillEffectPool'), true)
   assert.equal(source.includes('stageClearPanel'), true)
   assert.equal(source.includes('showResult'), true)
+  assert.equal(source.includes('advanceToStage'), true)
+  assert.equal(source.includes('advanceToNextStageFromPanel'), true)
 })
 
 test('stage clear panel renders reward fields and next stage action', () => {
@@ -44,6 +46,7 @@ test('stage clear panel renders reward fields and next stage action', () => {
   assert.equal(source.includes('titleLabel'), true)
   assert.equal(source.includes('rewardLabel'), true)
   assert.equal(source.includes('nextStageButton'), true)
+  assert.equal(source.includes('nextStageTarget'), true)
   assert.equal(source.includes('spiritStones'), true)
   assert.equal(source.includes('artifactEssence'), true)
   assert.equal(source.includes('dungeonPass'), true)

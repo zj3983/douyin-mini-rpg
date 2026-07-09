@@ -57,7 +57,24 @@ export class BattleRuntimeController extends Component {
   private runtime: BattleRuntime | null = null
 
   start() {
+    this.rebuildRuntime(this.stageNumber)
+  }
+
+  advanceToStage(stageNumber: number) {
+    this.rebuildRuntime(stageNumber)
+    this.stageClearPanel?.hide()
+    return { ok: Boolean(this.runtime), stageNumber: this.stageNumber }
+  }
+
+  advanceToNextStageFromPanel() {
+    const result = this.stageClearPanel?.takeResult()
+    if (!result) return { ok: false, stageNumber: this.stageNumber }
+    return this.advanceToStage(result.nextStageId)
+  }
+
+  private rebuildRuntime(stageNumber: number) {
     if (!this.designData) return
+    this.stageNumber = Math.max(1, Math.floor(stageNumber || 1))
     const stage = stageProfileFromDesign(this.designData.json as CultivationDesignData, this.stageNumber)
     this.runtime = createBattleRuntime(stage, this.heroAttack)
     this.refresh()

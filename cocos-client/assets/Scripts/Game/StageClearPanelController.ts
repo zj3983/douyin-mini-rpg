@@ -20,6 +20,8 @@ export class StageClearPanelController extends Component {
   @property(Button)
   nextStageButton: Button | null = null
 
+  nextStageTarget = 1
+
   private result: StageClearResult | null = null
 
   onLoad() {
@@ -28,6 +30,7 @@ export class StageClearPanelController extends Component {
 
   showResult(result: StageClearResult) {
     this.result = result
+    this.nextStageTarget = result.nextStageId
     const root = this.panelRoot ?? this.node
     root.active = true
 
