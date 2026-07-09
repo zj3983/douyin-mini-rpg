@@ -1,5 +1,6 @@
-import { _decorator, Component, JsonAsset, Texture2D, assetManager } from 'cc'
+import { _decorator, Component, JsonAsset, Texture2D, resources } from 'cc'
 import { AssetCatalogData, findCharacter, monstersForTheme } from '../Core/AssetCatalog'
+import { resourcePathForPng } from '../Core/StripAnimationRuntime'
 import { StripAnimator } from './StripAnimator'
 
 const { ccclass, property } = _decorator
@@ -37,8 +38,8 @@ export class ActorAnimationBinder extends Component {
   }
 
   private loadStrip(assetPath: string) {
-    const resourcePath = assetPath.replace(/\.png$/, '')
-    assetManager.resources?.load(resourcePath, Texture2D, (error, texture) => {
+    const resourcePath = resourcePathForPng(assetPath)
+    resources.load(resourcePath, Texture2D, (error, texture) => {
       if (error || !texture || !this.animator) return
       this.animator.play(texture, 4, 8)
     })

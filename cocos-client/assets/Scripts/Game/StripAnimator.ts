@@ -1,4 +1,5 @@
 import { _decorator, Component, Rect, Sprite, SpriteFrame, Texture2D } from 'cc'
+import { frameIndexAtTime, shouldAdvanceAnimation } from '../Core/StripAnimationRuntime'
 
 const { ccclass, property } = _decorator
 
@@ -16,8 +17,21 @@ export class StripAnimator extends Component {
   @property
   loop = true
 
+  @property
+  visibleForAnimation = true
+
+  @property
+  distanceToCamera = 0
+
+  @property
+  maxActiveDistance = 900
+
+  @property
+  updateInterval = 0.033
+
   private frames: SpriteFrame[] = []
   private elapsed = 0
+  private accumulatedTime = 0
   private frameIndex = 0
   private playing = false
 
@@ -26,6 +40,7 @@ export class StripAnimator extends Component {
     this.framesPerSecond = Math.max(1, framesPerSecond)
     this.frames = this.buildFrames(texture, this.frameCount)
     this.elapsed = 0
+    this.accumulatedTime = 0
     this.frameIndex = 0
     this.playing = this.frames.length > 0
     this.applyFrame()
@@ -39,14 +54,26 @@ export class StripAnimator extends Component {
   update(deltaTime: number) {
     if (!this.playing || this.frames.length <= 1) return
 
-    this.elapsed += deltaTime
-    const nextIndex = Math.floor(this.elapsed * this.framesPerSecond)
-    if (this.loop) {
-      this.frameIndex = nextIndex % this.frames.length
-    } else {
-      this.frameIndex = Math.min(this.frames.length - 1, nextIndex)
-      this.playing = this.frameIndex < this.frames.length - 1
+    this.accumulatedTime += deltaTime
+    if (!shouldAdvanceAnimation({
+      visible: this.visibleForAnimation,
+      distanceToCamera: this.distanceToCamera,
+      maxActiveDistance: this.maxActiveDistance,
+      accumulatedTime: this.accumulatedTime,
+      updateInterval: this.updateInterval,
+    })) {
+      return
     }
+
+    this.elapsed += deltaTime
+    this.accumulatedTime = 0
+    this.frameIndex = frameIndexAtTime({
+      elapsed: this.elapsed,
+      framesPerSecond: this.framesPerSecond,
+      frameCount: this.frames.length,
+      loop: this.loop,
+    })
+    if (!this.loop && this.frameIndex >= this.frames.length - 1) this.playing = false
     this.applyFrame()
   }
 

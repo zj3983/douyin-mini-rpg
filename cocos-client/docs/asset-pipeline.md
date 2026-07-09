@@ -33,6 +33,20 @@
 3. 再补怪物动作帧：待机、移动、攻击、受击、死亡。
 4. 最后把技能图标和技能特效拆开，不再复用同一张切片。
 
+## AI 序列帧处理
+
+AI 生成的连续 PNG 帧先放到临时目录，再用脚本统一处理：
+
+```bash
+python tools/build-frame-strip.py --input-dir tmp/source-frames --output assets/resources/Assets/Characters/QinglanSwordCultivator/Frames/idle.png --frame-width 256 --frame-height 256 --limit 4
+```
+
+脚本会做三件事：
+
+- 按 alpha 边界裁掉空白。
+- 居中到固定画布。
+- 横向打包成 Cocos 播放用 strip。
+
 ## 验证
 
 `tests/assetCatalog.test.mjs` 会检查清单中所有图片路径真实存在。
