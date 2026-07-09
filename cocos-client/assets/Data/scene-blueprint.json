@@ -23,6 +23,7 @@
         "designData": "assets/Data/cultivation-design.json",
         "statusLabel": "Canvas/BattleRoot/HudLayer/StatusLabel",
         "stageClearPanel": "Canvas/BattleRoot/HudLayer/StageClearPanel",
+        "enemySpawner": "Canvas/BattleRoot/ActorLayer/EnemySpawner",
         "soulOrbPool": "Canvas/Pools/SoulOrbPool",
         "damageNumberPool": "Canvas/Pools/DamageNumberPool",
         "bossSkillEffectPool": "Canvas/Pools/BossSkillEffectPool"
@@ -44,7 +45,20 @@
     {
       "path": "Canvas/BattleRoot/ActorLayer",
       "components": [],
+      "children": ["EnemySpawner"],
       "purpose": "Player and enemy runtime nodes."
+    },
+    {
+      "path": "Canvas/BattleRoot/ActorLayer/EnemySpawner",
+      "components": ["EnemySpawner"],
+      "bindings": {
+        "enemyPool": "Canvas/Pools/EnemyPool"
+      },
+      "defaults": {
+        "spawnX": 520,
+        "groundY": -60,
+        "flyingY": 70
+      }
     },
     {
       "path": "Canvas/BattleRoot/EffectLayer",

@@ -1,5 +1,6 @@
 const requiredNodes = [
   'Canvas/BattleRoot/Runtime',
+  'Canvas/BattleRoot/ActorLayer/EnemySpawner',
   'Canvas/BattleRoot/HudLayer/StatusLabel',
   'Canvas/BattleRoot/HudLayer/StageClearPanel',
   'Canvas/Pools/SoulOrbPool',
@@ -10,6 +11,7 @@ const requiredNodes = [
 
 const requiredComponents = [
   'BattleRuntimeController',
+  'EnemySpawner',
   'StageClearPanelController',
   'NodePoolController',
 ]
@@ -18,6 +20,7 @@ const requiredRuntimeBindings = [
   'designData',
   'statusLabel',
   'stageClearPanel',
+  'enemySpawner',
   'soulOrbPool',
   'damageNumberPool',
   'bossSkillEffectPool',

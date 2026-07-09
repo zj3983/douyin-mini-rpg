@@ -30,6 +30,8 @@ test('Cocos game layer has dedicated battle-loop components', () => {
 test('battle runtime controller exposes boss stage hooks', () => {
   const source = readFileSync(resolve('assets/Scripts/Game/BattleRuntimeController.ts'), 'utf8')
 
+  assert.equal(source.includes('enemySpawner'), true)
+  assert.equal(source.includes('update(deltaTime'), true)
   assert.equal(source.includes('summonWorldBoss'), true)
   assert.equal(source.includes('tickBossSkill'), true)
   assert.equal(source.includes('claimStageClear'), true)
@@ -38,6 +40,14 @@ test('battle runtime controller exposes boss stage hooks', () => {
   assert.equal(source.includes('showResult'), true)
   assert.equal(source.includes('advanceToStage'), true)
   assert.equal(source.includes('advanceToNextStageFromPanel'), true)
+})
+
+test('enemy spawner only maps runtime spawns to pooled nodes', () => {
+  const source = readFileSync(resolve('assets/Scripts/Game/EnemySpawner.ts'), 'utf8')
+
+  assert.equal(source.includes('spawnEnemy'), true)
+  assert.equal(source.includes('nextSpawn'), false)
+  assert.equal(source.includes('createBattleRuntime'), false)
 })
 
 test('stage clear panel renders reward fields and next stage action', () => {

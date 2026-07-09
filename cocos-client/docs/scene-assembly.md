@@ -12,6 +12,7 @@ Canvas
     Runtime
     WorldLayer
     ActorLayer
+      EnemySpawner
     EffectLayer
     DropLayer
     HudLayer
@@ -37,6 +38,7 @@ Canvas
 - `designData`：拖入 `assets/Data/cultivation-design.json` 对应的 JsonAsset。
 - `statusLabel`：拖入 `HudLayer/StatusLabel`。
 - `stageClearPanel`：拖入 `HudLayer/StageClearPanel` 上的 `StageClearPanelController`。
+- `enemySpawner`：拖入 `ActorLayer/EnemySpawner` 上的 `EnemySpawner`。
 - `soulOrbPool`：拖入 `Pools/SoulOrbPool` 上的 `NodePoolController`。
 - `damageNumberPool`：拖入 `Pools/DamageNumberPool` 上的 `NodePoolController`。
 - `bossSkillEffectPool`：拖入 `Pools/BossSkillEffectPool` 上的 `NodePoolController`。
@@ -51,6 +53,23 @@ Canvas
 - Handler 选择 `advanceToNextStageFromPanel`。
 
 ## StageClearPanel 节点
+
+## EnemySpawner 节点
+
+在 `BattleRoot/ActorLayer/EnemySpawner` 挂 `EnemySpawner`。
+
+字段绑定：
+
+- `enemyPool`：拖入 `Pools/EnemyPool` 上的 `NodePoolController`。
+- `spawnX`：小怪出生横坐标，默认 `520`。
+- `groundY`：地面怪高度，默认 `-60`。
+- `flyingY`：飞行怪高度，默认 `70`。
+
+运行时行为：
+
+- `BattleRuntimeController.update(deltaTime)` 统一调用规则层刷怪。
+- 生成成功后调用 `EnemySpawner.spawnEnemy(enemy)`，从对象池取怪物节点并设置位置。
+- `EnemySpawner` 不再创建自己的 `BattleRuntime`，避免和 Boss/结算状态分裂。
 
 在 `HudLayer/StageClearPanel` 挂 `StageClearPanelController`。
 

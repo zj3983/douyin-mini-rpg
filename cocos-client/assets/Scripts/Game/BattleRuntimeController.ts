@@ -11,6 +11,7 @@ import {
 } from '../Core/BattleRuntime'
 import { CultivationDesignData, stageProfileFromDesign } from '../Core/CultivationRuntime'
 import { DamageNumberController } from './DamageNumberController'
+import { EnemySpawner } from './EnemySpawner'
 import { NodePoolController } from './NodePoolController'
 import { StageClearPanelController } from './StageClearPanelController'
 
@@ -35,6 +36,9 @@ export class BattleRuntimeController extends Component {
 
   @property(StageClearPanelController)
   stageClearPanel: StageClearPanelController | null = null
+
+  @property(EnemySpawner)
+  enemySpawner: EnemySpawner | null = null
 
   @property
   stageNumber = 1
@@ -83,6 +87,14 @@ export class BattleRuntimeController extends Component {
   tickSpawn(deltaTime: number) {
     if (!this.runtime) return { ok: false, enemy: null }
     return nextSpawn(this.runtime, deltaTime)
+  }
+
+  update(deltaTime: number) {
+    const spawn = this.tickSpawn(deltaTime)
+    if (spawn.ok && spawn.enemy) {
+      this.enemySpawner?.spawnEnemy(spawn.enemy)
+      this.refresh()
+    }
   }
 
   summonWorldBoss() {
