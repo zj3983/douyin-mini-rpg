@@ -57,7 +57,10 @@
       "defaults": {
         "spawnX": 520,
         "groundY": -60,
-        "flyingY": 70
+        "flyingY": 70,
+        "bossSpawnX": 610,
+        "bossY": -38,
+        "bossScale": 1.45
       }
     },
     {

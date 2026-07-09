@@ -64,11 +64,15 @@ Canvas
 - `spawnX`：小怪出生横坐标，默认 `520`。
 - `groundY`：地面怪高度，默认 `-60`。
 - `flyingY`：飞行怪高度，默认 `70`。
+- `bossSpawnX`：Boss 出生横坐标，默认 `610`。
+- `bossY`：Boss 高度，默认 `-38`。
+- `bossScale`：Boss 节点缩放，默认 `1.45`。
 
 运行时行为：
 
 - `BattleRuntimeController.update(deltaTime)` 统一调用规则层刷怪。
 - 生成成功后调用 `EnemySpawner.spawnEnemy(enemy)`，从对象池取怪物节点并设置位置。
+- `summonWorldBoss()` 成功后同样调用 `EnemySpawner.spawnEnemy(result.enemy)`，Boss 会使用单独的坐标和缩放。
 - `EnemySpawner` 不再创建自己的 `BattleRuntime`，避免和 Boss/结算状态分裂。
 
 在 `HudLayer/StageClearPanel` 挂 `StageClearPanelController`。

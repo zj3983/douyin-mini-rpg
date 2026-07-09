@@ -100,6 +100,9 @@ export class BattleRuntimeController extends Component {
   summonWorldBoss() {
     if (!this.runtime) return { ok: false, enemy: null }
     const result = spawnBoss(this.runtime)
+    if (result.ok && result.enemy) {
+      this.enemySpawner?.spawnEnemy(result.enemy)
+    }
     this.refresh()
     return result
   }
