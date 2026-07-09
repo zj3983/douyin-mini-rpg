@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "node --test",
+    "test": "node --test test/*.js server/*.test.js",
     "server": "node server/index.js",
     "agent:test": "node scripts/game-agent.mjs"
   },
