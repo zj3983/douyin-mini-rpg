@@ -1,5 +1,13 @@
 import { _decorator, Component, JsonAsset, Label, Vec3 } from 'cc'
-import { applyFlyingSwordHit, BattleRuntime, createBattleRuntime, nextSpawn, runtimeStats } from '../Core/BattleRuntime'
+import {
+  applyFlyingSwordHit,
+  BattleRuntime,
+  createBattleRuntime,
+  nextSpawn,
+  runtimeStats,
+  spawnBoss,
+  tickBossSkill as tickBossSkillRuntime,
+} from '../Core/BattleRuntime'
 import { CultivationDesignData, stageProfileFromDesign } from '../Core/CultivationRuntime'
 import { DamageNumberController } from './DamageNumberController'
 import { NodePoolController } from './NodePoolController'
@@ -16,6 +24,9 @@ export class BattleRuntimeController extends Component {
 
   @property(NodePoolController)
   damageNumberPool: NodePoolController | null = null
+
+  @property(NodePoolController)
+  bossSkillEffectPool: NodePoolController | null = null
 
   @property(Label)
   statusLabel: Label | null = null
@@ -52,6 +63,23 @@ export class BattleRuntimeController extends Component {
     return nextSpawn(this.runtime, deltaTime)
   }
 
+  summonWorldBoss() {
+    if (!this.runtime) return { ok: false, enemy: null }
+    const result = spawnBoss(this.runtime)
+    this.refresh()
+    return result
+  }
+
+  tickBossSkill(deltaTime: number) {
+    if (!this.runtime) return { ok: false, event: null }
+    const result = tickBossSkillRuntime(this.runtime, deltaTime)
+    if (result.ok && result.event) {
+      const effectNode = this.bossSkillEffectPool?.spawn()
+      effectNode?.setPosition(new Vec3(result.event.position.x - 48, result.event.position.y + 24, 0))
+    }
+    return result
+  }
+
   castFlyingSword() {
     if (!this.runtime) return { hitCount: 0, damageEvents: [], defeatedEnemyIds: [] }
     const result = applyFlyingSwordHit(this.runtime, 3, 1, {
@@ -75,6 +103,7 @@ export class BattleRuntimeController extends Component {
   private refresh() {
     if (!this.statusLabel || !this.runtime) return
     const stats = runtimeStats(this.runtime)
-    this.statusLabel.string = `敌 ${stats.aliveEnemies} | 魂球 ${stats.soulDrops}`
+    const bossText = stats.stageCleared ? '已破关' : stats.bossAlive ? 'Boss' : '巡游'
+    this.statusLabel.string = `敌 ${stats.aliveEnemies} | 魂球 ${stats.soulDrops} | ${bossText}`
   }
 }

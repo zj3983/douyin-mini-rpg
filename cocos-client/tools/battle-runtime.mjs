@@ -4,7 +4,9 @@ import { resolve } from 'node:path'
 const design = JSON.parse(readFileSync(resolve('assets/Data/cultivation-design.json'), 'utf8'))
 
 function stageProfile(stageId) {
-  return design.worldStages[(Math.max(1, stageId) - 1) % design.worldStages.length]
+  const stage = design.worldStages[(Math.max(1, stageId) - 1) % design.worldStages.length]
+  const boss = stage.enemies.find((enemy) => enemy.role === 'boss')
+  return { ...stage, boss }
 }
 
 export function createBattleRuntime({ stageId, heroAttack }) {
@@ -16,6 +18,10 @@ export function createBattleRuntime({ stageId, heroAttack }) {
     nextEnemyId: 1,
     enemies: [],
     soulDrops: [],
+    bossSpawned: false,
+    bossSkillTimer: 0,
+    bossSkillInterval: 2.6,
+    stageCleared: false,
   }
 }
 
@@ -49,6 +55,7 @@ export function applyFlyingSwordHit(runtime, { pierce, damageScale, path }) {
   const damage = Math.round(runtime.heroAttack * damageScale)
   const damageEvents = []
   const defeatedEnemyIds = []
+  let stageClear = false
   for (const enemy of targets) {
     enemy.hp -= damage
     damageEvents.push({
@@ -59,9 +66,54 @@ export function applyFlyingSwordHit(runtime, { pierce, damageScale, path }) {
     })
     if (enemy.hp <= 0 && defeatEnemy(runtime, enemy.id)) {
       defeatedEnemyIds.push(enemy.id)
+      if (enemy.role === 'boss') {
+        runtime.stageCleared = true
+        stageClear = true
+      }
     }
   }
-  return { hitCount: targets.length, damageEvents, defeatedEnemyIds }
+  return { hitCount: targets.length, damageEvents, defeatedEnemyIds, stageClear }
+}
+
+export function spawnBoss(runtime) {
+  if (runtime.bossSpawned || runtime.stageCleared) return { ok: false, enemy: null }
+
+  const profile = runtime.stage.boss
+  const enemy = {
+    id: runtime.nextEnemyId++,
+    profileId: profile.id,
+    name: profile.name,
+    theme: profile.theme,
+    role: 'boss',
+    hp: 520,
+    position: { x: 580, y: -42 },
+    radius: 70,
+    alive: true,
+    dropped: false,
+  }
+  runtime.bossSpawned = true
+  runtime.enemies.push(enemy)
+  return { ok: true, enemy }
+}
+
+export function tickBossSkill(runtime, deltaTime) {
+  const boss = runtime.enemies.find((enemy) => enemy.role === 'boss' && enemy.alive)
+  if (!boss || runtime.stageCleared) return { ok: false, event: null }
+
+  runtime.bossSkillTimer += deltaTime
+  if (runtime.bossSkillTimer + 0.000001 < runtime.bossSkillInterval) return { ok: false, event: null }
+
+  runtime.bossSkillTimer = 0
+  return {
+    ok: true,
+    event: {
+      enemyId: boss.id,
+      skillId: `${boss.theme}-boss-skill`,
+      name: boss.theme === 'flame-cave' ? '地火裂涌' : boss.theme === 'starlight-ruin' ? '星陨压境' : '妖气冲袭',
+      damage: boss.theme === 'flame-cave' ? 18 : boss.theme === 'starlight-ruin' ? 16 : 14,
+      position: { ...boss.position },
+    },
+  }
 }
 
 export function segmentHitEnemies(runtime, { from, to, width, pierce }) {
@@ -108,5 +160,7 @@ export function runtimeStats(runtime) {
     aliveEnemies: runtime.enemies.filter((enemy) => enemy.alive).length,
     defeatedEnemies: runtime.enemies.filter((enemy) => !enemy.alive).length,
     soulDrops: runtime.soulDrops.length,
+    bossAlive: runtime.enemies.some((enemy) => enemy.role === 'boss' && enemy.alive),
+    stageCleared: runtime.stageCleared,
   }
 }

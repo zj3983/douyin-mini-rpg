@@ -25,3 +25,11 @@ test('Cocos game layer has dedicated battle-loop components', () => {
     assert.equal(source.includes(marker), true, `${file} should define ${marker}`)
   }
 })
+
+test('battle runtime controller exposes boss stage hooks', () => {
+  const source = readFileSync(resolve('assets/Scripts/Game/BattleRuntimeController.ts'), 'utf8')
+
+  assert.equal(source.includes('summonWorldBoss'), true)
+  assert.equal(source.includes('tickBossSkill'), true)
+  assert.equal(source.includes('bossSkillEffectPool'), true)
+})

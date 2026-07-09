@@ -7,6 +7,8 @@ import {
   nextSpawn,
   runtimeStats,
   segmentHitEnemies,
+  spawnBoss,
+  tickBossSkill,
 } from '../tools/battle-runtime.mjs'
 
 test('battle runtime spawns themed enemies from stage profile', () => {
@@ -96,4 +98,43 @@ test('flying sword geometry respects pierce order along path', () => {
   })
 
   assert.deepEqual(hits.map((enemy) => enemy.id), [near.id])
+})
+
+test('world stage can spawn one boss from its stage profile', () => {
+  const runtime = createBattleRuntime({ stageId: 1, heroAttack: 80 })
+
+  const first = spawnBoss(runtime)
+  const second = spawnBoss(runtime)
+
+  assert.equal(first.ok, true)
+  assert.equal(first.enemy.role, 'boss')
+  assert.equal(first.enemy.profileId, 'bamboo-warden')
+  assert.equal(first.enemy.hp, 520)
+  assert.equal(second.ok, false)
+  assert.equal(runtimeStats(runtime).bossAlive, true)
+})
+
+test('boss casts timed skill events while alive', () => {
+  const runtime = createBattleRuntime({ stageId: 3, heroAttack: 80 })
+  const boss = spawnBoss(runtime).enemy
+
+  const early = tickBossSkill(runtime, 1.2)
+  const cast = tickBossSkill(runtime, 1.4)
+
+  assert.equal(early.ok, false)
+  assert.equal(cast.ok, true)
+  assert.equal(cast.event.enemyId, boss.id)
+  assert.equal(cast.event.skillId, 'flame-cave-boss-skill')
+  assert.equal(cast.event.damage, 18)
+})
+
+test('defeating the world boss clears the stage', () => {
+  const runtime = createBattleRuntime({ stageId: 1, heroAttack: 260 })
+  spawnBoss(runtime)
+
+  const hit = applyFlyingSwordHit(runtime, { pierce: 1, damageScale: 2 })
+
+  assert.equal(hit.stageClear, true)
+  assert.equal(runtimeStats(runtime).stageCleared, true)
+  assert.equal(runtimeStats(runtime).soulDrops, 1)
 })
