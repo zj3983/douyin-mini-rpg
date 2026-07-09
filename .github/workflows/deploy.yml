@@ -66,11 +66,13 @@ jobs:
 
             APP_DIR="/var/www/game/douyin-mini-rpg"
             SERVER_DIR="/var/www/game/douyin-mini-rpg-server"
-            GAME_HUB_DIR="/var/www/game"
+            GAME_HUB_DIR="/var/www/games-prefix"
             LEGACY_GAME_DIR="/var/www/game/relaxed-sheep-match"
+            LEGACY_PREFIX_DIR="/var/www/games-prefix/relaxed-sheep-match"
             sudo mkdir -p "$APP_DIR"
             sudo mkdir -p "$APP_DIR/assets"
             sudo mkdir -p "$SERVER_DIR"
+            sudo mkdir -p "$GAME_HUB_DIR"
             rm -rf /tmp/douyin-mini-rpg-app
             mkdir -p /tmp/douyin-mini-rpg-app
             tar -xzf /tmp/douyin-mini-rpg-dist/app.tar.gz -C /tmp/douyin-mini-rpg-app
@@ -79,6 +81,7 @@ jobs:
             sudo tar -xzf /tmp/douyin-mini-rpg-app/dist-code.tar.gz -C "$APP_DIR"
             sudo chown -R www-data:www-data "$APP_DIR" || true
             sudo rm -rf "$LEGACY_GAME_DIR"
+            sudo rm -rf "$LEGACY_PREFIX_DIR"
             sudo tee "$GAME_HUB_DIR/index.html" > /dev/null <<'HTML'
             <!doctype html>
             <html lang="zh-CN">
@@ -108,6 +111,10 @@ jobs:
             </html>
             HTML
             sudo chown www-data:www-data "$GAME_HUB_DIR/index.html" || true
+            if [ -d "$LEGACY_GAME_DIR" ] || [ -d "$LEGACY_PREFIX_DIR" ]; then
+              echo "Legacy game files still exist"
+              exit 1
+            fi
             sudo rm -rf "$SERVER_DIR/server"
             sudo cp -R /tmp/douyin-mini-rpg-app/server "$SERVER_DIR/server"
             sudo cp /tmp/douyin-mini-rpg-app/package.json /tmp/douyin-mini-rpg-app/package-lock.json "$SERVER_DIR/"
@@ -240,8 +247,9 @@ jobs:
               echo "Legacy game entry still present"
               exit 1
             fi
-            if curl -fsSI -H 'Host: mcp.edcedc.cn' http://${{ env.DEPLOY_HOST }}/game/relaxed-sheep-match/; then
-              echo "Legacy game directory still reachable"
+            LEGACY_PUBLIC_PAGE="$(curl -fsS -H 'Host: mcp.edcedc.cn' http://${{ env.DEPLOY_HOST }}/game/relaxed-sheep-match/?deploy-check=1 || true)"
+            if echo "$LEGACY_PUBLIC_PAGE" | grep -E 'Relaxed Sheep Match|relaxed-sheep-match|羊'; then
+              echo "Legacy game content still reachable"
               exit 1
             fi
             for i in $(seq 1 20); do
