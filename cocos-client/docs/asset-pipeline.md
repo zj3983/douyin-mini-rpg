@@ -19,6 +19,16 @@
 
 这批帧表用于 Cocos 预览和节点挂载，不是最终美术。它们从现有 PNG 派生，能先解决“完全不会动”的问题；后续需要替换成透明全身横版动作帧。
 
+## 统一动画图集
+
+运行时优先使用统一图集，而不是逐动作加载独立 strip：
+
+- 每个角色或怪物对应一张 `atlas.png`。
+- `assets/Data/animation-atlas.json` 记录动作名、帧 rect、播放顺序、FPS 和循环规则。
+- `AtlasAnimator` 只需要加载一张贴图，然后按配置切换不同动作。
+
+这能减少资源数量和加载次数，后续多动作角色不会因为移动、攻击、受击、死亡分散成多张图而增加运行时开销。
+
 ## 目录约定
 
 - `assets/resources/Assets/Characters/*`：角色立绘和战斗图。
@@ -46,6 +56,14 @@ python tools/build-frame-strip.py --input-dir tmp/source-frames --output assets/
 - 按 alpha 边界裁掉空白。
 - 居中到固定画布。
 - 横向打包成 Cocos 播放用 strip。
+
+如果要生成统一图集，执行：
+
+```bash
+python tools/build-actor-atlases.py
+```
+
+这个脚本会读取 `asset-catalog.json` 里的动作帧路径，生成每个角色/怪物自己的 atlas 和 `animation-atlas.json`。
 
 ## 验证
 

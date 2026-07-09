@@ -40,6 +40,7 @@
 - `PlayerController`：角色踩飞剑平滑移动。
 - `FlyingSwordSkill`：御剑术自动释放和弧线飞行。
 - `AssetBindingController`：按角色、怪物、技能、法宝 id 查询资源路径。
+- `AtlasAnimator`：按统一 atlas 和 manifest 播放多动作序列帧。
 
 ## 资源目录约定
 
@@ -50,6 +51,7 @@
 
 第一批 PNG 已经落在 `assets/resources/Assets` 下，来源和替换顺序见 `docs/asset-pipeline.md`。
 角色和怪物也已经有第一版 4 帧动作 strip，可用于 Cocos 预览。
+运行时优先使用 `assets/resources/Assets/ActorAtlases/*/atlas.png` 和 `assets/Data/animation-atlas.json`，避免多动作角色拆成大量散图。
 
 ## 验证
 
