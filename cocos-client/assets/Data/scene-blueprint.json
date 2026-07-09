@@ -175,7 +175,7 @@
     },
     {
       "path": "prefabs/Enemy.prefab",
-      "components": ["PoolableActor", "EnemyController", "AtlasAnimator"]
+      "components": ["PoolableActor", "EnemyController", "EnemyVisualController", "AtlasAnimator"]
     }
   ]
 }

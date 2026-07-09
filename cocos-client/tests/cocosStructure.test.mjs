@@ -15,6 +15,7 @@ const requiredComponents = [
   ['assets/Scripts/Game/NodePoolController.ts', 'class NodePoolController'],
   ['assets/Scripts/Game/PoolableActor.ts', 'class PoolableActor'],
   ['assets/Scripts/Game/EnemySpawner.ts', 'class EnemySpawner'],
+  ['assets/Scripts/Game/EnemyVisualController.ts', 'class EnemyVisualController'],
   ['assets/Scripts/Game/BattleRuntimeController.ts', 'class BattleRuntimeController'],
   ['assets/Scripts/Game/DamageNumberController.ts', 'class DamageNumberController'],
   ['assets/Scripts/Game/StageClearPanelController.ts', 'class StageClearPanelController'],
@@ -58,6 +59,17 @@ test('enemy spawner only maps runtime spawns to pooled nodes', () => {
   assert.equal(source.includes('bossScale'), true)
   assert.equal(source.includes('nextSpawn'), false)
   assert.equal(source.includes('createBattleRuntime'), false)
+})
+
+test('enemy visual controller reacts to hit and defeat events', () => {
+  const source = readFileSync(resolve('assets/Scripts/Game/EnemyVisualController.ts'), 'utf8')
+
+  assert.equal(source.includes('enemy-hit'), true)
+  assert.equal(source.includes('enemy-defeated'), true)
+  assert.equal(source.includes("play('hurt')"), true)
+  assert.equal(source.includes("play('death')"), true)
+  assert.equal(source.includes('enemy-visual-hit'), true)
+  assert.equal(source.includes('enemy-visual-death'), true)
 })
 
 test('stage clear panel renders reward fields and next stage action', () => {

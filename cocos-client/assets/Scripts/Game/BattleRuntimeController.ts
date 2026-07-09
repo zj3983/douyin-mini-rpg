@@ -58,6 +58,9 @@ export class BattleRuntimeController extends Component {
   @property
   swordHitWidth = 18
 
+  @property
+  deathRecycleDelay = 0.45
+
   private runtime: BattleRuntime | null = null
   private enemyNodes = new Map<number, Node>()
 
@@ -149,7 +152,11 @@ export class BattleRuntimeController extends Component {
     for (const enemyId of result.defeatedEnemyIds) {
       const enemyNode = this.enemyNodes.get(enemyId)
       enemyNode?.emit('enemy-defeated', enemyId)
-      if (enemyNode) this.enemySpawner?.despawnEnemy(enemyNode)
+      if (enemyNode) {
+        this.scheduleOnce(() => {
+          this.enemySpawner?.despawnEnemy(enemyNode)
+        }, this.deathRecycleDelay)
+      }
       this.enemyNodes.delete(enemyId)
       this.soulOrbPool?.spawn()
     }

@@ -73,7 +73,8 @@ Canvas
 - `BattleRuntimeController.update(deltaTime)` 统一调用规则层刷怪。
 - 生成成功后调用 `EnemySpawner.spawnEnemy(enemy)`，从对象池取怪物节点并设置位置。
 - `summonWorldBoss()` 成功后同样调用 `EnemySpawner.spawnEnemy(result.enemy)`，Boss 会使用单独的坐标和缩放。
-- `BattleRuntimeController` 会登记生成出的节点；飞剑命中时节点收到 `enemy-hit` 事件，死亡时收到 `enemy-defeated` 事件并回收到 `EnemyPool`。
+- `BattleRuntimeController` 会登记生成出的节点；飞剑命中时节点收到 `enemy-hit` 事件，死亡时收到 `enemy-defeated` 事件。
+- `EnemyVisualController` 收到 `enemy-hit` 播放 `hurt`，收到 `enemy-defeated` 播放 `death`，随后运行时延迟回收到 `EnemyPool`。
 - `EnemySpawner` 不再创建自己的 `BattleRuntime`，避免和 Boss/结算状态分裂。
 
 在 `HudLayer/StageClearPanel` 挂 `StageClearPanelController`。
@@ -118,7 +119,7 @@ Canvas
 
 - `poolKey`：`enemy`
 - `capacity`：`80`
-- `prefab`：挂带 `PoolableActor`、`EnemyController` 和 `AtlasAnimator` 的怪物 prefab。
+- `prefab`：挂带 `PoolableActor`、`EnemyController`、`EnemyVisualController` 和 `AtlasAnimator` 的怪物 prefab。
 
 ## Prefab 最小要求
 
@@ -144,7 +145,9 @@ Boss 技能 prefab：
 
 - 根节点挂 `PoolableActor`。
 - 挂 `EnemyController` 控制靠近和攻击动作。
+- 挂 `EnemyVisualController` 监听 `enemy-hit` 和 `enemy-defeated`。
 - 挂 `AtlasAnimator` 播放 `idle`、`move`、`attack`、`hurt`、`death`。
+- `EnemyVisualController.animator` 拖入同节点或子节点上的 `AtlasAnimator`。
 
 ## 手动验证流程
 
@@ -159,4 +162,4 @@ Boss 技能 prefab：
 
 - 这里是编辑器装配清单，不是最终 UI 美术规范。
 - Boss 技能已有事件和对象池入口，但 prefab 美术表现仍需要单独做。
-- `EnemySpawner` 和真实怪物节点绑定还需要在场景里继续接，规则层已经可以提供主题怪物和 Boss。
+- 怪物节点已经有运行时 id 绑定和受击/死亡事件入口，后续重点是替换真实 prefab 美术和动画。
