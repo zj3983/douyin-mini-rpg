@@ -43,6 +43,8 @@
 - `AtlasAnimator`：按统一 atlas 和 manifest 播放多动作序列帧。
 - `NodePoolController`：复用怪物、魂球、飞剑和技能特效节点，避免频繁创建销毁。
 - `PoolableActor`：节点回收入口，供掉落物、怪物和特效主动归还对象池。
+- `EnemySpawner`：按世界关卡主题生成怪物，并从对象池取节点。
+- `BattleRuntimeController`：串联生成、御剑命中、怪物死亡和魂球掉落。
 
 ## 资源目录约定
 

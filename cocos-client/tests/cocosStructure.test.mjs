@@ -14,6 +14,8 @@ const requiredComponents = [
   ['assets/Scripts/Game/AtlasAnimator.ts', 'class AtlasAnimator'],
   ['assets/Scripts/Game/NodePoolController.ts', 'class NodePoolController'],
   ['assets/Scripts/Game/PoolableActor.ts', 'class PoolableActor'],
+  ['assets/Scripts/Game/EnemySpawner.ts', 'class EnemySpawner'],
+  ['assets/Scripts/Game/BattleRuntimeController.ts', 'class BattleRuntimeController'],
 ]
 
 test('Cocos game layer has dedicated battle-loop components', () => {

@@ -72,6 +72,13 @@ python tools/build-actor-atlases.py
 - 拾取魂球时只触发回收，不直接 `destroy()`。
 - 离屏或距离过远的动画通过 `StripAnimationRuntime` 降低更新频率。
 
+## 战斗运行时接入
+
+- `BattleRuntime` 负责纯规则：刷怪、飞剑命中、死亡、魂球掉落。
+- `EnemySpawner` 负责把规则里的怪物生成事件映射成 Cocos 节点。
+- `BattleRuntimeController` 负责把御剑命中和魂球对象池串起来。
+- 当前仍是第一版闭环，后续需要接真实碰撞、伤害飘字、Boss 技能和关卡胜负条件。
+
 ## 验证
 
 `tests/assetCatalog.test.mjs` 会检查清单中所有图片路径真实存在。
