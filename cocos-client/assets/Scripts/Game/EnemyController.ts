@@ -60,7 +60,7 @@ export class EnemyController extends Component {
       this.moving = false
       this.node.emit('enemy-motion', 'attack')
       this.node.emit('enemy-skill-cast', this.runtimeEnemy)
-      this.node.emit('enemy-attack-player', this.runtimeEnemy.profile.role === 'boss' ? 12 : 5)
+      this.node.emit('enemy-attack-player', this.runtimeEnemy.profile.role === 'boss' ? 10 : 3)
     }
     this.syncRuntimePosition()
   }

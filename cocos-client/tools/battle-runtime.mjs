@@ -203,6 +203,33 @@ export function segmentHitEnemiesAlongPath(runtime, { points, width, pierce }) {
     .map(({ enemy }) => enemy)
 }
 
+export function createContactDamageGate({ maxHealth, cooldown }) {
+  const safeMaxHealth = Math.max(1, Math.floor(maxHealth))
+  return {
+    health: safeMaxHealth,
+    maxHealth: safeMaxHealth,
+    cooldown: Math.max(0, cooldown),
+    cooldownRemaining: 0,
+  }
+}
+
+export function tickContactDamageGate(gate, deltaTime) {
+  gate.cooldownRemaining = Math.max(0, gate.cooldownRemaining - Math.max(0, deltaTime))
+}
+
+export function applyContactDamage(gate, damage) {
+  if (gate.health <= 0 || gate.cooldownRemaining > 0) return false
+  applyDirectDamage(gate, damage)
+  gate.cooldownRemaining = gate.cooldown
+  return true
+}
+
+export function applyDirectDamage(gate, damage) {
+  if (gate.health <= 0) return false
+  gate.health = Math.max(0, gate.health - Math.max(0, damage))
+  return true
+}
+
 function projectPointToSegment(point, from, to) {
   const dx = to.x - from.x
   const dy = to.y - from.y

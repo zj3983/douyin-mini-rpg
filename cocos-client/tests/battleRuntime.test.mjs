@@ -12,6 +12,7 @@ import {
   spawnBoss,
   tickBossSkill,
 } from '../tools/battle-runtime.mjs'
+import * as battleRuntimeModule from '../tools/battle-runtime.mjs'
 
 function defeatOrdinaryEnemies(runtime, count = 12) {
   for (let index = 0; index < count; index += 1) {
@@ -273,4 +274,29 @@ test('stage clear reward can only be claimed once after boss defeat', () => {
   assert.equal(first.result.reward.dungeonPass.name, '星门残券')
   assert.equal(second.ok, false)
   assert.equal(second.reason, 'already-claimed')
+})
+
+test('first-stage contact damage is limited but sustained boss pressure can still defeat the player', () => {
+  assert.equal(typeof battleRuntimeModule.createContactDamageGate, 'function')
+  const gate = battleRuntimeModule.createContactDamageGate({ maxHealth: 220, cooldown: 0.65 })
+
+  for (let wave = 0; wave < 22; wave += 1) {
+    battleRuntimeModule.tickContactDamageGate(gate, 1.8)
+    for (let attacker = 0; attacker < 6; attacker += 1) {
+      battleRuntimeModule.applyContactDamage(gate, 3)
+    }
+  }
+  assert.equal(gate.health, 154)
+
+  for (let wave = 0; wave < 7; wave += 1) {
+    battleRuntimeModule.tickContactDamageGate(gate, 1.8)
+    battleRuntimeModule.applyContactDamage(gate, 10)
+  }
+  for (let cast = 0; cast < 4; cast += 1) {
+    battleRuntimeModule.applyDirectDamage(gate, 14)
+  }
+  assert.equal(gate.health, 28)
+
+  battleRuntimeModule.applyDirectDamage(gate, 28)
+  assert.equal(gate.health, 0)
 })

@@ -5,6 +5,7 @@ import {
   createFlyingSwordTimeline,
   resetFlyingSwordTimeline,
 } from '../tools/flying-sword-runtime.mjs'
+import * as swordRuntime from '../tools/flying-sword-runtime.mjs'
 
 const config = {
   cooldown: 1,
@@ -113,4 +114,22 @@ test('negative delta is ignored', () => {
   const timeline = createFlyingSwordTimeline(config)
   assert.deepEqual(advanceFlyingSwordTimeline(timeline, -10), [])
   assert.equal(timeline.cooldownRemaining, config.cooldown)
+})
+
+test('flying sword path starts at the current player position and stays inside battle bounds', () => {
+  assert.equal(typeof swordRuntime.createPlayerSwordPath, 'function')
+  const path = swordRuntime.createPlayerSwordPath({ x: 40, y: 260 })
+  assert.deepEqual(path, {
+    from: { x: 68, y: 284 },
+    to: { x: 330, y: -30 },
+  })
+
+  assert.deepEqual(swordRuntime.createPlayerSwordPath({ x: 500, y: 500 }), {
+    from: { x: 100, y: 390 },
+    to: { x: 330, y: -30 },
+  })
+  assert.deepEqual(swordRuntime.createPlayerSwordPath({ x: -500, y: -500 }), {
+    from: { x: -300, y: -390 },
+    to: { x: 260, y: -30 },
+  })
 })

@@ -169,6 +169,40 @@ export function applyFlyingSwordPathHit(
   return { hitCount: targets.length, damageEvents, defeatedEnemyIds, stageClear }
 }
 
+export interface ContactDamageGate {
+  health: number
+  maxHealth: number
+  cooldown: number
+  cooldownRemaining: number
+}
+
+export function createContactDamageGate(input: { maxHealth: number; cooldown: number }): ContactDamageGate {
+  const maxHealth = Math.max(1, Math.floor(input.maxHealth))
+  return {
+    health: maxHealth,
+    maxHealth,
+    cooldown: Math.max(0, input.cooldown),
+    cooldownRemaining: 0,
+  }
+}
+
+export function tickContactDamageGate(gate: ContactDamageGate, deltaTime: number) {
+  gate.cooldownRemaining = Math.max(0, gate.cooldownRemaining - Math.max(0, deltaTime))
+}
+
+export function applyContactDamage(gate: ContactDamageGate, damage: number) {
+  if (gate.health <= 0 || gate.cooldownRemaining > 0) return false
+  applyDirectDamage(gate, damage)
+  gate.cooldownRemaining = gate.cooldown
+  return true
+}
+
+export function applyDirectDamage(gate: ContactDamageGate, damage: number) {
+  if (gate.health <= 0) return false
+  gate.health = Math.max(0, gate.health - Math.max(0, damage))
+  return true
+}
+
 export function spawnBoss(runtime: BattleRuntime) {
   if (
     runtime.bossSpawned

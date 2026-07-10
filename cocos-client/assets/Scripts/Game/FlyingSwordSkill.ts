@@ -32,6 +32,7 @@ export class FlyingSwordSkill extends Component {
   public arcHeight = 64
 
   private timeline: FlyingSwordTimeline | null = null
+  private activePath: { from: Vec3; to: Vec3 } | null = null
 
   onLoad() {
     this.timeline = this.createTimeline()
@@ -40,6 +41,7 @@ export class FlyingSwordSkill extends Component {
 
   onDisable() {
     if (this.timeline) resetFlyingSwordTimeline(this.timeline)
+    this.activePath = null
     this.resetSwordPresentation()
   }
 
@@ -66,6 +68,7 @@ export class FlyingSwordSkill extends Component {
 
   private handleTimelineEvent(event: FlyingSwordTimelineEvent) {
     if (event.type === 'castStarted') {
+      this.activePath = this.battleRuntime?.createFlyingSwordPath() ?? null
       this.node.emit('sword-cast-started', { phase: 'handSeal' })
       return
     }
@@ -80,6 +83,7 @@ export class FlyingSwordSkill extends Component {
       return
     }
     this.resetSwordPresentation()
+    this.activePath = null
   }
 
   private syncSwordPresentation() {
@@ -95,17 +99,11 @@ export class FlyingSwordSkill extends Component {
   }
 
   private getPath(phase: FlyingSwordPhase) {
-    const start = new Vec3(
-      this.battleRuntime?.swordStartX ?? -180,
-      this.battleRuntime?.swordY ?? -30,
-      0,
-    )
-    const end = new Vec3(
-      this.battleRuntime?.swordEndX ?? 300,
-      this.battleRuntime?.swordY ?? -30,
-      0,
-    )
-    return phase === 'outbound' ? { from: start, to: end } : { from: end, to: start }
+    const path = this.activePath ?? this.battleRuntime?.createFlyingSwordPath() ?? {
+      from: new Vec3(-180, -30, 0),
+      to: new Vec3(300, -30, 0),
+    }
+    return phase === 'outbound' ? path : { from: path.to, to: path.from }
   }
 
   private applySwordPose(from: Vec3, to: Vec3, progress: number) {

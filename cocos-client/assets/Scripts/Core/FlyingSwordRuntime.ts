@@ -22,11 +22,39 @@ export interface FlyingSwordTimeline {
   cooldownRemaining: number
 }
 
+export interface FlyingSwordPathPoint {
+  x: number
+  y: number
+}
+
+export interface FlyingSwordPath {
+  from: FlyingSwordPathPoint
+  to: FlyingSwordPathPoint
+}
+
 const EPSILON = 0.000000001
 const MAX_TRANSITIONS = 8
 
 function nonnegative(value: number) {
   return Number.isFinite(value) && value > 0 ? value : 0
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
+}
+
+export function createPlayerSwordPath(playerPosition: FlyingSwordPathPoint): FlyingSwordPath {
+  const from = {
+    x: clamp(playerPosition.x + 28, -300, 100),
+    y: clamp(playerPosition.y + 24, -390, 390),
+  }
+  return {
+    from,
+    to: {
+      x: clamp(from.x + 520, 260, 330),
+      y: -30,
+    },
+  }
 }
 
 function setState(timeline: FlyingSwordTimeline, state: FlyingSwordTimelineState) {

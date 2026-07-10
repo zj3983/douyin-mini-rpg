@@ -1,16 +1,21 @@
 import { _decorator, Component, JsonAsset, Node, Vec3 } from 'cc'
 import {
+  applyContactDamage,
+  applyDirectDamage,
   applyFlyingSwordPathHit,
   BattleEnemy,
   BattleRuntime,
   claimStageClear as claimStageClearRuntime,
   createBattleRuntime,
+  createContactDamageGate,
   nextSpawn,
   runtimeStats,
   spawnBoss,
   tickBossSkill as tickBossSkillRuntime,
+  tickContactDamageGate,
 } from '../Core/BattleRuntime'
 import { CultivationDesignData, stageProfileFromDesign } from '../Core/CultivationRuntime'
+import { createPlayerSwordPath } from '../Core/FlyingSwordRuntime'
 import { BattleHudController } from './BattleHudController'
 import { DamageNumberController } from './DamageNumberController'
 import { EnemySpawner } from './EnemySpawner'
@@ -38,13 +43,14 @@ export class BattleRuntimeController extends Component {
   @property swordHitWidth = 20
   @property swordArcHeight = 104
   @property deathRecycleDelay = 0.45
+  @property playerMaxHealth = 220
+  @property contactDamageCooldown = 0.65
 
   private runtime: BattleRuntime | null = null
   private enemyNodes = new Map<number, Node>()
   private enemyByNode = new Map<Node, BattleEnemy>()
   private pendingEnemyRecycles = 0
-  private playerHealth = 160
-  private readonly playerMaxHealth = 160
+  private damageGate = createContactDamageGate({ maxHealth: 220, cooldown: 0.65 })
   private soulCollected = 0
   private initialized = false
   private battleFrozen = false
@@ -75,6 +81,7 @@ export class BattleRuntimeController extends Component {
 
   update(deltaTime: number) {
     if (!this.runtime || this.battleFrozen) return
+    tickContactDamageGate(this.damageGate, deltaTime)
     if (this.enemySpawner?.canSpawn() !== false) {
       const spawn = nextSpawn(this.runtime, deltaTime)
       if (spawn.ok && spawn.enemy) this.spawnRuntimeEnemy(spawn.enemy)
@@ -88,11 +95,20 @@ export class BattleRuntimeController extends Component {
   }
 
   castFlyingSword() {
-    return this.resolveFlyingSwordHit(
-      new Vec3(this.swordStartX, this.swordY, 0),
-      new Vec3(this.swordEndX, this.swordY, 0),
-      3,
-    )
+    const path = this.createFlyingSwordPath()
+    return this.resolveFlyingSwordHit(path.from, path.to, 3)
+  }
+
+  createFlyingSwordPath() {
+    const playerPosition = this.playerNode?.position ?? new Vec3(this.swordStartX, this.swordY, 0)
+    const path = createPlayerSwordPath({ x: playerPosition.x, y: playerPosition.y })
+    this.swordStartX = path.from.x
+    this.swordY = path.from.y
+    this.swordEndX = path.to.x
+    return {
+      from: new Vec3(path.from.x, path.from.y, 0),
+      to: new Vec3(path.to.x, path.to.y, 0),
+    }
   }
 
   isBattleFrozen() {
@@ -105,10 +121,13 @@ export class BattleRuntimeController extends Component {
     const stage = stageProfileFromDesign(this.designData.json as CultivationDesignData, this.stageNumber)
     this.runtime = createBattleRuntime(stage, this.heroAttack)
     this.pendingEnemyRecycles = 0
-    this.playerHealth = this.playerMaxHealth
+    this.damageGate = createContactDamageGate({
+      maxHealth: this.playerMaxHealth,
+      cooldown: this.contactDamageCooldown,
+    })
     this.soulCollected = 0
     this.battleFrozen = false
-    this.hud?.updateHero({ realm: '筑基三重', health: this.playerHealth, maxHealth: this.playerMaxHealth, mana: 12, maxMana: 12 })
+    this.refreshHeroHealth()
     this.hud?.updateStage(stage.name, this.stageNumber)
     this.hud?.updateSoul(0, this.runtime.defeatTarget)
     this.hud?.hideBoss()
@@ -144,7 +163,7 @@ export class BattleRuntimeController extends Component {
     const bossNode = this.enemyNodes.get(result.event.enemyId)
     bossNode?.emit('enemy-boss-skill', result.event)
     bossNode?.emit('enemy-skill-cast', result.event)
-    this.applyPlayerDamage(result.event.damage)
+    this.applyPlayerDamage(result.event.damage, true)
     const effect = this.bossSkillEffectPool?.spawn()
     if (effect) {
       effect.setPosition(result.event.position.x - 55, result.event.position.y + 35, 0)
@@ -226,17 +245,34 @@ export class BattleRuntimeController extends Component {
 
   private onEnemyAttack(damage: number) {
     if (this.battleFrozen) return
-    this.applyPlayerDamage(damage)
+    this.applyPlayerDamage(damage, false)
   }
 
   private onBossSkillVisual() {
     this.node.emit('boss-skill-impact')
   }
 
-  private applyPlayerDamage(damage: number) {
-    this.playerHealth = Math.max(1, this.playerHealth - Math.max(0, damage))
-    this.hud?.updateHero({ realm: '筑基三重', health: this.playerHealth, maxHealth: this.playerMaxHealth, mana: 12, maxMana: 12 })
+  private applyPlayerDamage(damage: number, direct: boolean) {
+    const applied = direct
+      ? applyDirectDamage(this.damageGate, damage)
+      : applyContactDamage(this.damageGate, damage)
+    if (!applied) return
+    this.refreshHeroHealth()
     this.playerNode?.emit('player-hit', damage)
+    if (this.damageGate.health <= 0) {
+      this.battleFrozen = true
+      this.playerNode?.emit('player-defeated')
+    }
+  }
+
+  private refreshHeroHealth() {
+    this.hud?.updateHero({
+      realm: '筑基三重',
+      health: this.damageGate.health,
+      maxHealth: this.damageGate.maxHealth,
+      mana: 12,
+      maxMana: 12,
+    })
   }
 
   private updateBossHud(enemy: BattleEnemy) {

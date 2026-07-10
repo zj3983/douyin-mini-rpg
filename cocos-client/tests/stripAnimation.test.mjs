@@ -19,9 +19,20 @@ test('animation update can be culled or throttled for performance', () => {
   assert.equal(shouldAdvanceAnimation({ visible: true, distanceToCamera: 100, maxActiveDistance: 600, accumulatedTime: 0.12, updateInterval: 0.1 }), true)
 })
 
-test('png catalog path maps to Cocos resources path', () => {
+test('atlas png path maps to its Cocos Texture2D subresource', () => {
   assert.equal(
-    resourcePathForPng('Assets/Characters/QinglanSwordCultivator/Frames/idle.png'),
-    'Assets/Characters/QinglanSwordCultivator/Frames/idle',
+    resourcePathForPng('Assets/Combat/MistBamboo/moss-wolf-strip.png'),
+    'Assets/Combat/MistBamboo/moss-wolf-strip/texture',
+  )
+})
+
+test('existing texture paths are normalized without adding texture twice', () => {
+  assert.equal(
+    resourcePathForPng('Assets/Combat/QinglanSwordCultivator/action-strip/texture.png'),
+    'Assets/Combat/QinglanSwordCultivator/action-strip/texture',
+  )
+  assert.equal(
+    resourcePathForPng('Assets/Combat/QinglanSwordCultivator/action-strip/texture'),
+    'Assets/Combat/QinglanSwordCultivator/action-strip/texture',
   )
 })

@@ -184,14 +184,7 @@ export class PortraitBattleBootstrap extends Component {
         this.showLoadError(atlasPath)
         return
       }
-      const manifestJson = JSON.parse(JSON.stringify(asset.json)) as {
-        actors?: Array<{ id: string; atlas: string }>
-      }
-      const actor = manifestJson.actors?.find(({ id }) => id === 'qinglan-sword-cultivator')
-      if (actor) actor.atlas = 'Assets/Combat/QinglanSwordCultivator/action-strip/texture.png'
-      const runtimeManifest = new JsonAsset()
-      runtimeManifest.json = manifestJson
-      animator.animationManifest = runtimeManifest
+      animator.animationManifest = asset
       animator.play('sword_ride')
     })
     return { player: player.node, controller, animator }
@@ -348,7 +341,7 @@ export class PortraitBattleBootstrap extends Component {
     hud.bossRoot = bossRoot
     hud.bossNameLabel = bossNameLabel
     hud.bossHealthBar = bossHealth.progress
-    hud.updateHero({ realm: '筑基三重', health: 160, maxHealth: 160, mana: 12, maxMana: 12 })
+    hud.updateHero({ realm: '筑基三重', health: 220, maxHealth: 220, mana: 12, maxMana: 12 })
     hud.updateStage('青苔丘陵', 1)
     hud.updateSoul(0, 12)
     hud.hideBoss()

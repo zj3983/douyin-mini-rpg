@@ -57,6 +57,18 @@ test('battle controller drives enemy contact damage, boss gate, drops, HUD, and 
   assert.match(source, /if \(this\.enemyNodes\.get\(enemyId\) !== enemyNode\) return/)
 })
 
+test('battle controller uses a real contact damage gate and zero-health defeat state', () => {
+  const controller = read('assets/Scripts/Game/BattleRuntimeController.ts')
+  const enemy = read('assets/Scripts/Game/EnemyController.ts')
+
+  assert.match(controller, /createContactDamageGate/)
+  assert.match(controller, /tickContactDamageGate\(this\.damageGate, deltaTime\)/)
+  assert.match(controller, /applyContactDamage\(this\.damageGate, damage\)/)
+  assert.match(controller, /applyDirectDamage\(this\.damageGate, damage\)/)
+  assert.match(controller, /if \(this\.damageGate\.health <= 0\)/)
+  assert.match(enemy, /role === 'boss' \? 10 : 3/)
+})
+
 test('runtime-created enemies contain sprite animation combat and pool components', () => {
   const source = read('assets/Scripts/Game/PortraitBattleBootstrap.ts')
   const manifest = read('assets/resources/Data/animation-atlas.json')
@@ -77,6 +89,11 @@ test('runtime-created enemies contain sprite animation combat and pool component
   }
 })
 
+test('portrait bootstrap does not special-case the player atlas texture path', () => {
+  const source = read('assets/Scripts/Game/PortraitBattleBootstrap.ts')
+  assert.doesNotMatch(source, /actor\.atlas\s*=/)
+})
+
 test('flying sword uses the transparent v2 asset at a long-sword ratio', () => {
   const source = read('assets/Scripts/Game/PortraitBattleBootstrap.ts')
 
@@ -94,6 +111,17 @@ test('flying sword hit geometry follows a bounded arc instead of a flat line', (
   assert.match(controller, /applyFlyingSwordPathHit/)
   assert.match(runtime, /export function segmentHitEnemiesAlongPath/)
   assert.match(runtime, /const seen = new Set<number>\(\)/)
+})
+
+test('one captured player-relative path drives both sword visuals and hit passes', () => {
+  const controller = read('assets/Scripts/Game/BattleRuntimeController.ts')
+  const skill = read('assets/Scripts/Game/FlyingSwordSkill.ts')
+
+  assert.match(controller, /createFlyingSwordPath\(\)/)
+  assert.match(controller, /createPlayerSwordPath\(\{ x: playerPosition\.x, y: playerPosition\.y \}\)/)
+  assert.match(skill, /private activePath:/)
+  assert.match(skill, /this\.activePath = this\.battleRuntime\?\.createFlyingSwordPath\(\)/)
+  assert.match(skill, /castFlyingSwordPass\(path\.from, path\.to\)/)
 })
 
 test('soul orbs magnet to the player and publish pickup amount before recycling', () => {

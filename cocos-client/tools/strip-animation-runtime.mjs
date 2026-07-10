@@ -12,5 +12,6 @@ export function shouldAdvanceAnimation({ visible, distanceToCamera, maxActiveDis
 }
 
 export function resourcePathForPng(assetPath) {
-  return assetPath.replace(/\.png$/, '')
+  const resourcePath = assetPath.replace(/\.png$/, '')
+  return resourcePath.endsWith('/texture') ? resourcePath : `${resourcePath}/texture`
 }

@@ -27,5 +27,6 @@ export function shouldAdvanceAnimation(input: AnimationAdvanceInput) {
 }
 
 export function resourcePathForPng(assetPath: string) {
-  return assetPath.replace(/\.png$/, '')
+  const resourcePath = assetPath.replace(/\.png$/, '')
+  return resourcePath.endsWith('/texture') ? resourcePath : `${resourcePath}/texture`
 }
