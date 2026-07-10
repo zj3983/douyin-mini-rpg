@@ -134,11 +134,21 @@ export class BattleRuntimeController extends Component {
     return result
   }
 
-  castFlyingSword() {
+  public castFlyingSwordPass(from: Vec3, to: Vec3) {
+    return this.resolveFlyingSwordHit(from, to, 6)
+  }
+
+  public castFlyingSword() {
+    const from = new Vec3(this.swordStartX, this.swordY, 0)
+    const to = new Vec3(this.swordEndX, this.swordY, 0)
+    return this.resolveFlyingSwordHit(from, to, 3)
+  }
+
+  private resolveFlyingSwordHit(from: Vec3, to: Vec3, pierce: number) {
     if (!this.runtime) return { hitCount: 0, damageEvents: [], defeatedEnemyIds: [] }
-    const result = applyFlyingSwordHit(this.runtime, 3, 1, {
-      from: { x: this.swordStartX, y: this.swordY },
-      to: { x: this.swordEndX, y: this.swordY },
+    const result = applyFlyingSwordHit(this.runtime, pierce, 1, {
+      from: { x: from.x, y: from.y },
+      to: { x: to.x, y: to.y },
       width: this.swordHitWidth,
     })
     for (const event of result.damageEvents) {
