@@ -15,6 +15,8 @@ export function createBattleRuntime({ stageId, heroAttack }) {
     heroAttack,
     spawnTimer: 0,
     spawnInterval: 1,
+    defeatTarget: 12,
+    maxAliveEnemies: 18,
     nextEnemyId: 1,
     enemies: [],
     soulDrops: [],
@@ -27,11 +29,23 @@ export function createBattleRuntime({ stageId, heroAttack }) {
 }
 
 export function nextSpawn(runtime, deltaTime) {
+  const pool = runtime.stage.enemies.filter((enemy) => enemy.role !== 'boss')
+  const bossAlive = runtime.enemies.some((enemy) => enemy.role === 'boss' && enemy.alive)
+  const aliveOrdinaryEnemies = runtime.enemies.filter((enemy) => enemy.role !== 'boss' && enemy.alive).length
+  if (
+    pool.length === 0
+    || runtime.stageCleared
+    || defeatedOrdinaryEnemies(runtime) >= runtime.defeatTarget
+    || bossAlive
+    || aliveOrdinaryEnemies >= runtime.maxAliveEnemies
+  ) {
+    return { ok: false, enemy: null }
+  }
+
   runtime.spawnTimer += deltaTime
   if (runtime.spawnTimer < runtime.spawnInterval) return { ok: false, enemy: null }
 
   runtime.spawnTimer = 0
-  const pool = runtime.stage.enemies.filter((enemy) => enemy.role !== 'boss')
   const profile = pool[(runtime.nextEnemyId - 1) % pool.length]
   const enemy = {
     id: runtime.nextEnemyId++,
@@ -77,7 +91,13 @@ export function applyFlyingSwordHit(runtime, { pierce, damageScale, path }) {
 }
 
 export function spawnBoss(runtime) {
-  if (runtime.bossSpawned || runtime.stageCleared) return { ok: false, enemy: null }
+  if (
+    runtime.bossSpawned
+    || runtime.stageCleared
+    || defeatedOrdinaryEnemies(runtime) < runtime.defeatTarget
+  ) {
+    return { ok: false, enemy: null }
+  }
 
   const profile = runtime.stage.boss
   const enemy = {
@@ -187,10 +207,15 @@ export function defeatEnemy(runtime, enemyId) {
 export function runtimeStats(runtime) {
   return {
     aliveEnemies: runtime.enemies.filter((enemy) => enemy.alive).length,
-    defeatedEnemies: runtime.enemies.filter((enemy) => !enemy.alive).length,
+    defeatedEnemies: defeatedOrdinaryEnemies(runtime),
+    bossReady: defeatedOrdinaryEnemies(runtime) >= runtime.defeatTarget,
     soulDrops: runtime.soulDrops.length,
     bossAlive: runtime.enemies.some((enemy) => enemy.role === 'boss' && enemy.alive),
     stageCleared: runtime.stageCleared,
     stageClearClaimed: runtime.stageClearClaimed,
   }
+}
+
+function defeatedOrdinaryEnemies(runtime) {
+  return runtime.enemies.filter((enemy) => enemy.role !== 'boss' && !enemy.alive).length
 }

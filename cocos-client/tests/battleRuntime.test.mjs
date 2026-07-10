@@ -12,6 +12,14 @@ import {
   tickBossSkill,
 } from '../tools/battle-runtime.mjs'
 
+function defeatOrdinaryEnemies(runtime, count = 12) {
+  for (let index = 0; index < count; index += 1) {
+    const spawn = nextSpawn(runtime, 1.1)
+    assert.equal(spawn.ok, true)
+    assert.equal(defeatEnemy(runtime, spawn.enemy.id), true)
+  }
+}
+
 test('battle runtime spawns themed enemies from stage profile', () => {
   const runtime = createBattleRuntime({ stageId: 3, heroAttack: 40 })
 
@@ -22,6 +30,15 @@ test('battle runtime spawns themed enemies from stage profile', () => {
   assert.equal(first.enemy.theme, 'flame-cave')
   assert.equal(second.ok, true)
   assert.equal(runtimeStats(runtime).aliveEnemies, 2)
+})
+
+test('battle runtime skips spawning when the stage has no ordinary enemy profile', () => {
+  const runtime = createBattleRuntime({ stageId: 1, heroAttack: 40 })
+  runtime.stage = { ...runtime.stage, enemies: [runtime.stage.boss] }
+  runtime.spawnTimer = 0.4
+
+  assert.deepEqual(nextSpawn(runtime, 1.1), { ok: false, enemy: null })
+  assert.equal(runtime.spawnTimer, 0.4)
 })
 
 test('flying sword pierces multiple enemies and queues soul drops on defeat', () => {
@@ -49,6 +66,28 @@ test('flying sword hit reports nonlethal damage without soul drops', () => {
   assert.deepEqual(hit.defeatedEnemyIds, [])
   assert.equal(runtimeStats(runtime).aliveEnemies, 1)
   assert.equal(runtimeStats(runtime).soulDrops, 0)
+})
+
+test('flying sword can damage a living enemy once outbound and once on return', () => {
+  const runtime = createBattleRuntime({ stageId: 1, heroAttack: 35 })
+  const enemy = nextSpawn(runtime, 1.1).enemy
+  enemy.position = { x: 120, y: 0 }
+
+  const outbound = applyFlyingSwordHit(runtime, {
+    pierce: 1,
+    damageScale: 1,
+    path: { from: { x: 0, y: 0 }, to: { x: 260, y: 0 }, width: 18 },
+  })
+  const returning = applyFlyingSwordHit(runtime, {
+    pierce: 1,
+    damageScale: 1,
+    path: { from: { x: 260, y: 0 }, to: { x: 0, y: 0 }, width: 18 },
+  })
+
+  assert.equal(outbound.hitCount, 1)
+  assert.equal(returning.hitCount, 1)
+  assert.equal(returning.damageEvents[0].remainingHp, 30)
+  assert.equal(enemy.hp, 30)
 })
 
 test('defeated enemy can only drop once', () => {
@@ -101,8 +140,42 @@ test('flying sword geometry respects pierce order along path', () => {
   assert.deepEqual(hits.map((enemy) => enemy.id), [near.id])
 })
 
+test('stage becomes boss-ready only after 12 ordinary defeats', () => {
+  const runtime = createBattleRuntime({ stageId: 1, heroAttack: 80 })
+
+  assert.equal(runtime.defeatTarget, 12)
+  assert.equal(runtime.maxAliveEnemies, 18)
+  assert.equal(runtimeStats(runtime).bossReady, false)
+  assert.equal(spawnBoss(runtime).ok, false)
+
+  defeatOrdinaryEnemies(runtime, 11)
+  assert.equal(runtimeStats(runtime).bossReady, false)
+  assert.equal(spawnBoss(runtime).ok, false)
+
+  defeatOrdinaryEnemies(runtime, 1)
+  assert.equal(runtimeStats(runtime).bossReady, true)
+  assert.equal(nextSpawn(runtime, 1.1).ok, false)
+  assert.equal(spawnBoss(runtime).ok, true)
+})
+
+test('ordinary spawning stops at the alive enemy cap', () => {
+  const runtime = createBattleRuntime({ stageId: 2, heroAttack: 80 })
+
+  for (let index = 0; index < 18; index += 1) {
+    assert.equal(nextSpawn(runtime, 1.1).ok, true)
+  }
+
+  assert.equal(runtimeStats(runtime).aliveEnemies, 18)
+  assert.equal(nextSpawn(runtime, 1.1).ok, false)
+
+  assert.equal(defeatEnemy(runtime, runtime.enemies[0].id), true)
+  assert.equal(nextSpawn(runtime, 1.1).ok, true)
+  assert.equal(runtimeStats(runtime).aliveEnemies, 18)
+})
+
 test('world stage can spawn one boss from its stage profile', () => {
   const runtime = createBattleRuntime({ stageId: 1, heroAttack: 80 })
+  defeatOrdinaryEnemies(runtime)
 
   const first = spawnBoss(runtime)
   const second = spawnBoss(runtime)
@@ -112,11 +185,13 @@ test('world stage can spawn one boss from its stage profile', () => {
   assert.equal(first.enemy.profileId, 'bamboo-warden')
   assert.equal(first.enemy.hp, 520)
   assert.equal(second.ok, false)
+  assert.equal(nextSpawn(runtime, 1.1).ok, false)
   assert.equal(runtimeStats(runtime).bossAlive, true)
 })
 
 test('boss casts timed skill events while alive', () => {
   const runtime = createBattleRuntime({ stageId: 3, heroAttack: 80 })
+  defeatOrdinaryEnemies(runtime)
   const boss = spawnBoss(runtime).enemy
 
   const early = tickBossSkill(runtime, 1.2)
@@ -131,17 +206,21 @@ test('boss casts timed skill events while alive', () => {
 
 test('defeating the world boss clears the stage', () => {
   const runtime = createBattleRuntime({ stageId: 1, heroAttack: 260 })
+  defeatOrdinaryEnemies(runtime)
   spawnBoss(runtime)
 
   const hit = applyFlyingSwordHit(runtime, { pierce: 1, damageScale: 2 })
 
   assert.equal(hit.stageClear, true)
   assert.equal(runtimeStats(runtime).stageCleared, true)
-  assert.equal(runtimeStats(runtime).soulDrops, 1)
+  assert.equal(runtimeStats(runtime).defeatedEnemies, 12)
+  assert.equal(runtimeStats(runtime).soulDrops, 13)
+  assert.equal(nextSpawn(runtime, 1.1).ok, false)
 })
 
 test('stage clear reward can only be claimed once after boss defeat', () => {
   const runtime = createBattleRuntime({ stageId: 4, heroAttack: 520 })
+  defeatOrdinaryEnemies(runtime)
   spawnBoss(runtime)
   applyFlyingSwordHit(runtime, { pierce: 1, damageScale: 1 })
 
