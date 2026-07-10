@@ -6,7 +6,8 @@
     "version": "3.8.8"
   },
   "scripts": {
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "build:check": "node tools/check-cocos-build-readiness.mjs"
   },
   "devDependencies": {}
 }

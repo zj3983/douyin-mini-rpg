@@ -68,3 +68,18 @@
 ```bash
 npm test
 ```
+
+检查是否已经具备 Cocos Web 上线条件：
+
+```bash
+npm run build:check
+```
+
+当前 `build:check` 必须通过后，才能把服务器入口从旧 Web/Vite 包切到 Cocos 包。它会检查：
+
+- D 盘上的 Cocos Creator 3.8.x 可执行文件。
+- `assets/Scenes/MainBattle.scene` 等真实场景文件。
+- `settings` 下的 Creator 构建配置。
+- `build/web-mobile/index.html` 等 Web 构建产物。
+
+如果这几项缺失，继续部署只会更新旧 Web 包，不会让 Cocos 版本上线。
