@@ -30,6 +30,7 @@ import { BattleHudController } from './BattleHudController'
 import { DamageNumberController } from './DamageNumberController'
 import { EnemySpawner } from './EnemySpawner'
 import { NodePoolController } from './NodePoolController'
+import { PlayerController } from './PlayerController'
 import { SoulOrbController } from './SoulOrbController'
 import { StageClearPanelController } from './StageClearPanelController'
 
@@ -151,6 +152,8 @@ export class BattleRuntimeController extends Component {
     })
     this.soulCollected = 0
     this.battleFrozen = false
+    const playerController = this.playerNode?.getComponent(PlayerController)
+    playerController?.reset()
     this.stageClearPanel?.hide()
     this.refreshHeroHealth()
     this.hud?.updateStage(stage.name, this.stageNumber)
@@ -312,6 +315,8 @@ export class BattleRuntimeController extends Component {
     this.playerNode?.emit('player-hit', damage)
     if (this.damageGate.health <= 0 && markBattleAttemptDefeated(this.attemptState)) {
       this.battleFrozen = true
+      const playerController = this.playerNode?.getComponent(PlayerController)
+      playerController?.stop()
       this.playerNode?.emit('player-action-requested', 'death')
       this.playerNode?.emit('player-defeated')
       const generation = this.stageGeneration

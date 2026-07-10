@@ -5,6 +5,31 @@ export function clampBattleTarget(point, bounds) {
   }
 }
 
+export function createPlayerMovementState(spawnPosition) {
+  return {
+    spawnPosition: { ...spawnPosition },
+    target: null,
+    movementEnabled: true,
+  }
+}
+
+export function requestPlayerMovement(state, target) {
+  if (!state.movementEnabled) return false
+  state.target = { ...target }
+  return true
+}
+
+export function stopPlayerMovement(state) {
+  state.target = null
+  state.movementEnabled = false
+}
+
+export function resetPlayerMovement(state) {
+  state.target = null
+  state.movementEnabled = true
+  return { ...state.spawnPosition }
+}
+
 export function stepTowardTarget(current, target, speed, deltaTime) {
   const dx = target.x - current.x
   const dy = target.y - current.y

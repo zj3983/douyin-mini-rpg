@@ -10,6 +10,37 @@ export interface BattleBounds {
   maxY: number
 }
 
+export interface PlayerMovementState {
+  spawnPosition: Point2
+  target: Point2 | null
+  movementEnabled: boolean
+}
+
+export function createPlayerMovementState(spawnPosition: Point2): PlayerMovementState {
+  return {
+    spawnPosition: { ...spawnPosition },
+    target: null,
+    movementEnabled: true,
+  }
+}
+
+export function requestPlayerMovement(state: PlayerMovementState, target: Point2) {
+  if (!state.movementEnabled) return false
+  state.target = { ...target }
+  return true
+}
+
+export function stopPlayerMovement(state: PlayerMovementState) {
+  state.target = null
+  state.movementEnabled = false
+}
+
+export function resetPlayerMovement(state: PlayerMovementState) {
+  state.target = null
+  state.movementEnabled = true
+  return { ...state.spawnPosition }
+}
+
 export function clampBattleTarget(point: Point2, bounds: BattleBounds): Point2 {
   return {
     x: Math.max(bounds.minX, Math.min(bounds.maxX, point.x)),

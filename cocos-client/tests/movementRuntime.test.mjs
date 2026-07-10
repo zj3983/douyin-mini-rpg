@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { clampBattleTarget, stepTowardTarget } from '../tools/movement-runtime.mjs'
+import * as movementRuntime from '../tools/movement-runtime.mjs'
 
 test('portrait target stays below HUD and above navigation', () => {
   assert.deepEqual(
@@ -60,4 +61,22 @@ test('already-reached target reports zero movement and arrival', () => {
     distanceMoved: 0,
     arrived: true,
   })
+})
+
+test('death stops movement input and retry restores the spawn position with no stale target', () => {
+  assert.equal(typeof movementRuntime.createPlayerMovementState, 'function')
+  const state = movementRuntime.createPlayerMovementState({ x: -210, y: -80 })
+
+  assert.equal(movementRuntime.requestPlayerMovement(state, { x: 20, y: 160 }), true)
+  assert.deepEqual(state.target, { x: 20, y: 160 })
+
+  movementRuntime.stopPlayerMovement(state)
+  assert.equal(state.movementEnabled, false)
+  assert.equal(state.target, null)
+  assert.equal(movementRuntime.requestPlayerMovement(state, { x: 40, y: 220 }), false)
+  assert.equal(state.target, null)
+
+  assert.deepEqual(movementRuntime.resetPlayerMovement(state), { x: -210, y: -80 })
+  assert.equal(state.movementEnabled, true)
+  assert.equal(state.target, null)
 })

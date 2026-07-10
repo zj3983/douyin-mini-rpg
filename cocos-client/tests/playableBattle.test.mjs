@@ -86,6 +86,30 @@ test('defeat panel retries the current stage after a guarded death presentation'
   assert.doesNotMatch(panel, /location\.reload|scheduleOnce/)
 })
 
+test('moving player stops before death and retry restores sword ride without a stale target', () => {
+  const runtime = read('assets/Scripts/Game/BattleRuntimeController.ts')
+  const player = read('assets/Scripts/Game/PlayerController.ts')
+  const input = read('assets/Scripts/Game/BattleInputController.ts')
+  const bootstrap = read('assets/Scripts/Game/PortraitBattleBootstrap.ts')
+
+  assert.match(player, /public stop\(\)/)
+  assert.match(player, /public reset\(\)/)
+  assert.match(player, /stopPlayerMovement/)
+  assert.match(player, /resetPlayerMovement/)
+  const stopBody = player.match(/public stop\(\) \{([\s\S]*?)\n  \}/)?.[1] ?? ''
+  assert.doesNotMatch(stopBody, /sword_ride/)
+  assert.match(stopBody, /this\.target = null/)
+  const resetBody = player.match(/public reset\(\) \{([\s\S]*?)\n  \}/)?.[1] ?? ''
+  assert.match(resetBody, /this\.target = null/)
+
+  const stopIndex = runtime.indexOf('playerController?.stop()')
+  const deathIndex = runtime.indexOf("emit('player-action-requested', 'death')")
+  assert.ok(stopIndex >= 0 && deathIndex > stopIndex)
+  assert.match(runtime, /playerController\?\.reset\(\)/)
+  assert.match(input, /player\.moveTo\(worldTarget\)/)
+  assert.match(bootstrap, /player\.node\.setPosition\(-210, -80, 0\)[\s\S]*addComponent\(PlayerController\)/)
+})
+
 test('stage changes clear soul nodes and reject stale pickup callbacks', () => {
   const runtime = read('assets/Scripts/Game/BattleRuntimeController.ts')
   const pool = read('assets/Scripts/Game/NodePoolController.ts')
