@@ -176,6 +176,43 @@ export interface ContactDamageGate {
   cooldownRemaining: number
 }
 
+export interface StageSettlementState {
+  generation: number
+  pending: boolean
+  settled: boolean
+}
+
+export function createStageSettlementState(generation: number): StageSettlementState {
+  return {
+    generation: Math.max(0, Math.floor(generation)),
+    pending: false,
+    settled: false,
+  }
+}
+
+export function scheduleBossSettlement(state: StageSettlementState) {
+  if (state.pending || state.settled) return null
+  state.pending = true
+  return state.generation
+}
+
+export function completeBossSettlement(state: StageSettlementState, generation: number) {
+  if (generation !== state.generation || !state.pending || state.settled) return false
+  state.pending = false
+  state.settled = true
+  return true
+}
+
+export function canSummonWorldBoss(
+  stats: { bossReady: boolean; bossAlive: boolean; aliveOrdinaryEnemies: number },
+  pendingDeathRecycles: number,
+) {
+  return stats.bossReady
+    && !stats.bossAlive
+    && stats.aliveOrdinaryEnemies === 0
+    && pendingDeathRecycles === 0
+}
+
 export function normalizeSoulHudCount(current: number, required: number) {
   const safeRequired = Number.isFinite(required) ? Math.max(0, Math.floor(required)) : 0
   const safeCurrent = Number.isFinite(current) ? Math.max(0, Math.floor(current)) : 0
@@ -217,6 +254,7 @@ export function spawnBoss(runtime: BattleRuntime) {
     runtime.bossSpawned
     || runtime.stageCleared
     || defeatedOrdinaryEnemies(runtime) < runtime.defeatTarget
+    || aliveOrdinaryEnemies(runtime) > 0
   ) {
     return { ok: false, enemy: null }
   }
@@ -331,6 +369,17 @@ export function segmentHitEnemiesAlongPath(
     .map(({ enemy }) => enemy)
 }
 
+export function rollbackBossSpawn(runtime: BattleRuntime, enemyId: number) {
+  const index = runtime.enemies.findIndex((enemy) => (
+    enemy.id === enemyId && enemy.profile.role === 'boss'
+  ))
+  if (index < 0) return false
+  runtime.enemies.splice(index, 1)
+  runtime.bossSpawned = false
+  runtime.bossSkillTimer = 0
+  return true
+}
+
 function projectPointToSegment(point: { x: number; y: number }, from: { x: number; y: number }, to: { x: number; y: number }) {
   const dx = to.x - from.x
   const dy = to.y - from.y
@@ -356,6 +405,7 @@ export function defeatEnemy(runtime: BattleRuntime, enemyId: number) {
 export function runtimeStats(runtime: BattleRuntime) {
   return {
     aliveEnemies: runtime.enemies.filter((enemy) => enemy.alive).length,
+    aliveOrdinaryEnemies: aliveOrdinaryEnemies(runtime),
     defeatedEnemies: defeatedOrdinaryEnemies(runtime),
     bossReady: defeatedOrdinaryEnemies(runtime) >= runtime.defeatTarget,
     soulDrops: runtime.soulDrops.length,
@@ -367,4 +417,8 @@ export function runtimeStats(runtime: BattleRuntime) {
 
 function defeatedOrdinaryEnemies(runtime: BattleRuntime): number {
   return runtime.enemies.filter((enemy) => enemy.profile.role !== 'boss' && !enemy.alive).length
+}
+
+function aliveOrdinaryEnemies(runtime: BattleRuntime): number {
+  return runtime.enemies.filter((enemy) => enemy.profile.role !== 'boss' && enemy.alive).length
 }

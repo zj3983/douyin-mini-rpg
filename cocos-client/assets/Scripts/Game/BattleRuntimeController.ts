@@ -5,11 +5,16 @@ import {
   applyFlyingSwordPathHit,
   BattleEnemy,
   BattleRuntime,
+  canSummonWorldBoss,
   claimStageClear as claimStageClearRuntime,
+  completeBossSettlement,
   createBattleRuntime,
   createContactDamageGate,
+  createStageSettlementState,
   nextSpawn,
   runtimeStats,
+  rollbackBossSpawn,
+  scheduleBossSettlement,
   spawnBoss,
   tickBossSkill as tickBossSkillRuntime,
   tickContactDamageGate,
@@ -45,6 +50,7 @@ export class BattleRuntimeController extends Component {
   @property deathRecycleDelay = 0.45
   @property playerMaxHealth = 220
   @property contactDamageCooldown = 0.65
+  @property bossDeathSettleDelay = 0.55
 
   private runtime: BattleRuntime | null = null
   private enemyNodes = new Map<number, Node>()
@@ -54,6 +60,8 @@ export class BattleRuntimeController extends Component {
   private soulCollected = 0
   private initialized = false
   private battleFrozen = false
+  private stageGeneration = 0
+  private stageSettlement = createStageSettlementState(0)
 
   start() {
     this.initialize()
@@ -117,6 +125,8 @@ export class BattleRuntimeController extends Component {
 
   private rebuildRuntime(stageNumber: number) {
     if (!this.designData) return
+    this.stageGeneration += 1
+    this.stageSettlement = createStageSettlementState(this.stageGeneration)
     this.stageNumber = Math.max(1, Math.floor(stageNumber || 1))
     const stage = stageProfileFromDesign(this.designData.json as CultivationDesignData, this.stageNumber)
     this.runtime = createBattleRuntime(stage, this.heroAttack)
@@ -149,10 +159,14 @@ export class BattleRuntimeController extends Component {
   private trySpawnBoss() {
     if (!this.runtime || this.battleFrozen || this.pendingEnemyRecycles > 0) return false
     const stats = runtimeStats(this.runtime)
-    if (!stats.bossReady || stats.bossAlive || this.runtime.bossSpawned) return false
+    if (!canSummonWorldBoss(stats, this.pendingEnemyRecycles) || this.runtime.bossSpawned) return false
     const result = spawnBoss(this.runtime)
     if (!result.ok || !result.enemy) return false
-    this.spawnRuntimeEnemy(result.enemy)
+    const node = this.spawnRuntimeEnemy(result.enemy)
+    if (!node) {
+      rollbackBossSpawn(this.runtime, result.enemy.id)
+      return false
+    }
     return true
   }
 
@@ -192,7 +206,6 @@ export class BattleRuntimeController extends Component {
     }
 
     for (const enemyId of result.defeatedEnemyIds) this.handleEnemyDefeat(enemyId)
-    if (result.stageClear) this.finishStage()
     return result
   }
 
@@ -216,13 +229,32 @@ export class BattleRuntimeController extends Component {
     if (!enemyNode || !enemy) return
     enemyNode.emit('enemy-defeated', enemyId)
     this.spawnSoulOrb(enemyNode.position.clone(), enemy.profile.role === 'boss' ? 5 : 1)
-    this.pendingEnemyRecycles += enemy.profile.role === 'boss' ? 0 : 1
+
+    const generation = this.stageGeneration
+    if (enemy.profile.role === 'boss') {
+      const settlementToken = scheduleBossSettlement(this.stageSettlement)
+      if (settlementToken === null) return
+      const settleDelay = Math.max(this.deathRecycleDelay, this.bossDeathSettleDelay)
+      this.scheduleOnce(() => {
+        if (!completeBossSettlement(this.stageSettlement, settlementToken)) return
+        if (this.enemyNodes.get(enemyId) === enemyNode) {
+          this.enemySpawner?.despawnEnemy(enemyNode)
+          this.enemyNodes.delete(enemyId)
+          this.enemyByNode.delete(enemyNode)
+        }
+        this.finishStage()
+      }, settleDelay)
+      return
+    }
+
+    this.pendingEnemyRecycles += 1
     this.scheduleOnce(() => {
+      if (generation !== this.stageGeneration) return
       if (this.enemyNodes.get(enemyId) !== enemyNode) return
       this.enemySpawner?.despawnEnemy(enemyNode)
       this.enemyNodes.delete(enemyId)
       this.enemyByNode.delete(enemyNode)
-      if (enemy.profile.role !== 'boss') this.pendingEnemyRecycles = Math.max(0, this.pendingEnemyRecycles - 1)
+      this.pendingEnemyRecycles = Math.max(0, this.pendingEnemyRecycles - 1)
       this.trySpawnBoss()
     }, this.deathRecycleDelay)
   }

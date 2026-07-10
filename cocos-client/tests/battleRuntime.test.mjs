@@ -197,6 +197,36 @@ test('stage becomes boss-ready only after 12 ordinary defeats', () => {
   assert.equal(spawnBoss(runtime).ok, true)
 })
 
+test('boss waits until every surviving ordinary enemy is defeated', () => {
+  const runtime = createBattleRuntime({ stageId: 1, heroAttack: 80 })
+  const ordinary = []
+  for (let index = 0; index < 13; index += 1) ordinary.push(nextSpawn(runtime, 1.1).enemy)
+  for (const enemy of ordinary.slice(0, 12)) defeatEnemy(runtime, enemy.id)
+
+  assert.equal(runtimeStats(runtime).defeatedEnemies, 12)
+  assert.equal(runtimeStats(runtime).aliveOrdinaryEnemies, 1)
+  assert.equal(nextSpawn(runtime, 1.1).ok, false)
+  assert.equal(spawnBoss(runtime).ok, false)
+
+  defeatEnemy(runtime, ordinary[12].id)
+  assert.equal(runtimeStats(runtime).aliveOrdinaryEnemies, 0)
+  assert.equal(spawnBoss(runtime).ok, true)
+})
+
+test('world boss gate waits for the final ordinary death recycle', () => {
+  assert.equal(typeof battleRuntimeModule.canSummonWorldBoss, 'function')
+  const ready = {
+    bossReady: true,
+    bossAlive: false,
+    aliveOrdinaryEnemies: 0,
+  }
+
+  assert.equal(battleRuntimeModule.canSummonWorldBoss({ ...ready, aliveOrdinaryEnemies: 1 }, 0), false)
+  assert.equal(battleRuntimeModule.canSummonWorldBoss(ready, 1), false)
+  assert.equal(battleRuntimeModule.canSummonWorldBoss(ready, 0), true)
+  assert.equal(battleRuntimeModule.canSummonWorldBoss({ ...ready, bossReady: false }, 0), false)
+})
+
 test('ordinary spawning stops at the alive enemy cap', () => {
   const runtime = createBattleRuntime({ stageId: 2, heroAttack: 80 })
 
@@ -226,6 +256,32 @@ test('world stage can spawn one boss from its stage profile', () => {
   assert.equal(second.ok, false)
   assert.equal(nextSpawn(runtime, 1.1).ok, false)
   assert.equal(runtimeStats(runtime).bossAlive, true)
+})
+
+test('failed boss node creation can roll back and retry the core spawn', () => {
+  assert.equal(typeof battleRuntimeModule.rollbackBossSpawn, 'function')
+  const runtime = createBattleRuntime({ stageId: 1, heroAttack: 80 })
+  defeatOrdinaryEnemies(runtime)
+  const first = spawnBoss(runtime)
+
+  assert.equal(battleRuntimeModule.rollbackBossSpawn(runtime, first.enemy.id), true)
+  assert.equal(runtime.bossSpawned, false)
+  assert.equal(runtimeStats(runtime).bossAlive, false)
+  const retry = spawnBoss(runtime)
+  assert.equal(retry.ok, true)
+  assert.notEqual(retry.enemy.id, first.enemy.id)
+})
+
+test('boss settlement generation rejects stale and duplicate delayed callbacks', () => {
+  assert.equal(typeof battleRuntimeModule.createStageSettlementState, 'function')
+  const state = battleRuntimeModule.createStageSettlementState(4)
+  const token = battleRuntimeModule.scheduleBossSettlement(state)
+
+  assert.equal(token, 4)
+  assert.equal(battleRuntimeModule.scheduleBossSettlement(state), null)
+  assert.equal(battleRuntimeModule.completeBossSettlement(state, 3), false)
+  assert.equal(battleRuntimeModule.completeBossSettlement(state, token), true)
+  assert.equal(battleRuntimeModule.completeBossSettlement(state, token), false)
 })
 
 test('boss casts timed skill events while alive', () => {

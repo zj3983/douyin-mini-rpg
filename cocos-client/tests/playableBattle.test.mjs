@@ -57,6 +57,18 @@ test('battle controller drives enemy contact damage, boss gate, drops, HUD, and 
   assert.match(source, /if \(this\.enemyNodes\.get\(enemyId\) !== enemyNode\) return/)
 })
 
+test('boss spawn and settlement honor live enemies, pool rollback, and delayed generation guards', () => {
+  const source = read('assets/Scripts/Game/BattleRuntimeController.ts')
+
+  assert.match(source, /canSummonWorldBoss\(stats, this\.pendingEnemyRecycles\)/)
+  assert.match(source, /rollbackBossSpawn\(this\.runtime, result\.enemy\.id\)/)
+  assert.match(source, /bossDeathSettleDelay/)
+  assert.match(source, /scheduleBossSettlement/)
+  assert.match(source, /completeBossSettlement/)
+  assert.match(source, /Math\.max\(this\.deathRecycleDelay, this\.bossDeathSettleDelay\)/)
+  assert.doesNotMatch(source, /if \(result\.stageClear\) this\.finishStage\(\)/)
+})
+
 test('battle controller uses a real contact damage gate and zero-health defeat state', () => {
   const controller = read('assets/Scripts/Game/BattleRuntimeController.ts')
   const enemy = read('assets/Scripts/Game/EnemyController.ts')

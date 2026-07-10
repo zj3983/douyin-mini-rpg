@@ -95,6 +95,7 @@ export function spawnBoss(runtime) {
     runtime.bossSpawned
     || runtime.stageCleared
     || defeatedOrdinaryEnemies(runtime) < runtime.defeatTarget
+    || aliveOrdinaryEnemies(runtime) > 0
   ) {
     return { ok: false, enemy: null }
   }
@@ -203,6 +204,15 @@ export function segmentHitEnemiesAlongPath(runtime, { points, width, pierce }) {
     .map(({ enemy }) => enemy)
 }
 
+export function rollbackBossSpawn(runtime, enemyId) {
+  const index = runtime.enemies.findIndex((enemy) => enemy.id === enemyId && enemy.role === 'boss')
+  if (index < 0) return false
+  runtime.enemies.splice(index, 1)
+  runtime.bossSpawned = false
+  runtime.bossSkillTimer = 0
+  return true
+}
+
 export function createContactDamageGate({ maxHealth, cooldown }) {
   const safeMaxHealth = Math.max(1, Math.floor(maxHealth))
   return {
@@ -211,6 +221,34 @@ export function createContactDamageGate({ maxHealth, cooldown }) {
     cooldown: Math.max(0, cooldown),
     cooldownRemaining: 0,
   }
+}
+
+export function createStageSettlementState(generation) {
+  return {
+    generation: Math.max(0, Math.floor(generation)),
+    pending: false,
+    settled: false,
+  }
+}
+
+export function scheduleBossSettlement(state) {
+  if (state.pending || state.settled) return null
+  state.pending = true
+  return state.generation
+}
+
+export function completeBossSettlement(state, generation) {
+  if (generation !== state.generation || !state.pending || state.settled) return false
+  state.pending = false
+  state.settled = true
+  return true
+}
+
+export function canSummonWorldBoss(stats, pendingDeathRecycles) {
+  return stats.bossReady
+    && !stats.bossAlive
+    && stats.aliveOrdinaryEnemies === 0
+    && pendingDeathRecycles === 0
 }
 
 export function normalizeSoulHudCount(current, required) {
@@ -264,6 +302,7 @@ export function defeatEnemy(runtime, enemyId) {
 export function runtimeStats(runtime) {
   return {
     aliveEnemies: runtime.enemies.filter((enemy) => enemy.alive).length,
+    aliveOrdinaryEnemies: aliveOrdinaryEnemies(runtime),
     defeatedEnemies: defeatedOrdinaryEnemies(runtime),
     bossReady: defeatedOrdinaryEnemies(runtime) >= runtime.defeatTarget,
     soulDrops: runtime.soulDrops.length,
@@ -275,4 +314,8 @@ export function runtimeStats(runtime) {
 
 function defeatedOrdinaryEnemies(runtime) {
   return runtime.enemies.filter((enemy) => enemy.role !== 'boss' && !enemy.alive).length
+}
+
+function aliveOrdinaryEnemies(runtime) {
+  return runtime.enemies.filter((enemy) => enemy.role !== 'boss' && enemy.alive).length
 }
