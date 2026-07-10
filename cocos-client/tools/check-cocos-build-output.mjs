@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { checkCocosBuildReadiness } from './check-cocos-build-readiness.mjs'
 
 const base64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 
@@ -51,14 +52,32 @@ export function checkCocosBuildOutput({ buildRoot, projectRoot = process.cwd() }
   return { ok: errors.length === 0, buildRoot: resolvedBuildRoot, classId, sceneFile, errors }
 }
 
+export function verifyCocosBuildOutput({
+  buildRoot,
+  projectRoot = process.cwd(),
+  creatorCommand,
+}) {
+  const readiness = checkCocosBuildReadiness({ projectRoot, buildRoot, creatorCommand })
+  const output = checkCocosBuildOutput({ buildRoot, projectRoot })
+  const errors = [...readiness.blockers, ...output.errors]
+  return {
+    ok: readiness.ready && output.ok,
+    buildRoot: output.buildRoot,
+    classId: output.classId,
+    sceneFile: output.sceneFile,
+    readiness,
+    errors,
+  }
+}
+
 const isCli = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 if (isCli) {
-  const buildRoot = process.argv[2]
+  const buildRoot = process.argv[2] ?? process.env.COCOS_BUILD_ROOT
   if (!buildRoot) {
-    console.error('Usage: node tools/check-cocos-build-output.mjs <build-root>')
+    console.error('Usage: node tools/check-cocos-build-output.mjs <build-root> (or set COCOS_BUILD_ROOT)')
     process.exitCode = 2
   } else {
-    const report = checkCocosBuildOutput({ buildRoot })
+    const report = verifyCocosBuildOutput({ buildRoot })
     console.log(JSON.stringify(report, null, 2))
     if (!report.ok) process.exitCode = 1
   }

@@ -75,10 +75,44 @@ test('portrait bootstrap fills the visible height without stretching the whole s
   assert.doesNotMatch(source, /setScale\([^,]+,\s*visibleHeight \/ HEIGHT/)
 })
 
+test('portrait bootstrap relayouts visible-height UI when the canvas resizes', () => {
+  const source = readFileSync(resolve('assets/Scripts/Game/PortraitBattleBootstrap.ts'), 'utf8')
+
+  assert.match(source, /view\.on\('canvas-resize',\s*this\.relayoutVisibleArea,\s*this\)/)
+  assert.match(source, /view\.off\('canvas-resize',\s*this\.relayoutVisibleArea,\s*this\)/)
+  assert.match(source, /private relayoutVisibleArea\(\)/)
+  assert.match(source, /for \(const node of this\.fullHeightNodes\)/)
+  assert.match(source, /this\.resizeNode\(node, WIDTH, visibleHeight\)/)
+  assert.match(source, /this\.resizeNode\(this\.farBackground, backgroundWidth, visibleHeight\)/)
+  assert.match(source, /this\.resizeNode\(this\.midBackground, backgroundWidth, visibleHeight\)/)
+  assert.match(source, /this\.resizeNode\(this\.inputLayer, WIDTH, visibleHeight - NAV_HEIGHT\)/)
+  assert.match(source, /this\.topHud\?\.setPosition\(0, visibleHeight \/ 2 - TOP_HUD_OFFSET, 0\)/)
+  assert.match(source, /this\.bossHud\?\.setPosition\(0, visibleHeight \/ 2 - BOSS_HUD_OFFSET, 0\)/)
+  assert.match(source, /this\.bottomNavigation\?\.setPosition\(0, -visibleHeight \/ 2 \+ NAV_HEIGHT \/ 2, 0\)/)
+  assert.doesNotMatch(source, /resizeNode\(this\.player/)
+})
+
 test('portrait bootstrap bridges flying sword action events to the player animator', () => {
   const source = readFileSync(resolve('assets/Scripts/Game/PortraitBattleBootstrap.ts'), 'utf8')
+  const skillSource = readFileSync(resolve('assets/Scripts/Game/FlyingSwordSkill.ts'), 'utf8')
 
   assert.match(source, /createFlyingSword\(effectLayer, runtime, animator/)
   assert.match(source, /skillNode\.on\('player-action-requested',\s*\(action: string\) => animator\.play\(action\)/)
-  assert.match(source, /skillNode\.on\('player-action-ended',\s*\(\) => animator\.play\('sword_ride'\)/)
+  assert.doesNotMatch(source, /player-action-ended/)
+  assert.match(skillSource, /this\.node\.emit\('player-action-requested', event\.action\)/)
+})
+
+test('portrait bootstrap stops runtime binding after ready, failed, or destroyed states', () => {
+  const source = readFileSync(resolve('assets/Scripts/Game/PortraitBattleBootstrap.ts'), 'utf8')
+
+  assert.match(source, /type RuntimeLoadState =/)
+  assert.match(source, /status: 'loading'/)
+  assert.match(source, /status: 'ready'/)
+  assert.match(source, /status: 'failed'/)
+  assert.match(source, /if \(this\.destroyed \|\| state\.status === 'failed'\)/)
+  assert.match(source, /if \(state\.status !== 'ready'\) return/)
+  assert.match(source, /skill\.battleRuntime = state\.runtime/)
+  assert.match(source, /private stopRuntimeBinding\(.*\)/)
+  assert.match(source, /this\.unschedule\(bindRuntime\)/)
+  assert.match(source, /onDestroy\(\)[\s\S]*this\.destroyed = true[\s\S]*this\.stopRuntimeBinding\(\)/)
 })

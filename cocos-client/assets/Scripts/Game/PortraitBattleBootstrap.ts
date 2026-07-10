@@ -41,16 +41,36 @@ interface BarParts {
   progress: ProgressBar
 }
 
+type RuntimeLoadState =
+  | { status: 'loading' }
+  | { status: 'ready'; runtime: BattleRuntimeController }
+  | { status: 'failed' }
+
 @ccclass('PortraitBattleBootstrap')
 export class PortraitBattleBootstrap extends Component {
+  private fullHeightNodes: Node[] = []
+  private farBackground: Node | null = null
   private midBackground: Node | null = null
+  private inputLayer: Node | null = null
+  private topHud: Node | null = null
+  private bossHud: Node | null = null
+  private bottomNavigation: Node | null = null
   private midDriftElapsed = 0
   private loadErrorLabel: Label | null = null
+  private bindRuntimeCallback: (() => void) | null = null
+  private destroyed = false
   private assembled = false
 
   onLoad() {
     view.setDesignResolutionSize(750, 1334, ResolutionPolicy.FIXED_WIDTH)
     this.assembleScene()
+    view.on('canvas-resize', this.relayoutVisibleArea, this)
+  }
+
+  onDestroy() {
+    this.destroyed = true
+    this.stopRuntimeBinding()
+    view.off('canvas-resize', this.relayoutVisibleArea, this)
   }
 
   update(deltaTime: number) {
@@ -80,10 +100,12 @@ export class PortraitBattleBootstrap extends Component {
     const worldLayer = this.createNode('WorldLayer', battleRoot, WIDTH, visibleHeight)
     const actorLayer = this.createNode('ActorLayer', battleRoot, WIDTH, visibleHeight)
     const effectLayer = this.createNode('EffectLayer', battleRoot, WIDTH, visibleHeight)
-    this.createNode('DropLayer', battleRoot, WIDTH, visibleHeight)
+    const dropLayer = this.createNode('DropLayer', battleRoot, WIDTH, visibleHeight)
     const inputLayer = this.createNode('InputLayer', battleRoot, WIDTH, visibleHeight - NAV_HEIGHT)
     inputLayer.setPosition(0, NAV_HEIGHT / 2, 0)
     const hudLayer = this.createNode('HudLayer', battleRoot, WIDTH, visibleHeight)
+    this.fullHeightNodes = [canvasNode, battleRoot, worldLayer, actorLayer, effectLayer, dropLayer, hudLayer]
+    this.inputLayer = inputLayer
 
     this.createWorld(worldLayer, backgroundWidth, visibleHeight)
     const { player, controller, animator } = this.createPlayer(actorLayer)
@@ -96,10 +118,29 @@ export class PortraitBattleBootstrap extends Component {
     player.setSiblingIndex(0)
   }
 
+  private relayoutVisibleArea() {
+    const visibleHeight = Math.max(HEIGHT, view.getVisibleSize().height)
+    const backgroundWidth = WIDTH * (visibleHeight / HEIGHT)
+
+    for (const node of this.fullHeightNodes) this.resizeNode(node, WIDTH, visibleHeight)
+    this.resizeNode(this.farBackground, backgroundWidth, visibleHeight)
+    this.resizeNode(this.midBackground, backgroundWidth, visibleHeight)
+    this.resizeNode(this.inputLayer, WIDTH, visibleHeight - NAV_HEIGHT)
+    this.inputLayer?.setPosition(0, NAV_HEIGHT / 2, 0)
+    this.topHud?.setPosition(0, visibleHeight / 2 - TOP_HUD_OFFSET, 0)
+    this.bossHud?.setPosition(0, visibleHeight / 2 - BOSS_HUD_OFFSET, 0)
+    this.bottomNavigation?.setPosition(0, -visibleHeight / 2 + NAV_HEIGHT / 2, 0)
+  }
+
+  private resizeNode(node: Node | null, width: number, height: number) {
+    node?.getComponent(UITransform)?.setContentSize(width, height)
+  }
+
   private createWorld(parent: Node, backgroundWidth: number, visibleHeight: number) {
     const far = this.createSpriteNode('FarBackground', parent, backgroundWidth, visibleHeight)
     const mid = this.createSpriteNode('MidBackground', parent, backgroundWidth, visibleHeight)
     mid.sprite.color = new Color(255, 255, 255, 168)
+    this.farBackground = far.node
     this.midBackground = mid.node
     this.loadSprite('Assets/World/MistBamboo/far/spriteFrame', far.sprite)
     this.loadSprite('Assets/World/MistBamboo/mid/spriteFrame', mid.sprite)
@@ -137,40 +178,54 @@ export class PortraitBattleBootstrap extends Component {
   private loadRuntime(parent: Node, enemySpawner: EnemySpawner) {
     const runtimeNode = this.createNode('Runtime', parent)
     const designPath = 'Data/cultivation-design'
-    let runtime: BattleRuntimeController | null = null
+    let state: RuntimeLoadState = { status: 'loading' }
     resources.load(designPath, JsonAsset, (error, asset) => {
+      if (this.destroyed) return
       if (error || !asset) {
+        state = { status: 'failed' }
         this.showLoadError(designPath)
         return
       }
-      runtime = runtimeNode.addComponent(BattleRuntimeController)
+      const runtime = runtimeNode.addComponent(BattleRuntimeController)
       runtime.designData = asset
       runtime.enemySpawner = enemySpawner
+      state = { status: 'ready', runtime }
     })
-    return () => runtime
+    return () => state
   }
 
   private createFlyingSword(
     parent: Node,
-    getRuntime: () => BattleRuntimeController | null,
+    getRuntime: () => RuntimeLoadState,
     animator: AtlasAnimator,
     visibleHeight: number,
   ) {
     const skillNode = this.createNode('FlyingSwordSkill', parent, WIDTH, visibleHeight)
+    this.fullHeightNodes.push(skillNode)
     const sword = this.createSpriteNode('Sword', skillNode, 144, 48)
     sword.node.active = false
     this.loadSprite('Assets/Skills/FlyingSword/sword_projectile/spriteFrame', sword.sprite)
     const skill = skillNode.addComponent(FlyingSwordSkill)
     skill.sword = sword.node
     skillNode.on('player-action-requested', (action: string) => animator.play(action), this)
-    skillNode.on('player-action-ended', () => animator.play('sword_ride'), this)
     const bindRuntime = () => {
-      const runtime = getRuntime()
-      if (!runtime) return
-      skill.battleRuntime = runtime
-      this.unschedule(bindRuntime)
+      const state = getRuntime()
+      if (this.destroyed || state.status === 'failed') {
+        this.stopRuntimeBinding(bindRuntime)
+        return
+      }
+      if (state.status !== 'ready') return
+      skill.battleRuntime = state.runtime
+      this.stopRuntimeBinding(bindRuntime)
     }
+    this.bindRuntimeCallback = bindRuntime
     this.schedule(bindRuntime)
+  }
+
+  private stopRuntimeBinding(bindRuntime = this.bindRuntimeCallback) {
+    if (!bindRuntime) return
+    this.unschedule(bindRuntime)
+    if (this.bindRuntimeCallback === bindRuntime) this.bindRuntimeCallback = null
   }
 
   private createInput(inputLayer: Node, player: PlayerController) {
@@ -186,6 +241,7 @@ export class PortraitBattleBootstrap extends Component {
 
   private createHud(parent: Node, visibleHeight: number) {
     const topHud = this.createNode('TopHud', parent, WIDTH, 126)
+    this.topHud = topHud
     topHud.setPosition(0, visibleHeight / 2 - TOP_HUD_OFFSET, 0)
     this.drawBand(topHud, WIDTH, 126, new Color(13, 24, 28, 214))
     const realmLabel = this.createLabel('RealmLabel', topHud, '筑基三重', 28, 190, 40)
@@ -202,6 +258,7 @@ export class PortraitBattleBootstrap extends Component {
     const soulLabel = this.createLabel('SoulLabel', soul.root, '魂 0/12', 18, 190, 28)
 
     const bossRoot = this.createNode('BossHud', parent, WIDTH, 62)
+    this.bossHud = bossRoot
     bossRoot.setPosition(0, visibleHeight / 2 - BOSS_HUD_OFFSET, 0)
     this.drawBand(bossRoot, WIDTH, 62, new Color(35, 13, 17, 220))
     const bossNameLabel = this.createLabel('BossNameLabel', bossRoot, '', 22, 170, 32)
@@ -210,6 +267,7 @@ export class PortraitBattleBootstrap extends Component {
     bossHealth.root.setPosition(120, 0, 0)
 
     const bottomNavigation = this.createNode('BottomNavigation', parent, WIDTH, NAV_HEIGHT)
+    this.bottomNavigation = bottomNavigation
     bottomNavigation.setPosition(0, -visibleHeight / 2 + NAV_HEIGHT / 2, 0)
     this.drawBand(bottomNavigation, WIDTH, NAV_HEIGHT, new Color(12, 22, 25, 238))
     const navLabels = ['战斗', '副本', '抽卡', '装备', '背包', '法宝']

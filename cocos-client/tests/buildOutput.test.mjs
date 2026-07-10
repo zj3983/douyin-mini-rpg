@@ -3,7 +3,12 @@ import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { checkCocosBuildOutput, compressScriptUuid } from '../tools/check-cocos-build-output.mjs'
+import { spawnSync } from 'node:child_process'
+import {
+  checkCocosBuildOutput,
+  compressScriptUuid,
+  verifyCocosBuildOutput,
+} from '../tools/check-cocos-build-output.mjs'
 
 const projectRoot = process.cwd()
 const meta = JSON.parse(readFileSync(resolve('assets/Scripts/Game/PortraitBattleBootstrap.ts.meta'), 'utf8'))
@@ -37,6 +42,57 @@ test('build-output check accepts a compiled script and serialized MainBattle com
   assert.equal(report.ok, true, report.errors.join('\n'))
   assert.equal(report.classId, classId)
   assert.equal(Boolean(report.sceneFile), true)
+})
+
+test('formal build verifier combines readiness and bootstrap output checks', () => {
+  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-verified-'))
+  writeFixture(buildRoot, 'assets/main/index.js', `PortraitBattleBootstrap ${classId}`)
+  writeFixture(buildRoot, 'assets/main/import/main-battle.json', `["MainBattle","${classId}"]`)
+
+  const missingIndex = verifyCocosBuildOutput({
+    buildRoot,
+    projectRoot,
+    creatorCommand: process.execPath,
+  })
+  assert.equal(missingIndex.ok, false)
+  assert.equal(missingIndex.readiness.blockers.some((blocker) => blocker.includes('index.html')), true)
+
+  writeFixture(buildRoot, 'index.html', '<!doctype html>')
+  const complete = verifyCocosBuildOutput({
+    buildRoot,
+    projectRoot,
+    creatorCommand: process.execPath,
+  })
+  assert.equal(complete.ok, true, complete.errors.join('\n'))
+})
+
+test('verify:build-output is mandatory and accepts an explicit build root', () => {
+  const packageJson = JSON.parse(readFileSync(resolve('package.json'), 'utf8'))
+  assert.equal(packageJson.scripts['verify:build-output'], 'node tools/check-cocos-build-output.mjs')
+
+  const missingRootEnv = { ...process.env }
+  delete missingRootEnv.COCOS_BUILD_ROOT
+  const missingRoot = spawnSync(process.execPath, ['tools/check-cocos-build-output.mjs'], {
+    cwd: projectRoot,
+    env: missingRootEnv,
+    encoding: 'utf8',
+  })
+  assert.equal(missingRoot.status, 2)
+
+  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-command-'))
+  writeFixture(buildRoot, 'index.html', '<!doctype html>')
+  writeFixture(buildRoot, 'assets/main/index.js', `PortraitBattleBootstrap ${classId}`)
+  writeFixture(buildRoot, 'assets/main/import/main-battle.json', `["MainBattle","${classId}"]`)
+  const verified = spawnSync(process.execPath, ['tools/check-cocos-build-output.mjs'], {
+    cwd: projectRoot,
+    env: {
+      ...process.env,
+      COCOS_BUILD_ROOT: buildRoot,
+      COCOS_CREATOR_PATH: process.execPath,
+    },
+    encoding: 'utf8',
+  })
+  assert.equal(verified.status, 0, `${verified.stdout}\n${verified.stderr}`)
 })
 
 test('explicit COCOS_BUILD_ROOT contains the portrait bootstrap', {
