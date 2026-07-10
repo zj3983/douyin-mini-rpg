@@ -15,6 +15,8 @@ export interface BattleRuntime {
   heroAttack: number
   spawnTimer: number
   spawnInterval: number
+  defeatTarget: number
+  maxAliveEnemies: number
   nextEnemyId: number
   enemies: BattleEnemy[]
   soulDrops: Array<{ enemyId: number; amount: number }>
@@ -59,6 +61,8 @@ export function createBattleRuntime(stage: StageProfile, heroAttack: number): Ba
     heroAttack,
     spawnTimer: 0,
     spawnInterval: 1,
+    defeatTarget: 12,
+    maxAliveEnemies: 18,
     nextEnemyId: 1,
     enemies: [],
     soulDrops: [],
@@ -71,11 +75,23 @@ export function createBattleRuntime(stage: StageProfile, heroAttack: number): Ba
 }
 
 export function nextSpawn(runtime: BattleRuntime, deltaTime: number) {
+  const pool = runtime.stage.enemies.filter((enemy) => enemy.role !== 'boss')
+  const bossAlive = runtime.enemies.some((enemy) => enemy.profile.role === 'boss' && enemy.alive)
+  const aliveOrdinaryEnemies = runtime.enemies.filter((enemy) => enemy.profile.role !== 'boss' && enemy.alive).length
+  if (
+    pool.length === 0
+    || runtime.stageCleared
+    || defeatedOrdinaryEnemies(runtime) >= runtime.defeatTarget
+    || bossAlive
+    || aliveOrdinaryEnemies >= runtime.maxAliveEnemies
+  ) {
+    return { ok: false, enemy: null }
+  }
+
   runtime.spawnTimer += deltaTime
   if (runtime.spawnTimer < runtime.spawnInterval) return { ok: false, enemy: null }
 
   runtime.spawnTimer = 0
-  const pool = runtime.stage.enemies.filter((enemy) => enemy.role !== 'boss')
   const profile = pool[(runtime.nextEnemyId - 1) % pool.length]
   const enemy: BattleEnemy = {
     id: runtime.nextEnemyId,
@@ -123,8 +139,165 @@ export function applyFlyingSwordHit(
   return { hitCount: targets.length, damageEvents, defeatedEnemyIds, stageClear }
 }
 
+export function applyFlyingSwordPathHit(
+  runtime: BattleRuntime,
+  pierce: number,
+  damageScale: number,
+  path: { points: Array<{ x: number; y: number }>; width: number },
+) {
+  const targets = segmentHitEnemiesAlongPath(runtime, { ...path, pierce })
+  const damage = Math.round(runtime.heroAttack * damageScale)
+  const damageEvents: DamageEvent[] = []
+  const defeatedEnemyIds: number[] = []
+  let stageClear = false
+  for (const enemy of targets) {
+    enemy.hp -= damage
+    damageEvents.push({
+      enemyId: enemy.id,
+      damage,
+      remainingHp: Math.max(0, enemy.hp),
+      position: { ...enemy.position },
+    })
+    if (enemy.hp <= 0 && defeatEnemy(runtime, enemy.id)) {
+      defeatedEnemyIds.push(enemy.id)
+      if (enemy.profile.role === 'boss') {
+        runtime.stageCleared = true
+        stageClear = true
+      }
+    }
+  }
+  return { hitCount: targets.length, damageEvents, defeatedEnemyIds, stageClear }
+}
+
+export interface ContactDamageGate {
+  health: number
+  maxHealth: number
+  cooldown: number
+  cooldownRemaining: number
+}
+
+export interface StageSettlementState {
+  generation: number
+  pending: boolean
+  settled: boolean
+}
+
+export type BattleAttemptStatus = 'active' | 'defeated' | 'cleared'
+
+export interface BattleAttemptState {
+  generation: number
+  stageNumber: number
+  status: BattleAttemptStatus
+}
+
+export function createBattleAttemptState(generation: number, stageNumber: number): BattleAttemptState {
+  return {
+    generation: Math.max(0, Math.floor(generation)),
+    stageNumber: Math.max(1, Math.floor(stageNumber)),
+    status: 'active',
+  }
+}
+
+export function beginBattleAttempt(previous: BattleAttemptState, stageNumber: number) {
+  return createBattleAttemptState(previous.generation + 1, stageNumber)
+}
+
+export function markBattleAttemptDefeated(state: BattleAttemptState) {
+  if (state.status !== 'active') return false
+  state.status = 'defeated'
+  return true
+}
+
+export function markBattleAttemptCleared(state: BattleAttemptState) {
+  if (state.status !== 'active') return false
+  state.status = 'cleared'
+  return true
+}
+
+export function isBattleAttemptCallbackCurrent(
+  state: BattleAttemptState,
+  generation: number,
+  status: BattleAttemptStatus,
+) {
+  return state.generation === generation && state.status === status
+}
+
+export function createStageSettlementState(generation: number): StageSettlementState {
+  return {
+    generation: Math.max(0, Math.floor(generation)),
+    pending: false,
+    settled: false,
+  }
+}
+
+export function scheduleBossSettlement(state: StageSettlementState) {
+  if (state.pending || state.settled) return null
+  state.pending = true
+  return state.generation
+}
+
+export function completeBossSettlement(state: StageSettlementState, generation: number) {
+  if (generation !== state.generation || !state.pending || state.settled) return false
+  state.pending = false
+  state.settled = true
+  return true
+}
+
+export function canSummonWorldBoss(
+  stats: { bossReady: boolean; bossAlive: boolean; aliveOrdinaryEnemies: number },
+  pendingDeathRecycles: number,
+) {
+  return stats.bossReady
+    && !stats.bossAlive
+    && stats.aliveOrdinaryEnemies === 0
+    && pendingDeathRecycles === 0
+}
+
+export function normalizeSoulHudCount(current: number, required: number) {
+  const safeRequired = Number.isFinite(required) ? Math.max(0, Math.floor(required)) : 0
+  const safeCurrent = Number.isFinite(current) ? Math.max(0, Math.floor(current)) : 0
+  return {
+    current: Math.min(safeCurrent, safeRequired),
+    required: safeRequired,
+  }
+}
+
+export function createContactDamageGate(input: { maxHealth: number; cooldown: number }): ContactDamageGate {
+  const maxHealth = Math.max(1, Math.floor(input.maxHealth))
+  return {
+    health: maxHealth,
+    maxHealth,
+    cooldown: Math.max(0, input.cooldown),
+    cooldownRemaining: 0,
+  }
+}
+
+export function tickContactDamageGate(gate: ContactDamageGate, deltaTime: number) {
+  gate.cooldownRemaining = Math.max(0, gate.cooldownRemaining - Math.max(0, deltaTime))
+}
+
+export function applyContactDamage(gate: ContactDamageGate, damage: number) {
+  if (gate.health <= 0 || gate.cooldownRemaining > 0) return false
+  applyDirectDamage(gate, damage)
+  gate.cooldownRemaining = gate.cooldown
+  return true
+}
+
+export function applyDirectDamage(gate: ContactDamageGate, damage: number) {
+  if (gate.health <= 0) return false
+  gate.health = Math.max(0, gate.health - Math.max(0, damage))
+  return true
+}
+
 export function spawnBoss(runtime: BattleRuntime) {
-  if (runtime.bossSpawned || runtime.stageCleared) return { ok: false, enemy: null }
+  if (
+    runtime.bossSpawned
+    || runtime.stageCleared
+    || defeatedOrdinaryEnemies(runtime) < runtime.defeatTarget
+    || aliveOrdinaryEnemies(runtime) > 0
+  ) {
+    return { ok: false, enemy: null }
+  }
 
   const profile = runtime.stage.boss
   const enemy: BattleEnemy = {
@@ -212,6 +385,44 @@ export function segmentHitEnemies(
     .map((hit) => hit.enemy)
 }
 
+export function segmentHitEnemiesAlongPath(
+  runtime: BattleRuntime,
+  input: { points: Array<{ x: number; y: number }>; width: number; pierce: number },
+) {
+  if (input.points.length < 2) return []
+  const seen = new Set<number>()
+  const hits: Array<{ enemy: BattleEnemy; progress: number }> = []
+  for (let index = 0; index < input.points.length - 1; index += 1) {
+    const from = input.points[index]
+    const to = input.points[index + 1]
+    for (const enemy of runtime.enemies) {
+      if (!enemy.alive || seen.has(enemy.id)) continue
+      const projection = projectPointToSegment(enemy.position, from, to)
+      if (projection.distance > enemy.radius + input.width) continue
+      seen.add(enemy.id)
+      hits.push({ enemy, progress: index + projection.t })
+    }
+  }
+  return hits
+    .sort((a, b) => a.progress - b.progress)
+    .slice(0, Math.max(0, input.pierce))
+    .map(({ enemy }) => enemy)
+}
+
+export function rollbackSpawnedEnemy(runtime: BattleRuntime, enemyId: number) {
+  const index = runtime.enemies.findIndex((enemy) => enemy.id === enemyId)
+  if (index < 0) return false
+  const [enemy] = runtime.enemies.splice(index, 1)
+  if (enemy.profile.role !== 'boss') return true
+  runtime.bossSpawned = false
+  runtime.bossSkillTimer = 0
+  return true
+}
+
+export function rollbackBossSpawn(runtime: BattleRuntime, enemyId: number) {
+  return rollbackSpawnedEnemy(runtime, enemyId)
+}
+
 function projectPointToSegment(point: { x: number; y: number }, from: { x: number; y: number }, to: { x: number; y: number }) {
   const dx = to.x - from.x
   const dy = to.y - from.y
@@ -237,10 +448,20 @@ export function defeatEnemy(runtime: BattleRuntime, enemyId: number) {
 export function runtimeStats(runtime: BattleRuntime) {
   return {
     aliveEnemies: runtime.enemies.filter((enemy) => enemy.alive).length,
-    defeatedEnemies: runtime.enemies.filter((enemy) => !enemy.alive).length,
+    aliveOrdinaryEnemies: aliveOrdinaryEnemies(runtime),
+    defeatedEnemies: defeatedOrdinaryEnemies(runtime),
+    bossReady: defeatedOrdinaryEnemies(runtime) >= runtime.defeatTarget,
     soulDrops: runtime.soulDrops.length,
     bossAlive: runtime.enemies.some((enemy) => enemy.profile.role === 'boss' && enemy.alive),
     stageCleared: runtime.stageCleared,
     stageClearClaimed: runtime.stageClearClaimed,
   }
+}
+
+function defeatedOrdinaryEnemies(runtime: BattleRuntime): number {
+  return runtime.enemies.filter((enemy) => enemy.profile.role !== 'boss' && !enemy.alive).length
+}
+
+function aliveOrdinaryEnemies(runtime: BattleRuntime): number {
+  return runtime.enemies.filter((enemy) => enemy.profile.role !== 'boss' && enemy.alive).length
 }

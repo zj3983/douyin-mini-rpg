@@ -1,0 +1,134 @@
+{
+  "ver": "1.0.27",
+  "importer": "image",
+  "imported": true,
+  "uuid": "bc2fe44b-13bd-4be4-8205-e8248901d0dc",
+  "files": [
+    ".json",
+    ".png"
+  ],
+  "subMetas": {
+    "6c48a": {
+      "importer": "texture",
+      "uuid": "bc2fe44b-13bd-4be4-8205-e8248901d0dc@6c48a",
+      "displayName": "moss-wolf-strip",
+      "id": "6c48a",
+      "name": "texture",
+      "userData": {
+        "wrapModeS": "clamp-to-edge",
+        "wrapModeT": "clamp-to-edge",
+        "imageUuidOrDatabaseUri": "bc2fe44b-13bd-4be4-8205-e8248901d0dc",
+        "isUuid": true,
+        "visible": false,
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "none",
+        "anisotropy": 0
+      },
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "f9941": {
+      "importer": "sprite-frame",
+      "uuid": "bc2fe44b-13bd-4be4-8205-e8248901d0dc@f9941",
+      "displayName": "moss-wolf-strip",
+      "id": "f9941",
+      "name": "spriteFrame",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": -135.5,
+        "trimX": 28,
+        "trimY": 299,
+        "width": 1864,
+        "height": 185,
+        "rawWidth": 1920,
+        "rawHeight": 512,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [
+            -932,
+            -92.5,
+            0,
+            932,
+            -92.5,
+            0,
+            -932,
+            92.5,
+            0,
+            932,
+            92.5,
+            0
+          ],
+          "indexes": [
+            0,
+            1,
+            2,
+            2,
+            1,
+            3
+          ],
+          "uv": [
+            28,
+            213,
+            1892,
+            213,
+            28,
+            28,
+            1892,
+            28
+          ],
+          "nuv": [
+            0.014583333333333334,
+            0.0546875,
+            0.9854166666666667,
+            0.0546875,
+            0.014583333333333334,
+            0.416015625,
+            0.9854166666666667,
+            0.416015625
+          ],
+          "minPos": [
+            -932,
+            -92.5,
+            0
+          ],
+          "maxPos": [
+            932,
+            92.5,
+            0
+          ]
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "bc2fe44b-13bd-4be4-8205-e8248901d0dc@6c48a",
+        "atlasUuid": "",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "type": "sprite-frame",
+    "fixAlphaTransparencyArtifacts": false,
+    "hasAlpha": true,
+    "redirect": "bc2fe44b-13bd-4be4-8205-e8248901d0dc@6c48a"
+  }
+}

@@ -13,12 +13,23 @@ def trim_alpha_bounds(image: Image.Image) -> Image.Image:
     return rgba.crop(bounds)
 
 
-def center_on_canvas(image: Image.Image, size: tuple[int, int]) -> Image.Image:
+def center_on_canvas(
+    image: Image.Image,
+    size: tuple[int, int],
+    padding: int = 28,
+    vertical_align: str = "center",
+) -> Image.Image:
+    inner_size = (size[0] - 2 * padding, size[1] - 2 * padding)
+    if padding < 0 or inner_size[0] <= 0 or inner_size[1] <= 0:
+        raise ValueError(f"Padding {padding} leaves no drawable area in frame {size[0]}x{size[1]}")
+    if vertical_align not in ("center", "bottom"):
+        raise ValueError(f"Unsupported vertical alignment: {vertical_align}")
+
     canvas = Image.new("RGBA", size, (0, 0, 0, 0))
     subject = image.copy()
-    subject.thumbnail((size[0], size[1]), Image.Resampling.LANCZOS)
+    subject.thumbnail(inner_size, Image.Resampling.LANCZOS)
     x = (size[0] - subject.width) // 2
-    y = (size[1] - subject.height) // 2
+    y = (size[1] - subject.height) // 2 if vertical_align == "center" else size[1] - padding - subject.height
     canvas.alpha_composite(subject, (x, y))
     return canvas
 
@@ -30,7 +41,19 @@ def pack_horizontal_strip(frames: list[Image.Image], frame_size: tuple[int, int]
     return strip
 
 
-def build_frame_strip(input_dir: Path, output: Path, frame_size: tuple[int, int], limit: int | None) -> None:
+def build_frame_strip(
+    input_dir: Path,
+    output: Path,
+    frame_size: tuple[int, int],
+    limit: int | None,
+    padding: int = 28,
+    vertical_align: str = "center",
+) -> None:
+    if padding < 0 or frame_size[0] - 2 * padding <= 0 or frame_size[1] - 2 * padding <= 0:
+        raise SystemExit(
+            f"Padding {padding} leaves no drawable area in frame {frame_size[0]}x{frame_size[1]}"
+        )
+
     sources = sorted(input_dir.glob("*.png"))
     if limit:
         sources = sources[:limit]
@@ -40,7 +63,7 @@ def build_frame_strip(input_dir: Path, output: Path, frame_size: tuple[int, int]
     frames = []
     for source in sources:
         image = Image.open(source)
-        frames.append(center_on_canvas(trim_alpha_bounds(image), frame_size))
+        frames.append(center_on_canvas(trim_alpha_bounds(image), frame_size, padding, vertical_align))
 
     output.parent.mkdir(parents=True, exist_ok=True)
     pack_horizontal_strip(frames, frame_size).save(output, "PNG", optimize=True)
@@ -52,10 +75,19 @@ def main() -> None:
     parser.add_argument("--output", required=True, type=Path, help="Output horizontal strip PNG path.")
     parser.add_argument("--frame-width", type=int, default=256)
     parser.add_argument("--frame-height", type=int, default=256)
+    parser.add_argument("--padding", type=int, default=28, help="Transparent padding inside each output frame.")
+    parser.add_argument("--vertical-align", choices=("center", "bottom"), default="center")
     parser.add_argument("--limit", type=int, default=None, help="Optional maximum number of frames to pack.")
     args = parser.parse_args()
 
-    build_frame_strip(args.input_dir, args.output, (args.frame_width, args.frame_height), args.limit)
+    build_frame_strip(
+        args.input_dir,
+        args.output,
+        (args.frame_width, args.frame_height),
+        args.limit,
+        args.padding,
+        args.vertical_align,
+    )
 
 
 if __name__ == "__main__":

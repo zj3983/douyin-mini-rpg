@@ -1,6 +1,6 @@
 import { existsSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { join, relative, sep } from 'node:path'
+import { join, relative, resolve, sep } from 'node:path'
 
 const defaultCreatorCandidates = [
   'D:/CocosCreator/CocosCreator.exe',
@@ -13,6 +13,7 @@ export function checkCocosBuildReadiness(options = {}) {
   const projectRoot = options.projectRoot ?? process.cwd()
   const files = options.files ?? null
   const creatorCommand = options.creatorCommand ?? process.env.COCOS_CREATOR_PATH ?? findCreatorCommand()
+  const buildRoot = options.buildRoot ? resolve(options.buildRoot) : null
   const blockers = []
 
   if (!creatorCommand) {
@@ -27,13 +28,18 @@ export function checkCocosBuildReadiness(options = {}) {
     blockers.push('settings is missing Creator build configuration, such as settings/v2/packages/builder.json.')
   }
 
-  if (!hasPath(projectRoot, 'build/web-mobile/index.html', files)) {
-    blockers.push('build/web-mobile/index.html is missing; run a Cocos web-mobile build before deployment can serve it.')
+  const hasBuildIndex = buildRoot
+    ? existsSync(join(buildRoot, 'index.html'))
+    : hasPath(projectRoot, 'build/web-mobile/index.html', files)
+  if (!hasBuildIndex) {
+    const expectedIndex = buildRoot ? join(buildRoot, 'index.html') : 'build/web-mobile/index.html'
+    blockers.push(`${expectedIndex} is missing; run a Cocos web-mobile build before deployment can serve it.`)
   }
 
   return {
     ready: blockers.length === 0,
     creatorCommand,
+    buildRoot,
     blockers,
   }
 }
