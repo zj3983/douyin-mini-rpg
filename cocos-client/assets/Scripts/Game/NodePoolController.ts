@@ -1,5 +1,12 @@
 import { _decorator, Component, instantiate, Node, Prefab } from 'cc'
-import { createPoolState, despawnFromPool, poolStats, PoolState, spawnFromPool } from '../Core/PoolingRuntime'
+import {
+  createPoolState,
+  despawnAllFromPool,
+  despawnFromPool,
+  poolStats,
+  PoolState,
+  spawnFromPool,
+} from '../Core/PoolingRuntime'
 import { PoolableActor } from './PoolableActor'
 
 const { ccclass, property } = _decorator
@@ -75,6 +82,17 @@ export class NodePoolController extends Component {
 
     despawnFromPool(this.state, poolable.poolId)
     poolable.onDespawn()
+  }
+
+  despawnAll() {
+    const activeIds = new Set(despawnAllFromPool(this.state))
+    for (const [poolId, node] of this.nodes) {
+      if (!activeIds.has(poolId)) continue
+      const poolable = node.getComponent(PoolableActor)
+      if (poolable) poolable.onDespawn()
+      else node.active = false
+    }
+    return activeIds.size
   }
 
   private despawnByEvent(poolKey: string, poolId: number, node: Node) {

@@ -219,6 +219,7 @@ export class PortraitBattleBootstrap extends Component {
       runtime.hud = bindings.hud
       runtime.stageClearPanel = bindings.stageClearPanel
       bindings.stageClearPanel.onContinue = (nextStageId) => runtime.advanceToStage(nextStageId)
+      bindings.stageClearPanel.onRetry = () => runtime.retryCurrentStage()
       runtime.initialize()
       state = { status: 'ready', runtime }
     })

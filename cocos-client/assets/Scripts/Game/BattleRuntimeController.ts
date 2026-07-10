@@ -5,15 +5,20 @@ import {
   applyFlyingSwordPathHit,
   BattleEnemy,
   BattleRuntime,
+  beginBattleAttempt,
   canSummonWorldBoss,
   claimStageClear as claimStageClearRuntime,
   completeBossSettlement,
+  createBattleAttemptState,
   createBattleRuntime,
   createContactDamageGate,
   createStageSettlementState,
+  isBattleAttemptCallbackCurrent,
+  markBattleAttemptCleared,
+  markBattleAttemptDefeated,
   nextSpawn,
   runtimeStats,
-  rollbackBossSpawn,
+  rollbackSpawnedEnemy,
   scheduleBossSettlement,
   spawnBoss,
   tickBossSkill as tickBossSkillRuntime,
@@ -51,6 +56,7 @@ export class BattleRuntimeController extends Component {
   @property playerMaxHealth = 220
   @property contactDamageCooldown = 0.65
   @property bossDeathSettleDelay = 0.55
+  @property playerDefeatPanelDelay = 0.35
 
   private runtime: BattleRuntime | null = null
   private enemyNodes = new Map<number, Node>()
@@ -62,6 +68,7 @@ export class BattleRuntimeController extends Component {
   private battleFrozen = false
   private stageGeneration = 0
   private stageSettlement = createStageSettlementState(0)
+  private attemptState = createBattleAttemptState(0, 1)
 
   start() {
     this.initialize()
@@ -77,8 +84,11 @@ export class BattleRuntimeController extends Component {
   advanceToStage(stageNumber: number) {
     this.recycleAllEnemies()
     this.rebuildRuntime(stageNumber)
-    this.stageClearPanel?.hide()
     return { ok: Boolean(this.runtime), stageNumber: this.stageNumber }
+  }
+
+  retryCurrentStage() {
+    return this.advanceToStage(this.attemptState.stageNumber)
   }
 
   advanceToNextStageFromPanel() {
@@ -92,7 +102,9 @@ export class BattleRuntimeController extends Component {
     tickContactDamageGate(this.damageGate, deltaTime)
     if (this.enemySpawner?.canSpawn() !== false) {
       const spawn = nextSpawn(this.runtime, deltaTime)
-      if (spawn.ok && spawn.enemy) this.spawnRuntimeEnemy(spawn.enemy)
+      if (spawn.ok && spawn.enemy && !this.spawnRuntimeEnemy(spawn.enemy)) {
+        rollbackSpawnedEnemy(this.runtime, spawn.enemy.id)
+      }
     }
     this.trySpawnBoss()
     this.tickBossSkill(deltaTime)
@@ -125,9 +137,11 @@ export class BattleRuntimeController extends Component {
 
   private rebuildRuntime(stageNumber: number) {
     if (!this.designData) return
-    this.stageGeneration += 1
-    this.stageSettlement = createStageSettlementState(this.stageGeneration)
+    this.soulOrbPool?.despawnAll()
     this.stageNumber = Math.max(1, Math.floor(stageNumber || 1))
+    this.attemptState = beginBattleAttempt(this.attemptState, this.stageNumber)
+    this.stageGeneration = this.attemptState.generation
+    this.stageSettlement = createStageSettlementState(this.stageGeneration)
     const stage = stageProfileFromDesign(this.designData.json as CultivationDesignData, this.stageNumber)
     this.runtime = createBattleRuntime(stage, this.heroAttack)
     this.pendingEnemyRecycles = 0
@@ -137,6 +151,7 @@ export class BattleRuntimeController extends Component {
     })
     this.soulCollected = 0
     this.battleFrozen = false
+    this.stageClearPanel?.hide()
     this.refreshHeroHealth()
     this.hud?.updateStage(stage.name, this.stageNumber)
     this.hud?.updateSoul(0, this.runtime.defeatTarget)
@@ -164,7 +179,7 @@ export class BattleRuntimeController extends Component {
     if (!result.ok || !result.enemy) return false
     const node = this.spawnRuntimeEnemy(result.enemy)
     if (!node) {
-      rollbackBossSpawn(this.runtime, result.enemy.id)
+      rollbackSpawnedEnemy(this.runtime, result.enemy.id)
       return false
     }
     return true
@@ -266,7 +281,11 @@ export class BattleRuntimeController extends Component {
     const controller = orb.getComponent(SoulOrbController)
     if (!controller) return
     controller.follow(this.playerNode, amount)
-    controller.onPicked = (picked) => this.collectSoul(picked)
+    const generation = this.stageGeneration
+    controller.onPicked = (picked) => {
+      if (!isBattleAttemptCallbackCurrent(this.attemptState, generation, 'active')) return
+      this.collectSoul(picked)
+    }
   }
 
   private collectSoul(amount: number) {
@@ -291,9 +310,15 @@ export class BattleRuntimeController extends Component {
     if (!applied) return
     this.refreshHeroHealth()
     this.playerNode?.emit('player-hit', damage)
-    if (this.damageGate.health <= 0) {
+    if (this.damageGate.health <= 0 && markBattleAttemptDefeated(this.attemptState)) {
       this.battleFrozen = true
+      this.playerNode?.emit('player-action-requested', 'death')
       this.playerNode?.emit('player-defeated')
+      const generation = this.stageGeneration
+      this.scheduleOnce(() => {
+        if (!isBattleAttemptCallbackCurrent(this.attemptState, generation, 'defeated')) return
+        this.stageClearPanel?.showDefeat(this.stageNumber)
+      }, this.playerDefeatPanelDelay)
     }
   }
 
@@ -312,6 +337,7 @@ export class BattleRuntimeController extends Component {
   }
 
   private finishStage() {
+    if (!markBattleAttemptCleared(this.attemptState)) return
     this.battleFrozen = true
     this.hud?.hideBoss()
     const result = this.runtime ? claimStageClearRuntime(this.runtime) : null

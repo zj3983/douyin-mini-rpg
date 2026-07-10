@@ -182,6 +182,46 @@ export interface StageSettlementState {
   settled: boolean
 }
 
+export type BattleAttemptStatus = 'active' | 'defeated' | 'cleared'
+
+export interface BattleAttemptState {
+  generation: number
+  stageNumber: number
+  status: BattleAttemptStatus
+}
+
+export function createBattleAttemptState(generation: number, stageNumber: number): BattleAttemptState {
+  return {
+    generation: Math.max(0, Math.floor(generation)),
+    stageNumber: Math.max(1, Math.floor(stageNumber)),
+    status: 'active',
+  }
+}
+
+export function beginBattleAttempt(previous: BattleAttemptState, stageNumber: number) {
+  return createBattleAttemptState(previous.generation + 1, stageNumber)
+}
+
+export function markBattleAttemptDefeated(state: BattleAttemptState) {
+  if (state.status !== 'active') return false
+  state.status = 'defeated'
+  return true
+}
+
+export function markBattleAttemptCleared(state: BattleAttemptState) {
+  if (state.status !== 'active') return false
+  state.status = 'cleared'
+  return true
+}
+
+export function isBattleAttemptCallbackCurrent(
+  state: BattleAttemptState,
+  generation: number,
+  status: BattleAttemptStatus,
+) {
+  return state.generation === generation && state.status === status
+}
+
 export function createStageSettlementState(generation: number): StageSettlementState {
   return {
     generation: Math.max(0, Math.floor(generation)),
@@ -369,15 +409,18 @@ export function segmentHitEnemiesAlongPath(
     .map(({ enemy }) => enemy)
 }
 
-export function rollbackBossSpawn(runtime: BattleRuntime, enemyId: number) {
-  const index = runtime.enemies.findIndex((enemy) => (
-    enemy.id === enemyId && enemy.profile.role === 'boss'
-  ))
+export function rollbackSpawnedEnemy(runtime: BattleRuntime, enemyId: number) {
+  const index = runtime.enemies.findIndex((enemy) => enemy.id === enemyId)
   if (index < 0) return false
-  runtime.enemies.splice(index, 1)
+  const [enemy] = runtime.enemies.splice(index, 1)
+  if (enemy.profile.role !== 'boss') return true
   runtime.bossSpawned = false
   runtime.bossSkillTimer = 0
   return true
+}
+
+export function rollbackBossSpawn(runtime: BattleRuntime, enemyId: number) {
+  return rollbackSpawnedEnemy(runtime, enemyId)
 }
 
 function projectPointToSegment(point: { x: number; y: number }, from: { x: number; y: number }, to: { x: number; y: number }) {

@@ -284,6 +284,36 @@ test('boss settlement generation rejects stale and duplicate delayed callbacks',
   assert.equal(battleRuntimeModule.completeBossSettlement(state, token), false)
 })
 
+test('defeat and retry advance the battle attempt generation without page refresh', () => {
+  assert.equal(typeof battleRuntimeModule.createBattleAttemptState, 'function')
+  const attempt = battleRuntimeModule.createBattleAttemptState(7, 3)
+
+  assert.equal(battleRuntimeModule.markBattleAttemptDefeated(attempt), true)
+  assert.equal(battleRuntimeModule.markBattleAttemptDefeated(attempt), false)
+  assert.equal(battleRuntimeModule.isBattleAttemptCallbackCurrent(attempt, 7, 'defeated'), true)
+  assert.equal(battleRuntimeModule.isBattleAttemptCallbackCurrent(attempt, 6, 'defeated'), false)
+
+  const retry = battleRuntimeModule.beginBattleAttempt(attempt, attempt.stageNumber)
+  assert.deepEqual(retry, { generation: 8, stageNumber: 3, status: 'active' })
+  assert.equal(battleRuntimeModule.isBattleAttemptCallbackCurrent(retry, 7, 'defeated'), false)
+})
+
+test('generic spawned enemy rollback removes ordinary and boss runtime entries', () => {
+  assert.equal(typeof battleRuntimeModule.rollbackSpawnedEnemy, 'function')
+  const ordinaryRuntime = createBattleRuntime({ stageId: 1, heroAttack: 80 })
+  const ordinary = nextSpawn(ordinaryRuntime, 1.1).enemy
+  assert.equal(battleRuntimeModule.rollbackSpawnedEnemy(ordinaryRuntime, ordinary.id), true)
+  assert.equal(runtimeStats(ordinaryRuntime).aliveEnemies, 0)
+  assert.equal(nextSpawn(ordinaryRuntime, 1.1).ok, true)
+
+  const bossRuntime = createBattleRuntime({ stageId: 1, heroAttack: 80 })
+  defeatOrdinaryEnemies(bossRuntime)
+  const boss = spawnBoss(bossRuntime).enemy
+  assert.equal(battleRuntimeModule.rollbackSpawnedEnemy(bossRuntime, boss.id), true)
+  assert.equal(bossRuntime.bossSpawned, false)
+  assert.equal(spawnBoss(bossRuntime).ok, true)
+})
+
 test('boss casts timed skill events while alive', () => {
   const runtime = createBattleRuntime({ stageId: 3, heroAttack: 80 })
   defeatOrdinaryEnemies(runtime)

@@ -47,6 +47,12 @@ export function despawnFromPool(pool: PoolState, id: number) {
   return true
 }
 
+export function despawnAllFromPool(pool: PoolState) {
+  const activeIds = pool.items.filter((item) => item.active).map((item) => item.id)
+  for (const item of pool.items) item.active = false
+  return activeIds
+}
+
 export function poolStats(pool: PoolState) {
   return {
     kind: pool.kind,

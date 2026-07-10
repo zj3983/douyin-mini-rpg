@@ -61,12 +61,47 @@ test('boss spawn and settlement honor live enemies, pool rollback, and delayed g
   const source = read('assets/Scripts/Game/BattleRuntimeController.ts')
 
   assert.match(source, /canSummonWorldBoss\(stats, this\.pendingEnemyRecycles\)/)
-  assert.match(source, /rollbackBossSpawn\(this\.runtime, result\.enemy\.id\)/)
+  assert.match(source, /rollbackSpawnedEnemy\(this\.runtime, result\.enemy\.id\)/)
   assert.match(source, /bossDeathSettleDelay/)
   assert.match(source, /scheduleBossSettlement/)
   assert.match(source, /completeBossSettlement/)
   assert.match(source, /Math\.max\(this\.deathRecycleDelay, this\.bossDeathSettleDelay\)/)
   assert.doesNotMatch(source, /if \(result\.stageClear\) this\.finishStage\(\)/)
+})
+
+test('defeat panel retries the current stage after a guarded death presentation', () => {
+  const runtime = read('assets/Scripts/Game/BattleRuntimeController.ts')
+  const panel = read('assets/Scripts/Game/StageClearPanelController.ts')
+  const bootstrap = read('assets/Scripts/Game/PortraitBattleBootstrap.ts')
+
+  assert.match(runtime, /markBattleAttemptDefeated/)
+  assert.match(runtime, /emit\('player-action-requested', 'death'\)/)
+  assert.match(runtime, /showDefeat\(this\.stageNumber\)/)
+  assert.match(runtime, /retryCurrentStage\(\)/)
+  assert.match(panel, /showDefeat\(stageNumber: number\)/)
+  assert.match(panel, /试炼失败/)
+  assert.match(panel, /重新挑战/)
+  assert.match(panel, /onRetry/)
+  assert.match(bootstrap, /onRetry = \(\) => runtime\.retryCurrentStage\(\)/)
+  assert.doesNotMatch(panel, /location\.reload|scheduleOnce/)
+})
+
+test('stage changes clear soul nodes and reject stale pickup callbacks', () => {
+  const runtime = read('assets/Scripts/Game/BattleRuntimeController.ts')
+  const pool = read('assets/Scripts/Game/NodePoolController.ts')
+
+  assert.match(pool, /despawnAll\(\)/)
+  assert.match(runtime, /this\.soulOrbPool\?\.despawnAll\(\)/)
+  assert.match(runtime, /const generation = this\.stageGeneration/)
+  assert.match(runtime, /isBattleAttemptCallbackCurrent\(this\.attemptState, generation, 'active'\)/)
+})
+
+test('all failed visual spawns use the generic runtime rollback', () => {
+  const runtime = read('assets/Scripts/Game/BattleRuntimeController.ts')
+
+  assert.match(runtime, /rollbackSpawnedEnemy\(this\.runtime, spawn\.enemy\.id\)/)
+  assert.match(runtime, /rollbackSpawnedEnemy\(this\.runtime, result\.enemy\.id\)/)
+  assert.doesNotMatch(runtime, /rollbackBossSpawn/)
 })
 
 test('battle controller uses a real contact damage gate and zero-health defeat state', () => {
@@ -77,7 +112,7 @@ test('battle controller uses a real contact damage gate and zero-health defeat s
   assert.match(controller, /tickContactDamageGate\(this\.damageGate, deltaTime\)/)
   assert.match(controller, /applyContactDamage\(this\.damageGate, damage\)/)
   assert.match(controller, /applyDirectDamage\(this\.damageGate, damage\)/)
-  assert.match(controller, /if \(this\.damageGate\.health <= 0\)/)
+  assert.match(controller, /if \(this\.damageGate\.health <= 0 && markBattleAttemptDefeated\(this\.attemptState\)\)/)
   assert.match(enemy, /role === 'boss' \? 10 : 3/)
 })
 

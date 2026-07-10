@@ -204,13 +204,18 @@ export function segmentHitEnemiesAlongPath(runtime, { points, width, pierce }) {
     .map(({ enemy }) => enemy)
 }
 
-export function rollbackBossSpawn(runtime, enemyId) {
-  const index = runtime.enemies.findIndex((enemy) => enemy.id === enemyId && enemy.role === 'boss')
+export function rollbackSpawnedEnemy(runtime, enemyId) {
+  const index = runtime.enemies.findIndex((enemy) => enemy.id === enemyId)
   if (index < 0) return false
-  runtime.enemies.splice(index, 1)
+  const [enemy] = runtime.enemies.splice(index, 1)
+  if (enemy.role !== 'boss') return true
   runtime.bossSpawned = false
   runtime.bossSkillTimer = 0
   return true
+}
+
+export function rollbackBossSpawn(runtime, enemyId) {
+  return rollbackSpawnedEnemy(runtime, enemyId)
 }
 
 export function createContactDamageGate({ maxHealth, cooldown }) {
@@ -229,6 +234,34 @@ export function createStageSettlementState(generation) {
     pending: false,
     settled: false,
   }
+}
+
+export function createBattleAttemptState(generation, stageNumber) {
+  return {
+    generation: Math.max(0, Math.floor(generation)),
+    stageNumber: Math.max(1, Math.floor(stageNumber)),
+    status: 'active',
+  }
+}
+
+export function beginBattleAttempt(previous, stageNumber) {
+  return createBattleAttemptState(previous.generation + 1, stageNumber)
+}
+
+export function markBattleAttemptDefeated(state) {
+  if (state.status !== 'active') return false
+  state.status = 'defeated'
+  return true
+}
+
+export function markBattleAttemptCleared(state) {
+  if (state.status !== 'active') return false
+  state.status = 'cleared'
+  return true
+}
+
+export function isBattleAttemptCallbackCurrent(state, generation, status) {
+  return state.generation === generation && state.status === status
 }
 
 export function scheduleBossSettlement(state) {
