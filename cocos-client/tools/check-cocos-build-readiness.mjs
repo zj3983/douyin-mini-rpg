@@ -12,7 +12,7 @@ const defaultCreatorCandidates = [
 export function checkCocosBuildReadiness(options = {}) {
   const projectRoot = options.projectRoot ?? process.cwd()
   const files = options.files ?? null
-  const creatorCommand = options.creatorCommand ?? findCreatorCommand()
+  const creatorCommand = options.creatorCommand ?? process.env.COCOS_CREATOR_PATH ?? findCreatorCommand()
   const blockers = []
 
   if (!creatorCommand) {

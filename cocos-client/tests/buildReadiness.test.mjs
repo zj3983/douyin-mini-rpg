@@ -3,12 +3,17 @@ import assert from 'node:assert/strict'
 import { checkCocosBuildReadiness } from '../tools/check-cocos-build-readiness.mjs'
 
 test('build readiness reports missing Cocos export blockers', () => {
-  const report = checkCocosBuildReadiness({ projectRoot: process.cwd(), creatorCommand: null })
+  const report = checkCocosBuildReadiness({
+    projectRoot: process.cwd(),
+    creatorCommand: '',
+    files: new Set(),
+  })
 
   assert.equal(report.ready, false)
   assert.equal(report.blockers.some((blocker) => blocker.includes('Cocos Creator')), true)
   assert.equal(report.blockers.some((blocker) => blocker.includes('assets/Scenes')), true)
   assert.equal(report.blockers.some((blocker) => blocker.includes('settings')), true)
+  assert.equal(report.blockers.some((blocker) => blocker.includes('build/web-mobile')), true)
 })
 
 test('build readiness passes when editor, scene, settings, and web build output exist', () => {
