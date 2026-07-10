@@ -160,6 +160,7 @@ test('battle runtime exposes path-aware sword passes and the legacy cast wrapper
 
 test('portrait bootstrap assembles the approved compact playable scene', () => {
   const source = readSource('assets/Scripts/Game/PortraitBattleBootstrap.ts')
+  const stageVisualCatalog = readSource('assets/Scripts/Core/StageVisualCatalog.ts')
 
   assert.match(source, /setDesignResolutionSize\(750,\s*1334,\s*ResolutionPolicy\.FIXED_WIDTH\)/)
   assert.match(source, /addComponent\(Camera\)/)
@@ -175,8 +176,9 @@ test('portrait bootstrap assembles the approved compact playable scene', () => {
     assert.match(source, new RegExp(`['\"]${name}['\"]`), `bootstrap should create ${name}`)
   }
 
-  assert.match(source, /Assets\/World\/MistBamboo\/far\/spriteFrame/)
-  assert.match(source, /Assets\/World\/MistBamboo\/mid\/spriteFrame/)
+  assert.match(source, /stageVisualFor\(1\)/)
+  assert.match(stageVisualCatalog, /Assets\/World\/MistBamboo\/far\/spriteFrame/)
+  assert.match(stageVisualCatalog, /Assets\/World\/MistBamboo\/mid\/spriteFrame/)
   assert.match(source, /Assets\/Skills\/FlyingSword\/sword-projectile-v2\/spriteFrame/)
   assert.match(source, /qinglan-sword-cultivator/)
   assert.doesNotMatch(source, /action-strip\/texture\.png/)

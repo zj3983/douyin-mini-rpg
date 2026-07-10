@@ -35,6 +35,7 @@ import { PoolableActor } from './PoolableActor'
 import { SoulOrbController } from './SoulOrbController'
 import { StageClearPanelController } from './StageClearPanelController'
 import { DamageNumberController } from './DamageNumberController'
+import { StageVisual, stageVisualFor } from '../Core/StageVisualCatalog'
 
 const { ccclass } = _decorator
 const WIDTH = 750
@@ -68,6 +69,11 @@ export class PortraitBattleBootstrap extends Component {
   private bindRuntimeCallback: (() => void) | null = null
   private destroyed = false
   private assembled = false
+  private runtimeNode: Node | null = null
+  private backgroundLoadGeneration = 0
+  private activeFarPath: string | null = null
+  private activeMidPath: string | null = null
+  private backgroundLoadWarnings = new Set<string>()
 
   onLoad() {
     view.setDesignResolutionSize(750, 1334, ResolutionPolicy.FIXED_WIDTH)
@@ -78,6 +84,8 @@ export class PortraitBattleBootstrap extends Component {
   onDestroy() {
     this.destroyed = true
     this.stopRuntimeBinding()
+    this.backgroundLoadGeneration += 1
+    this.runtimeNode?.off('battle-stage-changed', this.onStageChanged, this)
     view.off('canvas-resize', this.relayoutVisibleArea, this)
   }
 
@@ -164,8 +172,7 @@ export class PortraitBattleBootstrap extends Component {
     mid.sprite.color = new Color(255, 255, 255, 168)
     this.farBackground = far.node
     this.midBackground = mid.node
-    this.loadSprite('Assets/World/MistBamboo/far/spriteFrame', far.sprite)
-    this.loadSprite('Assets/World/MistBamboo/mid/spriteFrame', mid.sprite)
+    this.switchStageBackground(stageVisualFor(1))
   }
 
   private createPlayer(parent: Node) {
@@ -200,6 +207,8 @@ export class PortraitBattleBootstrap extends Component {
     stageClearPanel: StageClearPanelController
   }) {
     const runtimeNode = this.createNode('Runtime', parent)
+    this.runtimeNode = runtimeNode
+    runtimeNode.on('battle-stage-changed', this.onStageChanged, this)
     const designPath = 'Data/cultivation-design'
     let state: RuntimeLoadState = { status: 'loading' }
     resources.load(designPath, JsonAsset, (error, asset) => {
@@ -224,6 +233,84 @@ export class PortraitBattleBootstrap extends Component {
       state = { status: 'ready', runtime }
     })
     return () => state
+  }
+
+  private onStageChanged(payload: { stageId: number; backgroundId: string; theme: string }) {
+    try {
+      this.switchStageBackground(stageVisualFor(payload.stageId))
+    } catch (error) {
+      this.warnBackgroundLoadOnce(`stage:${payload.stageId}`, error)
+    }
+  }
+
+  private switchStageBackground(visual: StageVisual) {
+    const farSprite = this.farBackground?.getComponent(Sprite)
+    if (!farSprite) return
+    const generation = ++this.backgroundLoadGeneration
+
+    resources.load(visual.farPath, SpriteFrame, (error, farAsset) => {
+      if (this.destroyed || generation !== this.backgroundLoadGeneration) {
+        if (!error && farAsset && !this.isFirstStagePath(visual.farPath)) {
+          resources.release(visual.farPath, SpriteFrame)
+        }
+        return
+      }
+      if (error || !farAsset) {
+        this.warnBackgroundLoadOnce(visual.farPath, error)
+        return
+      }
+
+      const applyVisual = (midAsset: SpriteFrame | null) => {
+        if (this.destroyed || generation !== this.backgroundLoadGeneration) {
+          if (!this.isFirstStagePath(visual.farPath)) resources.release(visual.farPath, SpriteFrame)
+          if (visual.midPath && !this.isFirstStagePath(visual.midPath)) resources.release(visual.midPath, SpriteFrame)
+          return
+        }
+        const previousFarPath = this.activeFarPath
+        const previousMidPath = this.activeMidPath
+        farSprite.spriteFrame = farAsset
+        farSprite.sizeMode = Sprite.SizeMode.CUSTOM
+        this.activeFarPath = visual.farPath
+
+        const midSprite = this.midBackground?.getComponent(Sprite)
+        if (this.midBackground && midSprite) {
+          this.midBackground.active = Boolean(midAsset)
+          midSprite.spriteFrame = midAsset
+          if (midAsset) midSprite.sizeMode = Sprite.SizeMode.CUSTOM
+        }
+        this.activeMidPath = visual.midPath
+        this.releasePreviousBackground(previousFarPath, visual.farPath)
+        this.releasePreviousBackground(previousMidPath, visual.midPath)
+      }
+
+      if (!visual.midPath) {
+        applyVisual(null)
+        return
+      }
+      resources.load(visual.midPath, SpriteFrame, (midError, midAsset) => {
+        if (midError || !midAsset) {
+          if (generation === this.backgroundLoadGeneration) this.warnBackgroundLoadOnce(visual.midPath!, midError)
+          if (!this.isFirstStagePath(visual.farPath)) resources.release(visual.farPath, SpriteFrame)
+          return
+        }
+        applyVisual(midAsset)
+      })
+    })
+  }
+
+  private releasePreviousBackground(previousPath: string | null, currentPath: string | null) {
+    if (!previousPath || previousPath === currentPath || this.isFirstStagePath(previousPath)) return
+    resources.release(previousPath, SpriteFrame)
+  }
+
+  private isFirstStagePath(path: string) {
+    return path.startsWith('Assets/World/MistBamboo/')
+  }
+
+  private warnBackgroundLoadOnce(key: string, error: unknown) {
+    if (this.backgroundLoadWarnings.has(key)) return
+    this.backgroundLoadWarnings.add(key)
+    console.warn(`[PortraitBattleBootstrap] background load failed: ${key}`, error)
   }
 
   private createFlyingSword(

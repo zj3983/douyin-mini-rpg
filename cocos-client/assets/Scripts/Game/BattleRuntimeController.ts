@@ -26,6 +26,7 @@ import {
 } from '../Core/BattleRuntime'
 import { CultivationDesignData, stageProfileFromDesign } from '../Core/CultivationRuntime'
 import { createPlayerSwordPath } from '../Core/FlyingSwordRuntime'
+import { stageVisualFor } from '../Core/StageVisualCatalog'
 import { BattleHudController } from './BattleHudController'
 import { DamageNumberController } from './DamageNumberController'
 import { EnemySpawner } from './EnemySpawner'
@@ -159,6 +160,12 @@ export class BattleRuntimeController extends Component {
     this.hud?.updateStage(stage.name, this.stageNumber)
     this.hud?.updateSoul(0, this.runtime.defeatTarget)
     this.hud?.hideBoss()
+    const visual = stageVisualFor(this.stageNumber)
+    this.node.emit('battle-stage-changed', {
+      stageId: visual.stageId,
+      backgroundId: visual.backgroundId,
+      theme: visual.theme,
+    })
   }
 
   private spawnRuntimeEnemy(enemy: BattleEnemy) {
