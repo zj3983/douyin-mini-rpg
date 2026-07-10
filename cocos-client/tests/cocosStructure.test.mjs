@@ -19,6 +19,8 @@ const requiredComponents = [
   ['assets/Scripts/Game/BattleRuntimeController.ts', 'class BattleRuntimeController'],
   ['assets/Scripts/Game/DamageNumberController.ts', 'class DamageNumberController'],
   ['assets/Scripts/Game/StageClearPanelController.ts', 'class StageClearPanelController'],
+  ['assets/Scripts/Game/BattleHudController.ts', 'class BattleHudController'],
+  ['assets/Scripts/Game/PortraitBattleBootstrap.ts', 'class PortraitBattleBootstrap'],
 ]
 
 function readSource(file) {
@@ -154,6 +156,61 @@ test('battle runtime exposes path-aware sword passes and the legacy cast wrapper
   assert.match(source, /public castFlyingSword\(\)/)
   assert.match(source, /return this\.resolveFlyingSwordHit\(from, to, 3\)/)
   assert.match(source, /applyFlyingSwordHit\(this\.runtime,\s*pierce,\s*1,/s)
+})
+
+test('portrait bootstrap assembles the approved compact playable scene', () => {
+  const source = readSource('assets/Scripts/Game/PortraitBattleBootstrap.ts')
+
+  assert.match(source, /setDesignResolutionSize\(750,\s*1334,\s*ResolutionPolicy\.FIXED_WIDTH\)/)
+  assert.match(source, /addComponent\(Camera\)/)
+  assert.match(source, /camera\.projection = Camera\.ProjectionType\.ORTHO/)
+  assert.match(source, /camera\.visibility = UI_LAYER/)
+  assert.match(source, /canvas\.cameraComponent = camera/)
+  for (const name of [
+    'Canvas', 'BattleRoot', 'WorldLayer', 'FarBackground', 'MidBackground',
+    'ActorLayer', 'Player', 'EnemySpawner', 'EffectLayer', 'FlyingSwordSkill',
+    'Sword', 'DropLayer', 'InputLayer', 'HudLayer', 'TopHud', 'BossHud',
+    'BottomNavigation', 'StageClearPanel',
+  ]) {
+    assert.match(source, new RegExp(`['\"]${name}['\"]`), `bootstrap should create ${name}`)
+  }
+
+  assert.match(source, /Assets\/World\/MistBamboo\/far\/spriteFrame/)
+  assert.match(source, /Assets\/World\/MistBamboo\/mid\/spriteFrame/)
+  assert.match(source, /Assets\/Skills\/FlyingSword\/sword_projectile\/spriteFrame/)
+  assert.match(source, /qinglan-sword-cultivator/)
+  assert.match(source, /Assets\/Combat\/QinglanSwordCultivator\/action-strip\/texture\.png/)
+  assert.match(source, /const runtimeManifest = new JsonAsset\(\)/)
+  assert.match(source, /createNode\('BarVisual',\s*fill\.node/)
+  assert.match(source, /setPosition\(-210,\s*-80/)
+  assert.match(source, /play\('sword_ride'\)/)
+  assert.match(source, /bindInputArea\(/)
+  assert.match(source, /schedule\(bindRuntime\)/)
+  assert.match(source, /unschedule\(bindRuntime\)/)
+  assert.match(source, /Sprite\.SizeMode\.CUSTOM/)
+  assert.match(source, /new UITransform|addComponent\(UITransform\)/)
+
+  for (const label of ['战斗', '副本', '抽卡', '装备', '背包', '法宝']) {
+    assert.equal(source.includes(label), true, `bottom navigation should include ${label}`)
+  }
+
+  assert.doesNotMatch(source, /Joystick|joystick|AttackButton|NormalAttack|SkillButton|skill button/)
+})
+
+test('battle HUD is null-safe and clamps every progress bar', () => {
+  const source = readSource('assets/Scripts/Game/BattleHudController.ts')
+
+  for (const field of [
+    'realmLabel', 'stageLabel', 'healthBar', 'manaBar', 'soulBar',
+    'soulLabel', 'bossRoot', 'bossNameLabel', 'bossHealthBar',
+  ]) {
+    assert.match(source, new RegExp(`${field}[^\\n]*\\| null = null`), `${field} should be nullable`)
+  }
+  for (const method of ['updateHero', 'updateStage', 'updateSoul', 'showBoss', 'hideBoss']) {
+    assert.match(source, new RegExp(`${method}\\(`), `HUD should expose ${method}`)
+  }
+  assert.match(source, /Math\.min\(1,\s*Math\.max\(0,/)
+  assert.match(source, /bossRoot\.active = false/)
 })
 
 test('stage clear panel renders reward fields and next stage action', () => {

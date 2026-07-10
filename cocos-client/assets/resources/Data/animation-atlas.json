@@ -1,0 +1,2757 @@
+{
+  "version": 1,
+  "framePacking": "single-atlas-per-actor",
+  "actors": [
+    {
+      "id": "qinglan-sword-cultivator",
+      "type": "character",
+      "atlas": "Assets/Combat/QinglanSwordCultivator/action-strip.png",
+      "frameSize": {
+        "w": 320,
+        "h": 512
+      },
+      "actions": [
+        {
+          "name": "idle",
+          "atlas": "Assets/Combat/QinglanSwordCultivator/action-strip.png",
+          "fps": 6,
+          "loop": true,
+          "order": [
+            0
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            }
+          ]
+        },
+        {
+          "name": "move",
+          "atlas": "Assets/Combat/QinglanSwordCultivator/action-strip.png",
+          "fps": 8,
+          "loop": true,
+          "order": [
+            0,
+            1
+          ],
+          "frames": [
+            {
+              "x": 320,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            },
+            {
+              "x": 640,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            }
+          ]
+        },
+        {
+          "name": "cast",
+          "atlas": "Assets/Combat/QinglanSwordCultivator/action-strip.png",
+          "fps": 10,
+          "loop": false,
+          "order": [
+            0
+          ],
+          "frames": [
+            {
+              "x": 960,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            }
+          ]
+        },
+        {
+          "name": "hurt",
+          "atlas": "Assets/Combat/QinglanSwordCultivator/action-strip.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0
+          ],
+          "frames": [
+            {
+              "x": 1280,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            }
+          ]
+        },
+        {
+          "name": "sword_ride",
+          "atlas": "Assets/Combat/QinglanSwordCultivator/action-strip.png",
+          "fps": 8,
+          "loop": true,
+          "order": [
+            0,
+            1
+          ],
+          "frames": [
+            {
+              "x": 320,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            },
+            {
+              "x": 640,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            }
+          ]
+        },
+        {
+          "name": "hand_seal",
+          "atlas": "Assets/Combat/QinglanSwordCultivator/action-strip.png",
+          "fps": 10,
+          "loop": false,
+          "order": [
+            0
+          ],
+          "frames": [
+            {
+              "x": 960,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            }
+          ]
+        },
+        {
+          "name": "death",
+          "atlas": "Assets/Combat/QinglanSwordCultivator/action-strip.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0
+          ],
+          "frames": [
+            {
+              "x": 1600,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "xuanyan-fire-cultivator",
+      "type": "character",
+      "atlas": "Assets/ActorAtlases/XuanyanFireCultivator/atlas.png",
+      "frameSize": {
+        "w": 256,
+        "h": 256
+      },
+      "actions": [
+        {
+          "name": "idle",
+          "atlas": "Assets/ActorAtlases/XuanyanFireCultivator/atlas.png",
+          "fps": 6,
+          "loop": true,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "move",
+          "atlas": "Assets/ActorAtlases/XuanyanFireCultivator/atlas.png",
+          "fps": 8,
+          "loop": true,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "cast",
+          "atlas": "Assets/ActorAtlases/XuanyanFireCultivator/atlas.png",
+          "fps": 10,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "hurt",
+          "atlas": "Assets/ActorAtlases/XuanyanFireCultivator/atlas.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jiuxiao-thunder-cultivator",
+      "type": "character",
+      "atlas": "Assets/ActorAtlases/JiuxiaoThunderCultivator/atlas.png",
+      "frameSize": {
+        "w": 256,
+        "h": 256
+      },
+      "actions": [
+        {
+          "name": "idle",
+          "atlas": "Assets/ActorAtlases/JiuxiaoThunderCultivator/atlas.png",
+          "fps": 6,
+          "loop": true,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "move",
+          "atlas": "Assets/ActorAtlases/JiuxiaoThunderCultivator/atlas.png",
+          "fps": 8,
+          "loop": true,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "cast",
+          "atlas": "Assets/ActorAtlases/JiuxiaoThunderCultivator/atlas.png",
+          "fps": 10,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "hurt",
+          "atlas": "Assets/ActorAtlases/JiuxiaoThunderCultivator/atlas.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "soul-bell-cultivator",
+      "type": "character",
+      "atlas": "Assets/ActorAtlases/SoulBellCultivator/atlas.png",
+      "frameSize": {
+        "w": 256,
+        "h": 256
+      },
+      "actions": [
+        {
+          "name": "idle",
+          "atlas": "Assets/ActorAtlases/SoulBellCultivator/atlas.png",
+          "fps": 6,
+          "loop": true,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "move",
+          "atlas": "Assets/ActorAtlases/SoulBellCultivator/atlas.png",
+          "fps": 8,
+          "loop": true,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "cast",
+          "atlas": "Assets/ActorAtlases/SoulBellCultivator/atlas.png",
+          "fps": 10,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "hurt",
+          "atlas": "Assets/ActorAtlases/SoulBellCultivator/atlas.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "moss-wolf",
+      "type": "monster",
+      "atlas": "Assets/Combat/MistBamboo/moss-wolf-strip.png",
+      "frameSize": {
+        "w": 320,
+        "h": 512
+      },
+      "actions": [
+        {
+          "name": "idle",
+          "atlas": "Assets/Combat/MistBamboo/moss-wolf-strip.png",
+          "fps": 6,
+          "loop": true,
+          "order": [
+            0
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            }
+          ]
+        },
+        {
+          "name": "move",
+          "atlas": "Assets/Combat/MistBamboo/moss-wolf-strip.png",
+          "fps": 8,
+          "loop": true,
+          "order": [
+            0,
+            1
+          ],
+          "frames": [
+            {
+              "x": 320,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            },
+            {
+              "x": 640,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            }
+          ]
+        },
+        {
+          "name": "attack",
+          "atlas": "Assets/Combat/MistBamboo/moss-wolf-strip.png",
+          "fps": 10,
+          "loop": false,
+          "order": [
+            0
+          ],
+          "frames": [
+            {
+              "x": 960,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            }
+          ]
+        },
+        {
+          "name": "hurt",
+          "atlas": "Assets/Combat/MistBamboo/moss-wolf-strip.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0
+          ],
+          "frames": [
+            {
+              "x": 1280,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            }
+          ]
+        },
+        {
+          "name": "death",
+          "atlas": "Assets/Combat/MistBamboo/moss-wolf-strip.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0
+          ],
+          "frames": [
+            {
+              "x": 1600,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "green-wing-moth",
+      "type": "monster",
+      "atlas": "Assets/Combat/MistBamboo/green-wing-moth-strip.png",
+      "frameSize": {
+        "w": 320,
+        "h": 512
+      },
+      "actions": [
+        {
+          "name": "idle",
+          "atlas": "Assets/Combat/MistBamboo/green-wing-moth-strip.png",
+          "fps": 6,
+          "loop": true,
+          "order": [
+            0
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            }
+          ]
+        },
+        {
+          "name": "move",
+          "atlas": "Assets/Combat/MistBamboo/green-wing-moth-strip.png",
+          "fps": 8,
+          "loop": true,
+          "order": [
+            0,
+            1
+          ],
+          "frames": [
+            {
+              "x": 320,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            },
+            {
+              "x": 640,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            }
+          ]
+        },
+        {
+          "name": "attack",
+          "atlas": "Assets/Combat/MistBamboo/green-wing-moth-strip.png",
+          "fps": 10,
+          "loop": false,
+          "order": [
+            0
+          ],
+          "frames": [
+            {
+              "x": 960,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            }
+          ]
+        },
+        {
+          "name": "hurt",
+          "atlas": "Assets/Combat/MistBamboo/green-wing-moth-strip.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0
+          ],
+          "frames": [
+            {
+              "x": 1280,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            }
+          ]
+        },
+        {
+          "name": "death",
+          "atlas": "Assets/Combat/MistBamboo/green-wing-moth-strip.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0
+          ],
+          "frames": [
+            {
+              "x": 1600,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bamboo-warden",
+      "type": "monster",
+      "atlas": "Assets/Combat/MistBamboo/bamboo-warden-strip.png",
+      "frameSize": {
+        "w": 320,
+        "h": 512
+      },
+      "actions": [
+        {
+          "name": "idle",
+          "atlas": "Assets/Combat/MistBamboo/bamboo-warden-strip.png",
+          "fps": 6,
+          "loop": true,
+          "order": [
+            0
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            }
+          ]
+        },
+        {
+          "name": "move",
+          "atlas": "Assets/Combat/MistBamboo/bamboo-warden-strip.png",
+          "fps": 8,
+          "loop": true,
+          "order": [
+            0,
+            1
+          ],
+          "frames": [
+            {
+              "x": 320,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            },
+            {
+              "x": 640,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            }
+          ]
+        },
+        {
+          "name": "attack",
+          "atlas": "Assets/Combat/MistBamboo/bamboo-warden-strip.png",
+          "fps": 10,
+          "loop": false,
+          "order": [
+            0
+          ],
+          "frames": [
+            {
+              "x": 960,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            }
+          ]
+        },
+        {
+          "name": "hurt",
+          "atlas": "Assets/Combat/MistBamboo/bamboo-warden-strip.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0
+          ],
+          "frames": [
+            {
+              "x": 1280,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            }
+          ]
+        },
+        {
+          "name": "death",
+          "atlas": "Assets/Combat/MistBamboo/bamboo-warden-strip.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0
+          ],
+          "frames": [
+            {
+              "x": 1600,
+              "y": 0,
+              "w": 320,
+              "h": 512
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fog-spider",
+      "type": "monster",
+      "atlas": "Assets/ActorAtlases/FogSpider/atlas.png",
+      "frameSize": {
+        "w": 256,
+        "h": 256
+      },
+      "actions": [
+        {
+          "name": "idle",
+          "atlas": "Assets/ActorAtlases/FogSpider/atlas.png",
+          "fps": 6,
+          "loop": true,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "move",
+          "atlas": "Assets/ActorAtlases/FogSpider/atlas.png",
+          "fps": 8,
+          "loop": true,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "attack",
+          "atlas": "Assets/ActorAtlases/FogSpider/atlas.png",
+          "fps": 10,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "hurt",
+          "atlas": "Assets/ActorAtlases/FogSpider/atlas.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "death",
+          "atlas": "Assets/ActorAtlases/FogSpider/atlas.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lantern-wraith",
+      "type": "monster",
+      "atlas": "Assets/ActorAtlases/LanternWraith/atlas.png",
+      "frameSize": {
+        "w": 256,
+        "h": 256
+      },
+      "actions": [
+        {
+          "name": "idle",
+          "atlas": "Assets/ActorAtlases/LanternWraith/atlas.png",
+          "fps": 6,
+          "loop": true,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "move",
+          "atlas": "Assets/ActorAtlases/LanternWraith/atlas.png",
+          "fps": 8,
+          "loop": true,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "attack",
+          "atlas": "Assets/ActorAtlases/LanternWraith/atlas.png",
+          "fps": 10,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "hurt",
+          "atlas": "Assets/ActorAtlases/LanternWraith/atlas.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "death",
+          "atlas": "Assets/ActorAtlases/LanternWraith/atlas.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mist-deer-king",
+      "type": "monster",
+      "atlas": "Assets/ActorAtlases/MistDeerKing/atlas.png",
+      "frameSize": {
+        "w": 256,
+        "h": 256
+      },
+      "actions": [
+        {
+          "name": "idle",
+          "atlas": "Assets/ActorAtlases/MistDeerKing/atlas.png",
+          "fps": 6,
+          "loop": true,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "move",
+          "atlas": "Assets/ActorAtlases/MistDeerKing/atlas.png",
+          "fps": 8,
+          "loop": true,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "attack",
+          "atlas": "Assets/ActorAtlases/MistDeerKing/atlas.png",
+          "fps": 10,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "hurt",
+          "atlas": "Assets/ActorAtlases/MistDeerKing/atlas.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "death",
+          "atlas": "Assets/ActorAtlases/MistDeerKing/atlas.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lava-lizard",
+      "type": "monster",
+      "atlas": "Assets/ActorAtlases/LavaLizard/atlas.png",
+      "frameSize": {
+        "w": 256,
+        "h": 256
+      },
+      "actions": [
+        {
+          "name": "idle",
+          "atlas": "Assets/ActorAtlases/LavaLizard/atlas.png",
+          "fps": 6,
+          "loop": true,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "move",
+          "atlas": "Assets/ActorAtlases/LavaLizard/atlas.png",
+          "fps": 8,
+          "loop": true,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "attack",
+          "atlas": "Assets/ActorAtlases/LavaLizard/atlas.png",
+          "fps": 10,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "hurt",
+          "atlas": "Assets/ActorAtlases/LavaLizard/atlas.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "death",
+          "atlas": "Assets/ActorAtlases/LavaLizard/atlas.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ember-crow",
+      "type": "monster",
+      "atlas": "Assets/ActorAtlases/EmberCrow/atlas.png",
+      "frameSize": {
+        "w": 256,
+        "h": 256
+      },
+      "actions": [
+        {
+          "name": "idle",
+          "atlas": "Assets/ActorAtlases/EmberCrow/atlas.png",
+          "fps": 6,
+          "loop": true,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "move",
+          "atlas": "Assets/ActorAtlases/EmberCrow/atlas.png",
+          "fps": 8,
+          "loop": true,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "attack",
+          "atlas": "Assets/ActorAtlases/EmberCrow/atlas.png",
+          "fps": 10,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "hurt",
+          "atlas": "Assets/ActorAtlases/EmberCrow/atlas.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "death",
+          "atlas": "Assets/ActorAtlases/EmberCrow/atlas.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "flame-ogre",
+      "type": "monster",
+      "atlas": "Assets/ActorAtlases/FlameOgre/atlas.png",
+      "frameSize": {
+        "w": 256,
+        "h": 256
+      },
+      "actions": [
+        {
+          "name": "idle",
+          "atlas": "Assets/ActorAtlases/FlameOgre/atlas.png",
+          "fps": 6,
+          "loop": true,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "move",
+          "atlas": "Assets/ActorAtlases/FlameOgre/atlas.png",
+          "fps": 8,
+          "loop": true,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "attack",
+          "atlas": "Assets/ActorAtlases/FlameOgre/atlas.png",
+          "fps": 10,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "hurt",
+          "atlas": "Assets/ActorAtlases/FlameOgre/atlas.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "death",
+          "atlas": "Assets/ActorAtlases/FlameOgre/atlas.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "star-armored-beast",
+      "type": "monster",
+      "atlas": "Assets/ActorAtlases/StarArmoredBeast/atlas.png",
+      "frameSize": {
+        "w": 256,
+        "h": 256
+      },
+      "actions": [
+        {
+          "name": "idle",
+          "atlas": "Assets/ActorAtlases/StarArmoredBeast/atlas.png",
+          "fps": 6,
+          "loop": true,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "move",
+          "atlas": "Assets/ActorAtlases/StarArmoredBeast/atlas.png",
+          "fps": 8,
+          "loop": true,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "attack",
+          "atlas": "Assets/ActorAtlases/StarArmoredBeast/atlas.png",
+          "fps": 10,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "hurt",
+          "atlas": "Assets/ActorAtlases/StarArmoredBeast/atlas.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "death",
+          "atlas": "Assets/ActorAtlases/StarArmoredBeast/atlas.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "void-wing-spirit",
+      "type": "monster",
+      "atlas": "Assets/ActorAtlases/VoidWingSpirit/atlas.png",
+      "frameSize": {
+        "w": 256,
+        "h": 256
+      },
+      "actions": [
+        {
+          "name": "idle",
+          "atlas": "Assets/ActorAtlases/VoidWingSpirit/atlas.png",
+          "fps": 6,
+          "loop": true,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "move",
+          "atlas": "Assets/ActorAtlases/VoidWingSpirit/atlas.png",
+          "fps": 8,
+          "loop": true,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "attack",
+          "atlas": "Assets/ActorAtlases/VoidWingSpirit/atlas.png",
+          "fps": 10,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "hurt",
+          "atlas": "Assets/ActorAtlases/VoidWingSpirit/atlas.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "death",
+          "atlas": "Assets/ActorAtlases/VoidWingSpirit/atlas.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "meteor-guardian",
+      "type": "monster",
+      "atlas": "Assets/ActorAtlases/MeteorGuardian/atlas.png",
+      "frameSize": {
+        "w": 256,
+        "h": 256
+      },
+      "actions": [
+        {
+          "name": "idle",
+          "atlas": "Assets/ActorAtlases/MeteorGuardian/atlas.png",
+          "fps": 6,
+          "loop": true,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 0,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "move",
+          "atlas": "Assets/ActorAtlases/MeteorGuardian/atlas.png",
+          "fps": 8,
+          "loop": true,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "attack",
+          "atlas": "Assets/ActorAtlases/MeteorGuardian/atlas.png",
+          "fps": 10,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "hurt",
+          "atlas": "Assets/ActorAtlases/MeteorGuardian/atlas.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 768,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        },
+        {
+          "name": "death",
+          "atlas": "Assets/ActorAtlases/MeteorGuardian/atlas.png",
+          "fps": 8,
+          "loop": false,
+          "order": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frames": [
+            {
+              "x": 0,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

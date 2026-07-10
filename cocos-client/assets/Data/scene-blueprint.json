@@ -1,11 +1,21 @@
 {
   "scene": {
     "name": "MainBattle",
-    "orientation": "landscape",
+    "orientation": "portrait",
     "target": "douyin-mini-game",
-    "notes": "Blueprint for assembling the first Cocos battle scene in Creator."
+    "designResolution": {
+      "width": 750,
+      "height": 1334
+    },
+    "resolutionPolicy": "FIXED_WIDTH",
+    "notes": "PortraitBattleBootstrap assembles the visible runtime hierarchy after the serialized scene loads."
   },
   "nodes": [
+    {
+      "path": "Scene/BattleRoot",
+      "components": ["PortraitBattleBootstrap"],
+      "purpose": "Serialized bootstrap host in MainBattle.scene."
+    },
     {
       "path": "Canvas",
       "components": ["Canvas"],
@@ -14,39 +24,43 @@
     {
       "path": "Canvas/BattleRoot",
       "components": [],
-      "children": ["Runtime", "WorldLayer", "ActorLayer", "EffectLayer", "DropLayer", "HudLayer"]
-    },
-    {
-      "path": "Canvas/BattleRoot/Runtime",
-      "components": ["BattleRuntimeController"],
-      "bindings": {
-        "designData": "assets/Data/cultivation-design.json",
-        "statusLabel": "Canvas/BattleRoot/HudLayer/StatusLabel",
-        "stageClearPanel": "Canvas/BattleRoot/HudLayer/StageClearPanel",
-        "enemySpawner": "Canvas/BattleRoot/ActorLayer/EnemySpawner",
-        "soulOrbPool": "Canvas/Pools/SoulOrbPool",
-        "damageNumberPool": "Canvas/Pools/DamageNumberPool",
-        "bossSkillEffectPool": "Canvas/Pools/BossSkillEffectPool"
-      },
-      "defaults": {
-        "stageNumber": 1,
-        "heroAttack": 40,
-        "swordStartX": -180,
-        "swordEndX": 300,
-        "swordY": -30,
-        "swordHitWidth": 18
-      }
+      "children": ["WorldLayer", "ActorLayer", "EffectLayer", "DropLayer", "InputLayer", "HudLayer", "Runtime"]
     },
     {
       "path": "Canvas/BattleRoot/WorldLayer",
-      "components": ["StageDirector"],
-      "purpose": "Background, stage theme, and scene transitions."
+      "components": [],
+      "children": ["FarBackground", "MidBackground"]
+    },
+    {
+      "path": "Canvas/BattleRoot/WorldLayer/FarBackground",
+      "components": ["Sprite"],
+      "resource": "Assets/World/MistBamboo/far/spriteFrame",
+      "size": { "width": 750, "height": 1334 },
+      "alpha": 255
+    },
+    {
+      "path": "Canvas/BattleRoot/WorldLayer/MidBackground",
+      "components": ["Sprite"],
+      "resource": "Assets/World/MistBamboo/mid/spriteFrame",
+      "size": { "width": 750, "height": 1334 },
+      "alpha": 168,
+      "parallax": "bounded-horizontal-drift"
     },
     {
       "path": "Canvas/BattleRoot/ActorLayer",
       "components": [],
-      "children": ["EnemySpawner"],
-      "purpose": "Player and enemy runtime nodes."
+      "children": ["Player", "EnemySpawner"]
+    },
+    {
+      "path": "Canvas/BattleRoot/ActorLayer/Player",
+      "components": ["Sprite", "AtlasAnimator", "PlayerController"],
+      "bindings": {
+        "animationManifest": "resources/Data/animation-atlas.json",
+        "actorId": "qinglan-sword-cultivator"
+      },
+      "position": { "x": -210, "y": -80 },
+      "scale": 0.8,
+      "initialAction": "sword_ride"
     },
     {
       "path": "Canvas/BattleRoot/ActorLayer/EnemySpawner",
@@ -54,20 +68,12 @@
       "bindings": {
         "enemyPool": "Canvas/Pools/EnemyPool"
       },
-      "defaults": {
-        "spawnX": 520,
-        "groundY": -60,
-        "flyingY": 70,
-        "bossSpawnX": 610,
-        "bossY": -38,
-        "bossScale": 1.45
-      }
+      "purpose": "Task 5 runtime placeholder; Task 6 supplies the visual pool and template."
     },
     {
       "path": "Canvas/BattleRoot/EffectLayer",
       "components": [],
-      "children": ["FlyingSwordSkill"],
-      "purpose": "Flying sword, boss skill, and impact effects."
+      "children": ["FlyingSwordSkill"]
     },
     {
       "path": "Canvas/BattleRoot/EffectLayer/FlyingSwordSkill",
@@ -76,109 +82,94 @@
         "battleRuntime": "Canvas/BattleRoot/Runtime",
         "sword": "Canvas/BattleRoot/EffectLayer/FlyingSwordSkill/Sword"
       },
-      "defaults": {
-        "cooldown": 1.2,
-        "flightDuration": 0.62,
-        "arcHeight": 38
-      },
-      "children": ["Sword"],
-      "purpose": "御剑术自动施放节点，视觉轨迹和 BattleRuntimeController 的飞剑命中路径保持一致。"
+      "children": ["Sword"]
     },
     {
       "path": "Canvas/BattleRoot/EffectLayer/FlyingSwordSkill/Sword",
       "components": ["Sprite"],
-      "purpose": "飞剑贴图节点，后续替换为法宝飞剑序列帧或粒子拖尾。"
+      "resource": "Assets/Skills/FlyingSword/sword_projectile/spriteFrame"
     },
     {
       "path": "Canvas/BattleRoot/DropLayer",
       "components": [],
-      "purpose": "Soul orbs and pickup feedback."
+      "purpose": "Reserved for Task 6 drops."
+    },
+    {
+      "path": "Canvas/BattleRoot/InputLayer",
+      "components": ["UITransform", "BattleInputController"],
+      "bindings": {
+        "player": "Canvas/BattleRoot/ActorLayer/Player",
+        "inputArea": "Canvas/BattleRoot/InputLayer"
+      },
+      "size": { "width": 750, "height": 1120 }
     },
     {
       "path": "Canvas/BattleRoot/HudLayer",
-      "components": [],
-      "children": ["StatusLabel", "StageClearPanel"]
+      "components": ["BattleHudController"],
+      "children": ["TopHud", "BossHud", "BottomNavigation", "StageClearPanel", "StatusLabel"]
     },
     {
-      "path": "Canvas/BattleRoot/HudLayer/StatusLabel",
+      "path": "Canvas/BattleRoot/HudLayer/TopHud",
+      "components": ["Label", "ProgressBar"],
+      "children": ["RealmLabel", "StageLabel", "HealthBar", "ManaBar", "SoulBar"]
+    },
+    {
+      "path": "Canvas/BattleRoot/HudLayer/BossHud",
+      "components": ["Label", "ProgressBar"],
+      "active": false
+    },
+    {
+      "path": "Canvas/BattleRoot/HudLayer/BottomNavigation",
       "components": ["Label"],
-      "text": "敌 0 | 魂球 0 | 巡游"
+      "height": 104,
+      "labels": ["战斗", "副本", "抽卡", "装备", "背包", "法宝"]
     },
     {
       "path": "Canvas/BattleRoot/HudLayer/StageClearPanel",
       "components": ["StageClearPanelController"],
+      "active": false
+    },
+    {
+      "path": "Canvas/BattleRoot/HudLayer/StatusLabel",
+      "components": ["Label"],
+      "active": false,
+      "purpose": "Legacy runtime binding retained for Task 6 migration; no old information panel is rendered."
+    },
+    {
+      "path": "Canvas/BattleRoot/Runtime",
+      "components": ["BattleRuntimeController"],
       "bindings": {
-        "panelRoot": "Canvas/BattleRoot/HudLayer/StageClearPanel",
-        "titleLabel": "Canvas/BattleRoot/HudLayer/StageClearPanel/TitleLabel",
-        "rewardLabel": "Canvas/BattleRoot/HudLayer/StageClearPanel/RewardLabel",
-        "nextStageLabel": "Canvas/BattleRoot/HudLayer/StageClearPanel/NextStageLabel",
-        "nextStageButton": "Canvas/BattleRoot/HudLayer/StageClearPanel/NextStageButton"
-      },
-      "buttonEvents": [
-        {
-          "node": "Canvas/BattleRoot/HudLayer/StageClearPanel/NextStageButton",
-          "target": "Canvas/BattleRoot/Runtime",
-          "component": "BattleRuntimeController",
-          "handler": "advanceToNextStageFromPanel"
-        }
-      ]
-    },
-    {
-      "path": "Canvas/BattleRoot/HudLayer/StageClearPanel/TitleLabel",
-      "components": ["Label"]
-    },
-    {
-      "path": "Canvas/BattleRoot/HudLayer/StageClearPanel/RewardLabel",
-      "components": ["Label"]
-    },
-    {
-      "path": "Canvas/BattleRoot/HudLayer/StageClearPanel/NextStageLabel",
-      "components": ["Label"]
-    },
-    {
-      "path": "Canvas/BattleRoot/HudLayer/StageClearPanel/NextStageButton",
-      "components": ["Button"]
+        "designData": "resources/Data/cultivation-design.json",
+        "statusLabel": "Canvas/BattleRoot/HudLayer/StatusLabel",
+        "stageClearPanel": "Canvas/BattleRoot/HudLayer/StageClearPanel",
+        "enemySpawner": "Canvas/BattleRoot/ActorLayer/EnemySpawner",
+        "soulOrbPool": "Canvas/Pools/SoulOrbPool",
+        "damageNumberPool": "Canvas/Pools/DamageNumberPool",
+        "bossSkillEffectPool": "Canvas/Pools/BossSkillEffectPool"
+      }
     },
     {
       "path": "Canvas/Pools",
       "components": [],
-      "children": ["SoulOrbPool", "DamageNumberPool", "BossSkillEffectPool", "EnemyPool"]
+      "active": false,
+      "children": ["SoulOrbPool", "DamageNumberPool", "BossSkillEffectPool", "EnemyPool"],
+      "purpose": "Task 6 pool assembly contract."
     },
     {
       "path": "Canvas/Pools/SoulOrbPool",
-      "components": ["NodePoolController"],
-      "pool": {
-        "poolKey": "soul-orb",
-        "capacity": 80,
-        "prefab": "prefabs/SoulOrb.prefab"
-      }
+      "components": ["NodePoolController"]
     },
     {
       "path": "Canvas/Pools/DamageNumberPool",
-      "components": ["NodePoolController"],
-      "pool": {
-        "poolKey": "damage-number",
-        "capacity": 120,
-        "prefab": "prefabs/DamageNumber.prefab"
-      }
+      "components": ["NodePoolController"]
     },
     {
       "path": "Canvas/Pools/BossSkillEffectPool",
-      "components": ["NodePoolController"],
-      "pool": {
-        "poolKey": "boss-skill-effect",
-        "capacity": 24,
-        "prefab": "prefabs/BossSkillEffect.prefab"
-      }
+      "components": ["NodePoolController"]
     },
     {
       "path": "Canvas/Pools/EnemyPool",
-      "components": ["NodePoolController"],
-      "pool": {
-        "poolKey": "enemy",
-        "capacity": 80,
-        "prefab": "prefabs/Enemy.prefab"
-      }
+      "components": ["NodePoolController"]
     }
   ],
   "prefabs": [

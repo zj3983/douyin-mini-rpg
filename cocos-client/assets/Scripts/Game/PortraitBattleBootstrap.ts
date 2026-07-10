@@ -1,0 +1,301 @@
+import {
+  _decorator,
+  Camera,
+  Canvas,
+  Color,
+  Component,
+  Graphics,
+  HorizontalTextAlignment,
+  JsonAsset,
+  Label,
+  Layers,
+  Node,
+  ProgressBar,
+  ResolutionPolicy,
+  Sprite,
+  SpriteFrame,
+  UITransform,
+  Vec3,
+  VerticalTextAlignment,
+  resources,
+  view,
+} from 'cc'
+import { AtlasAnimator } from './AtlasAnimator'
+import { BattleHudController } from './BattleHudController'
+import { BattleInputController } from './BattleInputController'
+import { BattleRuntimeController } from './BattleRuntimeController'
+import { EnemySpawner } from './EnemySpawner'
+import { FlyingSwordSkill } from './FlyingSwordSkill'
+import { PlayerController } from './PlayerController'
+
+const { ccclass } = _decorator
+const WIDTH = 750
+const HEIGHT = 1334
+const UI_LAYER = Layers.Enum.UI_2D
+
+interface BarParts {
+  root: Node
+  progress: ProgressBar
+}
+
+@ccclass('PortraitBattleBootstrap')
+export class PortraitBattleBootstrap extends Component {
+  private midBackground: Node | null = null
+  private midDriftElapsed = 0
+  private loadErrorLabel: Label | null = null
+  private assembled = false
+
+  onLoad() {
+    view.setDesignResolutionSize(750, 1334, ResolutionPolicy.FIXED_WIDTH)
+    this.assembleScene()
+  }
+
+  update(deltaTime: number) {
+    if (!this.midBackground) return
+    this.midDriftElapsed += Math.min(Math.max(deltaTime, 0), 0.05)
+    this.midBackground.setPosition(Math.sin(this.midDriftElapsed * 0.22) * 8, 0, 0)
+  }
+
+  private assembleScene() {
+    if (this.assembled) return
+    this.assembled = true
+
+    const canvasNode = this.createNode('Canvas', this.node, WIDTH, HEIGHT)
+    const canvas = canvasNode.addComponent(Canvas)
+    const cameraNode = this.createNode('UICamera', canvasNode)
+    const camera = cameraNode.addComponent(Camera)
+    camera.projection = Camera.ProjectionType.ORTHO
+    camera.visibility = UI_LAYER
+    camera.priority = 100
+    canvas.cameraComponent = camera
+    const battleRoot = this.createNode('BattleRoot', canvasNode, WIDTH, HEIGHT)
+    const worldLayer = this.createNode('WorldLayer', battleRoot, WIDTH, HEIGHT)
+    const actorLayer = this.createNode('ActorLayer', battleRoot, WIDTH, HEIGHT)
+    const effectLayer = this.createNode('EffectLayer', battleRoot, WIDTH, HEIGHT)
+    this.createNode('DropLayer', battleRoot, WIDTH, HEIGHT)
+    const inputLayer = this.createNode('InputLayer', battleRoot, WIDTH, 1120)
+    inputLayer.setPosition(0, -3, 0)
+    const hudLayer = this.createNode('HudLayer', battleRoot, WIDTH, HEIGHT)
+
+    this.createWorld(worldLayer)
+    const { player, controller } = this.createPlayer(actorLayer)
+    const enemySpawner = this.createNode('EnemySpawner', actorLayer).addComponent(EnemySpawner)
+    const runtime = this.loadRuntime(battleRoot, enemySpawner)
+    this.createFlyingSword(effectLayer, runtime)
+    this.createInput(inputLayer, controller)
+    this.createHud(hudLayer)
+
+    player.setSiblingIndex(0)
+  }
+
+  private createWorld(parent: Node) {
+    const far = this.createSpriteNode('FarBackground', parent, WIDTH, HEIGHT)
+    const mid = this.createSpriteNode('MidBackground', parent, WIDTH, HEIGHT)
+    mid.sprite.color = new Color(255, 255, 255, 168)
+    this.midBackground = mid.node
+    this.loadSprite('Assets/World/MistBamboo/far/spriteFrame', far.sprite)
+    this.loadSprite('Assets/World/MistBamboo/mid/spriteFrame', mid.sprite)
+  }
+
+  private createPlayer(parent: Node) {
+    const player = this.createSpriteNode('Player', parent, 320, 512)
+    player.node.setPosition(-210, -80, 0)
+    player.node.setScale(0.8, 0.8, 1)
+    const animator = player.node.addComponent(AtlasAnimator)
+    animator.targetSprite = player.sprite
+    animator.actorId = 'qinglan-sword-cultivator'
+    const controller = player.node.addComponent(PlayerController)
+    player.node.on('player-action-requested', (action: string) => animator.play(action), this)
+
+    const atlasPath = 'Data/animation-atlas'
+    resources.load(atlasPath, JsonAsset, (error, asset) => {
+      if (error || !asset) {
+        this.showLoadError(atlasPath)
+        return
+      }
+      const manifestJson = JSON.parse(JSON.stringify(asset.json)) as {
+        actors?: Array<{ id: string; atlas: string }>
+      }
+      const actor = manifestJson.actors?.find(({ id }) => id === 'qinglan-sword-cultivator')
+      if (actor) actor.atlas = 'Assets/Combat/QinglanSwordCultivator/action-strip/texture.png'
+      const runtimeManifest = new JsonAsset()
+      runtimeManifest.json = manifestJson
+      animator.animationManifest = runtimeManifest
+      animator.play('sword_ride')
+    })
+    return { player: player.node, controller }
+  }
+
+  private loadRuntime(parent: Node, enemySpawner: EnemySpawner) {
+    const runtimeNode = this.createNode('Runtime', parent)
+    const designPath = 'Data/cultivation-design'
+    let runtime: BattleRuntimeController | null = null
+    resources.load(designPath, JsonAsset, (error, asset) => {
+      if (error || !asset) {
+        this.showLoadError(designPath)
+        return
+      }
+      runtime = runtimeNode.addComponent(BattleRuntimeController)
+      runtime.designData = asset
+      runtime.enemySpawner = enemySpawner
+    })
+    return () => runtime
+  }
+
+  private createFlyingSword(parent: Node, getRuntime: () => BattleRuntimeController | null) {
+    const skillNode = this.createNode('FlyingSwordSkill', parent, WIDTH, HEIGHT)
+    const sword = this.createSpriteNode('Sword', skillNode, 144, 48)
+    sword.node.active = false
+    this.loadSprite('Assets/Skills/FlyingSword/sword_projectile/spriteFrame', sword.sprite)
+    const skill = skillNode.addComponent(FlyingSwordSkill)
+    skill.sword = sword.node
+    const bindRuntime = () => {
+      const runtime = getRuntime()
+      if (!runtime) return
+      skill.battleRuntime = runtime
+      this.unschedule(bindRuntime)
+    }
+    this.schedule(bindRuntime)
+  }
+
+  private createInput(inputLayer: Node, player: PlayerController) {
+    const inputArea = inputLayer.getComponent(UITransform)
+    const input = inputLayer.addComponent(BattleInputController)
+    input.player = player
+    input.minX = -310
+    input.maxX = 70
+    input.minY = -430
+    input.maxY = 430
+    input.bindInputArea(inputArea)
+  }
+
+  private createHud(parent: Node) {
+    const topHud = this.createNode('TopHud', parent, WIDTH, 126)
+    topHud.setPosition(0, 584, 0)
+    this.drawBand(topHud, WIDTH, 126, new Color(13, 24, 28, 214))
+    const realmLabel = this.createLabel('RealmLabel', topHud, '筑基三重', 28, 190, 40)
+    realmLabel.node.setPosition(-255, 34, 0)
+    realmLabel.horizontalAlign = HorizontalTextAlignment.LEFT
+    const stageLabel = this.createLabel('StageLabel', topHud, '第一关 青苔丘陵', 25, 340, 40)
+    stageLabel.node.setPosition(174, 34, 0)
+    stageLabel.horizontalAlign = HorizontalTextAlignment.RIGHT
+
+    const health = this.createBar('HealthBar', topHud, new Color(208, 71, 71, 255), -205)
+    const mana = this.createBar('ManaBar', topHud, new Color(68, 146, 216, 255), 0)
+    const soul = this.createBar('SoulBar', topHud, new Color(199, 163, 79, 255), 205)
+    for (const bar of [health.root, mana.root, soul.root]) bar.setPosition(bar.position.x, -28, 0)
+    const soulLabel = this.createLabel('SoulLabel', soul.root, '魂 0/12', 18, 190, 28)
+
+    const bossRoot = this.createNode('BossHud', parent, WIDTH, 62)
+    bossRoot.setPosition(0, 488, 0)
+    this.drawBand(bossRoot, WIDTH, 62, new Color(35, 13, 17, 220))
+    const bossNameLabel = this.createLabel('BossNameLabel', bossRoot, '', 22, 170, 32)
+    bossNameLabel.node.setPosition(-260, 0, 0)
+    const bossHealth = this.createBar('BossHealthBar', bossRoot, new Color(190, 48, 64, 255), 82, 430)
+    bossHealth.root.setPosition(120, 0, 0)
+
+    const bottomNavigation = this.createNode('BottomNavigation', parent, WIDTH, 104)
+    bottomNavigation.setPosition(0, -615, 0)
+    this.drawBand(bottomNavigation, WIDTH, 104, new Color(12, 22, 25, 238))
+    const navLabels = ['战斗', '副本', '抽卡', '装备', '背包', '法宝']
+    navLabels.forEach((text, index) => {
+      const label = this.createLabel(`Nav${index + 1}`, bottomNavigation, text, 23, 125, 104)
+      label.node.setPosition(-312.5 + index * 125, 0, 0)
+      label.color = index === 0 ? new Color(230, 199, 112, 255) : new Color(205, 215, 211, 255)
+    })
+
+    const stageClear = this.createNode('StageClearPanel', parent, 540, 300)
+    stageClear.active = false
+
+    const hud = parent.addComponent(BattleHudController)
+    hud.realmLabel = realmLabel
+    hud.stageLabel = stageLabel
+    hud.healthBar = health.progress
+    hud.manaBar = mana.progress
+    hud.soulBar = soul.progress
+    hud.soulLabel = soulLabel
+    hud.bossRoot = bossRoot
+    hud.bossNameLabel = bossNameLabel
+    hud.bossHealthBar = bossHealth.progress
+    hud.updateHero({ realm: '筑基三重', health: 160, maxHealth: 160, mana: 12, maxMana: 12 })
+    hud.updateStage('青苔丘陵', 1)
+    hud.updateSoul(0, 12)
+    hud.hideBoss()
+  }
+
+  private createNode(name: string, parent: Node, width = 0, height = 0) {
+    const node = new Node(name)
+    node.layer = UI_LAYER
+    node.parent = parent
+    const transform = node.addComponent(UITransform)
+    transform.setContentSize(width, height)
+    return node
+  }
+
+  private createSpriteNode(name: string, parent: Node, width: number, height: number) {
+    const node = this.createNode(name, parent, width, height)
+    const sprite = node.addComponent(Sprite)
+    sprite.sizeMode = Sprite.SizeMode.CUSTOM
+    return { node, sprite }
+  }
+
+  private createLabel(name: string, parent: Node, text: string, fontSize: number, width: number, height: number) {
+    const node = this.createNode(name, parent, width, height)
+    const label = node.addComponent(Label)
+    label.string = text
+    label.fontSize = fontSize
+    label.lineHeight = fontSize + 6
+    label.color = new Color(238, 242, 235, 255)
+    label.horizontalAlign = HorizontalTextAlignment.CENTER
+    label.verticalAlign = VerticalTextAlignment.CENTER
+    label.overflow = Label.Overflow.SHRINK
+    return label
+  }
+
+  private createBar(name: string, parent: Node, color: Color, x: number, width = 190): BarParts {
+    const root = this.createNode(name, parent, width, 18)
+    root.setPosition(x, 0, 0)
+    this.drawRect(root, -width / 2, -9, width, 18, new Color(4, 9, 11, 190))
+    const fill = this.createSpriteNode('Fill', root, width - 4, 14)
+    fill.node.getComponent(UITransform)?.setAnchorPoint(0, 0.5)
+    fill.node.setPosition(-width / 2 + 2, 0, 0)
+    const visual = this.createNode('BarVisual', fill.node, width - 4, 14)
+    this.drawRect(visual, 0, -7, width - 4, 14, color)
+    const progress = root.addComponent(ProgressBar)
+    progress.barSprite = fill.sprite
+    progress.totalLength = width - 4
+    return { root, progress }
+  }
+
+  private drawBand(node: Node, width: number, height: number, color: Color) {
+    this.drawRect(node, -width / 2, -height / 2, width, height, color)
+  }
+
+  private drawRect(node: Node, x: number, y: number, width: number, height: number, color: Color) {
+    const graphics = node.addComponent(Graphics)
+    graphics.fillColor = color
+    graphics.rect(x, y, width, height)
+    graphics.fill()
+  }
+
+  private loadSprite(path: string, sprite: Sprite) {
+    resources.load(path, SpriteFrame, (error, asset) => {
+      if (error || !asset) {
+        this.showLoadError(path)
+        return
+      }
+      sprite.spriteFrame = asset
+      sprite.sizeMode = Sprite.SizeMode.CUSTOM
+    })
+  }
+
+  private showLoadError(path: string) {
+    console.warn(`[PortraitBattleBootstrap] asset load failed: ${path}`)
+    if (this.loadErrorLabel) return
+    const canvas = this.node.getChildByName('Canvas')
+    if (!canvas) return
+    this.loadErrorLabel = this.createLabel('LoadErrorLabel', canvas, '资源加载失败', 22, 260, 44)
+    this.loadErrorLabel.node.setPosition(0, 460, 0)
+    this.loadErrorLabel.color = new Color(255, 201, 128, 255)
+  }
+}
