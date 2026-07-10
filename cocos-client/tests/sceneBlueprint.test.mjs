@@ -10,18 +10,26 @@ test('scene blueprint describes the serialized host and actual runtime roots', (
   assert.equal(blueprint.scene.name, 'MainBattle')
   assert.deepEqual(nodes.get('Scene/BattleRoot').components, ['PortraitBattleBootstrap'])
   assert.deepEqual(nodes.get('Canvas').children, ['UICamera', 'BattleRoot'])
-  assert.deepEqual(nodes.get('Canvas/BattleRoot/ActorLayer/EnemySpawner').bindings ?? {}, {})
+  assert.deepEqual(nodes.get('Canvas/BattleRoot/ActorLayer/EnemySpawner').bindings, {
+    enemyPool: 'Canvas/BattleRoot/ActorLayer/EnemyPool',
+  })
   assert.deepEqual(nodes.get('Canvas/BattleRoot/Runtime').bindings, {
     designData: 'resources/Data/cultivation-design.json',
     enemySpawner: 'Canvas/BattleRoot/ActorLayer/EnemySpawner',
+    soulOrbPool: 'Canvas/BattleRoot/DropLayer/SoulOrbPool',
+    damageNumberPool: 'Canvas/BattleRoot/EffectLayer/DamageNumberPool',
+    bossSkillEffectPool: 'Canvas/BattleRoot/EffectLayer/BossEffectPool',
+    playerNode: 'Canvas/BattleRoot/ActorLayer/Player',
+    hud: 'Canvas/BattleRoot/HudLayer',
+    stageClearPanel: 'Canvas/BattleRoot/HudLayer/StageClearPanel',
   })
 
   const paths = new Set(blueprint.nodes.map((node) => node.path))
   assert.equal([...paths].some((path) => path.startsWith('Canvas/Pools')), false)
   assert.equal([...paths].some((path) => path.includes('StatusLabel')), false)
-  assert.deepEqual(nodes.get('Canvas/BattleRoot/HudLayer/StageClearPanel').components, ['UITransform'])
-  assert.equal(JSON.stringify(blueprint).includes('StageClearPanelController'), false)
-  assert.equal(JSON.stringify(blueprint).includes('NodePoolController'), false)
+  assert.deepEqual(nodes.get('Canvas/BattleRoot/HudLayer/StageClearPanel').components, ['UITransform', 'Graphics', 'StageClearPanelController'])
+  assert.equal(JSON.stringify(blueprint).includes('StageClearPanelController'), true)
+  assert.equal(JSON.stringify(blueprint).includes('NodePoolController'), true)
 })
 
 test('scene blueprint defines the approved portrait runtime hierarchy', () => {
@@ -39,8 +47,10 @@ test('scene blueprint defines the approved portrait runtime hierarchy', () => {
     'Canvas/BattleRoot/WorldLayer/MidBackground',
     'Canvas/BattleRoot/ActorLayer/Player',
     'Canvas/BattleRoot/ActorLayer/EnemySpawner',
+    'Canvas/BattleRoot/ActorLayer/EnemyPool',
     'Canvas/BattleRoot/EffectLayer/FlyingSwordSkill/Sword',
     'Canvas/BattleRoot/DropLayer',
+    'Canvas/BattleRoot/DropLayer/SoulOrbPool',
     'Canvas/BattleRoot/InputLayer',
     'Canvas/BattleRoot/HudLayer/TopHud',
     'Canvas/BattleRoot/HudLayer/BossHud',
@@ -62,6 +72,8 @@ test('scene blueprint declares portrait bootstrap component bindings', () => {
     'BattleRuntimeController',
     'FlyingSwordSkill',
     'BattleHudController',
+    'NodePoolController',
+    'StageClearPanelController',
   ]) {
     assert.equal(componentNames.has(component), true, `missing portrait component: ${component}`)
   }

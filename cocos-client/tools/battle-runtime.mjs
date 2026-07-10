@@ -182,6 +182,27 @@ export function segmentHitEnemies(runtime, { from, to, width, pierce }) {
     .map((hit) => hit.enemy)
 }
 
+export function segmentHitEnemiesAlongPath(runtime, { points, width, pierce }) {
+  if (points.length < 2) return []
+  const seen = new Set()
+  const hits = []
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const from = points[index]
+    const to = points[index + 1]
+    for (const enemy of runtime.enemies) {
+      if (!enemy.alive || seen.has(enemy.id)) continue
+      const projection = projectPointToSegment(enemy.position, from, to)
+      if (projection.distance > (enemy.radius ?? 0) + width) continue
+      seen.add(enemy.id)
+      hits.push({ enemy, progress: index + projection.t })
+    }
+  }
+  return hits
+    .sort((a, b) => a.progress - b.progress)
+    .slice(0, Math.max(0, pierce))
+    .map(({ enemy }) => enemy)
+}
+
 function projectPointToSegment(point, from, to) {
   const dx = to.x - from.x
   const dy = to.y - from.y

@@ -1,6 +1,7 @@
 import {
   _decorator,
   Camera,
+  Button,
   Canvas,
   Color,
   Component,
@@ -25,8 +26,15 @@ import { BattleHudController } from './BattleHudController'
 import { BattleInputController } from './BattleInputController'
 import { BattleRuntimeController } from './BattleRuntimeController'
 import { EnemySpawner } from './EnemySpawner'
+import { EnemyController } from './EnemyController'
+import { EnemyVisualController } from './EnemyVisualController'
 import { FlyingSwordSkill } from './FlyingSwordSkill'
+import { NodePoolController } from './NodePoolController'
 import { PlayerController } from './PlayerController'
+import { PoolableActor } from './PoolableActor'
+import { SoulOrbController } from './SoulOrbController'
+import { StageClearPanelController } from './StageClearPanelController'
+import { DamageNumberController } from './DamageNumberController'
 
 const { ccclass } = _decorator
 const WIDTH = 750
@@ -109,11 +117,25 @@ export class PortraitBattleBootstrap extends Component {
 
     this.createWorld(worldLayer, backgroundWidth, visibleHeight)
     const { player, controller, animator } = this.createPlayer(actorLayer)
+    const enemyPool = this.createRuntimePool(actorLayer, 'EnemyPool', 'enemy', 18, () => this.createEnemyNode())
     const enemySpawner = this.createNode('EnemySpawner', actorLayer).addComponent(EnemySpawner)
-    const runtime = this.loadRuntime(battleRoot, enemySpawner)
+    enemySpawner.enemyPool = enemyPool
+    enemySpawner.playerTarget = player
+    const soulOrbPool = this.createRuntimePool(dropLayer, 'SoulOrbPool', 'soul-orb', 24, () => this.createSoulOrbNode())
+    const damageNumberPool = this.createRuntimePool(effectLayer, 'DamageNumberPool', 'damage-number', 24, () => this.createDamageNumberNode())
+    const bossEffectPool = this.createRuntimePool(effectLayer, 'BossEffectPool', 'boss-effect', 4, () => this.createBossEffectNode())
+    const hudParts = this.createHud(hudLayer, visibleHeight)
+    const runtime = this.loadRuntime(battleRoot, {
+      enemySpawner,
+      soulOrbPool,
+      damageNumberPool,
+      bossEffectPool,
+      player,
+      hud: hudParts.hud,
+      stageClearPanel: hudParts.stageClearPanel,
+    })
     this.createFlyingSword(effectLayer, runtime, animator, visibleHeight)
     this.createInput(inputLayer, controller)
-    this.createHud(hudLayer, visibleHeight)
 
     player.setSiblingIndex(0)
   }
@@ -175,7 +197,15 @@ export class PortraitBattleBootstrap extends Component {
     return { player: player.node, controller, animator }
   }
 
-  private loadRuntime(parent: Node, enemySpawner: EnemySpawner) {
+  private loadRuntime(parent: Node, bindings: {
+    enemySpawner: EnemySpawner
+    soulOrbPool: NodePoolController
+    damageNumberPool: NodePoolController
+    bossEffectPool: NodePoolController
+    player: Node
+    hud: BattleHudController
+    stageClearPanel: StageClearPanelController
+  }) {
     const runtimeNode = this.createNode('Runtime', parent)
     const designPath = 'Data/cultivation-design'
     let state: RuntimeLoadState = { status: 'loading' }
@@ -188,7 +218,15 @@ export class PortraitBattleBootstrap extends Component {
       }
       const runtime = runtimeNode.addComponent(BattleRuntimeController)
       runtime.designData = asset
-      runtime.enemySpawner = enemySpawner
+      runtime.enemySpawner = bindings.enemySpawner
+      runtime.soulOrbPool = bindings.soulOrbPool
+      runtime.damageNumberPool = bindings.damageNumberPool
+      runtime.bossSkillEffectPool = bindings.bossEffectPool
+      runtime.playerNode = bindings.player
+      runtime.hud = bindings.hud
+      runtime.stageClearPanel = bindings.stageClearPanel
+      bindings.stageClearPanel.onContinue = (nextStageId) => runtime.advanceToStage(nextStageId)
+      runtime.initialize()
       state = { status: 'ready', runtime }
     })
     return () => state
@@ -202,11 +240,12 @@ export class PortraitBattleBootstrap extends Component {
   ) {
     const skillNode = this.createNode('FlyingSwordSkill', parent, WIDTH, visibleHeight)
     this.fullHeightNodes.push(skillNode)
-    const sword = this.createSpriteNode('Sword', skillNode, 144, 48)
+    const sword = this.createSpriteNode('Sword', skillNode, 176, 44)
     sword.node.active = false
-    this.loadSprite('Assets/Skills/FlyingSword/sword_projectile/spriteFrame', sword.sprite)
+    this.loadSprite('Assets/Skills/FlyingSword/sword-projectile-v2/spriteFrame', sword.sprite)
     const skill = skillNode.addComponent(FlyingSwordSkill)
     skill.sword = sword.node
+    skill.arcHeight = 104
     skillNode.on('player-action-requested', (action: string) => animator.play(action), this)
     const bindRuntime = () => {
       const state = getRuntime()
@@ -216,6 +255,7 @@ export class PortraitBattleBootstrap extends Component {
       }
       if (state.status !== 'ready') return
       skill.battleRuntime = state.runtime
+      state.runtime.swordArcHeight = skill.arcHeight
       this.stopRuntimeBinding(bindRuntime)
     }
     this.bindRuntimeCallback = bindRuntime
@@ -277,8 +317,26 @@ export class PortraitBattleBootstrap extends Component {
       label.color = index === 0 ? new Color(230, 199, 112, 255) : new Color(205, 215, 211, 255)
     })
 
-    const stageClear = this.createNode('StageClearPanel', parent, 540, 300)
-    stageClear.active = false
+    const stageClear = this.createNode('StageClearPanel', parent, 520, 258)
+    stageClear.setPosition(0, 12, 0)
+    this.drawBand(stageClear, 520, 258, new Color(7, 18, 23, 246))
+    const clearTitle = this.createLabel('ClearTitle', stageClear, '守关突破', 34, 470, 48)
+    clearTitle.node.setPosition(0, 82, 0)
+    clearTitle.color = new Color(244, 208, 103, 255)
+    const rewardLabel = this.createLabel('RewardLabel', stageClear, '', 19, 470, 42)
+    rewardLabel.node.setPosition(0, 22, 0)
+    const continueNode = this.createNode('ContinueButton', stageClear, 270, 58)
+    continueNode.setPosition(0, -71, 0)
+    this.drawBand(continueNode, 270, 58, new Color(35, 129, 126, 255))
+    const continueLabel = this.createLabel('ContinueLabel', continueNode, '前往下一关', 24, 250, 54)
+    const continueButton = continueNode.addComponent(Button)
+    const stageClearPanel = stageClear.addComponent(StageClearPanelController)
+    stageClearPanel.panelRoot = stageClear
+    stageClearPanel.titleLabel = clearTitle
+    stageClearPanel.rewardLabel = rewardLabel
+    stageClearPanel.nextStageLabel = continueLabel
+    stageClearPanel.bindContinueButton(continueButton)
+    stageClearPanel.hide()
 
     const hud = parent.addComponent(BattleHudController)
     hud.realmLabel = realmLabel
@@ -294,6 +352,101 @@ export class PortraitBattleBootstrap extends Component {
     hud.updateStage('青苔丘陵', 1)
     hud.updateSoul(0, 12)
     hud.hideBoss()
+    return { hud, stageClearPanel }
+  }
+
+  private createRuntimePool(
+    parent: Node,
+    name: string,
+    poolKey: string,
+    capacity: number,
+    factory: () => Node,
+  ) {
+    const root = this.createNode(name, parent)
+    const pool = root.addComponent(NodePoolController)
+    pool.configure(poolKey, capacity)
+    pool.setFactory(() => factory())
+    return pool
+  }
+
+  private createEnemyNode() {
+    const node = new Node('EnemyActor')
+    node.layer = UI_LAYER
+    const transform = node.addComponent(UITransform)
+    transform.setContentSize(210, 336)
+    const sprite = node.addComponent(Sprite)
+    sprite.sizeMode = Sprite.SizeMode.CUSTOM
+    const animator = node.addComponent(AtlasAnimator)
+    animator.targetSprite = sprite
+    animator.updateInterval = 0.05
+    const controller = node.addComponent(EnemyController)
+    controller.moveSpeed = 78
+    const visual = node.addComponent(EnemyVisualController)
+    visual.animator = animator
+    node.addComponent(PoolableActor)
+    node.on('enemy-runtime-spawned', (_enemyId: number, profile: { id: string; role: string }) => {
+      animator.actorId = profile.id
+      controller.moveSpeed = profile.role === 'boss' ? 54 : profile.role === 'flying' ? 86 : 76
+      this.bindAnimationManifest(animator, 'move')
+    }, this)
+    return node
+  }
+
+  private createSoulOrbNode() {
+    const node = new Node('SoulOrb')
+    node.layer = UI_LAYER
+    node.addComponent(UITransform).setContentSize(34, 34)
+    const glow = node.addComponent(Graphics)
+    glow.fillColor = new Color(76, 235, 211, 210)
+    glow.circle(0, 0, 13)
+    glow.fill()
+    glow.strokeColor = new Color(211, 255, 244, 255)
+    glow.lineWidth = 3
+    glow.circle(0, 0, 16)
+    glow.stroke()
+    node.addComponent(PoolableActor)
+    const controller = node.addComponent(SoulOrbController)
+    controller.magnetRadius = 900
+    return node
+  }
+
+  private createDamageNumberNode() {
+    const node = new Node('DamageNumber')
+    node.layer = UI_LAYER
+    node.addComponent(UITransform).setContentSize(110, 40)
+    const label = node.addComponent(Label)
+    label.fontSize = 26
+    label.lineHeight = 32
+    label.horizontalAlign = HorizontalTextAlignment.CENTER
+    label.verticalAlign = VerticalTextAlignment.CENTER
+    node.addComponent(PoolableActor)
+    const controller = node.addComponent(DamageNumberController)
+    controller.label = label
+    return node
+  }
+
+  private createBossEffectNode() {
+    const node = new Node('BossSkillEffect')
+    node.layer = UI_LAYER
+    node.addComponent(UITransform).setContentSize(190, 190)
+    const effect = node.addComponent(Graphics)
+    effect.fillColor = new Color(55, 190, 126, 72)
+    effect.circle(0, 0, 88)
+    effect.fill()
+    effect.strokeColor = new Color(169, 255, 206, 230)
+    effect.lineWidth = 7
+    effect.circle(0, 0, 72)
+    effect.stroke()
+    node.addComponent(PoolableActor)
+    return node
+  }
+
+  private bindAnimationManifest(animator: AtlasAnimator, initialAction: string) {
+    resources.load('Data/animation-atlas', JsonAsset, (error, asset) => {
+      if (error || !asset || !animator.node.isValid) return
+      animator.animationManifest = asset
+      animator.play(initialAction)
+    })
   }
 
   private createNode(name: string, parent: Node, width = 0, height = 0) {

@@ -15,9 +15,12 @@ export class SoulOrbController extends Component {
   magnetSpeed = 420
 
   private target: Node | null = null
+  private amount = 1
+  onPicked: ((amount: number) => void) | null = null
 
-  follow(target: Node) {
+  follow(target: Node, amount = 1) {
     this.target = target
+    this.amount = Math.max(1, Math.floor(amount))
   }
 
   update(deltaTime: number) {
@@ -28,7 +31,9 @@ export class SoulOrbController extends Component {
     const distance = Vec3.distance(current, targetPosition)
 
     if (distance <= this.pickupRadius) {
-      this.node.emit('soul-orb-picked')
+      this.node.emit('soul-orb-picked', this.amount)
+      this.onPicked?.(this.amount)
+      this.onPicked = null
       const poolable = this.node.getComponent(PoolableActor)
       if (poolable) poolable.despawn()
       else this.node.active = false
@@ -38,7 +43,7 @@ export class SoulOrbController extends Component {
     if (distance <= this.magnetRadius) {
       const next = current.clone()
       const direction = targetPosition.clone().subtract(current).normalize()
-      next.add(direction.multiplyScalar(this.magnetSpeed * deltaTime))
+      next.add(direction.multiplyScalar(Math.min(distance, this.magnetSpeed * deltaTime)))
       this.node.setWorldPosition(next)
     }
   }

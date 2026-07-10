@@ -10,6 +10,9 @@ export class EnemySpawner extends Component {
   @property(NodePoolController)
   enemyPool: NodePoolController | null = null
 
+  @property(Node)
+  playerTarget: Node | null = null
+
   @property
   spawnX = 520
 
@@ -40,9 +43,22 @@ export class EnemySpawner extends Component {
     node.setScale(new Vec3(isBoss ? this.bossScale : 1, isBoss ? this.bossScale : 1, 1))
     enemy.position = { x: spawnX, y: spawnY }
     const controller = node.getComponent(EnemyController)
-    if (controller) controller.setTarget(new Vec3(-180, spawnY, 0))
+    if (controller) {
+      controller.bindRuntimeEnemy(enemy)
+      if (this.playerTarget) controller.setTargetNode(this.playerTarget, enemy.profile.role === 'ground')
+      else controller.setTarget(new Vec3(-180, spawnY, 0))
+    }
+    node.emit('enemy-motion', 'move')
     node.emit('enemy-runtime-spawned', enemy.id, enemy.profile)
     return node
+  }
+
+  bindEnemy(enemy: BattleEnemy) {
+    return this.spawnEnemy(enemy)
+  }
+
+  canSpawn() {
+    return this.enemyPool?.hasAvailableSlot() ?? false
   }
 
   despawnEnemy(node: Node) {

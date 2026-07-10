@@ -139,6 +139,36 @@ export function applyFlyingSwordHit(
   return { hitCount: targets.length, damageEvents, defeatedEnemyIds, stageClear }
 }
 
+export function applyFlyingSwordPathHit(
+  runtime: BattleRuntime,
+  pierce: number,
+  damageScale: number,
+  path: { points: Array<{ x: number; y: number }>; width: number },
+) {
+  const targets = segmentHitEnemiesAlongPath(runtime, { ...path, pierce })
+  const damage = Math.round(runtime.heroAttack * damageScale)
+  const damageEvents: DamageEvent[] = []
+  const defeatedEnemyIds: number[] = []
+  let stageClear = false
+  for (const enemy of targets) {
+    enemy.hp -= damage
+    damageEvents.push({
+      enemyId: enemy.id,
+      damage,
+      remainingHp: Math.max(0, enemy.hp),
+      position: { ...enemy.position },
+    })
+    if (enemy.hp <= 0 && defeatEnemy(runtime, enemy.id)) {
+      defeatedEnemyIds.push(enemy.id)
+      if (enemy.profile.role === 'boss') {
+        runtime.stageCleared = true
+        stageClear = true
+      }
+    }
+  }
+  return { hitCount: targets.length, damageEvents, defeatedEnemyIds, stageClear }
+}
+
 export function spawnBoss(runtime: BattleRuntime) {
   if (
     runtime.bossSpawned
@@ -232,6 +262,30 @@ export function segmentHitEnemies(
     .sort((a, b) => a.progress - b.progress)
     .slice(0, Math.max(0, input.pierce))
     .map((hit) => hit.enemy)
+}
+
+export function segmentHitEnemiesAlongPath(
+  runtime: BattleRuntime,
+  input: { points: Array<{ x: number; y: number }>; width: number; pierce: number },
+) {
+  if (input.points.length < 2) return []
+  const seen = new Set<number>()
+  const hits: Array<{ enemy: BattleEnemy; progress: number }> = []
+  for (let index = 0; index < input.points.length - 1; index += 1) {
+    const from = input.points[index]
+    const to = input.points[index + 1]
+    for (const enemy of runtime.enemies) {
+      if (!enemy.alive || seen.has(enemy.id)) continue
+      const projection = projectPointToSegment(enemy.position, from, to)
+      if (projection.distance > enemy.radius + input.width) continue
+      seen.add(enemy.id)
+      hits.push({ enemy, progress: index + projection.t })
+    }
+  }
+  return hits
+    .sort((a, b) => a.progress - b.progress)
+    .slice(0, Math.max(0, input.pierce))
+    .map(({ enemy }) => enemy)
 }
 
 function projectPointToSegment(point: { x: number; y: number }, from: { x: number; y: number }, to: { x: number; y: number }) {

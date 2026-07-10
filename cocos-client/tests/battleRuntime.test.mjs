@@ -8,6 +8,7 @@ import {
   nextSpawn,
   runtimeStats,
   segmentHitEnemies,
+  segmentHitEnemiesAlongPath,
   spawnBoss,
   tickBossSkill,
 } from '../tools/battle-runtime.mjs'
@@ -138,6 +139,43 @@ test('flying sword geometry respects pierce order along path', () => {
   })
 
   assert.deepEqual(hits.map((enemy) => enemy.id), [near.id])
+})
+
+test('bounded flying sword arc hits ground and flying lanes without hitting outside the path', () => {
+  const runtime = createBattleRuntime({ stageId: 1, heroAttack: 60 })
+  const ground = nextSpawn(runtime, 1.1).enemy
+  const flying = nextSpawn(runtime, 1.1).enemy
+  const outside = nextSpawn(runtime, 1.1).enemy
+  ground.position = { x: -120, y: -52 }
+  flying.position = { x: 150, y: 76 }
+  outside.position = { x: 150, y: 245 }
+
+  const hits = segmentHitEnemiesAlongPath(runtime, {
+    points: [
+      { x: -180, y: -30 },
+      { x: 40, y: 28 },
+      { x: 150, y: 74 },
+      { x: 300, y: -30 },
+    ],
+    width: 20,
+    pierce: 6,
+  })
+
+  assert.deepEqual(hits.map((enemy) => enemy.id), [ground.id, flying.id])
+})
+
+test('polyline sword path only returns each enemy once per pass', () => {
+  const runtime = createBattleRuntime({ stageId: 1, heroAttack: 60 })
+  const enemy = nextSpawn(runtime, 1.1).enemy
+  enemy.position = { x: 100, y: 20 }
+
+  const hits = segmentHitEnemiesAlongPath(runtime, {
+    points: [{ x: 0, y: 0 }, { x: 100, y: 20 }, { x: 200, y: 0 }],
+    width: 16,
+    pierce: 6,
+  })
+
+  assert.deepEqual(hits.map((entry) => entry.id), [enemy.id])
 })
 
 test('stage becomes boss-ready only after 12 ordinary defeats', () => {

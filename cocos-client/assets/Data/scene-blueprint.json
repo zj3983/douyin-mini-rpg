@@ -57,7 +57,7 @@
     {
       "path": "Canvas/BattleRoot/ActorLayer",
       "components": ["UITransform"],
-      "children": ["Player", "EnemySpawner"]
+      "children": ["Player", "EnemyPool", "EnemySpawner"]
     },
     {
       "path": "Canvas/BattleRoot/ActorLayer/Player",
@@ -71,14 +71,21 @@
       "initialAction": "sword_ride"
     },
     {
+      "path": "Canvas/BattleRoot/ActorLayer/EnemyPool",
+      "components": ["UITransform", "NodePoolController"],
+      "capacity": 18,
+      "factoryComponents": ["UITransform", "Sprite", "AtlasAnimator", "EnemyController", "EnemyVisualController", "PoolableActor"],
+      "profiles": ["moss-wolf", "green-wing-moth", "bamboo-warden"]
+    },
+    {
       "path": "Canvas/BattleRoot/ActorLayer/EnemySpawner",
       "components": ["UITransform", "EnemySpawner"],
-      "purpose": "Task 5 placeholder only. No enemy pool is bound until the next task."
+      "bindings": { "enemyPool": "Canvas/BattleRoot/ActorLayer/EnemyPool" }
     },
     {
       "path": "Canvas/BattleRoot/EffectLayer",
       "components": ["UITransform"],
-      "children": ["FlyingSwordSkill"]
+      "children": ["FlyingSwordSkill", "DamageNumberPool", "BossEffectPool"]
     },
     {
       "path": "Canvas/BattleRoot/EffectLayer/FlyingSwordSkill",
@@ -93,12 +100,19 @@
     {
       "path": "Canvas/BattleRoot/EffectLayer/FlyingSwordSkill/Sword",
       "components": ["UITransform", "Sprite"],
-      "resource": "Assets/Skills/FlyingSword/sword_projectile/spriteFrame"
+      "resource": "Assets/Skills/FlyingSword/sword-projectile-v2/spriteFrame",
+      "size": { "width": 176, "height": 44 }
     },
     {
       "path": "Canvas/BattleRoot/DropLayer",
       "components": ["UITransform"],
-      "purpose": "Empty visual layer reserved for the next task."
+      "children": ["SoulOrbPool"]
+    },
+    {
+      "path": "Canvas/BattleRoot/DropLayer/SoulOrbPool",
+      "components": ["UITransform", "NodePoolController"],
+      "capacity": 24,
+      "factoryComponents": ["UITransform", "Graphics", "PoolableActor", "SoulOrbController"]
     },
     {
       "path": "Canvas/BattleRoot/InputLayer",
@@ -137,16 +151,24 @@
     },
     {
       "path": "Canvas/BattleRoot/HudLayer/StageClearPanel",
-      "components": ["UITransform"],
+      "components": ["UITransform", "Graphics", "StageClearPanelController"],
       "active": false,
-      "purpose": "Hidden empty node reserved for the next task."
+      "size": { "width": 520, "height": 258 },
+      "children": ["ClearTitle", "RewardLabel", "ContinueButton"],
+      "purpose": "Compact click-driven clear panel; rewards remain on one row."
     },
     {
       "path": "Canvas/BattleRoot/Runtime",
       "components": ["UITransform", "BattleRuntimeController"],
       "bindings": {
         "designData": "resources/Data/cultivation-design.json",
-        "enemySpawner": "Canvas/BattleRoot/ActorLayer/EnemySpawner"
+        "enemySpawner": "Canvas/BattleRoot/ActorLayer/EnemySpawner",
+        "soulOrbPool": "Canvas/BattleRoot/DropLayer/SoulOrbPool",
+        "damageNumberPool": "Canvas/BattleRoot/EffectLayer/DamageNumberPool",
+        "bossSkillEffectPool": "Canvas/BattleRoot/EffectLayer/BossEffectPool",
+        "playerNode": "Canvas/BattleRoot/ActorLayer/Player",
+        "hud": "Canvas/BattleRoot/HudLayer",
+        "stageClearPanel": "Canvas/BattleRoot/HudLayer/StageClearPanel"
       }
     }
   ]

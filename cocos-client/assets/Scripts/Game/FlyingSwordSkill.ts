@@ -45,6 +45,10 @@ export class FlyingSwordSkill extends Component {
 
   update(deltaTime: number) {
     if (!this.battleRuntime) return
+    if (this.battleRuntime.isBattleFrozen()) {
+      this.resetSwordPresentation()
+      return
+    }
     if (!this.timeline) this.timeline = this.createTimeline()
 
     const events = advanceFlyingSwordTimeline(this.timeline, deltaTime)
