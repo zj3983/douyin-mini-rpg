@@ -31,6 +31,9 @@ import { PlayerController } from './PlayerController'
 const { ccclass } = _decorator
 const WIDTH = 750
 const HEIGHT = 1334
+const NAV_HEIGHT = 104
+const TOP_HUD_OFFSET = 83
+const BOSS_HUD_OFFSET = 179
 const UI_LAYER = Layers.Enum.UI_2D
 
 interface BarParts {
@@ -60,7 +63,12 @@ export class PortraitBattleBootstrap extends Component {
     if (this.assembled) return
     this.assembled = true
 
-    const canvasNode = this.createNode('Canvas', this.node, WIDTH, HEIGHT)
+    const visibleSize = view.getVisibleSize()
+    const visibleHeight = Math.max(HEIGHT, visibleSize.height)
+    const backgroundScale = visibleHeight / HEIGHT
+    const backgroundWidth = WIDTH * backgroundScale
+
+    const canvasNode = this.createNode('Canvas', this.node, WIDTH, visibleHeight)
     const canvas = canvasNode.addComponent(Canvas)
     const cameraNode = this.createNode('UICamera', canvasNode)
     const camera = cameraNode.addComponent(Camera)
@@ -68,29 +76,29 @@ export class PortraitBattleBootstrap extends Component {
     camera.visibility = UI_LAYER
     camera.priority = 100
     canvas.cameraComponent = camera
-    const battleRoot = this.createNode('BattleRoot', canvasNode, WIDTH, HEIGHT)
-    const worldLayer = this.createNode('WorldLayer', battleRoot, WIDTH, HEIGHT)
-    const actorLayer = this.createNode('ActorLayer', battleRoot, WIDTH, HEIGHT)
-    const effectLayer = this.createNode('EffectLayer', battleRoot, WIDTH, HEIGHT)
-    this.createNode('DropLayer', battleRoot, WIDTH, HEIGHT)
-    const inputLayer = this.createNode('InputLayer', battleRoot, WIDTH, 1120)
-    inputLayer.setPosition(0, -3, 0)
-    const hudLayer = this.createNode('HudLayer', battleRoot, WIDTH, HEIGHT)
+    const battleRoot = this.createNode('BattleRoot', canvasNode, WIDTH, visibleHeight)
+    const worldLayer = this.createNode('WorldLayer', battleRoot, WIDTH, visibleHeight)
+    const actorLayer = this.createNode('ActorLayer', battleRoot, WIDTH, visibleHeight)
+    const effectLayer = this.createNode('EffectLayer', battleRoot, WIDTH, visibleHeight)
+    this.createNode('DropLayer', battleRoot, WIDTH, visibleHeight)
+    const inputLayer = this.createNode('InputLayer', battleRoot, WIDTH, visibleHeight - NAV_HEIGHT)
+    inputLayer.setPosition(0, NAV_HEIGHT / 2, 0)
+    const hudLayer = this.createNode('HudLayer', battleRoot, WIDTH, visibleHeight)
 
-    this.createWorld(worldLayer)
-    const { player, controller } = this.createPlayer(actorLayer)
+    this.createWorld(worldLayer, backgroundWidth, visibleHeight)
+    const { player, controller, animator } = this.createPlayer(actorLayer)
     const enemySpawner = this.createNode('EnemySpawner', actorLayer).addComponent(EnemySpawner)
     const runtime = this.loadRuntime(battleRoot, enemySpawner)
-    this.createFlyingSword(effectLayer, runtime)
+    this.createFlyingSword(effectLayer, runtime, animator, visibleHeight)
     this.createInput(inputLayer, controller)
-    this.createHud(hudLayer)
+    this.createHud(hudLayer, visibleHeight)
 
     player.setSiblingIndex(0)
   }
 
-  private createWorld(parent: Node) {
-    const far = this.createSpriteNode('FarBackground', parent, WIDTH, HEIGHT)
-    const mid = this.createSpriteNode('MidBackground', parent, WIDTH, HEIGHT)
+  private createWorld(parent: Node, backgroundWidth: number, visibleHeight: number) {
+    const far = this.createSpriteNode('FarBackground', parent, backgroundWidth, visibleHeight)
+    const mid = this.createSpriteNode('MidBackground', parent, backgroundWidth, visibleHeight)
     mid.sprite.color = new Color(255, 255, 255, 168)
     this.midBackground = mid.node
     this.loadSprite('Assets/World/MistBamboo/far/spriteFrame', far.sprite)
@@ -123,7 +131,7 @@ export class PortraitBattleBootstrap extends Component {
       animator.animationManifest = runtimeManifest
       animator.play('sword_ride')
     })
-    return { player: player.node, controller }
+    return { player: player.node, controller, animator }
   }
 
   private loadRuntime(parent: Node, enemySpawner: EnemySpawner) {
@@ -142,13 +150,20 @@ export class PortraitBattleBootstrap extends Component {
     return () => runtime
   }
 
-  private createFlyingSword(parent: Node, getRuntime: () => BattleRuntimeController | null) {
-    const skillNode = this.createNode('FlyingSwordSkill', parent, WIDTH, HEIGHT)
+  private createFlyingSword(
+    parent: Node,
+    getRuntime: () => BattleRuntimeController | null,
+    animator: AtlasAnimator,
+    visibleHeight: number,
+  ) {
+    const skillNode = this.createNode('FlyingSwordSkill', parent, WIDTH, visibleHeight)
     const sword = this.createSpriteNode('Sword', skillNode, 144, 48)
     sword.node.active = false
     this.loadSprite('Assets/Skills/FlyingSword/sword_projectile/spriteFrame', sword.sprite)
     const skill = skillNode.addComponent(FlyingSwordSkill)
     skill.sword = sword.node
+    skillNode.on('player-action-requested', (action: string) => animator.play(action), this)
+    skillNode.on('player-action-ended', () => animator.play('sword_ride'), this)
     const bindRuntime = () => {
       const runtime = getRuntime()
       if (!runtime) return
@@ -169,9 +184,9 @@ export class PortraitBattleBootstrap extends Component {
     input.bindInputArea(inputArea)
   }
 
-  private createHud(parent: Node) {
+  private createHud(parent: Node, visibleHeight: number) {
     const topHud = this.createNode('TopHud', parent, WIDTH, 126)
-    topHud.setPosition(0, 584, 0)
+    topHud.setPosition(0, visibleHeight / 2 - TOP_HUD_OFFSET, 0)
     this.drawBand(topHud, WIDTH, 126, new Color(13, 24, 28, 214))
     const realmLabel = this.createLabel('RealmLabel', topHud, '筑基三重', 28, 190, 40)
     realmLabel.node.setPosition(-255, 34, 0)
@@ -187,19 +202,19 @@ export class PortraitBattleBootstrap extends Component {
     const soulLabel = this.createLabel('SoulLabel', soul.root, '魂 0/12', 18, 190, 28)
 
     const bossRoot = this.createNode('BossHud', parent, WIDTH, 62)
-    bossRoot.setPosition(0, 488, 0)
+    bossRoot.setPosition(0, visibleHeight / 2 - BOSS_HUD_OFFSET, 0)
     this.drawBand(bossRoot, WIDTH, 62, new Color(35, 13, 17, 220))
     const bossNameLabel = this.createLabel('BossNameLabel', bossRoot, '', 22, 170, 32)
     bossNameLabel.node.setPosition(-260, 0, 0)
     const bossHealth = this.createBar('BossHealthBar', bossRoot, new Color(190, 48, 64, 255), 82, 430)
     bossHealth.root.setPosition(120, 0, 0)
 
-    const bottomNavigation = this.createNode('BottomNavigation', parent, WIDTH, 104)
-    bottomNavigation.setPosition(0, -615, 0)
-    this.drawBand(bottomNavigation, WIDTH, 104, new Color(12, 22, 25, 238))
+    const bottomNavigation = this.createNode('BottomNavigation', parent, WIDTH, NAV_HEIGHT)
+    bottomNavigation.setPosition(0, -visibleHeight / 2 + NAV_HEIGHT / 2, 0)
+    this.drawBand(bottomNavigation, WIDTH, NAV_HEIGHT, new Color(12, 22, 25, 238))
     const navLabels = ['战斗', '副本', '抽卡', '装备', '背包', '法宝']
     navLabels.forEach((text, index) => {
-      const label = this.createLabel(`Nav${index + 1}`, bottomNavigation, text, 23, 125, 104)
+      const label = this.createLabel(`Nav${index + 1}`, bottomNavigation, text, 23, 125, NAV_HEIGHT)
       label.node.setPosition(-312.5 + index * 125, 0, 0)
       label.color = index === 0 ? new Color(230, 199, 112, 255) : new Color(205, 215, 211, 255)
     })

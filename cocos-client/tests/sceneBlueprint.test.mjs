@@ -2,19 +2,26 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { validateSceneBlueprint } from '../tools/validate-scene-blueprint.mjs'
 
-test('scene blueprint defines battle root, pools, hud, and required bindings', () => {
+test('scene blueprint describes the serialized host and actual runtime roots', () => {
   const blueprint = JSON.parse(readFileSync(resolve('assets/Data/scene-blueprint.json'), 'utf8'))
-  const report = validateSceneBlueprint(blueprint)
+  const nodes = new Map(blueprint.nodes.map((node) => [node.path, node]))
 
-  assert.equal(report.ok, true, report.errors.join('\n'))
   assert.equal(blueprint.scene.name, 'MainBattle')
-  assert.equal(blueprint.nodes.some((node) => node.path === 'Canvas/BattleRoot/Runtime'), true)
-  assert.equal(blueprint.nodes.some((node) => node.path === 'Canvas/Pools/SoulOrbPool'), true)
-  assert.equal(blueprint.nodes.some((node) => node.path === 'Canvas/BattleRoot/HudLayer/StageClearPanel'), true)
-  const enemyPrefab = blueprint.prefabs.find((prefab) => prefab.path === 'prefabs/Enemy.prefab')
-  assert.equal(enemyPrefab.components.includes('EnemyVisualController'), true)
+  assert.deepEqual(nodes.get('Scene/BattleRoot').components, ['PortraitBattleBootstrap'])
+  assert.deepEqual(nodes.get('Canvas').children, ['UICamera', 'BattleRoot'])
+  assert.deepEqual(nodes.get('Canvas/BattleRoot/ActorLayer/EnemySpawner').bindings ?? {}, {})
+  assert.deepEqual(nodes.get('Canvas/BattleRoot/Runtime').bindings, {
+    designData: 'resources/Data/cultivation-design.json',
+    enemySpawner: 'Canvas/BattleRoot/ActorLayer/EnemySpawner',
+  })
+
+  const paths = new Set(blueprint.nodes.map((node) => node.path))
+  assert.equal([...paths].some((path) => path.startsWith('Canvas/Pools')), false)
+  assert.equal([...paths].some((path) => path.includes('StatusLabel')), false)
+  assert.deepEqual(nodes.get('Canvas/BattleRoot/HudLayer/StageClearPanel').components, ['UITransform'])
+  assert.equal(JSON.stringify(blueprint).includes('StageClearPanelController'), false)
+  assert.equal(JSON.stringify(blueprint).includes('NodePoolController'), false)
 })
 
 test('scene blueprint defines the approved portrait runtime hierarchy', () => {
@@ -23,6 +30,7 @@ test('scene blueprint defines the approved portrait runtime hierarchy', () => {
 
   assert.equal(blueprint.scene.orientation, 'portrait')
   assert.deepEqual(blueprint.scene.designResolution, { width: 750, height: 1334 })
+  assert.equal(blueprint.scene.runtimeHeight, 'view.getVisibleSize().height')
 
   for (const path of [
     'Canvas',

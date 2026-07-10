@@ -59,3 +59,26 @@ test('resources Data copies deep-equal their authority JSON files', () => {
     assert.deepEqual(JSON.parse(readFileSync(resourcePath, 'utf8')), authority)
   }
 })
+
+test('portrait bootstrap fills the visible height without stretching the whole scene', () => {
+  const source = readFileSync(resolve('assets/Scripts/Game/PortraitBattleBootstrap.ts'), 'utf8')
+
+  assert.match(source, /const visibleSize = view\.getVisibleSize\(\)/)
+  assert.match(source, /const visibleHeight = Math\.max\(HEIGHT, visibleSize\.height\)/)
+  assert.match(source, /const backgroundScale = visibleHeight \/ HEIGHT/)
+  assert.match(source, /const backgroundWidth = WIDTH \* backgroundScale/)
+  assert.match(source, /createNode\('Canvas', this\.node, WIDTH, visibleHeight\)/)
+  assert.match(source, /createNode\('InputLayer', battleRoot, WIDTH, visibleHeight - NAV_HEIGHT\)/)
+  assert.match(source, /inputLayer\.setPosition\(0, NAV_HEIGHT \/ 2, 0\)/)
+  assert.match(source, /topHud\.setPosition\(0, visibleHeight \/ 2 - TOP_HUD_OFFSET, 0\)/)
+  assert.match(source, /bottomNavigation\.setPosition\(0, -visibleHeight \/ 2 \+ NAV_HEIGHT \/ 2, 0\)/)
+  assert.doesNotMatch(source, /setScale\([^,]+,\s*visibleHeight \/ HEIGHT/)
+})
+
+test('portrait bootstrap bridges flying sword action events to the player animator', () => {
+  const source = readFileSync(resolve('assets/Scripts/Game/PortraitBattleBootstrap.ts'), 'utf8')
+
+  assert.match(source, /createFlyingSword\(effectLayer, runtime, animator/)
+  assert.match(source, /skillNode\.on\('player-action-requested',\s*\(action: string\) => animator\.play\(action\)/)
+  assert.match(source, /skillNode\.on\('player-action-ended',\s*\(\) => animator\.play\('sword_ride'\)/)
+})
