@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import test from 'node:test'
 
-import { stageVisualFor } from '../tools/stage-visual-catalog.mjs'
+import { planBackgroundRelease, planBackgroundRequest, stageVisualFor } from '../tools/stage-visual-catalog.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 
@@ -39,6 +39,50 @@ test('stage visual catalog exposes background and theme metadata', () => {
   )
   assert.throws(() => stageVisualFor(0), /Unknown stage visual: 0/)
   assert.throws(() => stageVisualFor(5), /Unknown stage visual: 5/)
+})
+
+test('release plan frees every previous stage asset after a successful swap', () => {
+  assert.deepEqual(
+    planBackgroundRelease(stageVisualFor(1), stageVisualFor(2)),
+    [
+      'Assets/World/MistBamboo/far/spriteFrame',
+      'Assets/World/MistBamboo/mid/spriteFrame',
+    ],
+  )
+  assert.deepEqual(
+    planBackgroundRelease(stageVisualFor(2), stageVisualFor(3)),
+    ['Assets/World/MistLantern/far/spriteFrame'],
+  )
+})
+
+test('release plan never frees current paths and never returns duplicates', () => {
+  const shared = {
+    stageId: 8,
+    backgroundId: 'shared-old',
+    theme: 'test',
+    farPath: 'Assets/World/Shared/spriteFrame',
+    midPath: 'Assets/World/Shared/spriteFrame',
+  }
+  const current = {
+    stageId: 9,
+    backgroundId: 'shared-current',
+    theme: 'test',
+    farPath: 'Assets/World/Shared/spriteFrame',
+    midPath: null,
+  }
+
+  assert.deepEqual(planBackgroundRelease(shared, current), [])
+  assert.deepEqual(planBackgroundRelease(shared, null), ['Assets/World/Shared/spriteFrame'])
+})
+
+test('request plan avoids duplicate loads and cancels a stale outgoing request', () => {
+  const stage1 = stageVisualFor(1)
+  const stage2 = stageVisualFor(2)
+
+  assert.equal(planBackgroundRequest(null, stage1, stage1), 'ignore')
+  assert.equal(planBackgroundRequest(stage1, stage1, stage1), 'ignore')
+  assert.equal(planBackgroundRequest(stage1, stage2, stage1), 'cancel')
+  assert.equal(planBackgroundRequest(stage1, stage1, stage2), 'load')
 })
 
 test('stage backgrounds are copied into Cocos resources', () => {

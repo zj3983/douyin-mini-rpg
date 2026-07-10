@@ -35,7 +35,12 @@ import { PoolableActor } from './PoolableActor'
 import { SoulOrbController } from './SoulOrbController'
 import { StageClearPanelController } from './StageClearPanelController'
 import { DamageNumberController } from './DamageNumberController'
-import { StageVisual, stageVisualFor } from '../Core/StageVisualCatalog'
+import {
+  planBackgroundRelease,
+  planBackgroundRequest,
+  StageVisual,
+  stageVisualFor,
+} from '../Core/StageVisualCatalog'
 
 const { ccclass } = _decorator
 const WIDTH = 750
@@ -71,8 +76,8 @@ export class PortraitBattleBootstrap extends Component {
   private assembled = false
   private runtimeNode: Node | null = null
   private backgroundLoadGeneration = 0
-  private activeFarPath: string | null = null
-  private activeMidPath: string | null = null
+  private activeBackground: StageVisual | null = null
+  private requestedBackground: StageVisual | null = null
   private backgroundLoadWarnings = new Set<string>()
 
   onLoad() {
@@ -246,41 +251,48 @@ export class PortraitBattleBootstrap extends Component {
   private switchStageBackground(visual: StageVisual) {
     const farSprite = this.farBackground?.getComponent(Sprite)
     if (!farSprite) return
+    const requestPlan = planBackgroundRequest(this.activeBackground, this.requestedBackground, visual)
+    if (requestPlan === 'ignore') return
+    if (requestPlan === 'cancel') {
+      this.backgroundLoadGeneration += 1
+      this.requestedBackground = this.activeBackground
+      return
+    }
     const generation = ++this.backgroundLoadGeneration
+    this.requestedBackground = visual
 
     resources.load(visual.farPath, SpriteFrame, (error, farAsset) => {
       if (this.destroyed || generation !== this.backgroundLoadGeneration) {
-        if (!error && farAsset && !this.isFirstStagePath(visual.farPath)) {
-          resources.release(visual.farPath, SpriteFrame)
-        }
+        if (!error && farAsset) this.releaseAbandonedLoad(visual.farPath)
         return
       }
       if (error || !farAsset) {
+        this.requestedBackground = this.activeBackground
         this.warnBackgroundLoadOnce(visual.farPath, error)
         return
       }
 
       const applyVisual = (midAsset: SpriteFrame | null) => {
         if (this.destroyed || generation !== this.backgroundLoadGeneration) {
-          if (!this.isFirstStagePath(visual.farPath)) resources.release(visual.farPath, SpriteFrame)
-          if (visual.midPath && !this.isFirstStagePath(visual.midPath)) resources.release(visual.midPath, SpriteFrame)
+          this.releaseAbandonedLoad(visual.farPath)
+          if (visual.midPath) this.releaseAbandonedLoad(visual.midPath)
           return
         }
-        const previousFarPath = this.activeFarPath
-        const previousMidPath = this.activeMidPath
+        const previousBackground = this.activeBackground
         farSprite.spriteFrame = farAsset
         farSprite.sizeMode = Sprite.SizeMode.CUSTOM
-        this.activeFarPath = visual.farPath
 
         const midSprite = this.midBackground?.getComponent(Sprite)
         if (this.midBackground && midSprite) {
-          this.midBackground.active = Boolean(midAsset)
           midSprite.spriteFrame = midAsset
           if (midAsset) midSprite.sizeMode = Sprite.SizeMode.CUSTOM
+          this.midBackground.active = Boolean(midAsset)
         }
-        this.activeMidPath = visual.midPath
-        this.releasePreviousBackground(previousFarPath, visual.farPath)
-        this.releasePreviousBackground(previousMidPath, visual.midPath)
+        this.activeBackground = visual
+        this.requestedBackground = visual
+        for (const path of planBackgroundRelease(previousBackground, visual)) {
+          resources.release(path, SpriteFrame)
+        }
       }
 
       if (!visual.midPath) {
@@ -289,8 +301,11 @@ export class PortraitBattleBootstrap extends Component {
       }
       resources.load(visual.midPath, SpriteFrame, (midError, midAsset) => {
         if (midError || !midAsset) {
-          if (generation === this.backgroundLoadGeneration) this.warnBackgroundLoadOnce(visual.midPath!, midError)
-          if (!this.isFirstStagePath(visual.farPath)) resources.release(visual.farPath, SpriteFrame)
+          if (generation === this.backgroundLoadGeneration) {
+            this.requestedBackground = this.activeBackground
+            this.warnBackgroundLoadOnce(visual.midPath!, midError)
+          }
+          this.releaseAbandonedLoad(visual.farPath)
           return
         }
         applyVisual(midAsset)
@@ -298,13 +313,15 @@ export class PortraitBattleBootstrap extends Component {
     })
   }
 
-  private releasePreviousBackground(previousPath: string | null, currentPath: string | null) {
-    if (!previousPath || previousPath === currentPath || this.isFirstStagePath(previousPath)) return
-    resources.release(previousPath, SpriteFrame)
-  }
-
-  private isFirstStagePath(path: string) {
-    return path.startsWith('Assets/World/MistBamboo/')
+  private releaseAbandonedLoad(path: string) {
+    const activePaths = this.activeBackground
+      ? [this.activeBackground.farPath, this.activeBackground.midPath]
+      : []
+    const requestedPaths = this.requestedBackground
+      ? [this.requestedBackground.farPath, this.requestedBackground.midPath]
+      : []
+    if (activePaths.includes(path) || requestedPaths.includes(path)) return
+    resources.release(path, SpriteFrame)
   }
 
   private warnBackgroundLoadOnce(key: string, error: unknown) {

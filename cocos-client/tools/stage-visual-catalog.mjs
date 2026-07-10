@@ -34,3 +34,20 @@ export function stageVisualFor(stageId) {
   if (!visual) throw new Error(`Unknown stage visual: ${stageId}`)
   return visual
 }
+
+export function planBackgroundRelease(previous, current) {
+  if (!previous) return []
+  const currentPaths = new Set(current ? [current.farPath, current.midPath].filter(Boolean) : [])
+  return [...new Set([previous.farPath, previous.midPath].filter(Boolean))]
+    .filter((path) => !currentPaths.has(path))
+}
+
+function isSameVisual(left, right) {
+  return Boolean(left && right && left.farPath === right.farPath && left.midPath === right.midPath)
+}
+
+export function planBackgroundRequest(active, requested, next) {
+  if (isSameVisual(requested, next)) return 'ignore'
+  if (isSameVisual(active, next)) return 'cancel'
+  return 'load'
+}

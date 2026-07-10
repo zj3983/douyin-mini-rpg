@@ -42,3 +42,24 @@ export function stageVisualFor(stageId: number): StageVisual {
   if (!visual) throw new Error(`Unknown stage visual: ${stageId}`)
   return visual
 }
+
+export function planBackgroundRelease(previous: StageVisual | null, current: StageVisual | null): string[] {
+  if (!previous) return []
+  const currentPaths = new Set(current ? [current.farPath, current.midPath].filter(Boolean) : [])
+  return [...new Set([previous.farPath, previous.midPath].filter(Boolean) as string[])]
+    .filter((path) => !currentPaths.has(path))
+}
+
+function isSameVisual(left: StageVisual | null, right: StageVisual | null) {
+  return Boolean(left && right && left.farPath === right.farPath && left.midPath === right.midPath)
+}
+
+export function planBackgroundRequest(
+  active: StageVisual | null,
+  requested: StageVisual | null,
+  next: StageVisual,
+): 'ignore' | 'cancel' | 'load' {
+  if (isSameVisual(requested, next)) return 'ignore'
+  if (isSameVisual(active, next)) return 'cancel'
+  return 'load'
+}
