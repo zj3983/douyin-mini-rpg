@@ -213,6 +213,15 @@ export function createContactDamageGate({ maxHealth, cooldown }) {
   }
 }
 
+export function normalizeSoulHudCount(current, required) {
+  const safeRequired = Number.isFinite(required) ? Math.max(0, Math.floor(required)) : 0
+  const safeCurrent = Number.isFinite(current) ? Math.max(0, Math.floor(current)) : 0
+  return {
+    current: Math.min(safeCurrent, safeRequired),
+    required: safeRequired,
+  }
+}
+
 export function tickContactDamageGate(gate, deltaTime) {
   gate.cooldownRemaining = Math.max(0, gate.cooldownRemaining - Math.max(0, deltaTime))
 }

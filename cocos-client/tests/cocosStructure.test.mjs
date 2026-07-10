@@ -210,6 +210,8 @@ test('battle HUD is null-safe and clamps every progress bar', () => {
     assert.match(source, new RegExp(`${method}\\(`), `HUD should expose ${method}`)
   }
   assert.match(source, /Math\.min\(1,\s*Math\.max\(0,/)
+  assert.match(source, /normalizeSoulHudCount\(current, required\)/)
+  assert.match(source, /`魂 \$\{display\.current\}\/\$\{display\.required\}`/)
   assert.match(source, /bossRoot\.active = false/)
 })
 

@@ -176,6 +176,15 @@ export interface ContactDamageGate {
   cooldownRemaining: number
 }
 
+export function normalizeSoulHudCount(current: number, required: number) {
+  const safeRequired = Number.isFinite(required) ? Math.max(0, Math.floor(required)) : 0
+  const safeCurrent = Number.isFinite(current) ? Math.max(0, Math.floor(current)) : 0
+  return {
+    current: Math.min(safeCurrent, safeRequired),
+    required: safeRequired,
+  }
+}
+
 export function createContactDamageGate(input: { maxHealth: number; cooldown: number }): ContactDamageGate {
   const maxHealth = Math.max(1, Math.floor(input.maxHealth))
   return {

@@ -1,4 +1,5 @@
 import { _decorator, Component, Label, Node, ProgressBar } from 'cc'
+import { normalizeSoulHudCount } from '../Core/BattleRuntime'
 
 const { ccclass, property } = _decorator
 
@@ -50,8 +51,9 @@ export class BattleHudController extends Component {
   }
 
   updateSoul(current: number, required: number) {
-    this.setProgress(this.soulBar, current, required)
-    if (this.soulLabel) this.soulLabel.string = `魂 ${current}/${required}`
+    const display = normalizeSoulHudCount(current, required)
+    this.setProgress(this.soulBar, display.current, display.required)
+    if (this.soulLabel) this.soulLabel.string = `魂 ${display.current}/${display.required}`
   }
 
   showBoss(name: string, current: number, max: number) {
