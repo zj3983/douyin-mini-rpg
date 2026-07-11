@@ -1,4 +1,10 @@
 import { EnemyProfile, StageProfile } from './CultivationTypes'
+import {
+  completeDrain,
+  recordBossDefeat,
+  recordOrdinaryDefeat,
+  StageFlowState,
+} from './StageFlowRuntime'
 
 export interface BattleEnemy {
   id: number
@@ -449,6 +455,35 @@ export function retireOrdinaryEnemy(runtime: BattleRuntime, enemyId: number) {
 
   enemy.alive = false
   return true
+}
+
+export function advanceOrdinaryDefeatFlow(
+  runtime: BattleRuntime,
+  stageFlow: StageFlowState,
+  generation: number,
+) {
+  if (generation !== stageFlow.generation) {
+    return { changed: false, retiredEnemyIds: [] as number[], bossSpawn: null }
+  }
+
+  const transition = recordOrdinaryDefeat(stageFlow)
+  if (transition.command !== 'beginDrain') {
+    return { changed: transition.changed, retiredEnemyIds: [] as number[], bossSpawn: null }
+  }
+
+  const retiredEnemyIds = runtime.enemies
+    .filter((enemy) => enemy.alive && enemy.profile.role !== 'boss')
+    .filter((enemy) => retireOrdinaryEnemy(runtime, enemy.id))
+    .map((enemy) => enemy.id)
+  const drain = completeDrain(stageFlow, generation)
+  const bossSpawn = drain.command === 'spawnBoss' ? spawnBoss(runtime) : null
+  return { changed: true, retiredEnemyIds, bossSpawn }
+}
+
+export function advanceBossDefeatFlow(stageFlow: StageFlowState, generation: number) {
+  if (generation !== stageFlow.generation) return { changed: false, settle: false }
+  const transition = recordBossDefeat(stageFlow)
+  return { changed: transition.changed, settle: transition.command === 'settle' }
 }
 
 export function runtimeStats(runtime: BattleRuntime) {

@@ -3,6 +3,8 @@ import {
   applyContactDamage,
   applyDirectDamage,
   applyFlyingSwordPathHit,
+  advanceBossDefeatFlow,
+  advanceOrdinaryDefeatFlow,
   BattleEnemy,
   BattleRuntime,
   beginBattleAttempt,
@@ -16,7 +18,6 @@ import {
   markBattleAttemptCleared,
   markBattleAttemptDefeated,
   nextSpawn,
-  retireOrdinaryEnemy,
   rollbackSpawnedEnemy,
   scheduleBossSettlement,
   spawnBoss,
@@ -24,11 +25,8 @@ import {
   tickContactDamageGate,
 } from '../Core/BattleRuntime'
 import {
-  completeDrain,
   createStageFlow,
   markPlayerDefeated,
-  recordBossDefeat,
-  recordOrdinaryDefeat,
   StageFlowState,
 } from '../Core/StageFlowRuntime'
 import { CultivationDesignData, stageProfileFromDesign } from '../Core/CultivationRuntime'
@@ -198,9 +196,9 @@ export class BattleRuntimeController extends Component {
     return node
   }
 
-  private trySpawnBoss() {
-    if (!this.runtime || this.battleFrozen || this.stageFlow.phase !== 'boss' || this.runtime.bossSpawned) return false
-    const result = spawnBoss(this.runtime)
+  private trySpawnBoss(bossSpawn?: ReturnType<typeof spawnBoss> | null) {
+    if (!this.runtime || this.battleFrozen || this.stageFlow.phase !== 'boss' || (!bossSpawn && this.runtime.bossSpawned)) return false
+    const result = bossSpawn ?? spawnBoss(this.runtime)
     if (!result.ok || !result.enemy) return false
     const node = this.spawnRuntimeEnemy(result.enemy)
     if (!node) {
@@ -272,8 +270,8 @@ export class BattleRuntimeController extends Component {
 
     const generation = this.stageGeneration
     if (enemy.profile.role === 'boss') {
-      const transition = recordBossDefeat(this.stageFlow)
-      if (transition.command !== 'settle') return
+      const transition = advanceBossDefeatFlow(this.stageFlow, generation)
+      if (!transition.settle) return
       const settlementToken = scheduleBossSettlement(this.stageSettlement)
       if (settlementToken === null) return
       const settleDelay = Math.max(this.deathRecycleDelay, this.bossDeathSettleDelay)
@@ -289,7 +287,7 @@ export class BattleRuntimeController extends Component {
       return
     }
 
-    const transition = recordOrdinaryDefeat(this.stageFlow)
+    const transition = advanceOrdinaryDefeatFlow(this.runtime, this.stageFlow, generation)
     this.scheduleOnce(() => {
       if (generation !== this.stageGeneration) return
       if (this.enemyNodes.get(enemyId) === enemyNode) {
@@ -298,22 +296,13 @@ export class BattleRuntimeController extends Component {
         this.enemyByNode.delete(enemyNode)
       }
     }, this.deathRecycleDelay)
-    if (transition.command === 'beginDrain') this.beginDrain(generation)
-  }
-
-  private beginDrain(generation: number) {
-    if (!this.runtime || generation !== this.stageFlow.generation) return false
-    for (const enemy of this.runtime.enemies) {
-      if (!enemy.alive || enemy.profile.role === 'boss') continue
-      retireOrdinaryEnemy(this.runtime, enemy.id)
-      const node = this.enemyNodes.get(enemy.id)
+    for (const retiredEnemyId of transition.retiredEnemyIds) {
+      const node = this.enemyNodes.get(retiredEnemyId)
       if (node) this.enemySpawner?.despawnEnemy(node)
-      this.enemyNodes.delete(enemy.id)
+      this.enemyNodes.delete(retiredEnemyId)
       if (node) this.enemyByNode.delete(node)
     }
-    const drain = completeDrain(this.stageFlow, generation)
-    if (drain.command === 'spawnBoss') return this.trySpawnBoss()
-    return false
+    if (transition.bossSpawn) this.trySpawnBoss(transition.bossSpawn)
   }
 
   private spawnSoulOrb(position: Vec3, amount: number) {

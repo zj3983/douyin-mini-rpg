@@ -6,7 +6,6 @@ import {
   createBattleRuntime,
   defeatEnemy,
   nextSpawn,
-  retireOrdinaryEnemy,
   runtimeStats,
   segmentHitEnemies,
   segmentHitEnemiesAlongPath,
@@ -14,6 +13,7 @@ import {
   tickBossSkill,
 } from '../tools/battle-runtime.mjs'
 import * as battleRuntimeModule from '../tools/battle-runtime.mjs'
+import { createStageFlow } from '../tools/stage-flow-runtime.mjs'
 
 function defeatOrdinaryEnemies(runtime, count = 12) {
   for (let index = 0; index < count; index += 1) {
@@ -210,19 +210,60 @@ test('boss starts as soon as the defeat target is met even with survivors', () =
   assert.equal(spawnBoss(runtime).ok, true)
 })
 
-test('draining retires surviving ordinary enemies without drops or defeat credit', () => {
+test('target defeat drains surviving extras and spawns exactly one boss', () => {
+  assert.equal(typeof battleRuntimeModule.advanceOrdinaryDefeatFlow, 'function')
   const runtime = createBattleRuntime({ stageId: 1, heroAttack: 80 })
+  const flow = createStageFlow(runtime.defeatTarget, 7)
   const ordinary = []
   for (let index = 0; index < 14; index += 1) ordinary.push(nextSpawn(runtime, 1.1).enemy)
-  for (const enemy of ordinary.slice(0, 12)) defeatEnemy(runtime, enemy.id)
+  for (const enemy of ordinary.slice(0, 11)) {
+    defeatEnemy(runtime, enemy.id)
+    battleRuntimeModule.advanceOrdinaryDefeatFlow(runtime, flow, 7)
+  }
 
-  assert.equal(retireOrdinaryEnemy(runtime, ordinary[12].id), true)
-  assert.equal(retireOrdinaryEnemy(runtime, ordinary[13].id), true)
-  assert.equal(retireOrdinaryEnemy(runtime, ordinary[13].id), false)
+  defeatEnemy(runtime, ordinary[11].id)
+  const target = battleRuntimeModule.advanceOrdinaryDefeatFlow(runtime, flow, 7)
+  const duplicate = battleRuntimeModule.advanceOrdinaryDefeatFlow(runtime, flow, 7)
+
+  assert.deepEqual(target.retiredEnemyIds, ordinary.slice(12).map((enemy) => enemy.id))
+  assert.equal(target.bossSpawn?.ok, true)
+  assert.equal(duplicate.bossSpawn, null)
+  assert.equal(runtime.enemies.filter((enemy) => enemy.role === 'boss').length, 1)
   assert.equal(runtimeStats(runtime).aliveOrdinaryEnemies, 0)
   assert.equal(runtimeStats(runtime).defeatedEnemies, 12)
   assert.equal(runtimeStats(runtime).soulDrops, 12)
-  assert.equal(spawnBoss(runtime).ok, true)
+})
+
+test('stale generation after rebuild cannot block or duplicate the new boss', () => {
+  assert.equal(typeof battleRuntimeModule.advanceOrdinaryDefeatFlow, 'function')
+  const runtime = createBattleRuntime({ stageId: 1, heroAttack: 80 })
+  runtime.defeatTarget = 1
+  const flow = createStageFlow(1, 9)
+  const ordinary = nextSpawn(runtime, 1.1).enemy
+  defeatEnemy(runtime, ordinary.id)
+
+  const stale = battleRuntimeModule.advanceOrdinaryDefeatFlow(runtime, flow, 8)
+  const current = battleRuntimeModule.advanceOrdinaryDefeatFlow(runtime, flow, 9)
+  const late = battleRuntimeModule.advanceOrdinaryDefeatFlow(runtime, flow, 8)
+
+  assert.equal(stale.changed, false)
+  assert.equal(current.bossSpawn?.ok, true)
+  assert.equal(late.changed, false)
+  assert.equal(runtime.enemies.filter((enemy) => enemy.role === 'boss').length, 1)
+})
+
+test('boss defeat flow emits settlement exactly once', () => {
+  assert.equal(typeof battleRuntimeModule.advanceBossDefeatFlow, 'function')
+  const flow = createStageFlow(1, 4)
+  flow.phase = 'boss'
+
+  const first = battleRuntimeModule.advanceBossDefeatFlow(flow, 4)
+  const duplicate = battleRuntimeModule.advanceBossDefeatFlow(flow, 4)
+  const stale = battleRuntimeModule.advanceBossDefeatFlow(flow, 3)
+
+  assert.equal(first.settle, true)
+  assert.equal(duplicate.settle, false)
+  assert.equal(stale.settle, false)
 })
 
 test('ordinary spawning stops at the alive enemy cap', () => {

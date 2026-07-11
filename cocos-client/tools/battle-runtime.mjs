@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { completeDrain, recordBossDefeat, recordOrdinaryDefeat } from './stage-flow-runtime.mjs'
 
 const design = JSON.parse(readFileSync(resolve('assets/Data/cultivation-design.json'), 'utf8'))
 
@@ -336,6 +337,31 @@ export function retireOrdinaryEnemy(runtime, enemyId) {
 
   enemy.alive = false
   return true
+}
+
+export function advanceOrdinaryDefeatFlow(runtime, stageFlow, generation) {
+  if (generation !== stageFlow.generation) {
+    return { changed: false, retiredEnemyIds: [], bossSpawn: null }
+  }
+
+  const transition = recordOrdinaryDefeat(stageFlow)
+  if (transition.command !== 'beginDrain') {
+    return { changed: transition.changed, retiredEnemyIds: [], bossSpawn: null }
+  }
+
+  const retiredEnemyIds = runtime.enemies
+    .filter((enemy) => enemy.alive && enemy.role !== 'boss')
+    .filter((enemy) => retireOrdinaryEnemy(runtime, enemy.id))
+    .map((enemy) => enemy.id)
+  const drain = completeDrain(stageFlow, generation)
+  const bossSpawn = drain.command === 'spawnBoss' ? spawnBoss(runtime) : null
+  return { changed: true, retiredEnemyIds, bossSpawn }
+}
+
+export function advanceBossDefeatFlow(stageFlow, generation) {
+  if (generation !== stageFlow.generation) return { changed: false, settle: false }
+  const transition = recordBossDefeat(stageFlow)
+  return { changed: transition.changed, settle: transition.command === 'settle' }
 }
 
 export function runtimeStats(runtime) {
