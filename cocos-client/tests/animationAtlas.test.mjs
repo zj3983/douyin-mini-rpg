@@ -211,13 +211,7 @@ test('third stage actors use clean aligned Flame Ravine strips', async () => {
   const { readPngRgba } = await import('../tools/png-alpha-runtime.mjs')
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
   const actorIds = ['lava-lizard', 'ember-crow', 'flame-ogre']
-  const expectedFrames = {
-    idle: [0],
-    move: [1, 2],
-    attack: [3],
-    hurt: [4],
-    death: [5],
-  }
+  const sourceX = (action) => action.order.map((index) => action.frames[index].x)
 
   for (const actorId of actorIds) {
     const actor = manifest.actors.find(({ id }) => id === actorId)
@@ -228,6 +222,14 @@ test('third stage actors use clean aligned Flame Ravine strips', async () => {
 
     const image = readPngRgba(resolve('assets/resources', expectedAtlas))
     assert.deepEqual({ width: image.width, height: image.height }, { width: 1920, height: 512 })
+    for (const [x, y] of [[0, 0], [image.width - 1, 0], [0, image.height - 1], [image.width - 1, image.height - 1]]) {
+      const offset = (y * image.width + x) * 4
+      assert.deepEqual([...image.data.subarray(offset, offset + 4)], [0, 0, 0, 0], `${actorId} corner ${x},${y} must be clean RGBA`)
+    }
+    for (let x = 0; x < image.width; x += 1) {
+      assert.equal(image.data[x * 4 + 3], 0, `${actorId} top outer border must be transparent`)
+      assert.equal(image.data[((image.height - 1) * image.width + x) * 4 + 3], 0, `${actorId} bottom outer border must be transparent`)
+    }
     const visibleBottoms = []
     for (let cell = 0; cell < 6; cell += 1) {
       const cellX = cell * 320
@@ -253,6 +255,31 @@ test('third stage actors use clean aligned Flame Ravine strips', async () => {
       assert.equal(visiblePixels > 1000, true, `${actorId} cell ${cell} needs useful subject coverage`)
       assert.equal(magentaPixels / visiblePixels < 0.02, true, `${actorId} cell ${cell} retains magenta background`)
       assert.equal(blackPixels / visiblePixels < 0.15, true, `${actorId} cell ${cell} retains black background`)
+
+      const pending = new Set()
+      for (let y = 28; y < 484; y += 1) {
+        for (let x = 28; x < 292; x += 1) {
+          if (image.data[(y * image.width + cellX + x) * 4 + 3] > 32) pending.add(`${x},${y}`)
+        }
+      }
+      const componentSizes = []
+      while (pending.size) {
+        const first = pending.values().next().value
+        pending.delete(first)
+        const queue = [first]
+        let size = 0
+        while (queue.length) {
+          const [x, y] = queue.pop().split(',').map(Number)
+          size += 1
+          for (const key of [`${x - 1},${y}`, `${x + 1},${y}`, `${x},${y - 1}`, `${x},${y + 1}`]) {
+            if (pending.delete(key)) queue.push(key)
+          }
+        }
+        componentSizes.push(size)
+      }
+      componentSizes.sort((a, b) => b - a)
+      assert.equal(componentSizes[0] > visiblePixels * 0.55, true, `${actorId} cell ${cell} lacks one dominant whole subject`)
+      assert.equal((componentSizes[1] ?? 0) < visiblePixels * 0.08, true, `${actorId} cell ${cell} has an obvious detached frame fragment`)
       visibleBottoms.push(visibleBottom)
     }
     assert.equal(
@@ -261,13 +288,50 @@ test('third stage actors use clean aligned Flame Ravine strips', async () => {
       `${actorId} visible bottoms should align: ${visibleBottoms.join(', ')}`,
     )
 
-    for (const [name, indices] of Object.entries(expectedFrames)) {
-      const action = actor.actions.find((candidate) => candidate.name === name)
-      assert.ok(action, `${actorId} should define ${name}`)
-      assert.equal(action.atlas, expectedAtlas)
-      assert.deepEqual(action.frames, indices.map((index) => ({ x: index * 320, y: 0, w: 320, h: 512 })))
-      assert.deepEqual(action.order, indices.map((_, index) => index))
-    }
+    const actions = Object.fromEntries(actor.actions.map((action) => [action.name, action]))
+    for (const action of Object.values(actions)) assert.equal(action.atlas, expectedAtlas)
+
+    assert.equal(actions.idle.loop, true)
+    assert.equal(actions.idle.order.length > 1, true, `${actorId} idle should be a readable loop`)
+    assert.equal(sourceX(actions.idle).includes(0), true, `${actorId} idle should preserve x0`)
+    assert.deepEqual(new Set(sourceX(actions.move)), new Set([320, 640]))
+
+    const attackX = sourceX(actions.attack)
+    assert.equal(actions.attack.loop, false)
+    assert.equal(attackX.length >= 3, true, `${actorId} attack needs windup, strike, and recovery`)
+    assert.equal(attackX.indexOf(960) > 0 && attackX.indexOf(960) < attackX.length - 1, true)
+    assert.equal(attackX.at(-1), 0, `${actorId} attack should recover to idle`)
+
+    const hurtX = sourceX(actions.hurt)
+    assert.equal(actions.hurt.loop, false)
+    assert.equal(hurtX.length >= 2, true, `${actorId} hurt needs recoil and recovery`)
+    assert.equal(hurtX.includes(1280), true)
+    assert.equal(hurtX.at(-1), 0, `${actorId} hurt should recover to idle`)
+
+    const deathX = sourceX(actions.death)
+    assert.equal(actions.death.loop, false)
+    assert.equal(deathX.length >= 3, true, `${actorId} death needs transition and hold frames`)
+    assert.equal(deathX[0], 1280, `${actorId} death should transition through hurt`)
+    assert.equal(deathX.at(-1), 1600, `${actorId} death should end on its death pose`)
+    assert.equal(deathX.at(-2), 1600, `${actorId} death should hold its final pose before stopping`)
+  }
+})
+
+test('third stage replacement atlases leave no stale actor-atlas assets or manifest references', () => {
+  const stalePaths = [
+    'Assets/ActorAtlases/LavaLizard/atlas.png',
+    'Assets/ActorAtlases/EmberCrow/atlas.png',
+    'Assets/ActorAtlases/FlameOgre/atlas.png',
+  ]
+  const manifests = [
+    readFileSync(resolve('assets/Data/animation-atlas.json'), 'utf8'),
+    readFileSync(resolve('assets/resources/Data/animation-atlas.json'), 'utf8'),
+  ]
+
+  for (const stalePath of stalePaths) {
+    assert.equal(existsSync(resolve('assets/resources', stalePath)), false, `${stalePath} should be removed`)
+    assert.equal(existsSync(resolve('assets/resources', `${stalePath}.meta`)), false, `${stalePath}.meta should be removed`)
+    assert.equal(manifests.some((manifest) => manifest.includes(stalePath)), false, `${stalePath} should be unreferenced`)
   }
 })
 
@@ -298,7 +362,8 @@ test('animation atlas actions define frame rects, playback order, and loop rules
 
     for (const action of actor.actions) {
       assert.equal(action.frames.length > 0, true)
-      assert.equal(action.order.length, action.frames.length)
+      assert.equal(action.order.length > 0, true)
+      assert.equal(action.order.every((index) => Number.isInteger(index) && index >= 0 && index < action.frames.length), true)
       assert.equal(typeof action.loop, 'boolean')
       assert.equal(action.fps > 0, true)
 
