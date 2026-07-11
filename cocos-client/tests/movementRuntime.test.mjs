@@ -2,7 +2,14 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { advancePlayerMovement, clampBattleTarget, stepTowardTarget } from '../tools/movement-runtime.mjs'
+import {
+  advancePlayerControllerFrame,
+  advancePlayerMovement,
+  applyPlayerActionEvent,
+  clampBattleTarget,
+  createPlayerPresentationState,
+  stepTowardTarget,
+} from '../tools/movement-runtime.mjs'
 import * as movementRuntime from '../tools/movement-runtime.mjs'
 
 test('portrait target stays below HUD and above navigation', () => {
@@ -94,13 +101,70 @@ test('rapid target replacement changes only the target and advances from the cur
     { x: 0, y: -300 },
     { x: -300, y: 0 },
   ]) {
+    const currentBeforeRequest = { ...current }
+    const spawnBeforeRequest = { ...state.spawnPosition }
+    const stateBeforeRequest = { ...state, target: state.target && { ...state.target } }
     assert.equal(movementRuntime.requestPlayerMovement(state, target), true)
-    assert.deepEqual(state.spawnPosition, spawn)
+    assert.deepEqual(state.spawnPosition, spawnBeforeRequest)
+    assert.deepEqual(current, currentBeforeRequest)
+    assert.equal(state.movementEnabled, stateBeforeRequest.movementEnabled)
+    assert.deepEqual(state.target, target)
     const frame = advancePlayerMovement(state, current, 220, 1 / 60)
+    const displacement = { x: frame.position.x - current.x, y: frame.position.y - current.y }
+    const latestDirection = { x: target.x - current.x, y: target.y - current.y }
+    assert.ok(displacement.x * latestDirection.x + displacement.y * latestDirection.y > 0)
     assert.ok(Math.abs(frame.distanceMoved - 220 / 60) < 1e-9)
     assert.ok(Math.hypot(frame.position.x - current.x, frame.position.y - current.y) <= 220 / 60 + 1e-9)
     current = frame.position
   }
+})
+
+test('controller frame helper emits move only for displacement and sword ride once on arrival', () => {
+  const movement = movementRuntime.createPlayerMovementState({ x: 0, y: 0 })
+  const presentation = createPlayerPresentationState(11)
+  movementRuntime.requestPlayerMovement(movement, { x: 2, y: 0 })
+
+  const arrived = advancePlayerControllerFrame(movement, presentation, { x: 0, y: 0 }, 220, 0.2)
+  assert.deepEqual(arrived.position, { x: 2, y: 0 })
+  assert.equal(arrived.emitMove, true)
+  assert.deepEqual(arrived.motionChanges, [true, false])
+  assert.equal(arrived.action, 'sword_ride')
+  assert.equal(arrived.arrived, true)
+
+  const idle = advancePlayerControllerFrame(movement, presentation, arrived.position, 220, 0.2)
+  assert.equal(idle.emitMove, false)
+  assert.equal(idle.action, null)
+  assert.equal(idle.arrived, false)
+})
+
+test('cast hit and death action events preserve position target and movement presentation', () => {
+  const movement = movementRuntime.createPlayerMovementState({ x: -10, y: 5 })
+  const presentation = createPlayerPresentationState(7)
+  const current = { x: 3, y: 4 }
+  movementRuntime.requestPlayerMovement(movement, { x: 80, y: -20 })
+
+  for (const action of ['hand_seal', 'flying_sword_cast', 'hurt', 'death']) {
+    const before = structuredClone({ movement, presentation, current })
+    const decision = applyPlayerActionEvent(movement, presentation, current, action)
+    assert.deepEqual({ movement, presentation, current }, before)
+    assert.deepEqual(decision.position, current)
+    assert.deepEqual(decision.target, { x: 80, y: -20 })
+    assert.equal(decision.action, action)
+    assert.equal(decision.emitMove, false)
+  }
+})
+
+test('hover output is absolute from a stable base and never accumulates', () => {
+  const movement = movementRuntime.createPlayerMovementState({ x: 0, y: 0 })
+  const presentation = createPlayerPresentationState(20)
+  const first = advancePlayerControllerFrame(movement, presentation, { x: 0, y: 0 }, 220, 0.125)
+  const second = advancePlayerControllerFrame(movement, presentation, { x: 0, y: 0 }, 220, 0.125)
+  const fresh = createPlayerPresentationState(20)
+  const combined = advancePlayerControllerFrame(movementRuntime.createPlayerMovementState({ x: 0, y: 0 }), fresh, { x: 0, y: 0 }, 220, 0.25)
+
+  assert.equal(first.hoverY, 20 + Math.sin(0.5) * 2)
+  assert.equal(second.hoverY, combined.hoverY)
+  assert.ok(second.hoverY >= 18 && second.hoverY <= 22)
 })
 
 test('one large update matches deterministic bounded substeps', () => {

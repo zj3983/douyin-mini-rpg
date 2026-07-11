@@ -1,8 +1,11 @@
 import { _decorator, Component, Node, Vec3 } from 'cc'
 import {
-  advancePlayerMovement,
+  advancePlayerControllerFrame,
+  applyPlayerActionEvent,
   createPlayerMovementState,
+  createPlayerPresentationState,
   PlayerMovementState,
+  PlayerPresentationState,
   requestPlayerMovement,
   resetPlayerMovement,
   stepTowardTarget,
@@ -20,18 +23,20 @@ export class PlayerController extends Component {
   public moveSpeed = 220
 
   private movementState: PlayerMovementState = createPlayerMovementState({ x: 0, y: 0 })
-  private moving = false
-  private hoverElapsed = 0
+  private presentationState: PlayerPresentationState = createPlayerPresentationState()
   private swordMountBasePosition = new Vec3()
 
   onLoad() {
     const spawnPosition = this.node.worldPosition
     this.movementState = createPlayerMovementState({ x: spawnPosition.x, y: spawnPosition.y })
-    if (this.swordMount) this.swordMountBasePosition.set(this.swordMount.position)
+    if (this.swordMount) {
+      this.swordMountBasePosition.set(this.swordMount.position)
+      this.presentationState = createPlayerPresentationState(this.swordMountBasePosition.y)
+    }
   }
 
   start() {
-    this.node.emit('player-action-requested', 'sword_ride')
+    this.requestAction('sword_ride')
   }
 
   public moveTo(worldPosition: Vec3) {
@@ -41,47 +46,53 @@ export class PlayerController extends Component {
 
   public stop() {
     stopPlayerMovement(this.movementState)
-    this.setMoving(false, false)
+    this.setMoving(false)
   }
 
   public reset() {
     const spawnPosition = resetPlayerMovement(this.movementState)
     this.node.setWorldPosition(spawnPosition.x, spawnPosition.y, this.node.worldPosition.z)
-    this.setMoving(false, false)
-    this.node.emit('player-action-requested', 'sword_ride')
+    this.setMoving(false)
+    this.requestAction('sword_ride')
   }
 
   update(deltaTime: number) {
-    if (Number.isFinite(deltaTime) && deltaTime > 0) this.hoverElapsed += deltaTime
-    this.animateSword()
-    if (!this.movementState.target) return
-
     const current = this.node.worldPosition
+    // Presentation helper validates deltaTime before hoverElapsed += deltaTime.
     // Runtime applies bounded stepTowardTarget(...) substeps before returning one frame result.
-    const frame = advancePlayerMovement(this.movementState, current, this.moveSpeed, deltaTime)
-    if (frame.distanceMoved > 0) {
+    const frame = advancePlayerControllerFrame(
+      this.movementState,
+      this.presentationState,
+      current,
+      this.moveSpeed,
+      deltaTime,
+    )
+    this.animateSword(frame.hoverY)
+    if (frame.emitMove) {
       this.node.setWorldPosition(frame.position.x, frame.position.y, current.z)
-      this.setMoving(true, false)
     }
-    if (frame.arrived) {
-      this.setMoving(false)
-    }
+    for (const moving of frame.motionChanges) this.node.emit('player-motion-changed', moving)
+    if (frame.action) this.requestAction(frame.action, frame.position)
   }
 
-  private animateSword() {
+  private animateSword(hoverY: number) {
     if (!this.swordMount) return
-    const yOffset = Math.sin(this.hoverElapsed * 4) * 2
     this.swordMount.setPosition(
       this.swordMountBasePosition.x,
-      this.swordMountBasePosition.y + yOffset,
+      hoverY,
       this.swordMountBasePosition.z,
     )
   }
 
-  private setMoving(moving: boolean, requestIdleAction = true) {
-    if (this.moving === moving) return
-    this.moving = moving
+  private setMoving(moving: boolean) {
+    if (this.presentationState.moving === moving) return
+    this.presentationState.moving = moving
     this.node.emit('player-motion-changed', moving)
-    if (requestIdleAction) this.node.emit('player-action-requested', 'sword_ride')
+  }
+
+  private requestAction(action: string, position = this.node.worldPosition) {
+    const decision = applyPlayerActionEvent(this.movementState, this.presentationState, position, action)
+    // Arrival resolves to emit('player-action-requested', 'sword_ride') through the runtime decision.
+    this.node.emit('player-action-requested', decision.action)
   }
 }

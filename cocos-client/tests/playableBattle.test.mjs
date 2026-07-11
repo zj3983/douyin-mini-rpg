@@ -327,9 +327,10 @@ test('flying sword visual and damage consume the same per-frame swept segment', 
 
 test('player controller consumes substep movement and emits motion only for displacement', () => {
   const player = read('assets/Scripts/Game/PlayerController.ts')
-  assert.match(player, /advancePlayerMovement\(/)
-  assert.match(player, /if \(frame\.distanceMoved > 0\)/)
-  assert.match(player, /if \(frame\.arrived\)/)
+  assert.match(player, /advancePlayerControllerFrame\(/)
+  assert.match(player, /applyPlayerActionEvent\(/)
+  assert.match(player, /if \(frame\.emitMove\)/)
+  assert.match(player, /if \(frame\.action\)/)
   assert.doesNotMatch(player, /private target: Vec3/)
 })
 
@@ -347,8 +348,8 @@ test('cast hit and death events cannot mutate player movement or create a lunge'
 
 test('sword hover is subtle and always derives from its captured base transform', () => {
   const player = read('assets/Scripts/Game/PlayerController.ts')
-  assert.match(player, /swordMountBasePosition\.y \+ yOffset/)
-  assert.match(player, /Math\.sin\(this\.hoverElapsed \* 4\) \* [12]/)
+  assert.match(player, /frame\.hoverY/)
+  assert.match(player, /createPlayerPresentationState\(this\.swordMountBasePosition\.y\)/)
   assert.doesNotMatch(player, /swordMount\.position\.y \+ yOffset/)
 })
 

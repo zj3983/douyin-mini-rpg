@@ -67,6 +67,12 @@ export function stepTowardTarget(current: Point2, target: Point2, speed: number,
   }
 }
 
+export interface PlayerPresentationState {
+  moving: boolean
+  hoverElapsed: number
+  hoverBaseY: number
+}
+
 export const MAX_MOVEMENT_SUBSTEP = 1 / 60
 
 export function advancePlayerMovement(
@@ -100,4 +106,54 @@ export function advancePlayerMovement(
   }
 
   return { position, distanceMoved, arrived: false, substeps }
+}
+
+export function createPlayerPresentationState(hoverBaseY = 0): PlayerPresentationState {
+  return { moving: false, hoverElapsed: 0, hoverBaseY }
+}
+
+export function advancePlayerControllerFrame(
+  movementState: PlayerMovementState,
+  presentationState: PlayerPresentationState,
+  current: Point2,
+  speed: number,
+  deltaTime: number,
+) {
+  const validDelta = Number.isFinite(deltaTime) && deltaTime > 0 ? deltaTime : 0
+  presentationState.hoverElapsed += validDelta
+  const movement = advancePlayerMovement(movementState, current, speed, deltaTime)
+  const emitMove = movement.distanceMoved > 0
+  const motionChanges: boolean[] = []
+
+  if (emitMove && !presentationState.moving) {
+    presentationState.moving = true
+    motionChanges.push(true)
+  }
+  if (movement.arrived && presentationState.moving) {
+    presentationState.moving = false
+    motionChanges.push(false)
+  }
+
+  return {
+    ...movement,
+    emitMove,
+    motionChanges,
+    action: movement.arrived ? 'sword_ride' : null,
+    hoverY: presentationState.hoverBaseY + Math.sin(presentationState.hoverElapsed * 4) * 2,
+  }
+}
+
+export function applyPlayerActionEvent(
+  movementState: PlayerMovementState,
+  presentationState: PlayerPresentationState,
+  current: Point2,
+  action: string,
+) {
+  return {
+    action,
+    position: { ...current },
+    target: movementState.target ? { ...movementState.target } : null,
+    moving: presentationState.moving,
+    emitMove: false,
+  }
 }
