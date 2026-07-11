@@ -335,6 +335,108 @@ test('third stage replacement atlases leave no stale actor-atlas assets or manif
   }
 })
 
+test('fourth stage actors use clean aligned Star Abyss strips and honest sequences', async () => {
+  const { readPngRgba } = await import('../tools/png-alpha-runtime.mjs')
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+  const actorIds = ['star-armored-beast', 'void-wing-spirit', 'meteor-guardian']
+  const sourceX = (action) => action.order.map((index) => action.frames[index].x)
+
+  for (const actorId of actorIds) {
+    const actor = manifest.actors.find(({ id }) => id === actorId)
+    const expectedAtlas = `Assets/Combat/StarAbyss/${actorId}-strip.png`
+    assert.ok(actor, `${actorId} should exist`)
+    assert.equal(actor.atlas, expectedAtlas)
+    assert.deepEqual(actor.frameSize, { w: 320, h: 512 })
+
+    const image = readPngRgba(resolve('assets/resources', expectedAtlas))
+    assert.deepEqual({ width: image.width, height: image.height }, { width: 1920, height: 512 })
+    const visibleBottoms = []
+    for (let cell = 0; cell < 6; cell += 1) {
+      const cellX = cell * 320
+      let visibleBottom = -1
+      let visiblePixels = 0
+      let blackPixels = 0
+      let magentaPixels = 0
+      const pending = new Set()
+      for (let y = 0; y < 512; y += 1) {
+        for (let x = 0; x < 320; x += 1) {
+          const offset = (y * image.width + cellX + x) * 4
+          const [r, g, b, alpha] = image.data.subarray(offset, offset + 4)
+          if (alpha > 0) {
+            visiblePixels += 1
+            visibleBottom = y
+            if (r > 220 && b > 180 && g < 80) magentaPixels += 1
+            if (r < 5 && g < 5 && b < 5) blackPixels += 1
+          }
+          if (alpha > 32 && x >= 28 && x < 292 && y >= 28 && y < 484) pending.add(`${x},${y}`)
+          if (x < 28 || x >= 292 || y < 28 || y >= 484) {
+            assert.equal(alpha, 0, `${actorId} cell ${cell} touches its transparent gutter`)
+          }
+        }
+      }
+      assert.equal(visiblePixels > 1000, true, `${actorId} cell ${cell} needs useful subject coverage`)
+      assert.equal(magentaPixels / visiblePixels < 0.02, true, `${actorId} cell ${cell} retains chroma background`)
+      assert.equal(blackPixels / visiblePixels < 0.15, true, `${actorId} cell ${cell} retains black background`)
+
+      const componentSizes = []
+      while (pending.size) {
+        const first = pending.values().next().value
+        pending.delete(first)
+        const queue = [first]
+        let size = 0
+        while (queue.length) {
+          const [x, y] = queue.pop().split(',').map(Number)
+          size += 1
+          for (const key of [`${x - 1},${y}`, `${x + 1},${y}`, `${x},${y - 1}`, `${x},${y + 1}`]) {
+            if (pending.delete(key)) queue.push(key)
+          }
+        }
+        componentSizes.push(size)
+      }
+      componentSizes.sort((a, b) => b - a)
+      assert.equal(componentSizes[0] > visiblePixels * 0.55, true, `${actorId} cell ${cell} lacks one dominant whole subject`)
+      assert.equal((componentSizes[1] ?? 0) < visiblePixels * 0.08, true, `${actorId} cell ${cell} has a neighbor fragment`)
+      visibleBottoms.push(visibleBottom)
+    }
+    assert.equal(Math.max(...visibleBottoms) - Math.min(...visibleBottoms) <= 1, true, `${actorId} baselines differ: ${visibleBottoms}`)
+
+    const actions = Object.fromEntries(actor.actions.map((action) => [action.name, action]))
+    for (const action of Object.values(actions)) assert.equal(action.atlas, expectedAtlas)
+    assert.equal(actions.idle.loop, true)
+    assert.deepEqual(new Set(sourceX(actions.idle)), new Set([0]))
+    assert.deepEqual(new Set(sourceX(actions.move)), new Set([320, 640]))
+    assert.equal(actions.attack.loop, false)
+    assert.equal(sourceX(actions.attack).length >= 3, true)
+    assert.equal(sourceX(actions.attack).includes(960), true)
+    assert.equal(sourceX(actions.attack).at(-1), 0)
+    assert.equal(actions.hurt.loop, false)
+    assert.equal(sourceX(actions.hurt).includes(1280), true)
+    assert.equal(sourceX(actions.hurt).at(-1), 0)
+    assert.equal(actions.death.loop, false)
+    assert.equal(sourceX(actions.death)[0], 1280)
+    assert.equal(sourceX(actions.death).at(-2), 1600)
+    assert.equal(sourceX(actions.death).at(-1), 1600)
+  }
+})
+
+test('fourth stage replacement atlases leave no stale actor-atlas assets or manifest references', () => {
+  const stalePaths = [
+    'Assets/ActorAtlases/StarArmoredBeast/atlas.png',
+    'Assets/ActorAtlases/VoidWingSpirit/atlas.png',
+    'Assets/ActorAtlases/MeteorGuardian/atlas.png',
+  ]
+  const manifests = [
+    readFileSync(resolve('assets/Data/animation-atlas.json'), 'utf8'),
+    readFileSync(resolve('assets/resources/Data/animation-atlas.json'), 'utf8'),
+  ]
+
+  for (const stalePath of stalePaths) {
+    assert.equal(existsSync(resolve('assets/resources', stalePath)), false, `${stalePath} should be removed`)
+    assert.equal(existsSync(resolve('assets/resources', `${stalePath}.meta`)), false, `${stalePath}.meta should be removed`)
+    assert.equal(manifests.some((manifest) => manifest.includes(stalePath)), false, `${stalePath} should be unreferenced`)
+  }
+})
+
 test('source and resources animation manifests stay deeply identical', () => {
   const sourceManifest = JSON.parse(readFileSync(resolve('assets/Data/animation-atlas.json'), 'utf8'))
   const resourceManifest = JSON.parse(readFileSync(resolve('assets/resources/Data/animation-atlas.json'), 'utf8'))
