@@ -34,6 +34,7 @@ import {
 import { CultivationDesignData, stageProfileFromDesign } from '../Core/CultivationRuntime'
 import {
   HomingSwordSegment,
+  HomingSwordPhase,
   HomingSwordState,
   recordGeometricSwordHits,
   snapshotLivingSwordTargets,
@@ -130,7 +131,7 @@ export class BattleRuntimeController extends Component {
     return { x: position.x, y: position.y }
   }
 
-  resolveHomingSwordSegment(state: HomingSwordState, segment: HomingSwordSegment) {
+  resolveHomingSwordSegment(state: HomingSwordState, segment: HomingSwordSegment, phase: HomingSwordPhase) {
     const empty: ReturnType<typeof applyFlyingSwordPathHit> = {
       hitCount: 0,
       damageEvents: [],
@@ -145,7 +146,7 @@ export class BattleRuntimeController extends Component {
       pierce: this.runtime.enemies.length,
     })
     const result = { ...empty }
-    const newHitIds = new Set(recordGeometricSwordHits(state, geometricHits.map((enemy) => String(enemy.id))))
+    const newHitIds = new Set(recordGeometricSwordHits(state, geometricHits.map((enemy) => String(enemy.id)), phase))
     for (const enemy of geometricHits) {
       if (!newHitIds.has(String(enemy.id))) continue
       const isolatedRuntime = { ...this.runtime, enemies: [enemy] }

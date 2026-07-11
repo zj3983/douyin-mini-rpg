@@ -106,9 +106,9 @@ export function createHomingSwordCast(start: SwordPoint, targets: HomingSwordTar
   return state
 }
 
-export function recordGeometricSwordHits(state: HomingSwordState, ids: string[]) {
+export function recordGeometricSwordHits(state: HomingSwordState, ids: string[], phase: HomingSwordPhase = state.phase) {
   if (!Array.isArray(ids)) return []
-  return ids.filter((id) => recordSwordHit(state, id))
+  return ids.filter((id) => recordSwordHit(state, id, phase))
 }
 
 export function resetHomingSwordCast(_state: HomingSwordState | null): null {
@@ -145,9 +145,11 @@ export function beginSwordReturn(state: HomingSwordState) {
   state.phase = 'returning'; state.targetId = null; return true
 }
 
-export function recordSwordHit(state: HomingSwordState, id: unknown) {
-  if (!state || typeof id !== 'string' || id.trim() === '' || !Array.isArray(state.hitIds) || state.hitIds.includes(id)) return false
-  state.hitIds.push(id); return true
+export function recordSwordHit(state: HomingSwordState, id: unknown, phase: HomingSwordPhase = state.phase) {
+  if (!state || typeof id !== 'string' || id.trim() === '' || (phase !== 'outbound' && phase !== 'returning') || !Array.isArray(state.hitIds)) return false
+  const key = `${phase}:${id}`
+  if (state.hitIds.includes(key)) return false
+  state.hitIds.push(key); return true
 }
 
 export function stepHomingSword(state: HomingSwordState, deltaTime: number, targets: HomingSwordTarget[], playerPosition: SwordPoint): HomingSwordStepResult {

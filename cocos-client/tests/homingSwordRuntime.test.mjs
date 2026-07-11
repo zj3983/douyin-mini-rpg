@@ -157,14 +157,16 @@ test('returning tracks a moved player and finishes within radius without oversho
   assert.ok(finiteState(state))
 })
 
-test('records each valid hit only once across the full cast', () => {
+test('records each valid hit once per flight phase', () => {
   const state = createHomingSword({ x: 0, y: 0 }, { x: 1, y: 0 }, config)
-  assert.equal(recordSwordHit(state, 'enemy'), true)
+  assert.equal(recordSwordHit(state, 'enemy', 'outbound'), true)
+  assert.equal(recordSwordHit(state, 'enemy', 'outbound'), false)
   beginSwordReturn(state)
-  assert.equal(recordSwordHit(state, 'enemy'), false)
+  assert.equal(recordSwordHit(state, 'enemy', 'returning'), true)
+  assert.equal(recordSwordHit(state, 'enemy', 'returning'), false)
   assert.equal(recordSwordHit(state, ''), false)
   assert.equal(recordSwordHit(state, null), false)
-  assert.deepEqual(state.hitIds, ['enemy'])
+  assert.deepEqual(state.hitIds, ['outbound:enemy', 'returning:enemy'])
 })
 
 test('return is idempotent and invalid delta does not move or create NaN', () => {
@@ -202,7 +204,7 @@ function parityTrace(runtime) {
   ])
   const cast = runtime.createHomingSwordCast({ x: 0, y: 0 }, snapshots, config)
   trace.push(snapshots)
-  trace.push(runtime.recordGeometricSwordHits(cast, ['2', '2', '3']))
+  trace.push(runtime.recordGeometricSwordHits(cast, ['2', '2', '3'], 'outbound'))
   trace.push(runtime.stepHomingSwordCast(cast, 0.1, snapshots, { x: 0, y: 0 }))
   trace.push(runtime.resetHomingSwordCast(cast))
   return trace

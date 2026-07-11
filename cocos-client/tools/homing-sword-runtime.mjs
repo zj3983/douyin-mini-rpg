@@ -98,9 +98,9 @@ export function createHomingSwordCast(start, targets, config) {
   return state
 }
 
-export function recordGeometricSwordHits(state, ids) {
+export function recordGeometricSwordHits(state, ids, phase = state.phase) {
   if (!Array.isArray(ids)) return []
-  return ids.filter((id) => recordSwordHit(state, id))
+  return ids.filter((id) => recordSwordHit(state, id, phase))
 }
 
 export function resetHomingSwordCast(_state) {
@@ -135,9 +135,11 @@ export function beginSwordReturn(state) {
   return true
 }
 
-export function recordSwordHit(state, id) {
-  if (!state || typeof id !== 'string' || id.trim() === '' || !Array.isArray(state.hitIds) || state.hitIds.includes(id)) return false
-  state.hitIds.push(id)
+export function recordSwordHit(state, id, phase = state.phase) {
+  if (!state || typeof id !== 'string' || id.trim() === '' || (phase !== 'outbound' && phase !== 'returning') || !Array.isArray(state.hitIds)) return false
+  const key = `${phase}:${id}`
+  if (state.hitIds.includes(key)) return false
+  state.hitIds.push(key)
   return true
 }
 

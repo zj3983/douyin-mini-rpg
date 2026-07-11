@@ -199,7 +199,7 @@ test('flying sword visual and damage consume the same per-frame swept segment', 
 
   assert.match(skill, /const frame = stepHomingSwordCast\(/)
   assert.match(skill, /applySwordPose\(frame\.presentationSegment\)/)
-  assert.match(skill, /resolveHomingSwordSegment\(this\.homingState, frame\.damageSegment\)/)
+  assert.match(skill, /resolveHomingSwordSegment\(this\.homingState, frame\.damageSegment, frame\.step\.previousPhase\)/)
   assert.match(controller, /points: \[from, to\]/)
   assert.doesNotMatch(skill, /timeline\.progress|Math\.sin|Math\.cos/)
 })
@@ -216,10 +216,10 @@ test('flying sword refreshes live targets every frame so dead targets retarget n
   assert.doesNotMatch(skill, /cachedTargets|activeTarget/)
 })
 
-test('one homing cast records geometric hits before damage and never damages the same enemy twice', () => {
+test('each homing phase records geometric hits before damage and rejects repeats', () => {
   const controller = read('assets/Scripts/Game/BattleRuntimeController.ts')
 
-  assert.match(controller, /const newHitIds = new Set\(recordGeometricSwordHits\(state, geometricHits\.map\(\(enemy\) => String\(enemy\.id\)\)\)\)/)
+  assert.match(controller, /const newHitIds = new Set\(recordGeometricSwordHits\(state, geometricHits\.map\(\(enemy\) => String\(enemy\.id\)\), phase\)\)/)
   assert.match(controller, /for \(const enemy of geometricHits\)[\s\S]*if \(!newHitIds\.has\(String\(enemy\.id\)\)\) continue/)
   assert.match(controller, /enemies: \[enemy\]/)
   assert.match(controller, /points: \[from, to\]/)
@@ -238,7 +238,7 @@ test('homing integration filters target snapshots and copies positions', () => {
   assert.notEqual(snapshots[0].position, sourcePosition)
 })
 
-test('homing integration de-duplicates geometric hits across repeated swept segments', () => {
+test('homing integration de-duplicates per phase and lets return hit the outbound target once', () => {
   assert.equal(typeof swordRuntime.recordGeometricSwordHits, 'function')
   const cast = swordRuntime.createHomingSwordCast(
     { x: 0, y: 0 },
@@ -246,8 +246,10 @@ test('homing integration de-duplicates geometric hits across repeated swept segm
     homingConfig,
   )
 
-  assert.deepEqual(swordRuntime.recordGeometricSwordHits(cast, ['a', 'b']), ['a', 'b'])
-  assert.deepEqual(swordRuntime.recordGeometricSwordHits(cast, ['a', 'b', 'c']), ['c'])
+  assert.deepEqual(swordRuntime.recordGeometricSwordHits(cast, ['a'], 'outbound'), ['a'])
+  assert.deepEqual(swordRuntime.recordGeometricSwordHits(cast, ['a'], 'outbound'), [])
+  assert.deepEqual(swordRuntime.recordGeometricSwordHits(cast, ['a'], 'returning'), ['a'])
+  assert.deepEqual(swordRuntime.recordGeometricSwordHits(cast, ['a'], 'returning'), [])
 })
 
 test('homing integration retargets dead targets and shares one swept segment object', () => {

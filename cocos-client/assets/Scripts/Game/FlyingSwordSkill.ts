@@ -112,7 +112,7 @@ export class FlyingSwordSkill extends Component {
     const playerPosition = this.battleRuntime.getCurrentPlayerPosition()
     const frame = stepHomingSwordCast(this.homingState, deltaTime, targets, playerPosition)
     this.applySwordPose(frame.presentationSegment)
-    const result = this.battleRuntime.resolveHomingSwordSegment(this.homingState, frame.damageSegment)
+    const result = this.battleRuntime.resolveHomingSwordSegment(this.homingState, frame.damageSegment, frame.step.previousPhase)
     this.node.emit('sword-pass-resolved', { phase: frame.step.previousPhase, result })
     if (this.timeline && frame.step.nextPhase === 'returning') this.timeline.state = 'returning'
     if (frame.step.nextPhase === 'finished') this.finishCast()
