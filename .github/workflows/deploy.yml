@@ -36,7 +36,7 @@ jobs:
           cd cocos-client
           npm test
           COCOS_CREATOR_PATH=prebuilt npm run build:check
-          npm run verify:build-output -- build/web-mobile
+          COCOS_CREATOR_PATH=prebuilt npm run verify:build-output -- build/web-mobile
           cd ..
 
       - name: Checkout release on server
