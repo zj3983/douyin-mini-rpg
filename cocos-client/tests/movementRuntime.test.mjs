@@ -1,6 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { clampBattleTarget, stepTowardTarget } from '../tools/movement-runtime.mjs'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { advancePlayerMovement, clampBattleTarget, stepTowardTarget } from '../tools/movement-runtime.mjs'
 import * as movementRuntime from '../tools/movement-runtime.mjs'
 
 test('portrait target stays below HUD and above navigation', () => {
@@ -79,4 +81,91 @@ test('death stops movement input and retry restores the spawn position with no s
   assert.deepEqual(movementRuntime.resetPlayerMovement(state), { x: -210, y: -80 })
   assert.equal(state.movementEnabled, true)
   assert.equal(state.target, null)
+})
+
+test('rapid target replacement changes only the target and advances from the current position', () => {
+  const spawn = { x: -210, y: -80 }
+  const state = movementRuntime.createPlayerMovementState(spawn)
+  let current = { ...spawn }
+
+  for (const target of [
+    { x: 0, y: 300 },
+    { x: 300, y: 0 },
+    { x: 0, y: -300 },
+    { x: -300, y: 0 },
+  ]) {
+    assert.equal(movementRuntime.requestPlayerMovement(state, target), true)
+    assert.deepEqual(state.spawnPosition, spawn)
+    const frame = advancePlayerMovement(state, current, 220, 1 / 60)
+    assert.ok(Math.abs(frame.distanceMoved - 220 / 60) < 1e-9)
+    assert.ok(Math.hypot(frame.position.x - current.x, frame.position.y - current.y) <= 220 / 60 + 1e-9)
+    current = frame.position
+  }
+})
+
+test('one large update matches deterministic bounded substeps', () => {
+  const target = { x: 80, y: 150 }
+  const largeState = movementRuntime.createPlayerMovementState({ x: 0, y: 0 })
+  const smallState = movementRuntime.createPlayerMovementState({ x: 0, y: 0 })
+  movementRuntime.requestPlayerMovement(largeState, target)
+  movementRuntime.requestPlayerMovement(smallState, target)
+
+  const large = advancePlayerMovement(largeState, { x: 0, y: 0 }, 220, 0.2)
+  let small = { position: { x: 0, y: 0 } }
+  for (let index = 0; index < 12; index += 1) {
+    small = advancePlayerMovement(smallState, small.position, 220, 1 / 60)
+  }
+
+  assert.ok(large.substeps <= 12)
+  assert.ok(Math.hypot(large.position.x - small.position.x, large.position.y - small.position.y) < 1e-9)
+  assert.ok(large.distanceMoved <= 220 * 0.2 + 1e-9)
+})
+
+test('invalid delta time and coordinates produce finite stationary output', () => {
+  const state = movementRuntime.createPlayerMovementState({ x: 1, y: 2 })
+  movementRuntime.requestPlayerMovement(state, { x: 20, y: 30 })
+  for (const deltaTime of [-1, NaN, Infinity]) {
+    const frame = advancePlayerMovement(state, { x: 1, y: 2 }, 220, deltaTime)
+    assert.deepEqual(frame.position, { x: 1, y: 2 })
+    assert.equal(frame.distanceMoved, 0)
+    assert.equal(Number.isFinite(frame.position.x) && Number.isFinite(frame.position.y), true)
+  }
+  const invalidCurrent = advancePlayerMovement(state, { x: NaN, y: Infinity }, 220, 1 / 60)
+  assert.deepEqual(invalidCurrent.position, { x: 0, y: 0 })
+})
+
+test('arrival clears the target exactly once without overshoot', () => {
+  const state = movementRuntime.createPlayerMovementState({ x: 0, y: 0 })
+  movementRuntime.requestPlayerMovement(state, { x: 2, y: 0 })
+  const arrived = advancePlayerMovement(state, { x: 0, y: 0 }, 220, 0.2)
+  assert.deepEqual(arrived.position, { x: 2, y: 0 })
+  assert.equal(arrived.arrived, true)
+  assert.equal(state.target, null)
+  const idle = advancePlayerMovement(state, arrived.position, 220, 0.2)
+  assert.equal(idle.arrived, false)
+  assert.equal(idle.distanceMoved, 0)
+})
+
+test('TypeScript and mjs movement runtimes expose matching behavior bodies', async () => {
+  const ts = readFileSync(resolve('assets/Scripts/Core/MovementRuntime.ts'), 'utf8')
+  for (const name of ['requestPlayerMovement', 'stepTowardTarget', 'advancePlayerMovement']) {
+    assert.equal(typeof movementRuntime[name], 'function')
+    assert.match(ts, new RegExp(`export function ${name}\\(`))
+  }
+  for (const marker of ['MAX_MOVEMENT_SUBSTEP = 1 / 60', 'Number.isFinite', 'state.target = null']) {
+    assert.equal(readFileSync(resolve('tools/movement-runtime.mjs'), 'utf8').includes(marker), true)
+    assert.equal(ts.includes(marker), true)
+  }
+
+  const tsRuntime = await import('../assets/Scripts/Core/MovementRuntime.ts')
+  const parityResults = []
+  for (const runtime of [movementRuntime, tsRuntime]) {
+    const state = runtime.createPlayerMovementState({ x: -5, y: 2 })
+    runtime.requestPlayerMovement(state, { x: 60, y: 90 })
+    const first = runtime.advancePlayerMovement(state, { x: -5, y: 2 }, 220, 0.2)
+    runtime.requestPlayerMovement(state, { x: -40, y: -20 })
+    const second = runtime.advancePlayerMovement(state, first.position, 220, 1 / 60)
+    parityResults.push({ first, second, state })
+  }
+  assert.deepEqual(parityResults[1], parityResults[0])
 })

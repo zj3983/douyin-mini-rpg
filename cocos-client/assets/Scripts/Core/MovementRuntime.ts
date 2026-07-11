@@ -25,7 +25,7 @@ export function createPlayerMovementState(spawnPosition: Point2): PlayerMovement
 }
 
 export function requestPlayerMovement(state: PlayerMovementState, target: Point2) {
-  if (!state.movementEnabled) return false
+  if (!state.movementEnabled || !Number.isFinite(target.x) || !Number.isFinite(target.y)) return false
   state.target = { ...target }
   return true
 }
@@ -49,6 +49,12 @@ export function clampBattleTarget(point: Point2, bounds: BattleBounds): Point2 {
 }
 
 export function stepTowardTarget(current: Point2, target: Point2, speed: number, deltaTime: number) {
+  if (
+    !Number.isFinite(current.x) || !Number.isFinite(current.y) ||
+    !Number.isFinite(target.x) || !Number.isFinite(target.y) ||
+    !Number.isFinite(speed) || speed <= 0 ||
+    !Number.isFinite(deltaTime) || deltaTime <= 0
+  ) return { position: { ...current }, distanceMoved: 0, arrived: false }
   const dx = target.x - current.x
   const dy = target.y - current.y
   const distance = Math.hypot(dx, dy)
@@ -59,4 +65,39 @@ export function stepTowardTarget(current: Point2, target: Point2, speed: number,
     distanceMoved: step,
     arrived: step >= distance,
   }
+}
+
+export const MAX_MOVEMENT_SUBSTEP = 1 / 60
+
+export function advancePlayerMovement(
+  state: PlayerMovementState,
+  current: Point2,
+  speed: number,
+  deltaTime: number,
+) {
+  const finiteCurrent = {
+    x: Number.isFinite(current.x) ? current.x : 0,
+    y: Number.isFinite(current.y) ? current.y : 0,
+  }
+  const stationary = { position: finiteCurrent, distanceMoved: 0, arrived: false, substeps: 0 }
+  if (!state.movementEnabled || !state.target) return stationary
+  if (!Number.isFinite(deltaTime) || deltaTime <= 0) return stationary
+  if (!Number.isFinite(current.x) || !Number.isFinite(current.y)) return stationary
+
+  const substeps = Math.max(1, Math.ceil(deltaTime / MAX_MOVEMENT_SUBSTEP - 1e-12))
+  const substepDelta = deltaTime / substeps
+  let position = { ...current }
+  let distanceMoved = 0
+
+  for (let index = 0; index < substeps; index += 1) {
+    const step = stepTowardTarget(position, state.target, speed, substepDelta)
+    position = step.position
+    distanceMoved += step.distanceMoved
+    if (step.arrived) {
+      state.target = null
+      return { position, distanceMoved, arrived: true, substeps: index + 1 }
+    }
+  }
+
+  return { position, distanceMoved, arrived: false, substeps }
 }

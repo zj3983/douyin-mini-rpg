@@ -1,5 +1,6 @@
 import { _decorator, Component, Node, Vec3 } from 'cc'
 import {
+  advancePlayerMovement,
   createPlayerMovementState,
   PlayerMovementState,
   requestPlayerMovement,
@@ -18,7 +19,6 @@ export class PlayerController extends Component {
   @property
   public moveSpeed = 220
 
-  private target: Vec3 | null = null
   private movementState: PlayerMovementState = createPlayerMovementState({ x: 0, y: 0 })
   private moving = false
   private hoverElapsed = 0
@@ -36,45 +36,41 @@ export class PlayerController extends Component {
 
   public moveTo(worldPosition: Vec3) {
     if (!requestPlayerMovement(this.movementState, worldPosition)) return false
-    const current = this.node.worldPosition
-    this.target = new Vec3(worldPosition.x, worldPosition.y, current.z)
-    this.setMoving(current.x !== this.target.x || current.y !== this.target.y)
     return true
   }
 
   public stop() {
     stopPlayerMovement(this.movementState)
-    this.target = null
     this.setMoving(false, false)
   }
 
   public reset() {
     const spawnPosition = resetPlayerMovement(this.movementState)
     this.node.setWorldPosition(spawnPosition.x, spawnPosition.y, this.node.worldPosition.z)
-    this.target = null
     this.setMoving(false, false)
     this.node.emit('player-action-requested', 'sword_ride')
   }
 
   update(deltaTime: number) {
-    this.hoverElapsed += deltaTime
+    if (Number.isFinite(deltaTime) && deltaTime > 0) this.hoverElapsed += deltaTime
     this.animateSword()
-    const target = this.target
-    if (!this.movementState.target || !target) return
+    if (!this.movementState.target) return
 
     const current = this.node.worldPosition
-    const step = stepTowardTarget(current, target, this.moveSpeed, deltaTime)
-    this.node.setWorldPosition(step.position.x, step.position.y, current.z)
-    if (step.arrived) {
-      this.movementState.target = null
-      this.target = null
+    // Runtime applies bounded stepTowardTarget(...) substeps before returning one frame result.
+    const frame = advancePlayerMovement(this.movementState, current, this.moveSpeed, deltaTime)
+    if (frame.distanceMoved > 0) {
+      this.node.setWorldPosition(frame.position.x, frame.position.y, current.z)
+      this.setMoving(true, false)
+    }
+    if (frame.arrived) {
       this.setMoving(false)
     }
   }
 
   private animateSword() {
     if (!this.swordMount) return
-    const yOffset = Math.sin(this.hoverElapsed * 4) * 4
+    const yOffset = Math.sin(this.hoverElapsed * 4) * 2
     this.swordMount.setPosition(
       this.swordMountBasePosition.x,
       this.swordMountBasePosition.y + yOffset,

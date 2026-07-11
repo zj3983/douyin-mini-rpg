@@ -237,9 +237,9 @@ test('moving player stops before death and retry restores sword ride without a s
   assert.match(player, /resetPlayerMovement/)
   const stopBody = player.match(/public stop\(\) \{([\s\S]*?)\n  \}/)?.[1] ?? ''
   assert.doesNotMatch(stopBody, /sword_ride/)
-  assert.match(stopBody, /this\.target = null/)
+  assert.match(stopBody, /stopPlayerMovement\(this\.movementState\)/)
   const resetBody = player.match(/public reset\(\) \{([\s\S]*?)\n  \}/)?.[1] ?? ''
-  assert.match(resetBody, /this\.target = null/)
+  assert.match(resetBody, /resetPlayerMovement\(this\.movementState\)/)
 
   const stopIndex = runtime.indexOf('playerController?.stop()')
   const deathIndex = runtime.indexOf("emit('player-action-requested', 'death')")
@@ -323,6 +323,33 @@ test('flying sword visual and damage consume the same per-frame swept segment', 
   assert.match(skill, /resolveHomingSwordSegment\(this\.homingState, frame\.damageSegment, frame\.step\.previousPhase\)/)
   assert.match(controller, /points: \[from, to\]/)
   assert.doesNotMatch(skill, /timeline\.progress|Math\.sin|Math\.cos/)
+})
+
+test('player controller consumes substep movement and emits motion only for displacement', () => {
+  const player = read('assets/Scripts/Game/PlayerController.ts')
+  assert.match(player, /advancePlayerMovement\(/)
+  assert.match(player, /if \(frame\.distanceMoved > 0\)/)
+  assert.match(player, /if \(frame\.arrived\)/)
+  assert.doesNotMatch(player, /private target: Vec3/)
+})
+
+test('cast hit and death events cannot mutate player movement or create a lunge', () => {
+  const player = read('assets/Scripts/Game/PlayerController.ts')
+  const skill = read('assets/Scripts/Game/FlyingSwordSkill.ts')
+  const runtime = read('assets/Scripts/Game/BattleRuntimeController.ts')
+
+  assert.doesNotMatch(skill, /player(?:Node)?\??\.(?:setWorldPosition|setPosition|moveTo)\(/)
+  assert.doesNotMatch(skill, /movementState|requestPlayerMovement/)
+  assert.doesNotMatch(runtime, /playerNode\??\.(?:setWorldPosition|setPosition|moveTo)\(/)
+  assert.doesNotMatch(skill, /emit\('player-action-requested'[^\n]*\)[\s\S]{0,120}(?:setWorldPosition|moveTo)\(/)
+  assert.doesNotMatch(runtime, /emit\('player-action-requested', '(?:hurt|death)'\)[\s\S]{0,120}(?:setWorldPosition|moveTo)\(/)
+})
+
+test('sword hover is subtle and always derives from its captured base transform', () => {
+  const player = read('assets/Scripts/Game/PlayerController.ts')
+  assert.match(player, /swordMountBasePosition\.y \+ yOffset/)
+  assert.match(player, /Math\.sin\(this\.hoverElapsed \* 4\) \* [12]/)
+  assert.doesNotMatch(player, /swordMount\.position\.y \+ yOffset/)
 })
 
 test('flying sword refreshes live targets every frame so dead targets retarget next frame', () => {
