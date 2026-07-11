@@ -19,6 +19,7 @@ import {
   markBattleAttemptDefeated,
   nextSpawn,
   rollbackSpawnedEnemy,
+  retryBossSpawnFlow,
   scheduleBossSettlement,
   spawnBoss,
   tickBossSkill as tickBossSkillRuntime,
@@ -113,6 +114,8 @@ export class BattleRuntimeController extends Component {
         rollbackSpawnedEnemy(this.runtime, spawn.enemy.id)
       }
     }
+    const bossRetry = retryBossSpawnFlow(this.runtime, this.stageFlow, this.stageGeneration)
+    if (bossRetry.bossSpawn) this.trySpawnBoss(bossRetry.bossSpawn)
     this.tickBossSkill(deltaTime)
   }
 
@@ -154,6 +157,7 @@ export class BattleRuntimeController extends Component {
   private rebuildRuntime(stageNumber: number) {
     if (!this.designData) return
     this.unscheduleAllCallbacks()
+    this.bossSkillEffectPool?.despawnAll()
     this.soulOrbPool?.despawnAll()
     this.stageNumber = Math.max(1, Math.floor(stageNumber || 1))
     this.attemptState = beginBattleAttempt(this.attemptState, this.stageNumber)

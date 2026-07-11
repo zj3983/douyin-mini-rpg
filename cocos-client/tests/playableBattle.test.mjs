@@ -68,6 +68,8 @@ test('boss spawn and settlement are commanded once with delayed generation guard
   assert.match(source, /advanceBossDefeatFlow\(this\.stageFlow, generation\)/)
   assert.match(source, /!transition\.settle/)
   assert.match(source, /createStageFlow\(this\.runtime\.defeatTarget, this\.stageGeneration\)/)
+  assert.match(source, /retryBossSpawnFlow\(this\.runtime, this\.stageFlow, this\.stageGeneration\)/)
+  assert.match(source, /if \(bossRetry\.bossSpawn\) this\.trySpawnBoss\(bossRetry\.bossSpawn\)/)
   assert.match(source, /this\.unscheduleAllCallbacks\(\)/)
   assert.match(source, /rollbackSpawnedEnemy\(this\.runtime, result\.enemy\.id\)/)
   assert.match(source, /bossDeathSettleDelay/)
@@ -75,6 +77,12 @@ test('boss spawn and settlement are commanded once with delayed generation guard
   assert.match(source, /completeBossSettlement/)
   assert.match(source, /Math\.max\(this\.deathRecycleDelay, this\.bossDeathSettleDelay\)/)
   assert.doesNotMatch(source, /if \(result\.stageClear\) this\.finishStage\(\)/)
+})
+
+test('stage rebuild drains controller-scheduled boss effects after cancelling cleanup callbacks', () => {
+  const source = read('assets/Scripts/Game/BattleRuntimeController.ts')
+
+  assert.match(source, /this\.unscheduleAllCallbacks\(\)[\s\S]*this\.bossSkillEffectPool\?\.despawnAll\(\)/)
 })
 
 test('defeat panel retries the current stage after a guarded death presentation', () => {

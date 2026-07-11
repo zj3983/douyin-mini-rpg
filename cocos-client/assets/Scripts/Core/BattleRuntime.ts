@@ -486,6 +486,18 @@ export function advanceBossDefeatFlow(stageFlow: StageFlowState, generation: num
   return { changed: transition.changed, settle: transition.command === 'settle' }
 }
 
+export function retryBossSpawnFlow(
+  runtime: BattleRuntime,
+  stageFlow: StageFlowState,
+  generation: number,
+) {
+  if (generation !== stageFlow.generation || stageFlow.phase !== 'boss' || runtime.bossSpawned) {
+    return { changed: false, bossSpawn: null }
+  }
+  const bossSpawn = spawnBoss(runtime)
+  return { changed: bossSpawn.ok, bossSpawn: bossSpawn.ok ? bossSpawn : null }
+}
+
 export function runtimeStats(runtime: BattleRuntime) {
   return {
     aliveEnemies: runtime.enemies.filter((enemy) => enemy.alive).length,

@@ -297,18 +297,26 @@ test('world stage can spawn one boss from its stage profile', () => {
   assert.equal(runtimeStats(runtime).bossAlive, true)
 })
 
-test('failed boss node creation can roll back and retry the core spawn', () => {
-  assert.equal(typeof battleRuntimeModule.rollbackBossSpawn, 'function')
+test('failed boss visual spawn recovers on the next flow update without duplication', () => {
+  assert.equal(typeof battleRuntimeModule.retryBossSpawnFlow, 'function')
   const runtime = createBattleRuntime({ stageId: 1, heroAttack: 80 })
-  defeatOrdinaryEnemies(runtime)
-  const first = spawnBoss(runtime)
+  const flow = createStageFlow(runtime.defeatTarget, 11)
+  let first = null
+  for (let index = 0; index < runtime.defeatTarget; index += 1) {
+    const ordinary = nextSpawn(runtime, 1.1).enemy
+    defeatEnemy(runtime, ordinary.id)
+    first = battleRuntimeModule.advanceOrdinaryDefeatFlow(runtime, flow, 11).bossSpawn ?? first
+  }
 
-  assert.equal(battleRuntimeModule.rollbackBossSpawn(runtime, first.enemy.id), true)
+  assert.equal(battleRuntimeModule.rollbackSpawnedEnemy(runtime, first.enemy.id), true)
   assert.equal(runtime.bossSpawned, false)
   assert.equal(runtimeStats(runtime).bossAlive, false)
-  const retry = spawnBoss(runtime)
-  assert.equal(retry.ok, true)
-  assert.notEqual(retry.enemy.id, first.enemy.id)
+  const retry = battleRuntimeModule.retryBossSpawnFlow(runtime, flow, 11)
+  const duplicate = battleRuntimeModule.retryBossSpawnFlow(runtime, flow, 11)
+  assert.equal(retry.bossSpawn?.ok, true)
+  assert.notEqual(retry.bossSpawn.enemy.id, first.enemy.id)
+  assert.equal(duplicate.bossSpawn, null)
+  assert.equal(runtime.enemies.filter((enemy) => enemy.role === 'boss').length, 1)
 })
 
 test('boss settlement generation rejects stale and duplicate delayed callbacks', () => {
