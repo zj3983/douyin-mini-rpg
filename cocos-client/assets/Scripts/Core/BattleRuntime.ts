@@ -277,6 +277,26 @@ export function createContactDamageGate(input: { maxHealth: number; cooldown: nu
   }
 }
 
+export interface BattleFreezeState {
+  frozen: boolean
+}
+
+export function createBattleFreezeState(): BattleFreezeState {
+  return { frozen: false }
+}
+
+export function freezeBattle(state: BattleFreezeState) {
+  state.frozen = true
+}
+
+export function rebuildBattleFreeze(state: BattleFreezeState) {
+  state.frozen = false
+}
+
+export function canProcessBattleAction(state: BattleFreezeState) {
+  return !state.frozen
+}
+
 export function tickContactDamageGate(gate: ContactDamageGate, deltaTime: number) {
   gate.cooldownRemaining = Math.max(0, gate.cooldownRemaining - Math.max(0, deltaTime))
 }

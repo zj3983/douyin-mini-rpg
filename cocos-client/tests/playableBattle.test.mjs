@@ -3,10 +3,43 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import * as swordRuntime from '../tools/homing-sword-runtime.mjs'
+import * as battleRuntime from '../tools/battle-runtime.mjs'
+import * as movementRuntime from '../tools/movement-runtime.mjs'
+import { completeDrain, createStageFlow, recordBossDefeat, recordOrdinaryDefeat } from '../tools/stage-flow-runtime.mjs'
 
 const read = (path) => readFileSync(resolve(path), 'utf8')
 
 const homingConfig = { speed: 10, maxTurnRadians: Math.PI, maxOutboundDistance: 20, returnRadius: 1 }
+
+test('accepted boss settlement freezes input movement and queued damage until rebuild', () => {
+  const flow = createStageFlow(1, 4)
+  recordOrdinaryDefeat(flow)
+  completeDrain(flow, 4)
+  const movement = movementRuntime.createPlayerMovementState({ x: -210, y: -80 })
+  const damageGate = battleRuntime.createContactDamageGate({ maxHealth: 220, cooldown: 0 })
+  const freeze = battleRuntime.createBattleFreezeState()
+
+  assert.equal(movementRuntime.requestPlayerMovement(movement, { x: 40, y: 200 }), true)
+  const transition = recordBossDefeat(flow)
+  assert.deepEqual(transition, { changed: true, command: 'settle' })
+  battleRuntime.freezeBattle(freeze)
+  movementRuntime.stopPlayerMovement(movement)
+
+  assert.equal(battleRuntime.canProcessBattleAction(freeze), false)
+  assert.equal(movementRuntime.requestPlayerMovement(movement, { x: 20, y: 120 }), false)
+  assert.equal(movement.target, null)
+  const delayedFrame = movementRuntime.advancePlayerMovement(movement, { x: -210, y: -80 }, 220, 0.55)
+  assert.equal(delayedFrame.distanceMoved, 0)
+  if (battleRuntime.canProcessBattleAction(freeze)) battleRuntime.applyDirectDamage(damageGate, 35)
+  assert.equal(damageGate.health, 220)
+
+  battleRuntime.rebuildBattleFreeze(freeze)
+  movementRuntime.resetPlayerMovement(movement)
+  assert.equal(battleRuntime.canProcessBattleAction(freeze), true)
+  assert.equal(movementRuntime.requestPlayerMovement(movement, { x: 20, y: 120 }), true)
+  if (battleRuntime.canProcessBattleAction(freeze)) battleRuntime.applyDirectDamage(damageGate, 35)
+  assert.equal(damageGate.health, 185)
+})
 
 test('runtime node pool supports a bounded factory-backed pool', () => {
   const source = read('assets/Scripts/Game/NodePoolController.ts')
@@ -67,6 +100,8 @@ test('battle controller drives enemy contact damage, stage flow, drops, HUD, and
 
 test('boss spawn and settlement are commanded once with delayed generation guards', () => {
   const source = read('assets/Scripts/Game/BattleRuntimeController.ts')
+  const input = read('assets/Scripts/Game/BattleInputController.ts')
+  const bootstrap = read('assets/Scripts/Game/PortraitBattleBootstrap.ts')
 
   assert.match(source, /advanceBossDefeatFlow\(this\.stageFlow, generation\)/)
   assert.match(source, /!transition\.settle/)
@@ -79,6 +114,17 @@ test('boss spawn and settlement are commanded once with delayed generation guard
   assert.match(source, /scheduleBossSettlement/)
   assert.match(source, /completeBossSettlement/)
   assert.match(source, /Math\.max\(this\.deathRecycleDelay, this\.bossDeathSettleDelay\)/)
+  const transitionIndex = source.indexOf('if (!transition.settle) return')
+  const freezeIndex = source.indexOf('this.freezeBattle()')
+  const delayIndex = source.indexOf('this.scheduleOnce(() => {', transitionIndex)
+  assert.ok(transitionIndex >= 0 && freezeIndex > transitionIndex && delayIndex > freezeIndex)
+  const finishBody = source.match(/private finishStage\(\) \{([\s\S]*?)\n  \}/)?.[1] ?? ''
+  assert.doesNotMatch(finishBody, /freezeBattle|battleFrozen\s*=\s*true/)
+  assert.match(source, /this\.battleInput\?\.setInputEnabled\(false\)/)
+  assert.match(source, /this\.battleInput\?\.setInputEnabled\(true\)/)
+  assert.match(input, /public setInputEnabled\(enabled: boolean\)/)
+  assert.match(input, /if \(!this\.inputEnabled\) return false/)
+  assert.match(bootstrap, /runtime\.battleInput = bindings\.battleInput/)
   assert.doesNotMatch(source, /if \(result\.stageClear\) this\.finishStage\(\)/)
 })
 
@@ -242,9 +288,10 @@ test('moving player stops before death and retry restores sword ride without a s
   assert.match(resetBody, /resetPlayerMovement\(this\.movementState\)/)
   assert.match(resetBody, /resetPlayerPresentationState\(this\.presentationState\)/)
 
-  const stopIndex = runtime.indexOf('playerController?.stop()')
+  const stopIndex = runtime.indexOf('this.freezeBattle()')
   const deathIndex = runtime.indexOf("emit('player-action-requested', 'death')")
   assert.ok(stopIndex >= 0 && deathIndex > stopIndex)
+  assert.match(runtime, /private freezeBattle\(\)[\s\S]*getComponent\(PlayerController\)\?\.stop\(\)/)
   assert.match(runtime, /playerController\?\.reset\(\)/)
   assert.match(input, /player\.moveTo\(worldTarget\)/)
   assert.match(bootstrap, /player\.node\.setPosition\(-210, -80, 0\)[\s\S]*addComponent\(PlayerController\)/)

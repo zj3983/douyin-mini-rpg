@@ -8,18 +8,22 @@ import {
   BattleEnemy,
   BattleRuntime,
   beginBattleAttempt,
+  canProcessBattleAction,
   claimStageClear as claimStageClearRuntime,
   completeBossSettlement,
+  createBattleFreezeState,
   createBattleAttemptState,
   createBattleRuntime,
   createContactDamageGate,
   createStageSettlementState,
+  freezeBattle,
   isBattleAttemptCallbackCurrent,
   markBattleAttemptCleared,
   markBattleAttemptDefeated,
   nextSpawn,
   rollbackSpawnedEnemy,
   retryBossSpawnFlow,
+  rebuildBattleFreeze,
   scheduleBossSettlement,
   segmentHitEnemiesAlongPath,
   spawnBoss,
@@ -41,6 +45,7 @@ import {
 } from '../Core/HomingSwordRuntime'
 import { stageVisualFor } from '../Core/StageVisualCatalog'
 import { BattleHudController } from './BattleHudController'
+import { BattleInputController } from './BattleInputController'
 import { DamageNumberController } from './DamageNumberController'
 import { EnemySpawner } from './EnemySpawner'
 import { NodePoolController } from './NodePoolController'
@@ -60,6 +65,7 @@ export class BattleRuntimeController extends Component {
   @property(EnemySpawner) enemySpawner: EnemySpawner | null = null
   @property(BattleHudController) hud: BattleHudController | null = null
   @property(Node) playerNode: Node | null = null
+  @property(BattleInputController) battleInput: BattleInputController | null = null
   @property stageNumber = 1
   @property heroAttack = 44
   @property swordHitWidth = 72
@@ -75,7 +81,7 @@ export class BattleRuntimeController extends Component {
   private damageGate = createContactDamageGate({ maxHealth: 220, cooldown: 0.65 })
   private soulCollected = 0
   private initialized = false
-  private battleFrozen = false
+  private battleFreeze = createBattleFreezeState()
   private stageGeneration = 0
   private stageSettlement = createStageSettlementState(0)
   private attemptState = createBattleAttemptState(0, 1)
@@ -165,7 +171,11 @@ export class BattleRuntimeController extends Component {
   }
 
   isBattleFrozen() {
-    return this.battleFrozen
+    return !canProcessBattleAction(this.battleFreeze)
+  }
+
+  private get battleFrozen() {
+    return this.isBattleFrozen()
   }
 
   private rebuildRuntime(stageNumber: number) {
@@ -185,9 +195,10 @@ export class BattleRuntimeController extends Component {
       cooldown: this.contactDamageCooldown,
     })
     this.soulCollected = 0
-    this.battleFrozen = false
+    rebuildBattleFreeze(this.battleFreeze)
     const playerController = this.playerNode?.getComponent(PlayerController)
     playerController?.reset()
+    this.battleInput?.setInputEnabled(true)
     this.stageClearPanel?.hide()
     this.refreshHeroHealth()
     this.hud?.updateStage(stage.name, this.stageNumber)
@@ -268,6 +279,7 @@ export class BattleRuntimeController extends Component {
     if (enemy.profile.role === 'boss') {
       const transition = advanceBossDefeatFlow(this.stageFlow, generation)
       if (!transition.settle) return
+      this.freezeBattle()
       const settlementToken = scheduleBossSettlement(this.stageSettlement)
       if (settlementToken === null) return
       const settleDelay = Math.max(this.deathRecycleDelay, this.bossDeathSettleDelay)
@@ -338,9 +350,7 @@ export class BattleRuntimeController extends Component {
     this.refreshHeroHealth()
     this.playerNode?.emit('player-hit', damage)
     if (this.damageGate.health <= 0 && markPlayerDefeated(this.stageFlow).changed && markBattleAttemptDefeated(this.attemptState)) {
-      this.battleFrozen = true
-      const playerController = this.playerNode?.getComponent(PlayerController)
-      playerController?.stop()
+      this.freezeBattle()
       this.playerNode?.emit('player-action-requested', 'death')
       this.playerNode?.emit('player-defeated')
       const generation = this.stageGeneration
@@ -367,10 +377,15 @@ export class BattleRuntimeController extends Component {
 
   private finishStage() {
     if (!markBattleAttemptCleared(this.attemptState)) return
-    this.battleFrozen = true
     this.hud?.hideBoss()
     const result = this.runtime ? claimStageClearRuntime(this.runtime) : null
     if (result?.ok && result.result) this.stageClearPanel?.showResult(result.result)
+  }
+
+  private freezeBattle() {
+    freezeBattle(this.battleFreeze)
+    this.playerNode?.getComponent(PlayerController)?.stop()
+    this.battleInput?.setInputEnabled(false)
   }
 
   private recycleAllEnemies() {

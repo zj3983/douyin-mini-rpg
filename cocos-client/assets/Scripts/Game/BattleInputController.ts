@@ -43,6 +43,12 @@ export class BattleInputController extends Component {
     if (this.inputEnabled) this.subscribeInputNode()
   }
 
+  public setInputEnabled(enabled: boolean) {
+    this.inputEnabled = enabled
+    if (enabled) this.subscribeInputNode()
+    else this.unsubscribeInputNode()
+  }
+
   private subscribeInputNode() {
     const node = this.inputArea?.node ?? null
     if (!node || this.subscribedNode === node) return
@@ -58,8 +64,9 @@ export class BattleInputController extends Component {
   }
 
   private onTouchEnd(event: EventTouch) {
+    if (!this.inputEnabled) return false
     const { player, inputArea } = this
-    if (!player || !inputArea) return
+    if (!player || !inputArea) return false
 
     const location = event.getUILocation()
     const local = inputArea.convertToNodeSpaceAR(new Vec3(location.x, location.y, 0))
@@ -70,6 +77,6 @@ export class BattleInputController extends Component {
       maxY: this.maxY,
     })
     const worldTarget = inputArea.convertToWorldSpaceAR(new Vec3(clamped.x, clamped.y, 0))
-    player.moveTo(worldTarget)
+    return player.moveTo(worldTarget)
   }
 }

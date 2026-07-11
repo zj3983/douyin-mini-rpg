@@ -127,6 +127,7 @@ export class PortraitBattleBootstrap extends Component {
     const damageNumberPool = this.createRuntimePool(effectLayer, 'DamageNumberPool', 'damage-number', 24, () => this.createDamageNumberNode())
     const bossEffectPool = this.createRuntimePool(effectLayer, 'BossEffectPool', 'boss-effect', 4, () => this.createBossEffectNode())
     const hudParts = this.createHud(hudLayer, visibleHeight)
+    const battleInput = this.createInput(inputLayer, controller)
     const runtime = this.loadRuntime(battleRoot, {
       enemySpawner,
       soulOrbPool,
@@ -135,9 +136,9 @@ export class PortraitBattleBootstrap extends Component {
       player,
       hud: hudParts.hud,
       stageClearPanel: hudParts.stageClearPanel,
+      battleInput,
     })
     this.createFlyingSword(effectLayer, runtime, animator, visibleHeight)
-    this.createInput(inputLayer, controller)
 
     player.setSiblingIndex(0)
   }
@@ -200,6 +201,7 @@ export class PortraitBattleBootstrap extends Component {
     player: Node
     hud: BattleHudController
     stageClearPanel: StageClearPanelController
+    battleInput: BattleInputController
   }) {
     const runtimeNode = this.createNode('Runtime', parent)
     this.runtimeNode = runtimeNode
@@ -222,6 +224,7 @@ export class PortraitBattleBootstrap extends Component {
       runtime.playerNode = bindings.player
       runtime.hud = bindings.hud
       runtime.stageClearPanel = bindings.stageClearPanel
+      runtime.battleInput = bindings.battleInput
       bindings.stageClearPanel.onContinue = (nextStageId) => runtime.advanceToStage(nextStageId)
       bindings.stageClearPanel.onRetry = () => runtime.retryCurrentStage()
       runtime.initialize()
@@ -277,6 +280,7 @@ export class PortraitBattleBootstrap extends Component {
     input.minY = -430
     input.maxY = 430
     input.bindInputArea(inputArea)
+    return input
   }
 
   private createHud(parent: Node, visibleHeight: number) {

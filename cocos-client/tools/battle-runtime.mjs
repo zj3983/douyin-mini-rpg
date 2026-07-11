@@ -292,6 +292,22 @@ export function normalizeSoulHudCount(current, required) {
   }
 }
 
+export function createBattleFreezeState() {
+  return { frozen: false }
+}
+
+export function freezeBattle(state) {
+  state.frozen = true
+}
+
+export function rebuildBattleFreeze(state) {
+  state.frozen = false
+}
+
+export function canProcessBattleAction(state) {
+  return !state.frozen
+}
+
 export function tickContactDamageGate(gate, deltaTime) {
   gate.cooldownRemaining = Math.max(0, gate.cooldownRemaining - Math.max(0, deltaTime))
 }
