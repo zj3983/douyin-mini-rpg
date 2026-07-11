@@ -67,3 +67,67 @@ test('frame strip processor slices one six-column sheet before trimming and pack
     rmSync(workDir, { recursive: true, force: true })
   }
 })
+
+test('sheet mode rejects invalid column counts and non-divisible widths', () => {
+  const script = resolve('tools/build-frame-strip.py')
+  const source = resolve('temp/imagegen/stage2/transparent/fog-spider-sheet-alpha.png')
+  for (const columns of ['0', '-2', '5']) {
+    const result = spawnSync('python', [script, '--input-sheet', source, '--sheet-columns', columns, '--output', 'temp-invalid-strip.png'], { encoding: 'utf8' })
+    assert.notEqual(result.status, 0)
+    assert.match(`${result.stdout}${result.stderr}`, /sheet-columns|divisible/i)
+  }
+  rmSync(resolve('temp-invalid-strip.png'), { force: true })
+})
+
+test('sheet-only options reject directory mode and limit is rejected in sheet mode', () => {
+  const script = resolve('tools/build-frame-strip.py')
+  const source = resolve('temp/imagegen/stage2/transparent/fog-spider-sheet-alpha.png')
+  const directory = resolve('assets/resources/Assets/Combat/QinglanSwordCultivator')
+  const misuse = [
+    ['--input-dir', directory, '--sheet-columns', '6'],
+    ['--input-sheet', source, '--sheet-columns', '6', '--limit', '3'],
+  ]
+  for (const args of misuse) {
+    const result = spawnSync('python', [script, ...args, '--output', 'temp-invalid-strip.png'], { encoding: 'utf8' })
+    assert.notEqual(result.status, 0)
+    assert.match(`${result.stdout}${result.stderr}`, /only valid|cannot be used/i)
+  }
+  rmSync(resolve('temp-invalid-strip.png'), { force: true })
+})
+
+test('multi-subject sheet cannot silently run as a one-column sheet', () => {
+  const result = spawnSync('python', [
+    resolve('tools/build-frame-strip.py'),
+    '--input-sheet', resolve('temp/imagegen/stage2/transparent/fog-spider-sheet-alpha.png'),
+    '--output', 'temp-invalid-strip.png',
+  ], { encoding: 'utf8' })
+  assert.notEqual(result.status, 0)
+  assert.match(`${result.stdout}${result.stderr}`, /sheet-columns.+required/i)
+  rmSync(resolve('temp-invalid-strip.png'), { force: true })
+})
+
+test('adaptive sheet extraction rejects equal-column contamination and preserves whole subjects', () => {
+  const result = spawnSync('python', [
+    resolve('tools/build-frame-strip.py'),
+    '--input-sheet', resolve('temp/imagegen/stage2/transparent/fog-spider-sheet-alpha.png'),
+    '--sheet-columns', '6',
+    '--extract-components',
+    '--output', resolve('temp-component-strip.png'),
+    '--frame-width', '320', '--frame-height', '512', '--padding', '28', '--vertical-align', 'bottom',
+  ], { encoding: 'utf8' })
+  assert.equal(result.status, 0, `${result.stdout}${result.stderr}`)
+  assert.match(result.stdout, /crosses equal column boundaries/i)
+  rmSync(resolve('temp-component-strip.png'), { force: true })
+})
+
+test('equal slicing refuses a source whose subjects touch column boundaries', () => {
+  const result = spawnSync('python', [
+    resolve('tools/build-frame-strip.py'),
+    '--input-sheet', resolve('temp/imagegen/stage2/transparent/fog-spider-sheet-alpha.png'),
+    '--sheet-columns', '6',
+    '--output', 'temp-invalid-strip.png',
+  ], { encoding: 'utf8' })
+  assert.notEqual(result.status, 0)
+  assert.match(`${result.stdout}${result.stderr}`, /crosses equal column boundaries.+extract-components/i)
+  rmSync(resolve('temp-invalid-strip.png'), { force: true })
+})
