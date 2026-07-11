@@ -36,12 +36,10 @@ jobs:
           cd cocos-client
           npm test
           COCOS_CREATOR_PATH=prebuilt npm run build:check
+          npm run verify:build-output -- build/web-mobile
           cd ..
-          tar -czf dist-code.tar.gz -C cocos-client/build/web-mobile .
-          tar -czf app.tar.gz dist-code.tar.gz server package.json package-lock.json
-          ls -lh dist-code.tar.gz app.tar.gz
 
-      - name: Prepare upload directory
+      - name: Checkout release on server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ env.DEPLOY_HOST }}
@@ -50,18 +48,9 @@ jobs:
           command_timeout: 5m
           script: |
             set -e
-            rm -rf /tmp/douyin-mini-rpg-dist
-            mkdir -p /tmp/douyin-mini-rpg-dist
-
-      - name: Upload built archive
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ env.DEPLOY_HOST }}
-          username: ubuntu
-          key: ${{ secrets.SERVER_KEY }}
-          source: "app.tar.gz"
-          target: "/tmp/douyin-mini-rpg-dist"
-          command_timeout: 20m
+            rm -rf /tmp/douyin-mini-rpg-app
+            git clone --depth 1 --branch main https://github.com/zj3983/douyin-mini-rpg.git /tmp/douyin-mini-rpg-app
+            test "$(git -C /tmp/douyin-mini-rpg-app rev-parse HEAD)" = "${{ github.sha }}"
 
       - name: Deploy archive and route domain
         uses: appleboy/ssh-action@v1.0.3
@@ -79,13 +68,9 @@ jobs:
             LEGACY_GAME_DIR="/var/www/game/relaxed-sheep-match"
             LEGACY_PREFIX_DIR="/var/www/games-prefix/relaxed-sheep-match"
 
-            rm -rf /tmp/douyin-mini-rpg-app
-            mkdir -p /tmp/douyin-mini-rpg-app
-            tar -xzf /tmp/douyin-mini-rpg-dist/app.tar.gz -C /tmp/douyin-mini-rpg-app
-
             sudo rm -rf "$APP_DIR"
             sudo mkdir -p "$APP_DIR" "$SERVER_DIR" "$GAME_HUB_DIR"
-            sudo tar -xzf /tmp/douyin-mini-rpg-app/dist-code.tar.gz -C "$APP_DIR"
+            sudo cp -R /tmp/douyin-mini-rpg-app/cocos-client/build/web-mobile/. "$APP_DIR/"
             sudo chown -R www-data:www-data "$APP_DIR" || true
 
             sudo rm -rf "$LEGACY_GAME_DIR" "$LEGACY_PREFIX_DIR"
