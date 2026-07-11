@@ -179,6 +179,23 @@ test('arrival cannot override locked hand seal cast hurt or death actions', () =
   }
 })
 
+test('same-frame quarter-second arrival cannot age out a newly accepted high-priority action', () => {
+  for (const action of ['hand_seal', 'flying_sword_cast', 'hurt']) {
+    const movement = movementRuntime.createPlayerMovementState({ x: 0, y: 0 })
+    const presentation = createPlayerPresentationState(0)
+    movementRuntime.requestPlayerMovement(movement, { x: 2, y: 0 })
+
+    const accepted = applyPlayerActionEvent(movement, presentation, { x: 0, y: 0 }, action)
+    const arrival = advancePlayerControllerFrame(movement, presentation, { x: 0, y: 0 }, 220, 0.25)
+
+    assert.equal(accepted.emitAction, true)
+    assert.equal(arrival.arrived, true)
+    assert.equal(arrival.action, null, `${action} must survive its acceptance frame`)
+    assert.equal(presentation.activeAction, action)
+    assert.equal(presentation.pendingSwordRide, true)
+  }
+})
+
 test('death outranks hurt and cast while active', () => {
   const movement = movementRuntime.createPlayerMovementState({ x: 0, y: 0 })
   const presentation = createPlayerPresentationState(0)

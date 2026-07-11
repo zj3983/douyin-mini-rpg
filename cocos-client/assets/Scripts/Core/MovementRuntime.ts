@@ -73,6 +73,7 @@ export interface PlayerPresentationState {
   hoverBaseY: number
   activeAction: string | null
   actionLockRemaining: number
+  actionJustAccepted: boolean
   pendingSwordRide: boolean
 }
 
@@ -120,6 +121,7 @@ export function createPlayerPresentationState(hoverBaseY = 0): PlayerPresentatio
     hoverBaseY,
     activeAction: null,
     actionLockRemaining: 0,
+    actionJustAccepted: false,
     pendingSwordRide: false,
   }
 }
@@ -129,6 +131,7 @@ export function resetPlayerPresentationState(state: PlayerPresentationState) {
   state.hoverElapsed = 0
   state.activeAction = null
   state.actionLockRemaining = 0
+  state.actionJustAccepted = false
   state.pendingSwordRide = false
 }
 
@@ -150,7 +153,7 @@ export function advancePlayerControllerFrame(
     ? Math.min(deltaTime, MAX_MOVEMENT_FRAME_DELTA)
     : 0
   presentationState.hoverElapsed += validDelta
-  if (Number.isFinite(presentationState.actionLockRemaining)) {
+  if (!presentationState.actionJustAccepted && Number.isFinite(presentationState.actionLockRemaining)) {
     presentationState.actionLockRemaining = Math.max(0, presentationState.actionLockRemaining - validDelta)
     if (presentationState.actionLockRemaining === 0) presentationState.activeAction = null
   }
@@ -174,6 +177,7 @@ export function advancePlayerControllerFrame(
     presentationState.activeAction = 'sword_ride'
     action = 'sword_ride'
   }
+  presentationState.actionJustAccepted = false
 
   return {
     ...movement,
@@ -197,6 +201,7 @@ export function applyPlayerActionEvent(
   if (accepted) {
     presentationState.activeAction = action
     presentationState.actionLockRemaining = ACTION_LOCK[action] ?? 0.1
+    presentationState.actionJustAccepted = true
   }
   return {
     action: accepted ? action : presentationState.activeAction,
