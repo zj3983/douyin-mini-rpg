@@ -52,7 +52,7 @@ export class BattleRuntimeController extends Component {
   @property swordStartX = -210
   @property swordEndX = 330
   @property swordY = -30
-  @property swordHitWidth = 20
+  @property swordHitWidth = 72
   @property swordArcHeight = 104
   @property deathRecycleDelay = 0.45
   @property playerMaxHealth = 220

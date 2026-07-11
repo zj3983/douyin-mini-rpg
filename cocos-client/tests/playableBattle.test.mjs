@@ -196,6 +196,11 @@ test('one captured player-relative path drives both sword visuals and hit passes
   assert.match(skill, /castFlyingSwordPass\(path\.from, path\.to\)/)
 })
 
+test('automatic flying sword keeps a forgiving hit corridor for moving enemies', () => {
+  const controller = read('assets/Scripts/Game/BattleRuntimeController.ts')
+  assert.match(controller, /@property swordHitWidth = 72/)
+})
+
 test('soul orbs magnet to the player and publish pickup amount before recycling', () => {
   const source = read('assets/Scripts/Game/SoulOrbController.ts')
 
