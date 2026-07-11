@@ -240,6 +240,7 @@ test('moving player stops before death and retry restores sword ride without a s
   assert.match(stopBody, /stopPlayerMovement\(this\.movementState\)/)
   const resetBody = player.match(/public reset\(\) \{([\s\S]*?)\n  \}/)?.[1] ?? ''
   assert.match(resetBody, /resetPlayerMovement\(this\.movementState\)/)
+  assert.match(resetBody, /resetPlayerPresentationState\(this\.presentationState\)/)
 
   const stopIndex = runtime.indexOf('playerController?.stop()')
   const deathIndex = runtime.indexOf("emit('player-action-requested', 'death')")

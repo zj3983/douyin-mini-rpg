@@ -8,6 +8,7 @@ import {
   PlayerPresentationState,
   requestPlayerMovement,
   resetPlayerMovement,
+  resetPlayerPresentationState,
   stepTowardTarget,
   stopPlayerMovement,
 } from '../Core/MovementRuntime'
@@ -51,6 +52,7 @@ export class PlayerController extends Component {
 
   public reset() {
     const spawnPosition = resetPlayerMovement(this.movementState)
+    resetPlayerPresentationState(this.presentationState)
     this.node.setWorldPosition(spawnPosition.x, spawnPosition.y, this.node.worldPosition.z)
     this.setMoving(false)
     this.requestAction('sword_ride')
@@ -93,6 +95,6 @@ export class PlayerController extends Component {
   private requestAction(action: string, position = this.node.worldPosition) {
     const decision = applyPlayerActionEvent(this.movementState, this.presentationState, position, action)
     // Arrival resolves to emit('player-action-requested', 'sword_ride') through the runtime decision.
-    this.node.emit('player-action-requested', decision.action)
+    if (decision.emitAction) this.node.emit('player-action-requested', decision.action)
   }
 }

@@ -8,6 +8,7 @@ import {
   applyPlayerActionEvent,
   clampBattleTarget,
   createPlayerPresentationState,
+  resetPlayerPresentationState,
   stepTowardTarget,
 } from '../tools/movement-runtime.mjs'
 import * as movementRuntime from '../tools/movement-runtime.mjs'
@@ -137,21 +138,70 @@ test('controller frame helper emits move only for displacement and sword ride on
   assert.equal(idle.arrived, false)
 })
 
-test('cast hit and death action events preserve position target and movement presentation', () => {
+test('cast hit and death action events preserve position and movement target', () => {
   const movement = movementRuntime.createPlayerMovementState({ x: -10, y: 5 })
-  const presentation = createPlayerPresentationState(7)
   const current = { x: 3, y: 4 }
   movementRuntime.requestPlayerMovement(movement, { x: 80, y: -20 })
 
   for (const action of ['hand_seal', 'flying_sword_cast', 'hurt', 'death']) {
-    const before = structuredClone({ movement, presentation, current })
+    const presentation = createPlayerPresentationState(7)
+    const before = structuredClone({ movement, current })
     const decision = applyPlayerActionEvent(movement, presentation, current, action)
-    assert.deepEqual({ movement, presentation, current }, before)
+    assert.deepEqual({ movement, current }, before)
     assert.deepEqual(decision.position, current)
     assert.deepEqual(decision.target, { x: 80, y: -20 })
     assert.equal(decision.action, action)
     assert.equal(decision.emitMove, false)
   }
+})
+
+test('arrival cannot override locked hand seal cast hurt or death actions', () => {
+  for (const action of ['hand_seal', 'flying_sword_cast', 'hurt', 'death']) {
+    const movement = movementRuntime.createPlayerMovementState({ x: 0, y: 0 })
+    const presentation = createPlayerPresentationState(0)
+    movementRuntime.requestPlayerMovement(movement, { x: 2, y: 0 })
+    const actionDecision = applyPlayerActionEvent(movement, presentation, { x: 0, y: 0 }, action)
+    assert.equal(actionDecision.action, action)
+    assert.equal(actionDecision.emitAction, true)
+
+    const arrival = advancePlayerControllerFrame(movement, presentation, { x: 0, y: 0 }, 220, 1 / 60)
+    assert.equal(arrival.arrived, true)
+    assert.equal(arrival.action, null)
+
+    const afterLock = advancePlayerControllerFrame(
+      movement,
+      presentation,
+      arrival.position,
+      220,
+      action === 'death' ? 10 : 0.3,
+    )
+    assert.equal(afterLock.action, action === 'death' ? null : 'sword_ride')
+  }
+})
+
+test('death outranks hurt and cast while active', () => {
+  const movement = movementRuntime.createPlayerMovementState({ x: 0, y: 0 })
+  const presentation = createPlayerPresentationState(0)
+  const current = { x: 0, y: 0 }
+  assert.equal(applyPlayerActionEvent(movement, presentation, current, 'hand_seal').action, 'hand_seal')
+  assert.equal(applyPlayerActionEvent(movement, presentation, current, 'hurt').action, 'hurt')
+  assert.equal(applyPlayerActionEvent(movement, presentation, current, 'death').action, 'death')
+  const rejected = applyPlayerActionEvent(movement, presentation, current, 'flying_sword_cast')
+  assert.equal(rejected.action, 'death')
+  assert.equal(rejected.emitAction, false)
+})
+
+test('presentation reset clears death lock and preserves hover base', () => {
+  const movement = movementRuntime.createPlayerMovementState({ x: 0, y: 0 })
+  const presentation = createPlayerPresentationState(19)
+  applyPlayerActionEvent(movement, presentation, { x: 0, y: 0 }, 'death')
+  resetPlayerPresentationState(presentation)
+  const idle = applyPlayerActionEvent(movement, presentation, { x: 0, y: 0 }, 'sword_ride')
+
+  assert.equal(idle.emitAction, true)
+  assert.equal(idle.action, 'sword_ride')
+  assert.equal(presentation.hoverBaseY, 19)
+  assert.equal(presentation.actionLockRemaining, 0)
 })
 
 test('hover output is absolute from a stable base and never accumulates', () => {
@@ -185,6 +235,17 @@ test('one large update matches deterministic bounded substeps', () => {
   assert.ok(large.distanceMoved <= 220 * 0.2 + 1e-9)
 })
 
+test('extreme finite delta is clamped to bounded real-time movement work', () => {
+  const state = movementRuntime.createPlayerMovementState({ x: 0, y: 0 })
+  movementRuntime.requestPlayerMovement(state, { x: 1e9, y: 0 })
+  const frame = advancePlayerMovement(state, { x: 0, y: 0 }, 220, 1e12)
+
+  assert.ok(frame.substeps <= 15)
+  assert.ok(frame.distanceMoved <= 220 * 0.25 + 1e-9)
+  assert.equal(Number.isFinite(frame.position.x) && Number.isFinite(frame.position.y), true)
+  assert.deepEqual(state.target, { x: 1e9, y: 0 })
+})
+
 test('invalid delta time and coordinates produce finite stationary output', () => {
   const state = movementRuntime.createPlayerMovementState({ x: 1, y: 2 })
   movementRuntime.requestPlayerMovement(state, { x: 20, y: 30 })
@@ -212,11 +273,11 @@ test('arrival clears the target exactly once without overshoot', () => {
 
 test('TypeScript and mjs movement runtimes expose matching behavior bodies', async () => {
   const ts = readFileSync(resolve('assets/Scripts/Core/MovementRuntime.ts'), 'utf8')
-  for (const name of ['requestPlayerMovement', 'stepTowardTarget', 'advancePlayerMovement']) {
+  for (const name of ['requestPlayerMovement', 'stepTowardTarget', 'advancePlayerMovement', 'advancePlayerControllerFrame', 'applyPlayerActionEvent']) {
     assert.equal(typeof movementRuntime[name], 'function')
     assert.match(ts, new RegExp(`export function ${name}\\(`))
   }
-  for (const marker of ['MAX_MOVEMENT_SUBSTEP = 1 / 60', 'Number.isFinite', 'state.target = null']) {
+  for (const marker of ['MAX_MOVEMENT_SUBSTEP = 1 / 60', 'MAX_MOVEMENT_FRAME_DELTA = 0.25', 'Number.isFinite', 'state.target = null']) {
     assert.equal(readFileSync(resolve('tools/movement-runtime.mjs'), 'utf8').includes(marker), true)
     assert.equal(ts.includes(marker), true)
   }
@@ -229,7 +290,16 @@ test('TypeScript and mjs movement runtimes expose matching behavior bodies', asy
     const first = runtime.advancePlayerMovement(state, { x: -5, y: 2 }, 220, 0.2)
     runtime.requestPlayerMovement(state, { x: -40, y: -20 })
     const second = runtime.advancePlayerMovement(state, first.position, 220, 1 / 60)
-    parityResults.push({ first, second, state })
+    const extremeState = runtime.createPlayerMovementState({ x: 0, y: 0 })
+    runtime.requestPlayerMovement(extremeState, { x: 1e9, y: 0 })
+    const extreme = runtime.advancePlayerMovement(extremeState, { x: 0, y: 0 }, 220, 1e12)
+    const actionMovement = runtime.createPlayerMovementState({ x: 0, y: 0 })
+    const presentation = runtime.createPlayerPresentationState(4)
+    runtime.requestPlayerMovement(actionMovement, { x: 2, y: 0 })
+    const cast = runtime.applyPlayerActionEvent(actionMovement, presentation, { x: 0, y: 0 }, 'hand_seal')
+    const arrival = runtime.advancePlayerControllerFrame(actionMovement, presentation, { x: 0, y: 0 }, 220, 1 / 60)
+    const unlocked = runtime.advancePlayerControllerFrame(actionMovement, presentation, arrival.position, 220, 0.3)
+    parityResults.push({ first, second, state, extreme, extremeState, cast, arrival, unlocked, presentation })
   }
   assert.deepEqual(parityResults[1], parityResults[0])
 })

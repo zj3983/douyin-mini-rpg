@@ -50,6 +50,7 @@ export function stepTowardTarget(current, target, speed, deltaTime) {
 }
 
 export const MAX_MOVEMENT_SUBSTEP = 1 / 60
+export const MAX_MOVEMENT_FRAME_DELTA = 0.25
 
 export function advancePlayerMovement(state, current, speed, deltaTime) {
   const finiteCurrent = {
@@ -61,8 +62,9 @@ export function advancePlayerMovement(state, current, speed, deltaTime) {
   if (!Number.isFinite(deltaTime) || deltaTime <= 0) return stationary
   if (!Number.isFinite(current.x) || !Number.isFinite(current.y)) return stationary
 
-  const substeps = Math.max(1, Math.ceil(deltaTime / MAX_MOVEMENT_SUBSTEP - 1e-12))
-  const substepDelta = deltaTime / substeps
+  const acceptedDelta = Math.min(deltaTime, MAX_MOVEMENT_FRAME_DELTA)
+  const substeps = Math.max(1, Math.ceil(acceptedDelta / MAX_MOVEMENT_SUBSTEP - 1e-12))
+  const substepDelta = acceptedDelta / substeps
   let position = { ...current }
   let distanceMoved = 0
 
@@ -80,12 +82,36 @@ export function advancePlayerMovement(state, current, speed, deltaTime) {
 }
 
 export function createPlayerPresentationState(hoverBaseY = 0) {
-  return { moving: false, hoverElapsed: 0, hoverBaseY }
+  return {
+    moving: false,
+    hoverElapsed: 0,
+    hoverBaseY,
+    activeAction: null,
+    actionLockRemaining: 0,
+    pendingSwordRide: false,
+  }
 }
 
+export function resetPlayerPresentationState(state) {
+  state.moving = false
+  state.hoverElapsed = 0
+  state.activeAction = null
+  state.actionLockRemaining = 0
+  state.pendingSwordRide = false
+}
+
+const ACTION_PRIORITY = { sword_ride: 0, hand_seal: 2, flying_sword_cast: 2, hurt: 3, death: 4 }
+const ACTION_LOCK = { sword_ride: 0, hand_seal: 0.22, flying_sword_cast: 0.25, hurt: 0.2, death: Infinity }
+
 export function advancePlayerControllerFrame(movementState, presentationState, current, speed, deltaTime) {
-  const validDelta = Number.isFinite(deltaTime) && deltaTime > 0 ? deltaTime : 0
+  const validDelta = Number.isFinite(deltaTime) && deltaTime > 0
+    ? Math.min(deltaTime, MAX_MOVEMENT_FRAME_DELTA)
+    : 0
   presentationState.hoverElapsed += validDelta
+  if (Number.isFinite(presentationState.actionLockRemaining)) {
+    presentationState.actionLockRemaining = Math.max(0, presentationState.actionLockRemaining - validDelta)
+    if (presentationState.actionLockRemaining === 0) presentationState.activeAction = null
+  }
   const movement = advancePlayerMovement(movementState, current, speed, deltaTime)
   const emitMove = movement.distanceMoved > 0
   const motionChanges = []
@@ -98,22 +124,39 @@ export function advancePlayerControllerFrame(movementState, presentationState, c
     presentationState.moving = false
     motionChanges.push(false)
   }
+  if (movement.arrived) presentationState.pendingSwordRide = true
+
+  let action = null
+  if (presentationState.pendingSwordRide && presentationState.actionLockRemaining === 0) {
+    presentationState.pendingSwordRide = false
+    presentationState.activeAction = 'sword_ride'
+    action = 'sword_ride'
+  }
 
   return {
     ...movement,
     emitMove,
     motionChanges,
-    action: movement.arrived ? 'sword_ride' : null,
+    action,
     hoverY: presentationState.hoverBaseY + Math.sin(presentationState.hoverElapsed * 4) * 2,
   }
 }
 
 export function applyPlayerActionEvent(movementState, presentationState, current, action) {
+  const priority = ACTION_PRIORITY[action] ?? 1
+  const activePriority = ACTION_PRIORITY[presentationState.activeAction] ?? -1
+  const locked = presentationState.actionLockRemaining > 0
+  const accepted = !locked || priority >= activePriority
+  if (accepted) {
+    presentationState.activeAction = action
+    presentationState.actionLockRemaining = ACTION_LOCK[action] ?? 0.1
+  }
   return {
-    action,
+    action: accepted ? action : presentationState.activeAction,
     position: { ...current },
     target: movementState.target ? { ...movementState.target } : null,
     moving: presentationState.moving,
     emitMove: false,
+    emitAction: accepted,
   }
 }
