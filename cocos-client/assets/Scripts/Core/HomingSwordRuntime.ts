@@ -74,7 +74,7 @@ export function selectNearestTarget(position: SwordPoint, targets: HomingSwordTa
   for (const candidate of targets) {
     if (!validTarget(candidate) || excluded?.has(candidate.id)) continue
     const distance = (candidate.position.x - position.x) ** 2 + (candidate.position.y - position.y) ** 2
-    if (distance < nearestDistance - EPSILON || (Math.abs(distance - nearestDistance) <= EPSILON && candidate.id < (nearest?.id ?? ''))) {
+    if (distance < nearestDistance || (distance === nearestDistance && candidate.id < (nearest?.id ?? ''))) {
       nearest = candidate; nearestDistance = distance
     }
   }
