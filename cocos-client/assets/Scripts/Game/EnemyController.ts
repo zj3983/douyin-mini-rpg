@@ -1,5 +1,6 @@
 import { _decorator, Component, Node, Vec3 } from 'cc'
 import { BattleEnemy } from '../Core/BattleRuntime'
+import { EnemyFacing, updateEnemyFacing } from '../Core/EnemyFacingRuntime'
 
 const { ccclass, property } = _decorator
 
@@ -8,6 +9,7 @@ export class EnemyController extends Component {
   @property moveSpeed = 90
   @property attackRange = 70
   @property attackCooldown = 1.8
+  @property facingDeadZone = 4
 
   private target: Vec3 | null = null
   private targetNode: Node | null = null
@@ -15,6 +17,7 @@ export class EnemyController extends Component {
   private cooldownLeft = 0
   private runtimeEnemy: BattleEnemy | null = null
   private moving = false
+  private facing: EnemyFacing = -1
 
   bindRuntimeEnemy(enemy: BattleEnemy) {
     this.resetRuntimeState()
@@ -44,6 +47,11 @@ export class EnemyController extends Component {
 
     const current = this.node.worldPosition
     const liveTarget = this.targetNode?.worldPosition ?? this.target
+    const nextFacing = updateEnemyFacing(this.facing, current.x, liveTarget.x, this.facingDeadZone)
+    if (nextFacing !== this.facing) {
+      this.facing = nextFacing
+      this.node.emit('enemy-facing', this.facing)
+    }
     const desiredTarget = liveTarget.clone()
     if (this.lockTargetY) desiredTarget.y = current.y
     const moveDistance = Vec3.distance(current, desiredTarget)
@@ -81,5 +89,6 @@ export class EnemyController extends Component {
     this.lockTargetY = false
     this.cooldownLeft = 0
     this.moving = false
+    this.facing = -1
   }
 }

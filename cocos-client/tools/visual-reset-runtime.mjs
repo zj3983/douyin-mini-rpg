@@ -69,6 +69,10 @@ export function setVisualActionState(state, action) {
   }
 }
 
+export function setVisualFacing(state, facing) {
+  return { ...state, facing }
+}
+
 export function visualResetCommands(state) {
   return {
     position: { ...state.localPosition },

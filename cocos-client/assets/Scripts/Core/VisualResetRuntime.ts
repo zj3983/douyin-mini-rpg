@@ -102,6 +102,10 @@ export function setVisualActionState(state: VisualResetState, action: string): V
   }
 }
 
+export function setVisualFacing(state: VisualResetState, facing: -1 | 1): VisualResetState {
+  return { ...state, facing }
+}
+
 export function visualResetCommands(state: VisualResetState) {
   return {
     position: { ...state.localPosition },

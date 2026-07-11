@@ -9,6 +9,7 @@ import {
   prepareVisualForPool,
   resetVisualForSpawn,
   setVisualActionState,
+  setVisualFacing,
   visualResetCommands,
   VisualResetState,
 } from '../Core/VisualResetRuntime'
@@ -68,6 +69,7 @@ export class EnemyVisualController extends Component {
     this.node.on('enemy-defeated', this.onEnemyDefeated, this)
     this.node.on('enemy-motion', this.onEnemyMotion, this)
     this.node.on('enemy-skill-cast', this.onEnemySkill, this)
+    this.node.on('enemy-facing', this.onEnemyFacing, this)
     this.eventsBound = true
   }
 
@@ -77,11 +79,20 @@ export class EnemyVisualController extends Component {
     this.node.off('enemy-defeated', this.onEnemyDefeated, this)
     this.node.off('enemy-motion', this.onEnemyMotion, this)
     this.node.off('enemy-skill-cast', this.onEnemySkill, this)
+    this.node.off('enemy-facing', this.onEnemyFacing, this)
     this.eventsBound = false
   }
 
   private onEnemyMotion(action: string) {
     this.applyActionState(action)
+  }
+
+  private onEnemyFacing(facing: -1 | 1) {
+    this.visualState = setVisualFacing(this.visualState, facing)
+    const visualNode = this.animator?.targetSprite?.node
+    if (!visualNode) return
+    const scale = visualResetCommands(this.visualState).scale
+    visualNode.setScale(scale.x, scale.y, scale.z)
   }
 
   private onEnemySkill() {
@@ -110,11 +121,13 @@ export class EnemyVisualController extends Component {
   private applyVisualState(playAction = true) {
     const commands = visualResetCommands(this.visualState)
     this.applyCombatFlags(commands)
-    const visualNode = this.animator?.targetSprite?.node ?? this.node
-    visualNode.setPosition(commands.position.x, commands.position.y, commands.position.z)
-    visualNode.setScale(commands.scale.x, commands.scale.y, commands.scale.z)
-    visualNode.setRotationFromEuler(commands.rotation.x, commands.rotation.y, commands.rotation.z)
-    const sprite = visualNode.getComponent(Sprite) ?? this.animator?.targetSprite
+    const visualNode = this.animator?.targetSprite?.node
+    if (visualNode) {
+      visualNode.setPosition(commands.position.x, commands.position.y, commands.position.z)
+      visualNode.setScale(commands.scale.x, commands.scale.y, commands.scale.z)
+      visualNode.setRotationFromEuler(commands.rotation.x, commands.rotation.y, commands.rotation.z)
+    }
+    const sprite = this.animator?.targetSprite ?? null
     if (sprite) sprite.color = new Color(commands.color.r, commands.color.g, commands.color.b, commands.color.a)
     if (!commands.actorId) return
     this.animator?.setActor(commands.actorId)
