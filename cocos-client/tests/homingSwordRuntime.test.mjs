@@ -94,6 +94,24 @@ test('large return step with low turn rate cannot end farther from the player', 
   assert.ok(finiteState(state))
 })
 
+test('low-turn large-delta return eventually finishes instead of orbiting forever', () => {
+  const state = createHomingSword(
+    { x: 10, y: 0 },
+    { x: 0, y: 1 },
+    { ...config, speed: 100, maxTurnRadians: 0.1, returnRadius: 1 },
+  )
+  beginSwordReturn(state)
+  let calls = 0
+  while (state.phase !== 'finished' && calls < 20) {
+    stepHomingSword(state, 1, [], { x: 0, y: 0 })
+    calls += 1
+  }
+  assert.equal(state.phase, 'finished')
+  assert.ok(calls <= 20)
+  assert.ok(Math.hypot(state.position.x, state.position.y) <= 1 + 1e-9)
+  assert.ok(finiteState(state))
+})
+
 test('retargets when the current target dies and reports the change', () => {
   const state = createHomingSword({ x: 0, y: 0 }, { x: 1, y: 0 }, config)
   stepHomingSword(state, 0.1, [target('a', 5, 0), target('b', 8, 0)], { x: 0, y: 0 })

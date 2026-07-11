@@ -1,6 +1,7 @@
 export const HOMING_SWORD_RUNTIME_VERSION = '1'
 
 const EPSILON = 1e-9
+const RETURN_APPROACH_FRACTION = 0.05
 
 function finite(value, fallback = 0) {
   return Number.isFinite(value) ? value : fallback
@@ -55,9 +56,9 @@ function safeReturnDistance(position, player, direction, requestedDistance, retu
   const discriminant = projection ** 2 - (radialDistanceSquared - returnRadius ** 2)
   if (discriminant >= 0) {
     const radiusEntry = -projection - Math.sqrt(discriminant)
-    if (radiusEntry >= 0 && radiusEntry <= requestedDistance) return radiusEntry
+    if (radiusEntry >= 0) return Math.min(requestedDistance, radiusEntry)
   }
-  return Math.min(requestedDistance, Math.max(0, -2 * projection))
+  return Math.min(requestedDistance, Math.max(0, -projection * RETURN_APPROACH_FRACTION))
 }
 
 export function createHomingSword(start, initialDirection, input) {

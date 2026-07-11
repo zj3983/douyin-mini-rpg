@@ -25,6 +25,7 @@ export interface HomingSwordStepResult {
 }
 
 const EPSILON = 1e-9
+const RETURN_APPROACH_FRACTION = 0.05
 const finite = (value: number, fallback = 0) => Number.isFinite(value) ? value : fallback
 const nonnegative = (value: number) => Number.isFinite(value) && value > 0 ? value : 0
 const point = (value?: Partial<SwordPoint> | null): SwordPoint => ({ x: finite(value?.x ?? 0), y: finite(value?.y ?? 0) })
@@ -66,9 +67,9 @@ function safeReturnDistance(position: SwordPoint, player: SwordPoint, direction:
   const discriminant = projection ** 2 - (radialDistanceSquared - returnRadius ** 2)
   if (discriminant >= 0) {
     const radiusEntry = -projection - Math.sqrt(discriminant)
-    if (radiusEntry >= 0 && radiusEntry <= requestedDistance) return radiusEntry
+    if (radiusEntry >= 0) return Math.min(requestedDistance, radiusEntry)
   }
-  return Math.min(requestedDistance, Math.max(0, -2 * projection))
+  return Math.min(requestedDistance, Math.max(0, -projection * RETURN_APPROACH_FRACTION))
 }
 
 export function createHomingSword(start: SwordPoint, initialDirection: SwordVector, input: HomingSwordConfig): HomingSwordState {
