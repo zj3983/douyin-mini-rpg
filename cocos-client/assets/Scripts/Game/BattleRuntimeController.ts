@@ -285,10 +285,11 @@ export class BattleRuntimeController extends Component {
     this.pendingEnemyRecycles += 1
     this.scheduleOnce(() => {
       if (generation !== this.stageGeneration) return
-      if (this.enemyNodes.get(enemyId) !== enemyNode) return
-      this.enemySpawner?.despawnEnemy(enemyNode)
-      this.enemyNodes.delete(enemyId)
-      this.enemyByNode.delete(enemyNode)
+      if (this.enemyNodes.get(enemyId) === enemyNode) {
+        this.enemySpawner?.despawnEnemy(enemyNode)
+        this.enemyNodes.delete(enemyId)
+        this.enemyByNode.delete(enemyNode)
+      }
       this.pendingEnemyRecycles = Math.max(0, this.pendingEnemyRecycles - 1)
       this.trySpawnBoss()
     }, this.deathRecycleDelay)

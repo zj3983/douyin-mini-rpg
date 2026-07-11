@@ -54,7 +54,9 @@ test('battle controller drives enemy contact damage, boss gate, drops, HUD, and 
   assert.doesNotMatch(source, /scheduleOnce\([^)]*hide/)
   assert.match(source, /if \(this\.enemySpawner\?\.canSpawn\(\) !== false\)/)
   assert.match(source, /isBattleFrozen\(\)/)
-  assert.match(source, /if \(this\.enemyNodes\.get\(enemyId\) !== enemyNode\) return/)
+  assert.match(source, /if \(this\.enemyNodes\.get\(enemyId\) === enemyNode\) \{/)
+  assert.match(source, /this\.pendingEnemyRecycles = Math\.max\(0, this\.pendingEnemyRecycles - 1\)/)
+  assert.doesNotMatch(source, /if \(this\.enemyNodes\.get\(enemyId\) !== enemyNode\) return/)
 })
 
 test('boss spawn and settlement honor live enemies, pool rollback, and delayed generation guards', () => {
