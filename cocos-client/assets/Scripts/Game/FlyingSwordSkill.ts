@@ -7,11 +7,11 @@ import {
   resetFlyingSwordTimeline,
 } from '../Core/FlyingSwordRuntime'
 import {
-  createHomingSword,
+  createHomingSwordCast,
   HomingSwordState,
-  selectNearestTarget,
-  stepHomingSword,
-  SwordPoint,
+  HomingSwordSegment,
+  resetHomingSwordCast,
+  stepHomingSwordCast,
 } from '../Core/HomingSwordRuntime'
 import { BattleRuntimeController } from './BattleRuntimeController'
 
@@ -43,15 +43,12 @@ export class FlyingSwordSkill extends Component {
   @property
   public returnRadius = 24
 
-  // Kept until the scene bootstrap stops assigning the former arc setting.
-  public arcHeight = 0
-
   private timeline: FlyingSwordTimeline | null = null
   private homingState: HomingSwordState | null = null
 
   onLoad() {
     this.timeline = this.createTimeline()
-    this.resetSwordPresentation()
+    this.hideSword()
   }
 
   onDisable() {
@@ -97,17 +94,12 @@ export class FlyingSwordSkill extends Component {
     if (!this.battleRuntime) return
     const start = this.battleRuntime.getCurrentPlayerPosition()
     const targets = this.battleRuntime.getLivingSwordTargets()
-    const target = selectNearestTarget(start, targets)
-    const direction = target
-      ? { x: target.position.x - start.x, y: target.position.y - start.y }
-      : { x: 1, y: 0 }
-    this.homingState = createHomingSword(start, direction, {
+    this.homingState = createHomingSwordCast(start, targets, {
       speed: this.swordSpeed,
       maxTurnRadians: this.maxTurnRadians,
       maxOutboundDistance: this.maxOutboundDistance,
       returnRadius: this.returnRadius,
     })
-    this.homingState.targetId = target?.id ?? null
     if (this.sword) {
       this.sword.setPosition(start.x, start.y, 0)
       this.sword.active = true
@@ -118,16 +110,17 @@ export class FlyingSwordSkill extends Component {
     if (!this.battleRuntime || !this.homingState) return
     const targets = this.battleRuntime.getLivingSwordTargets()
     const playerPosition = this.battleRuntime.getCurrentPlayerPosition()
-    const step = stepHomingSword(this.homingState, deltaTime, targets, playerPosition)
-    this.applySwordPose(step.previousPosition, step.nextPosition)
-    const result = this.battleRuntime.resolveHomingSwordSegment(this.homingState, step.previousPosition, step.nextPosition)
-    this.node.emit('sword-pass-resolved', { phase: step.previousPhase, result })
-    if (this.timeline && step.nextPhase === 'returning') this.timeline.state = 'returning'
-    if (step.nextPhase === 'finished') this.finishCast()
+    const frame = stepHomingSwordCast(this.homingState, deltaTime, targets, playerPosition)
+    this.applySwordPose(frame.presentationSegment)
+    const result = this.battleRuntime.resolveHomingSwordSegment(this.homingState, frame.damageSegment)
+    this.node.emit('sword-pass-resolved', { phase: frame.step.previousPhase, result })
+    if (this.timeline && frame.step.nextPhase === 'returning') this.timeline.state = 'returning'
+    if (frame.step.nextPhase === 'finished') this.finishCast()
   }
 
-  private applySwordPose(from: SwordPoint, to: SwordPoint) {
+  private applySwordPose(segment: HomingSwordSegment) {
     if (!this.sword) return
+    const { from, to } = segment
     const angle = Math.atan2(to.y - from.y, to.x - from.x) * 180 / Math.PI
     this.sword.setPosition(to.x, to.y, 0)
     this.sword.setRotationFromEuler(0, 0, angle)
@@ -136,13 +129,13 @@ export class FlyingSwordSkill extends Component {
   private finishCast() {
     this.node.emit('player-action-requested', 'sword_ride')
     if (this.timeline) resetFlyingSwordTimeline(this.timeline)
-    this.homingState = null
+    this.homingState = resetHomingSwordCast(this.homingState)
     this.hideSword()
   }
 
   private cancelCast() {
     if (this.timeline) resetFlyingSwordTimeline(this.timeline)
-    this.homingState = null
+    this.homingState = resetHomingSwordCast(this.homingState)
     this.hideSword()
   }
 

@@ -32,7 +32,12 @@ import {
   StageFlowState,
 } from '../Core/StageFlowRuntime'
 import { CultivationDesignData, stageProfileFromDesign } from '../Core/CultivationRuntime'
-import { HomingSwordState, recordSwordHit, SwordPoint } from '../Core/HomingSwordRuntime'
+import {
+  HomingSwordSegment,
+  HomingSwordState,
+  recordGeometricSwordHits,
+  snapshotLivingSwordTargets,
+} from '../Core/HomingSwordRuntime'
 import { stageVisualFor } from '../Core/StageVisualCatalog'
 import { BattleHudController } from './BattleHudController'
 import { DamageNumberController } from './DamageNumberController'
@@ -57,7 +62,6 @@ export class BattleRuntimeController extends Component {
   @property stageNumber = 1
   @property heroAttack = 44
   @property swordHitWidth = 72
-  public swordArcHeight = 0
   @property deathRecycleDelay = 0.45
   @property playerMaxHealth = 220
   @property contactDamageCooldown = 0.65
@@ -118,13 +122,7 @@ export class BattleRuntimeController extends Component {
   }
 
   getLivingSwordTargets() {
-    return (this.runtime?.enemies ?? [])
-      .filter((enemy) => enemy.alive)
-      .map((enemy) => ({
-        id: String(enemy.id),
-        position: { ...enemy.position },
-        alive: true,
-      }))
+    return snapshotLivingSwordTargets(this.runtime?.enemies ?? [])
   }
 
   getCurrentPlayerPosition() {
@@ -132,7 +130,7 @@ export class BattleRuntimeController extends Component {
     return { x: position.x, y: position.y }
   }
 
-  resolveHomingSwordSegment(state: HomingSwordState, from: SwordPoint, to: SwordPoint) {
+  resolveHomingSwordSegment(state: HomingSwordState, segment: HomingSwordSegment) {
     const empty: ReturnType<typeof applyFlyingSwordPathHit> = {
       hitCount: 0,
       damageEvents: [],
@@ -140,14 +138,16 @@ export class BattleRuntimeController extends Component {
       stageClear: false,
     }
     if (!this.runtime || this.battleFrozen) return empty
+    const { from, to } = segment
     const geometricHits = segmentHitEnemiesAlongPath(this.runtime, {
       points: [from, to],
       width: this.swordHitWidth,
       pierce: this.runtime.enemies.length,
     })
     const result = { ...empty }
+    const newHitIds = new Set(recordGeometricSwordHits(state, geometricHits.map((enemy) => String(enemy.id))))
     for (const enemy of geometricHits) {
-      if (!recordSwordHit(state, String(enemy.id))) continue
+      if (!newHitIds.has(String(enemy.id))) continue
       const isolatedRuntime = { ...this.runtime, enemies: [enemy] }
       const applied = applyFlyingSwordPathHit(isolatedRuntime, 1, 1, {
         points: [from, to],

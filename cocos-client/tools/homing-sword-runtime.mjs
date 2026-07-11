@@ -80,6 +80,39 @@ export function createHomingSword(start, initialDirection, input) {
   }
 }
 
+export function snapshotLivingSwordTargets(targets) {
+  if (!Array.isArray(targets)) return []
+  return targets
+    .filter((target) => target?.alive === true && String(target.id).trim() !== ''
+      && Number.isFinite(target.position?.x) && Number.isFinite(target.position?.y))
+    .map((target) => ({ id: String(target?.id ?? ''), position: point(target?.position), alive: target?.alive === true }))
+}
+
+export function createHomingSwordCast(start, targets, config) {
+  const target = selectNearestTarget(start, targets)
+  const direction = target
+    ? { x: target.position.x - start.x, y: target.position.y - start.y }
+    : { x: 1, y: 0 }
+  const state = createHomingSword(start, direction, config)
+  state.targetId = target?.id ?? null
+  return state
+}
+
+export function recordGeometricSwordHits(state, ids) {
+  if (!Array.isArray(ids)) return []
+  return ids.filter((id) => recordSwordHit(state, id))
+}
+
+export function resetHomingSwordCast(_state) {
+  return null
+}
+
+export function stepHomingSwordCast(state, deltaTime, targets, playerPosition) {
+  const step = stepHomingSword(state, deltaTime, targets, playerPosition)
+  const segment = { from: step.previousPosition, to: step.nextPosition }
+  return { step, segment, presentationSegment: segment, damageSegment: segment }
+}
+
 export function selectNearestTarget(position, targets, excluded = undefined) {
   if (!validPosition(position) || !Array.isArray(targets)) return null
   let nearest = null

@@ -247,7 +247,6 @@ export class PortraitBattleBootstrap extends Component {
     this.loadSprite('Assets/Skills/FlyingSword/sword-projectile-v2/spriteFrame', sword.sprite)
     const skill = skillNode.addComponent(FlyingSwordSkill)
     skill.sword = sword.node
-    skill.arcHeight = 104
     skillNode.on('player-action-requested', (action: string) => animator.play(action), this)
     const bindRuntime = () => {
       const state = getRuntime()
@@ -257,7 +256,6 @@ export class PortraitBattleBootstrap extends Component {
       }
       if (state.status !== 'ready') return
       skill.battleRuntime = state.runtime
-      state.runtime.swordArcHeight = skill.arcHeight
       this.stopRuntimeBinding(bindRuntime)
     }
     this.bindRuntimeCallback = bindRuntime

@@ -2,8 +2,11 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import * as swordRuntime from '../tools/homing-sword-runtime.mjs'
 
 const read = (path) => readFileSync(resolve(path), 'utf8')
+
+const homingConfig = { speed: 10, maxTurnRadians: Math.PI, maxOutboundDistance: 20, returnRadius: 1 }
 
 test('runtime node pool supports a bounded factory-backed pool', () => {
   const source = read('assets/Scripts/Game/NodePoolController.ts')
@@ -194,9 +197,9 @@ test('flying sword visual and damage consume the same per-frame swept segment', 
   const controller = read('assets/Scripts/Game/BattleRuntimeController.ts')
   const skill = read('assets/Scripts/Game/FlyingSwordSkill.ts')
 
-  assert.match(skill, /const step = stepHomingSword\(/)
-  assert.match(skill, /applySwordPose\(step\.previousPosition, step\.nextPosition\)/)
-  assert.match(skill, /resolveHomingSwordSegment\(this\.homingState, step\.previousPosition, step\.nextPosition\)/)
+  assert.match(skill, /const frame = stepHomingSwordCast\(/)
+  assert.match(skill, /applySwordPose\(frame\.presentationSegment\)/)
+  assert.match(skill, /resolveHomingSwordSegment\(this\.homingState, frame\.damageSegment\)/)
   assert.match(controller, /points: \[from, to\]/)
   assert.doesNotMatch(skill, /timeline\.progress|Math\.sin|Math\.cos/)
 })
@@ -205,21 +208,74 @@ test('flying sword refreshes live targets every frame so dead targets retarget n
   const controller = read('assets/Scripts/Game/BattleRuntimeController.ts')
   const skill = read('assets/Scripts/Game/FlyingSwordSkill.ts')
 
-  assert.match(controller, /getLivingSwordTargets\(\)[\s\S]*filter\(\(enemy\) => enemy\.alive\)/)
+  assert.match(controller, /getLivingSwordTargets\(\)[\s\S]*snapshotLivingSwordTargets\(this\.runtime\?\.enemies \?\? \[\]\)/)
   assert.match(skill, /updateHomingSword\(deltaTime\)/)
   const updateBody = skill.match(/private updateHomingSword\(deltaTime: number\) \{([\s\S]*?)\n  \}/)?.[1] ?? ''
   assert.match(updateBody, /getLivingSwordTargets\(\)/)
-  assert.match(updateBody, /stepHomingSword\(this\.homingState, deltaTime, targets,/)
+  assert.match(updateBody, /stepHomingSwordCast\(this\.homingState, deltaTime, targets,/)
   assert.doesNotMatch(skill, /cachedTargets|activeTarget/)
 })
 
 test('one homing cast records geometric hits before damage and never damages the same enemy twice', () => {
   const controller = read('assets/Scripts/Game/BattleRuntimeController.ts')
 
-  assert.match(controller, /for \(const enemy of geometricHits\)/)
-  assert.match(controller, /if \(!recordSwordHit\(state, String\(enemy\.id\)\)\) continue/)
+  assert.match(controller, /const newHitIds = new Set\(recordGeometricSwordHits\(state, geometricHits\.map\(\(enemy\) => String\(enemy\.id\)\)\)\)/)
+  assert.match(controller, /for \(const enemy of geometricHits\)[\s\S]*if \(!newHitIds\.has\(String\(enemy\.id\)\)\) continue/)
   assert.match(controller, /enemies: \[enemy\]/)
   assert.match(controller, /points: \[from, to\]/)
+})
+
+test('homing integration filters target snapshots and copies positions', () => {
+  assert.equal(typeof swordRuntime.snapshotLivingSwordTargets, 'function')
+  const sourcePosition = { x: 4, y: 5 }
+  const snapshots = swordRuntime.snapshotLivingSwordTargets([
+    { id: 2, position: sourcePosition, alive: true },
+    { id: 1, position: { x: 1, y: 1 }, alive: false },
+    { id: 3, position: { x: NaN, y: 1 }, alive: true },
+  ])
+
+  assert.deepEqual(snapshots, [{ id: '2', position: { x: 4, y: 5 }, alive: true }])
+  assert.notEqual(snapshots[0].position, sourcePosition)
+})
+
+test('homing integration de-duplicates geometric hits across repeated swept segments', () => {
+  assert.equal(typeof swordRuntime.recordGeometricSwordHits, 'function')
+  const cast = swordRuntime.createHomingSwordCast(
+    { x: 0, y: 0 },
+    [{ id: 'a', position: { x: 10, y: 0 }, alive: true }],
+    homingConfig,
+  )
+
+  assert.deepEqual(swordRuntime.recordGeometricSwordHits(cast, ['a', 'b']), ['a', 'b'])
+  assert.deepEqual(swordRuntime.recordGeometricSwordHits(cast, ['a', 'b', 'c']), ['c'])
+})
+
+test('homing integration retargets dead targets and shares one swept segment object', () => {
+  assert.equal(typeof swordRuntime.stepHomingSwordCast, 'function')
+  const cast = swordRuntime.createHomingSwordCast(
+    { x: 0, y: 0 },
+    [{ id: 'a', position: { x: 5, y: 0 }, alive: true }],
+    homingConfig,
+  )
+  const frame = swordRuntime.stepHomingSwordCast(cast, 0.1, [
+    { id: 'a', position: { x: 5, y: 0 }, alive: false },
+    { id: 'b', position: { x: 8, y: 0 }, alive: true },
+  ], { x: 0, y: 0 })
+
+  assert.equal(frame.step.previousTargetId, 'a')
+  assert.equal(frame.step.nextTargetId, 'b')
+  assert.strictEqual(frame.presentationSegment, frame.damageSegment)
+  assert.strictEqual(frame.segment.from, frame.step.previousPosition)
+  assert.strictEqual(frame.segment.to, frame.step.nextPosition)
+})
+
+test('homing integration reset clears active casts for frozen and disable lifecycle paths', () => {
+  assert.equal(typeof swordRuntime.resetHomingSwordCast, 'function')
+  const frozenCast = swordRuntime.createHomingSwordCast({ x: 0, y: 0 }, [], homingConfig)
+  const disabledCast = swordRuntime.createHomingSwordCast({ x: 0, y: 0 }, [], homingConfig)
+
+  assert.equal(swordRuntime.resetHomingSwordCast(frozenCast), null)
+  assert.equal(swordRuntime.resetHomingSwordCast(disabledCast), null)
 })
 
 test('automatic flying sword keeps a forgiving hit corridor for moving enemies', () => {

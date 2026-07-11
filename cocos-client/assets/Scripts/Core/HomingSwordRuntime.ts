@@ -23,6 +23,13 @@ export interface HomingSwordStepResult {
   nextTargetId: string | null
   targetChanged: boolean
 }
+export interface HomingSwordSegment { from: SwordPoint; to: SwordPoint }
+export interface HomingSwordCastFrame {
+  step: HomingSwordStepResult
+  segment: HomingSwordSegment
+  presentationSegment: HomingSwordSegment
+  damageSegment: HomingSwordSegment
+}
 
 const EPSILON = 1e-9
 const RETURN_APPROACH_FRACTION = 0.05
@@ -79,6 +86,44 @@ export function createHomingSword(start: SwordPoint, initialDirection: SwordVect
     maxOutboundDistance: nonnegative(input?.maxOutboundDistance), returnRadius: nonnegative(input?.returnRadius),
   }
   return { position: point(start), velocity: { x: direction.x * config.speed, y: direction.y * config.speed }, phase: 'outbound', targetId: null, distanceTravelled: 0, hitIds: [], config }
+}
+
+export function snapshotLivingSwordTargets(targets: Array<{ id: string | number; position: SwordPoint; alive: boolean }>) {
+  if (!Array.isArray(targets)) return []
+  return targets
+    .filter((target) => target?.alive === true && String(target.id).trim() !== ''
+      && Number.isFinite(target.position?.x) && Number.isFinite(target.position?.y))
+    .map((target) => ({ id: String(target?.id ?? ''), position: point(target?.position), alive: target?.alive === true }))
+}
+
+export function createHomingSwordCast(start: SwordPoint, targets: HomingSwordTarget[], config: HomingSwordConfig) {
+  const target = selectNearestTarget(start, targets)
+  const direction = target
+    ? { x: target.position.x - start.x, y: target.position.y - start.y }
+    : { x: 1, y: 0 }
+  const state = createHomingSword(start, direction, config)
+  state.targetId = target?.id ?? null
+  return state
+}
+
+export function recordGeometricSwordHits(state: HomingSwordState, ids: string[]) {
+  if (!Array.isArray(ids)) return []
+  return ids.filter((id) => recordSwordHit(state, id))
+}
+
+export function resetHomingSwordCast(_state: HomingSwordState | null): null {
+  return null
+}
+
+export function stepHomingSwordCast(
+  state: HomingSwordState,
+  deltaTime: number,
+  targets: HomingSwordTarget[],
+  playerPosition: SwordPoint,
+): HomingSwordCastFrame {
+  const step = stepHomingSword(state, deltaTime, targets, playerPosition)
+  const segment = { from: step.previousPosition, to: step.nextPosition }
+  return { step, segment, presentationSegment: segment, damageSegment: segment }
 }
 
 export function selectNearestTarget(position: SwordPoint, targets: HomingSwordTarget[], excluded?: ReadonlySet<string>) {

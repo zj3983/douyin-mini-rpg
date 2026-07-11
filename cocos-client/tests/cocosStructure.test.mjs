@@ -133,8 +133,8 @@ test('flying sword delegates timing while homing state owns flight and lifecycle
   assert.match(source, /advanceFlyingSwordTimeline\(/)
   assert.match(source, /resetFlyingSwordTimeline\(/)
   assert.match(source, /handSealDuration/)
-  assert.match(source, /createHomingSword\(/)
-  assert.match(source, /stepHomingSword\(/)
+  assert.match(source, /createHomingSwordCast\(/)
+  assert.match(source, /stepHomingSwordCast\(/)
   assert.match(source, /getLivingSwordTargets\(\)/)
   assert.match(source, /getCurrentPlayerPosition\(\)/)
   assert.match(source, /resolveHomingSwordSegment\(/)
@@ -144,26 +144,35 @@ test('flying sword delegates timing while homing state owns flight and lifecycle
   assert.match(source, /if \(this\.battleRuntime\.isBattleFrozen\(\)\)[\s\S]*this\.cancelCast\(\)/)
   assert.match(source, /onDisable\(\)[\s\S]*this\.cancelCast\(\)/)
   assert.match(source, /nextPhase === 'finished'[\s\S]*'sword_ride'[\s\S]*resetFlyingSwordTimeline/)
-  assert.match(source, /private cancelCast\(\)[\s\S]*this\.homingState = null[\s\S]*this\.sword\.active = false/)
+  assert.match(source, /private cancelCast\(\)[\s\S]*this\.homingState = resetHomingSwordCast\(this\.homingState\)[\s\S]*this\.sword\.active = false/)
   assert.match(source, /setRotationFromEuler\(/)
+})
+
+test('flying sword has a definition for every private method it calls', () => {
+  const source = readSource('assets/Scripts/Game/FlyingSwordSkill.ts')
+  const definitions = new Set(
+    [...source.matchAll(/^  (?:private )?(\w+)\([^)]*\)\s*\{/gm)].map((match) => match[1]),
+  )
+  const calls = [...source.matchAll(/this\.(\w+)\(/g)].map((match) => match[1])
+  const undefinedCalls = [...new Set(calls.filter((name) => !definitions.has(name)))]
+
+  assert.deepEqual(undefinedCalls, [])
 })
 
 test('battle runtime exposes copied live snapshots and de-duplicated swept hits', () => {
   const source = readSource('assets/Scripts/Game/BattleRuntimeController.ts')
 
   assert.match(source, /getLivingSwordTargets\(\)/)
-  assert.match(source, /filter\(\(enemy\) => enemy\.alive\)/)
-  assert.match(source, /id: String\(enemy\.id\)/)
-  assert.match(source, /position: \{ \.\.\.enemy\.position \}/)
+  assert.match(source, /return snapshotLivingSwordTargets\(this\.runtime\?\.enemies \?\? \[\]\)/)
   assert.match(source, /getCurrentPlayerPosition\(\)/)
   assert.match(source, /return \{ x: position\.x, y: position\.y \}/)
-  assert.match(source, /resolveHomingSwordSegment\(state:\s*HomingSwordState,\s*from:\s*SwordPoint,\s*to:\s*SwordPoint\)/)
+  assert.match(source, /resolveHomingSwordSegment\(state:\s*HomingSwordState,\s*segment:\s*HomingSwordSegment\)/)
   assert.match(source, /segmentHitEnemiesAlongPath\(/)
-  const recordIndex = source.indexOf('recordSwordHit(state, String(enemy.id))')
+  const recordIndex = source.indexOf('recordGeometricSwordHits(state, geometricHits.map((enemy) => String(enemy.id)))')
   const damageIndex = source.indexOf('applyFlyingSwordPathHit(')
   assert.ok(recordIndex >= 0 && damageIndex > recordIndex, 'hit must be recorded before damage is applied')
   assert.doesNotMatch(source, /castFlyingSword(?:Pass)?\(/)
-  assert.doesNotMatch(source, /createFlyingSwordPath|createPlayerSwordPath|buildArcPath|swordStartX|swordEndX|swordY/)
+  assert.doesNotMatch(source, /createFlyingSwordPath|createPlayerSwordPath|buildArcPath|arcHeight|swordStartX|swordEndX|swordY/)
 })
 
 test('portrait bootstrap assembles the approved compact playable scene', () => {
@@ -205,6 +214,7 @@ test('portrait bootstrap assembles the approved compact playable scene', () => {
   }
 
   assert.doesNotMatch(source, /Joystick|joystick|AttackButton|NormalAttack|SkillButton|skill button/)
+  assert.doesNotMatch(source, /skill\.arcHeight|runtime\.swordArcHeight/)
 })
 
 test('battle HUD is null-safe and clamps every progress bar', () => {

@@ -196,6 +196,15 @@ function parityTrace(runtime) {
   trace.push(runtime.stepHomingSword(state, 100, [], { x: 5, y: 90 }))
   trace.push(runtime.recordSwordHit(state, 'a'))
   trace.push(structuredClone(state))
+  const snapshots = runtime.snapshotLivingSwordTargets([
+    { id: 2, position: { x: 4, y: 5 }, alive: true },
+    { id: 1, position: { x: 1, y: 1 }, alive: false },
+  ])
+  const cast = runtime.createHomingSwordCast({ x: 0, y: 0 }, snapshots, config)
+  trace.push(snapshots)
+  trace.push(runtime.recordGeometricSwordHits(cast, ['2', '2', '3']))
+  trace.push(runtime.stepHomingSwordCast(cast, 0.1, snapshots, { x: 0, y: 0 }))
+  trace.push(runtime.resetHomingSwordCast(cast))
   return trace
 }
 
