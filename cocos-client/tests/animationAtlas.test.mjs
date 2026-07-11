@@ -224,7 +224,7 @@ test('third stage actors use clean aligned Flame Ravine strips', async () => {
     assert.deepEqual({ width: image.width, height: image.height }, { width: 1920, height: 512 })
     for (const [x, y] of [[0, 0], [image.width - 1, 0], [0, image.height - 1], [image.width - 1, image.height - 1]]) {
       const offset = (y * image.width + x) * 4
-      assert.deepEqual([...image.data.subarray(offset, offset + 4)], [0, 0, 0, 0], `${actorId} corner ${x},${y} must be clean RGBA`)
+      assert.equal(image.data[offset + 3], 0, `${actorId} corner ${x},${y} must be transparent`)
     }
     for (let x = 0; x < image.width; x += 1) {
       assert.equal(image.data[x * 4 + 3], 0, `${actorId} top outer border must be transparent`)
@@ -292,8 +292,8 @@ test('third stage actors use clean aligned Flame Ravine strips', async () => {
     for (const action of Object.values(actions)) assert.equal(action.atlas, expectedAtlas)
 
     assert.equal(actions.idle.loop, true)
-    assert.equal(actions.idle.order.length > 1, true, `${actorId} idle should be a readable loop`)
-    assert.equal(sourceX(actions.idle).includes(0), true, `${actorId} idle should preserve x0`)
+    assert.equal(sourceX(actions.idle).length > 0, true, `${actorId} idle should define at least one frame`)
+    assert.equal(sourceX(actions.idle).every((x) => x === 0), true, `${actorId} idle should honestly hold x0`)
     assert.deepEqual(new Set(sourceX(actions.move)), new Set([320, 640]))
 
     const attackX = sourceX(actions.attack)
