@@ -207,6 +207,70 @@ test('second stage actors use aligned transparent Mist Lantern strips', async ()
   }
 })
 
+test('third stage actors use clean aligned Flame Ravine strips', async () => {
+  const { readPngRgba } = await import('../tools/png-alpha-runtime.mjs')
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+  const actorIds = ['lava-lizard', 'ember-crow', 'flame-ogre']
+  const expectedFrames = {
+    idle: [0],
+    move: [1, 2],
+    attack: [3],
+    hurt: [4],
+    death: [5],
+  }
+
+  for (const actorId of actorIds) {
+    const actor = manifest.actors.find(({ id }) => id === actorId)
+    const expectedAtlas = `Assets/Combat/FlameRavine/${actorId}-strip.png`
+    assert.ok(actor, `${actorId} should exist`)
+    assert.equal(actor.atlas, expectedAtlas)
+    assert.deepEqual(actor.frameSize, { w: 320, h: 512 })
+
+    const image = readPngRgba(resolve('assets/resources', expectedAtlas))
+    assert.deepEqual({ width: image.width, height: image.height }, { width: 1920, height: 512 })
+    const visibleBottoms = []
+    for (let cell = 0; cell < 6; cell += 1) {
+      const cellX = cell * 320
+      let visibleBottom = -1
+      let visiblePixels = 0
+      let blackPixels = 0
+      let magentaPixels = 0
+      for (let y = 0; y < 512; y += 1) {
+        for (let x = 0; x < 320; x += 1) {
+          const offset = (y * image.width + cellX + x) * 4
+          const [r, g, b, alpha] = image.data.subarray(offset, offset + 4)
+          if (alpha > 0) {
+            visiblePixels += 1
+            visibleBottom = y
+            if (r > 220 && b > 180 && g < 80) magentaPixels += 1
+            if (r < 5 && g < 5 && b < 5) blackPixels += 1
+          }
+          if (x < 28 || x >= 292 || y < 28 || y >= 484) {
+            assert.equal(alpha, 0, `${actorId} cell ${cell} touches its transparent gutter`)
+          }
+        }
+      }
+      assert.equal(visiblePixels > 1000, true, `${actorId} cell ${cell} needs useful subject coverage`)
+      assert.equal(magentaPixels / visiblePixels < 0.02, true, `${actorId} cell ${cell} retains magenta background`)
+      assert.equal(blackPixels / visiblePixels < 0.15, true, `${actorId} cell ${cell} retains black background`)
+      visibleBottoms.push(visibleBottom)
+    }
+    assert.equal(
+      Math.max(...visibleBottoms) - Math.min(...visibleBottoms) <= 1,
+      true,
+      `${actorId} visible bottoms should align: ${visibleBottoms.join(', ')}`,
+    )
+
+    for (const [name, indices] of Object.entries(expectedFrames)) {
+      const action = actor.actions.find((candidate) => candidate.name === name)
+      assert.ok(action, `${actorId} should define ${name}`)
+      assert.equal(action.atlas, expectedAtlas)
+      assert.deepEqual(action.frames, indices.map((index) => ({ x: index * 320, y: 0, w: 320, h: 512 })))
+      assert.deepEqual(action.order, indices.map((_, index) => index))
+    }
+  }
+})
+
 test('source and resources animation manifests stay deeply identical', () => {
   const sourceManifest = JSON.parse(readFileSync(resolve('assets/Data/animation-atlas.json'), 'utf8'))
   const resourceManifest = JSON.parse(readFileSync(resolve('assets/resources/Data/animation-atlas.json'), 'utf8'))
