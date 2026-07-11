@@ -443,6 +443,14 @@ export function defeatEnemy(runtime: BattleRuntime, enemyId: number) {
   return true
 }
 
+export function retireOrdinaryEnemy(runtime: BattleRuntime, enemyId: number) {
+  const enemy = runtime.enemies.find((entry) => entry.id === enemyId)
+  if (!enemy || !enemy.alive || enemy.profile.role === 'boss') return false
+
+  enemy.alive = false
+  return true
+}
+
 export function runtimeStats(runtime: BattleRuntime) {
   return {
     aliveEnemies: runtime.enemies.filter((enemy) => enemy.alive).length,
@@ -457,7 +465,7 @@ export function runtimeStats(runtime: BattleRuntime) {
 }
 
 function defeatedOrdinaryEnemies(runtime: BattleRuntime): number {
-  return runtime.enemies.filter((enemy) => enemy.profile.role !== 'boss' && !enemy.alive).length
+  return runtime.enemies.filter((enemy) => enemy.profile.role !== 'boss' && enemy.dropped).length
 }
 
 function aliveOrdinaryEnemies(runtime: BattleRuntime): number {

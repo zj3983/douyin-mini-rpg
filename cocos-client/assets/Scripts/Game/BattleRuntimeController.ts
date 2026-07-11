@@ -6,7 +6,6 @@ import {
   BattleEnemy,
   BattleRuntime,
   beginBattleAttempt,
-  canSummonWorldBoss,
   claimStageClear as claimStageClearRuntime,
   completeBossSettlement,
   createBattleAttemptState,
@@ -17,13 +16,21 @@ import {
   markBattleAttemptCleared,
   markBattleAttemptDefeated,
   nextSpawn,
-  runtimeStats,
+  retireOrdinaryEnemy,
   rollbackSpawnedEnemy,
   scheduleBossSettlement,
   spawnBoss,
   tickBossSkill as tickBossSkillRuntime,
   tickContactDamageGate,
 } from '../Core/BattleRuntime'
+import {
+  completeDrain,
+  createStageFlow,
+  markPlayerDefeated,
+  recordBossDefeat,
+  recordOrdinaryDefeat,
+  StageFlowState,
+} from '../Core/StageFlowRuntime'
 import { CultivationDesignData, stageProfileFromDesign } from '../Core/CultivationRuntime'
 import { createPlayerSwordPath } from '../Core/FlyingSwordRuntime'
 import { stageVisualFor } from '../Core/StageVisualCatalog'
@@ -63,7 +70,6 @@ export class BattleRuntimeController extends Component {
   private runtime: BattleRuntime | null = null
   private enemyNodes = new Map<number, Node>()
   private enemyByNode = new Map<Node, BattleEnemy>()
-  private pendingEnemyRecycles = 0
   private damageGate = createContactDamageGate({ maxHealth: 220, cooldown: 0.65 })
   private soulCollected = 0
   private initialized = false
@@ -71,6 +77,7 @@ export class BattleRuntimeController extends Component {
   private stageGeneration = 0
   private stageSettlement = createStageSettlementState(0)
   private attemptState = createBattleAttemptState(0, 1)
+  private stageFlow: StageFlowState = createStageFlow(12, 0)
 
   start() {
     this.initialize()
@@ -102,13 +109,12 @@ export class BattleRuntimeController extends Component {
   update(deltaTime: number) {
     if (!this.runtime || this.battleFrozen) return
     tickContactDamageGate(this.damageGate, deltaTime)
-    if (this.enemySpawner?.canSpawn() !== false) {
+    if (this.stageFlow.phase === 'clearing' && this.enemySpawner?.canSpawn() !== false) {
       const spawn = nextSpawn(this.runtime, deltaTime)
       if (spawn.ok && spawn.enemy && !this.spawnRuntimeEnemy(spawn.enemy)) {
         rollbackSpawnedEnemy(this.runtime, spawn.enemy.id)
       }
     }
-    this.trySpawnBoss()
     this.tickBossSkill(deltaTime)
   }
 
@@ -149,6 +155,7 @@ export class BattleRuntimeController extends Component {
 
   private rebuildRuntime(stageNumber: number) {
     if (!this.designData) return
+    this.unscheduleAllCallbacks()
     this.soulOrbPool?.despawnAll()
     this.stageNumber = Math.max(1, Math.floor(stageNumber || 1))
     this.attemptState = beginBattleAttempt(this.attemptState, this.stageNumber)
@@ -156,7 +163,7 @@ export class BattleRuntimeController extends Component {
     this.stageSettlement = createStageSettlementState(this.stageGeneration)
     const stage = stageProfileFromDesign(this.designData.json as CultivationDesignData, this.stageNumber)
     this.runtime = createBattleRuntime(stage, this.heroAttack)
-    this.pendingEnemyRecycles = 0
+    this.stageFlow = createStageFlow(this.runtime.defeatTarget, this.stageGeneration)
     this.damageGate = createContactDamageGate({
       maxHealth: this.playerMaxHealth,
       cooldown: this.contactDamageCooldown,
@@ -192,9 +199,7 @@ export class BattleRuntimeController extends Component {
   }
 
   private trySpawnBoss() {
-    if (!this.runtime || this.battleFrozen || this.pendingEnemyRecycles > 0) return false
-    const stats = runtimeStats(this.runtime)
-    if (!canSummonWorldBoss(stats, this.pendingEnemyRecycles) || this.runtime.bossSpawned) return false
+    if (!this.runtime || this.battleFrozen || this.stageFlow.phase !== 'boss' || this.runtime.bossSpawned) return false
     const result = spawnBoss(this.runtime)
     if (!result.ok || !result.enemy) return false
     const node = this.spawnRuntimeEnemy(result.enemy)
@@ -267,6 +272,8 @@ export class BattleRuntimeController extends Component {
 
     const generation = this.stageGeneration
     if (enemy.profile.role === 'boss') {
+      const transition = recordBossDefeat(this.stageFlow)
+      if (transition.command !== 'settle') return
       const settlementToken = scheduleBossSettlement(this.stageSettlement)
       if (settlementToken === null) return
       const settleDelay = Math.max(this.deathRecycleDelay, this.bossDeathSettleDelay)
@@ -282,7 +289,7 @@ export class BattleRuntimeController extends Component {
       return
     }
 
-    this.pendingEnemyRecycles += 1
+    const transition = recordOrdinaryDefeat(this.stageFlow)
     this.scheduleOnce(() => {
       if (generation !== this.stageGeneration) return
       if (this.enemyNodes.get(enemyId) === enemyNode) {
@@ -290,9 +297,23 @@ export class BattleRuntimeController extends Component {
         this.enemyNodes.delete(enemyId)
         this.enemyByNode.delete(enemyNode)
       }
-      this.pendingEnemyRecycles = Math.max(0, this.pendingEnemyRecycles - 1)
-      this.trySpawnBoss()
     }, this.deathRecycleDelay)
+    if (transition.command === 'beginDrain') this.beginDrain(generation)
+  }
+
+  private beginDrain(generation: number) {
+    if (!this.runtime || generation !== this.stageFlow.generation) return false
+    for (const enemy of this.runtime.enemies) {
+      if (!enemy.alive || enemy.profile.role === 'boss') continue
+      retireOrdinaryEnemy(this.runtime, enemy.id)
+      const node = this.enemyNodes.get(enemy.id)
+      if (node) this.enemySpawner?.despawnEnemy(node)
+      this.enemyNodes.delete(enemy.id)
+      if (node) this.enemyByNode.delete(node)
+    }
+    const drain = completeDrain(this.stageFlow, generation)
+    if (drain.command === 'spawnBoss') return this.trySpawnBoss()
+    return false
   }
 
   private spawnSoulOrb(position: Vec3, amount: number) {
@@ -331,7 +352,7 @@ export class BattleRuntimeController extends Component {
     if (!applied) return
     this.refreshHeroHealth()
     this.playerNode?.emit('player-hit', damage)
-    if (this.damageGate.health <= 0 && markBattleAttemptDefeated(this.attemptState)) {
+    if (this.damageGate.health <= 0 && markPlayerDefeated(this.stageFlow).changed && markBattleAttemptDefeated(this.attemptState)) {
       this.battleFrozen = true
       const playerController = this.playerNode?.getComponent(PlayerController)
       playerController?.stop()

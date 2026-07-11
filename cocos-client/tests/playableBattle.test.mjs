@@ -36,7 +36,7 @@ test('enemy movement continuously synchronizes the combat runtime position', () 
   assert.match(source, /this\.targetNode\?\.worldPosition/)
 })
 
-test('battle controller drives enemy contact damage, boss gate, drops, HUD, and manual clear', () => {
+test('battle controller drives enemy contact damage, stage flow, drops, HUD, and manual clear', () => {
   const source = read('assets/Scripts/Game/BattleRuntimeController.ts')
 
   for (const marker of [
@@ -52,17 +52,27 @@ test('battle controller drives enemy contact damage, boss gate, drops, HUD, and 
     assert.equal(source.includes(marker), true, `missing ${marker}`)
   }
   assert.doesNotMatch(source, /scheduleOnce\([^)]*hide/)
-  assert.match(source, /if \(this\.enemySpawner\?\.canSpawn\(\) !== false\)/)
+  assert.match(source, /if \(this\.stageFlow\.phase === 'clearing' && this\.enemySpawner\?\.canSpawn\(\) !== false\)/)
   assert.match(source, /isBattleFrozen\(\)/)
   assert.match(source, /if \(this\.enemyNodes\.get\(enemyId\) === enemyNode\) \{/)
-  assert.match(source, /this\.pendingEnemyRecycles = Math\.max\(0, this\.pendingEnemyRecycles - 1\)/)
+  assert.match(source, /private stageFlow: StageFlowState/)
+  assert.match(source, /this\.stageFlow\.phase === 'clearing'/)
+  assert.match(source, /recordOrdinaryDefeat\(this\.stageFlow\)/)
+  assert.match(source, /retireOrdinaryEnemy\(this\.runtime, enemy\.id\)/)
+  assert.match(source, /completeDrain\(this\.stageFlow, generation\)/)
+  assert.doesNotMatch(source, /pendingEnemyRecycles/)
   assert.doesNotMatch(source, /if \(this\.enemyNodes\.get\(enemyId\) !== enemyNode\) return/)
 })
 
-test('boss spawn and settlement honor live enemies, pool rollback, and delayed generation guards', () => {
+test('boss spawn and settlement are commanded once with delayed generation guards', () => {
   const source = read('assets/Scripts/Game/BattleRuntimeController.ts')
 
-  assert.match(source, /canSummonWorldBoss\(stats, this\.pendingEnemyRecycles\)/)
+  assert.match(source, /transition\.command === 'beginDrain'/)
+  assert.match(source, /drain\.command === 'spawnBoss'/)
+  assert.match(source, /recordBossDefeat\(this\.stageFlow\)/)
+  assert.match(source, /transition\.command !== 'settle'/)
+  assert.match(source, /createStageFlow\(this\.runtime\.defeatTarget, this\.stageGeneration\)/)
+  assert.match(source, /generation !== this\.stageFlow\.generation/)
   assert.match(source, /rollbackSpawnedEnemy\(this\.runtime, result\.enemy\.id\)/)
   assert.match(source, /bossDeathSettleDelay/)
   assert.match(source, /scheduleBossSettlement/)
@@ -138,7 +148,8 @@ test('battle controller uses a real contact damage gate and zero-health defeat s
   assert.match(controller, /tickContactDamageGate\(this\.damageGate, deltaTime\)/)
   assert.match(controller, /applyContactDamage\(this\.damageGate, damage\)/)
   assert.match(controller, /applyDirectDamage\(this\.damageGate, damage\)/)
-  assert.match(controller, /if \(this\.damageGate\.health <= 0 && markBattleAttemptDefeated\(this\.attemptState\)\)/)
+  assert.match(controller, /markPlayerDefeated\(this\.stageFlow\)\.changed/)
+  assert.match(controller, /markBattleAttemptDefeated\(this\.attemptState\)/)
   assert.match(enemy, /role === 'boss' \? 10 : 3/)
 })
 

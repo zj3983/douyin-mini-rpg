@@ -6,6 +6,7 @@ import {
   createBattleRuntime,
   defeatEnemy,
   nextSpawn,
+  retireOrdinaryEnemy,
   runtimeStats,
   segmentHitEnemies,
   segmentHitEnemiesAlongPath,
@@ -209,18 +210,19 @@ test('boss starts as soon as the defeat target is met even with survivors', () =
   assert.equal(spawnBoss(runtime).ok, true)
 })
 
-test('world boss gate ignores surviving extras but waits for death recycle', () => {
-  assert.equal(typeof battleRuntimeModule.canSummonWorldBoss, 'function')
-  const ready = {
-    bossReady: true,
-    bossAlive: false,
-    aliveOrdinaryEnemies: 0,
-  }
+test('draining retires surviving ordinary enemies without drops or defeat credit', () => {
+  const runtime = createBattleRuntime({ stageId: 1, heroAttack: 80 })
+  const ordinary = []
+  for (let index = 0; index < 14; index += 1) ordinary.push(nextSpawn(runtime, 1.1).enemy)
+  for (const enemy of ordinary.slice(0, 12)) defeatEnemy(runtime, enemy.id)
 
-  assert.equal(battleRuntimeModule.canSummonWorldBoss({ ...ready, aliveOrdinaryEnemies: 1 }, 0), true)
-  assert.equal(battleRuntimeModule.canSummonWorldBoss(ready, 1), false)
-  assert.equal(battleRuntimeModule.canSummonWorldBoss(ready, 0), true)
-  assert.equal(battleRuntimeModule.canSummonWorldBoss({ ...ready, bossReady: false }, 0), false)
+  assert.equal(retireOrdinaryEnemy(runtime, ordinary[12].id), true)
+  assert.equal(retireOrdinaryEnemy(runtime, ordinary[13].id), true)
+  assert.equal(retireOrdinaryEnemy(runtime, ordinary[13].id), false)
+  assert.equal(runtimeStats(runtime).aliveOrdinaryEnemies, 0)
+  assert.equal(runtimeStats(runtime).defeatedEnemies, 12)
+  assert.equal(runtimeStats(runtime).soulDrops, 12)
+  assert.equal(spawnBoss(runtime).ok, true)
 })
 
 test('ordinary spawning stops at the alive enemy cap', () => {
