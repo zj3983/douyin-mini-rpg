@@ -39,6 +39,11 @@ test('stage visual catalog exposes background and theme metadata', () => {
   )
   assert.throws(() => stageVisualFor(0), /Unknown stage visual: 0/)
   assert.throws(() => stageVisualFor(5), /Unknown stage visual: 5/)
+  assert.equal(Object.isFrozen(stageVisualFor(1)), true)
+  assert.throws(() => {
+    stageVisualFor(1).farPath = 'mutated'
+  }, TypeError)
+  assert.equal(stageVisualFor(1).farPath, 'Assets/World/MistBamboo/far/spriteFrame')
 })
 
 test('release plan frees every previous stage asset after a successful swap', () => {
@@ -101,13 +106,18 @@ test('battle runtime announces rebuilt stage visual metadata', () => {
   assert.match(source, /theme/)
 })
 
-test('bootstrap switches backgrounds safely and tears listeners down', () => {
-  const source = readFileSync(join(root, 'assets', 'Scripts', 'Game', 'PortraitBattleBootstrap.ts'), 'utf8')
+test('bootstrap delegates stage background lifecycle and tears its listener down', () => {
+  const bootstrap = readFileSync(join(root, 'assets', 'Scripts', 'Game', 'PortraitBattleBootstrap.ts'), 'utf8')
+  const controller = readFileSync(join(root, 'assets', 'Scripts', 'Game', 'StageBackgroundController.ts'), 'utf8')
 
-  assert.match(source, /battle-stage-changed/)
-  assert.match(source, /backgroundLoadGeneration/)
-  assert.match(source, /release/)
-  assert.match(source, /onDestroy/)
-  assert.match(source, /\.off\('battle-stage-changed'/)
-  assert.match(source, /midBackground.*active/s)
+  assert.match(bootstrap, /battle-stage-changed/)
+  assert.match(bootstrap, /new StageBackgroundController/)
+  assert.match(bootstrap, /stageBackgroundController\?\.destroy\(\)/)
+  assert.match(bootstrap, /\.off\('battle-stage-changed'/)
+  assert.doesNotMatch(bootstrap, /backgroundLoadGeneration|resources\.release/)
+  assert.match(controller, /new StageBackgroundRuntime<SpriteFrame>/)
+  assert.match(controller, /asset\.addRef\(\)/)
+  assert.match(controller, /release: \(_path, resource\) => resource\.decRef\(\)/)
+  assert.match(controller, /midSprite\.spriteFrame = null/)
+  assert.match(controller, /midSprite\.node\.active = false/)
 })

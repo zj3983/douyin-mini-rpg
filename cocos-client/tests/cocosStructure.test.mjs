@@ -176,7 +176,7 @@ test('portrait bootstrap assembles the approved compact playable scene', () => {
     assert.match(source, new RegExp(`['\"]${name}['\"]`), `bootstrap should create ${name}`)
   }
 
-  assert.match(source, /stageVisualFor\(1\)/)
+  assert.match(source, /stageBackgroundController\.showStage\(1\)/)
   assert.match(stageVisualCatalog, /Assets\/World\/MistBamboo\/far\/spriteFrame/)
   assert.match(stageVisualCatalog, /Assets\/World\/MistBamboo\/mid\/spriteFrame/)
   assert.match(source, /Assets\/Skills\/FlyingSword\/sword-projectile-v2\/spriteFrame/)

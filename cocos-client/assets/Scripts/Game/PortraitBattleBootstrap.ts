@@ -35,12 +35,7 @@ import { PoolableActor } from './PoolableActor'
 import { SoulOrbController } from './SoulOrbController'
 import { StageClearPanelController } from './StageClearPanelController'
 import { DamageNumberController } from './DamageNumberController'
-import {
-  planBackgroundRelease,
-  planBackgroundRequest,
-  StageVisual,
-  stageVisualFor,
-} from '../Core/StageVisualCatalog'
+import { StageBackgroundController } from './StageBackgroundController'
 
 const { ccclass } = _decorator
 const WIDTH = 750
@@ -69,16 +64,12 @@ export class PortraitBattleBootstrap extends Component {
   private topHud: Node | null = null
   private bossHud: Node | null = null
   private bottomNavigation: Node | null = null
-  private midDriftElapsed = 0
   private loadErrorLabel: Label | null = null
   private bindRuntimeCallback: (() => void) | null = null
   private destroyed = false
   private assembled = false
   private runtimeNode: Node | null = null
-  private backgroundLoadGeneration = 0
-  private activeBackground: StageVisual | null = null
-  private requestedBackground: StageVisual | null = null
-  private backgroundLoadWarnings = new Set<string>()
+  private stageBackgroundController: StageBackgroundController | null = null
 
   onLoad() {
     view.setDesignResolutionSize(750, 1334, ResolutionPolicy.FIXED_WIDTH)
@@ -89,15 +80,13 @@ export class PortraitBattleBootstrap extends Component {
   onDestroy() {
     this.destroyed = true
     this.stopRuntimeBinding()
-    this.backgroundLoadGeneration += 1
     this.runtimeNode?.off('battle-stage-changed', this.onStageChanged, this)
+    this.stageBackgroundController?.destroy()
     view.off('canvas-resize', this.relayoutVisibleArea, this)
   }
 
   update(deltaTime: number) {
-    if (!this.midBackground) return
-    this.midDriftElapsed += Math.min(Math.max(deltaTime, 0), 0.05)
-    this.midBackground.setPosition(Math.sin(this.midDriftElapsed * 0.22) * 8, 0, 0)
+    this.stageBackgroundController?.update(deltaTime)
   }
 
   private assembleScene() {
@@ -177,7 +166,8 @@ export class PortraitBattleBootstrap extends Component {
     mid.sprite.color = new Color(255, 255, 255, 168)
     this.farBackground = far.node
     this.midBackground = mid.node
-    this.switchStageBackground(stageVisualFor(1))
+    this.stageBackgroundController = new StageBackgroundController(far.sprite, mid.sprite)
+    this.stageBackgroundController.showStage(1)
   }
 
   private createPlayer(parent: Node) {
@@ -241,93 +231,7 @@ export class PortraitBattleBootstrap extends Component {
   }
 
   private onStageChanged(payload: { stageId: number; backgroundId: string; theme: string }) {
-    try {
-      this.switchStageBackground(stageVisualFor(payload.stageId))
-    } catch (error) {
-      this.warnBackgroundLoadOnce(`stage:${payload.stageId}`, error)
-    }
-  }
-
-  private switchStageBackground(visual: StageVisual) {
-    const farSprite = this.farBackground?.getComponent(Sprite)
-    if (!farSprite) return
-    const requestPlan = planBackgroundRequest(this.activeBackground, this.requestedBackground, visual)
-    if (requestPlan === 'ignore') return
-    if (requestPlan === 'cancel') {
-      this.backgroundLoadGeneration += 1
-      this.requestedBackground = this.activeBackground
-      return
-    }
-    const generation = ++this.backgroundLoadGeneration
-    this.requestedBackground = visual
-
-    resources.load(visual.farPath, SpriteFrame, (error, farAsset) => {
-      if (this.destroyed || generation !== this.backgroundLoadGeneration) {
-        if (!error && farAsset) this.releaseAbandonedLoad(visual.farPath)
-        return
-      }
-      if (error || !farAsset) {
-        this.requestedBackground = this.activeBackground
-        this.warnBackgroundLoadOnce(visual.farPath, error)
-        return
-      }
-
-      const applyVisual = (midAsset: SpriteFrame | null) => {
-        if (this.destroyed || generation !== this.backgroundLoadGeneration) {
-          this.releaseAbandonedLoad(visual.farPath)
-          if (visual.midPath) this.releaseAbandonedLoad(visual.midPath)
-          return
-        }
-        const previousBackground = this.activeBackground
-        farSprite.spriteFrame = farAsset
-        farSprite.sizeMode = Sprite.SizeMode.CUSTOM
-
-        const midSprite = this.midBackground?.getComponent(Sprite)
-        if (this.midBackground && midSprite) {
-          midSprite.spriteFrame = midAsset
-          if (midAsset) midSprite.sizeMode = Sprite.SizeMode.CUSTOM
-          this.midBackground.active = Boolean(midAsset)
-        }
-        this.activeBackground = visual
-        this.requestedBackground = visual
-        for (const path of planBackgroundRelease(previousBackground, visual)) {
-          resources.release(path, SpriteFrame)
-        }
-      }
-
-      if (!visual.midPath) {
-        applyVisual(null)
-        return
-      }
-      resources.load(visual.midPath, SpriteFrame, (midError, midAsset) => {
-        if (midError || !midAsset) {
-          if (generation === this.backgroundLoadGeneration) {
-            this.requestedBackground = this.activeBackground
-            this.warnBackgroundLoadOnce(visual.midPath!, midError)
-          }
-          this.releaseAbandonedLoad(visual.farPath)
-          return
-        }
-        applyVisual(midAsset)
-      })
-    })
-  }
-
-  private releaseAbandonedLoad(path: string) {
-    const activePaths = this.activeBackground
-      ? [this.activeBackground.farPath, this.activeBackground.midPath]
-      : []
-    const requestedPaths = this.requestedBackground
-      ? [this.requestedBackground.farPath, this.requestedBackground.midPath]
-      : []
-    if (activePaths.includes(path) || requestedPaths.includes(path)) return
-    resources.release(path, SpriteFrame)
-  }
-
-  private warnBackgroundLoadOnce(key: string, error: unknown) {
-    if (this.backgroundLoadWarnings.has(key)) return
-    this.backgroundLoadWarnings.add(key)
-    console.warn(`[PortraitBattleBootstrap] background load failed: ${key}`, error)
+    this.stageBackgroundController?.showStage(payload.stageId)
   }
 
   private createFlyingSword(
