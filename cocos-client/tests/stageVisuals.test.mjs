@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import test from 'node:test'
@@ -94,6 +95,16 @@ test('stage backgrounds are copied into Cocos resources', () => {
   for (const folder of ['MistLantern', 'FlameRavine', 'StarRoad']) {
     assert.equal(existsSync(join(root, 'assets', 'resources', 'Assets', 'World', folder, 'far.webp')), true)
   }
+})
+
+test('stage backgrounds contain distinct artwork instead of duplicate files', () => {
+  const folders = ['MistBamboo', 'MistLantern', 'FlameRavine', 'StarRoad']
+  const hashes = folders.map((folder) => {
+    const bytes = readFileSync(join(root, 'assets', 'resources', 'Assets', 'World', folder, 'far.webp'))
+    return createHash('sha256').update(bytes).digest('hex')
+  })
+
+  assert.equal(new Set(hashes).size, folders.length)
 })
 
 test('battle runtime announces rebuilt stage visual metadata', () => {
