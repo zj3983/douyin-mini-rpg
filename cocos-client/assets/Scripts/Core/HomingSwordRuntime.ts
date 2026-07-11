@@ -58,6 +58,19 @@ function steer(velocity: SwordVector, destination: SwordPoint, position: SwordPo
   return { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed }
 }
 
+function safeReturnDistance(position: SwordPoint, player: SwordPoint, direction: SwordVector, requestedDistance: number, returnRadius: number) {
+  const relativeX = position.x - player.x
+  const relativeY = position.y - player.y
+  const radialDistanceSquared = relativeX ** 2 + relativeY ** 2
+  const projection = relativeX * direction.x + relativeY * direction.y
+  const discriminant = projection ** 2 - (radialDistanceSquared - returnRadius ** 2)
+  if (discriminant >= 0) {
+    const radiusEntry = -projection - Math.sqrt(discriminant)
+    if (radiusEntry >= 0 && radiusEntry <= requestedDistance) return radiusEntry
+  }
+  return Math.min(requestedDistance, Math.max(0, -2 * projection))
+}
+
 export function createHomingSword(start: SwordPoint, initialDirection: SwordVector, input: HomingSwordConfig): HomingSwordState {
   const direction = unit(initialDirection)
   const config = {
@@ -117,8 +130,8 @@ export function stepHomingSword(state: HomingSwordState, deltaTime: number, targ
   const returnRadius = nonnegative(state.config?.returnRadius)
   if (distanceToPlayer <= returnRadius + EPSILON) { state.phase = 'finished'; return result() }
   state.velocity = steer(state.velocity, player, state.position, turnLimit, speed)
-  const distance = Math.min(speed * deltaTime, Math.max(0, distanceToPlayer - returnRadius))
   const direction = unit(state.velocity)
+  const distance = safeReturnDistance(state.position, player, direction, speed * deltaTime, returnRadius)
   state.position.x += direction.x * distance; state.position.y += direction.y * distance
   if (Math.hypot(player.x - state.position.x, player.y - state.position.y) <= returnRadius + EPSILON) state.phase = 'finished'
   return result()

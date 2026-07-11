@@ -80,6 +80,20 @@ test('bounds angular steering while returning', () => {
   assert.ok(Math.abs(Math.atan2(state.velocity.y, state.velocity.x) - 3 * Math.PI / 4) < 1e-9)
 })
 
+test('large return step with low turn rate cannot end farther from the player', () => {
+  const state = createHomingSword(
+    { x: 10, y: 0 },
+    { x: 0, y: 1 },
+    { ...config, speed: 100, maxTurnRadians: 0.1, returnRadius: 1 },
+  )
+  beginSwordReturn(state)
+  const beforeDistance = Math.hypot(state.position.x, state.position.y)
+  stepHomingSword(state, 1, [], { x: 0, y: 0 })
+  const afterDistance = Math.hypot(state.position.x, state.position.y)
+  assert.ok(afterDistance <= beforeDistance + 1e-9)
+  assert.ok(finiteState(state))
+})
+
 test('retargets when the current target dies and reports the change', () => {
   const state = createHomingSword({ x: 0, y: 0 }, { x: 1, y: 0 }, config)
   stepHomingSword(state, 0.1, [target('a', 5, 0), target('b', 8, 0)], { x: 0, y: 0 })
