@@ -35,6 +35,7 @@ import { PoolableActor } from './PoolableActor'
 import { SoulOrbController } from './SoulOrbController'
 import { StageClearPanelController } from './StageClearPanelController'
 import { DamageNumberController } from './DamageNumberController'
+import { StageBackgroundController } from './StageBackgroundController'
 
 const { ccclass } = _decorator
 const WIDTH = 750
@@ -63,11 +64,12 @@ export class PortraitBattleBootstrap extends Component {
   private topHud: Node | null = null
   private bossHud: Node | null = null
   private bottomNavigation: Node | null = null
-  private midDriftElapsed = 0
   private loadErrorLabel: Label | null = null
   private bindRuntimeCallback: (() => void) | null = null
   private destroyed = false
   private assembled = false
+  private runtimeNode: Node | null = null
+  private stageBackgroundController: StageBackgroundController | null = null
 
   onLoad() {
     view.setDesignResolutionSize(750, 1334, ResolutionPolicy.FIXED_WIDTH)
@@ -78,13 +80,13 @@ export class PortraitBattleBootstrap extends Component {
   onDestroy() {
     this.destroyed = true
     this.stopRuntimeBinding()
+    this.runtimeNode?.off('battle-stage-changed', this.onStageChanged, this)
+    this.stageBackgroundController?.destroy()
     view.off('canvas-resize', this.relayoutVisibleArea, this)
   }
 
   update(deltaTime: number) {
-    if (!this.midBackground) return
-    this.midDriftElapsed += Math.min(Math.max(deltaTime, 0), 0.05)
-    this.midBackground.setPosition(Math.sin(this.midDriftElapsed * 0.22) * 8, 0, 0)
+    this.stageBackgroundController?.update(deltaTime)
   }
 
   private assembleScene() {
@@ -164,8 +166,8 @@ export class PortraitBattleBootstrap extends Component {
     mid.sprite.color = new Color(255, 255, 255, 168)
     this.farBackground = far.node
     this.midBackground = mid.node
-    this.loadSprite('Assets/World/MistBamboo/far/spriteFrame', far.sprite)
-    this.loadSprite('Assets/World/MistBamboo/mid/spriteFrame', mid.sprite)
+    this.stageBackgroundController = new StageBackgroundController(far.sprite, mid.sprite)
+    this.stageBackgroundController.showStage(1)
   }
 
   private createPlayer(parent: Node) {
@@ -200,6 +202,8 @@ export class PortraitBattleBootstrap extends Component {
     stageClearPanel: StageClearPanelController
   }) {
     const runtimeNode = this.createNode('Runtime', parent)
+    this.runtimeNode = runtimeNode
+    runtimeNode.on('battle-stage-changed', this.onStageChanged, this)
     const designPath = 'Data/cultivation-design'
     let state: RuntimeLoadState = { status: 'loading' }
     resources.load(designPath, JsonAsset, (error, asset) => {
@@ -224,6 +228,10 @@ export class PortraitBattleBootstrap extends Component {
       state = { status: 'ready', runtime }
     })
     return () => state
+  }
+
+  private onStageChanged(payload: { stageId: number; backgroundId: string; theme: string }) {
+    this.stageBackgroundController?.showStage(payload.stageId)
   }
 
   private createFlyingSword(

@@ -41,8 +41,27 @@ def pack_horizontal_strip(frames: list[Image.Image], frame_size: tuple[int, int]
     return strip
 
 
+def slice_sheet_columns(sheet: Image.Image, columns: int) -> list[Image.Image]:
+    if columns <= 0 or sheet.width % columns != 0:
+        raise ValueError(f"Sheet width {sheet.width} is not evenly divisible by {columns} columns")
+    cell_width = sheet.width // columns
+    return [sheet.crop((index * cell_width, 0, (index + 1) * cell_width, sheet.height)) for index in range(columns)]
+
+
+def content_touches_equal_boundaries(sheet: Image.Image, columns: int, band: int = 2) -> bool:
+    alpha = sheet.convert("RGBA").getchannel("A")
+    cell_width = sheet.width // columns
+    for index in range(1, columns):
+        boundary = index * cell_width
+        if alpha.crop((max(0, boundary - band), 0, min(sheet.width, boundary + band), sheet.height)).getbbox():
+            return True
+    return False
+
+
 def build_frame_strip(
-    input_dir: Path,
+    input_dir: Path | None,
+    input_sheet: Path | None,
+    sheet_columns: int,
     output: Path,
     frame_size: tuple[int, int],
     limit: int | None,
@@ -54,16 +73,33 @@ def build_frame_strip(
             f"Padding {padding} leaves no drawable area in frame {frame_size[0]}x{frame_size[1]}"
         )
 
-    sources = sorted(input_dir.glob("*.png"))
-    if limit:
-        sources = sources[:limit]
-    if not sources:
-        raise SystemExit(f"No PNG frames found in {input_dir}")
+    if input_sheet:
+        with Image.open(input_sheet) as sheet:
+            rgba_sheet = sheet.convert("RGBA")
+            if rgba_sheet.width % sheet_columns != 0:
+                raise ValueError(
+                    f"Sheet width {rgba_sheet.width} is not evenly divisible by {sheet_columns} columns"
+                )
+            if content_touches_equal_boundaries(rgba_sheet, sheet_columns):
+                raise ValueError(
+                    "Subject content crosses equal column boundaries; reconstruct it during offline art preparation"
+                )
+            source_frames = slice_sheet_columns(rgba_sheet, sheet_columns)
+    else:
+        sources = sorted(input_dir.glob("*.png")) if input_dir else []
+        if limit:
+            sources = sources[:limit]
+        if not sources:
+            raise SystemExit(f"No PNG frames found in {input_dir}")
+        source_frames = []
+        for source in sources:
+            with Image.open(source) as image:
+                source_frames.append(image.convert("RGBA"))
 
-    frames = []
-    for source in sources:
-        image = Image.open(source)
-        frames.append(center_on_canvas(trim_alpha_bounds(image), frame_size, padding, vertical_align))
+    frames = [
+        center_on_canvas(trim_alpha_bounds(image), frame_size, padding, vertical_align)
+        for image in source_frames
+    ]
 
     output.parent.mkdir(parents=True, exist_ok=True)
     pack_horizontal_strip(frames, frame_size).save(output, "PNG", optimize=True)
@@ -71,7 +107,10 @@ def build_frame_strip(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Trim, center, and pack AI-generated PNG frames into a Cocos strip.")
-    parser.add_argument("--input-dir", required=True, type=Path, help="Directory containing source PNG sequence frames.")
+    inputs = parser.add_mutually_exclusive_group(required=True)
+    inputs.add_argument("--input-dir", type=Path, help="Directory containing source PNG sequence frames.")
+    inputs.add_argument("--input-sheet", type=Path, help="One evenly divided horizontal source sheet.")
+    parser.add_argument("--sheet-columns", type=int, default=None, help="Number of action columns in --input-sheet.")
     parser.add_argument("--output", required=True, type=Path, help="Output horizontal strip PNG path.")
     parser.add_argument("--frame-width", type=int, default=256)
     parser.add_argument("--frame-height", type=int, default=256)
@@ -80,8 +119,19 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=None, help="Optional maximum number of frames to pack.")
     args = parser.parse_args()
 
+    if args.input_sheet and args.sheet_columns is None:
+        parser.error("--sheet-columns is required with --input-sheet")
+    if args.input_dir and args.sheet_columns is not None:
+        parser.error("--sheet-columns is only valid with --input-sheet")
+    if args.input_sheet and args.limit is not None:
+        parser.error("--limit cannot be used with --input-sheet")
+    if args.sheet_columns is not None and args.sheet_columns <= 0:
+        parser.error("--sheet-columns must be greater than zero")
+
     build_frame_strip(
         args.input_dir,
+        args.input_sheet,
+        args.sheet_columns,
         args.output,
         (args.frame_width, args.frame_height),
         args.limit,
