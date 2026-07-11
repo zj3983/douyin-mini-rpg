@@ -82,6 +82,54 @@ test('boss spawn and settlement are commanded once with delayed generation guard
   assert.doesNotMatch(source, /if \(result\.stageClear\) this\.finishStage\(\)/)
 })
 
+test('enemy pool can reserve a node and activate it only after visual reset', () => {
+  const pool = read('assets/Scripts/Game/NodePoolController.ts')
+  const spawner = read('assets/Scripts/Game/EnemySpawner.ts')
+
+  assert.match(pool, /spawn\(activate = true\)/)
+  assert.match(pool, /activateNode\(node: Node\)/)
+  assert.match(pool, /if \(activate\) this\.activateNode\(node\)/)
+  assert.match(spawner, /enemyPool\.spawn\(false\)/)
+  const resetIndex = spawner.indexOf('visual?.resetForSpawn')
+  const activateIndex = spawner.indexOf('enemyPool.activateNode(node)')
+  assert.ok(resetIndex >= 0 && activateIndex > resetIndex)
+})
+
+test('pooled enemy lifecycle resets combat and visual state before spawn events', () => {
+  const spawner = read('assets/Scripts/Game/EnemySpawner.ts')
+  const enemy = read('assets/Scripts/Game/EnemyController.ts')
+  const visual = read('assets/Scripts/Game/EnemyVisualController.ts')
+
+  assert.match(enemy, /prepareForPool\(\)/)
+  assert.match(enemy, /this\.target = null/)
+  assert.match(enemy, /this\.targetNode = null/)
+  assert.match(enemy, /this\.lockTargetY = false/)
+  assert.match(enemy, /this\.cooldownLeft = 0/)
+  assert.match(visual, /resetForSpawn\(profile:/)
+  assert.match(visual, /prepareForPool\(\)/)
+  assert.match(visual, /unscheduleAllCallbacks\(\)/)
+  assert.match(visual, /this\.animator\?\.reset\('move'\)/)
+  assert.match(visual, /this\.animator\?\.stop\(\)/)
+
+  const resetIndex = spawner.indexOf('visual?.resetForSpawn')
+  const activeIndex = spawner.indexOf('enemyPool.activateNode(node)')
+  const eventIndex = spawner.indexOf("node.emit('enemy-runtime-spawned'")
+  assert.ok(resetIndex >= 0 && activeIndex > resetIndex && eventIndex > activeIndex)
+  assert.match(spawner, /visual\?\.prepareForPool\(\)[\s\S]*controller\?\.prepareForPool\(\)[\s\S]*enemyPool\?\.despawn/)
+})
+
+test('atlas animator invalidates stale loads and exposes stop and frame-zero reset', () => {
+  const source = read('assets/Scripts/Game/AtlasAnimator.ts')
+
+  assert.match(source, /private loadGeneration = 0/)
+  assert.match(source, /setActor\(actorId: string\)/)
+  assert.match(source, /this\.loadGeneration \+= 1/)
+  assert.match(source, /stop\(\)/)
+  assert.match(source, /reset\(actionName = 'move'\)/)
+  assert.match(source, /acceptAnimationLoad\(/)
+  assert.match(source, /this\.frameIndex = 0/)
+})
+
 test('stage rebuild drains controller-scheduled boss effects after cancelling cleanup callbacks', () => {
   const source = read('assets/Scripts/Game/BattleRuntimeController.ts')
 

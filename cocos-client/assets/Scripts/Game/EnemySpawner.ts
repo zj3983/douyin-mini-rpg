@@ -1,7 +1,8 @@
-import { _decorator, Component, Node, Vec3 } from 'cc'
+import { _decorator, Color, Component, Node, Sprite, Vec3 } from 'cc'
 import { BattleEnemy } from '../Core/BattleRuntime'
 import { EnemyController } from './EnemyController'
 import { NodePoolController } from './NodePoolController'
+import { EnemyVisualController } from './EnemyVisualController'
 
 const { ccclass, property } = _decorator
 
@@ -33,14 +34,22 @@ export class EnemySpawner extends Component {
 
   spawnEnemy(enemy: BattleEnemy) {
     if (!this.enemyPool) return null
-    const node = this.enemyPool.spawn()
+    const node = this.enemyPool.spawn(false)
     if (!node) return null
 
     const isBoss = enemy.profile.role === 'boss'
     const spawnX = isBoss ? this.bossSpawnX : this.spawnX
     const spawnY = isBoss ? this.bossY : enemy.profile.role === 'flying' ? this.flyingY : this.groundY
+    node.setPosition(Vec3.ZERO)
+    node.setScale(Vec3.ONE)
+    node.setRotationFromEuler(Vec3.ZERO)
+    const rootSprite = node.getComponent(Sprite)
+    if (rootSprite) rootSprite.color = Color.WHITE
+    const visual = node.getComponent(EnemyVisualController)
+    visual?.resetForSpawn(enemy.profile)
     node.setPosition(new Vec3(spawnX, spawnY, 0))
-    node.setScale(new Vec3(isBoss ? this.bossScale : 1, isBoss ? this.bossScale : 1, 1))
+    const scale = isBoss ? this.bossScale : 1
+    node.setScale(new Vec3(scale, scale, 1))
     enemy.position = { x: spawnX, y: spawnY }
     const controller = node.getComponent(EnemyController)
     if (controller) {
@@ -48,6 +57,7 @@ export class EnemySpawner extends Component {
       if (this.playerTarget) controller.setTargetNode(this.playerTarget, enemy.profile.role === 'ground')
       else controller.setTarget(new Vec3(-180, spawnY, 0))
     }
+    this.enemyPool.activateNode(node)
     node.emit('enemy-motion', 'move')
     node.emit('enemy-runtime-spawned', enemy.id, enemy.profile)
     return node
@@ -62,6 +72,10 @@ export class EnemySpawner extends Component {
   }
 
   despawnEnemy(node: Node) {
+    const visual = node.getComponent(EnemyVisualController)
+    const controller = node.getComponent(EnemyController)
+    visual?.prepareForPool()
+    controller?.prepareForPool()
     this.enemyPool?.despawn(node)
   }
 }

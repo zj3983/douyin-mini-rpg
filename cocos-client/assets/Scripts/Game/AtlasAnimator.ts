@@ -1,6 +1,13 @@
 import { _decorator, Component, JsonAsset, Rect, Sprite, SpriteFrame, Texture2D, resources } from 'cc'
 import { AtlasAction, AnimationAtlasManifest, findActorAtlas, findAtlasAction } from '../Core/AnimationAtlas'
 import { frameIndexAtTime, resourcePathForPng, shouldAdvanceAnimation } from '../Core/StripAnimationRuntime'
+import {
+  acceptAnimationLoad,
+  beginAnimationLoad,
+  createVisualResetState,
+  prepareVisualForPool,
+  VisualResetState,
+} from '../Core/VisualResetRuntime'
 
 const { ccclass, property } = _decorator
 
@@ -34,6 +41,32 @@ export class AtlasAnimator extends Component {
   private accumulatedTime = 0
   private frameIndex = 0
   private playing = false
+  private loadGeneration = 0
+  private resetState: VisualResetState = createVisualResetState()
+
+  setActor(actorId: string) {
+    if (this.actorId === actorId) return
+    this.actorId = actorId
+    this.stop()
+  }
+
+  stop() {
+    this.loadGeneration += 1
+    this.resetState = prepareVisualForPool(this.resetState)
+    this.action = null
+    this.texture = null
+    this.frames = []
+    this.elapsed = 0
+    this.accumulatedTime = 0
+    this.frameIndex = 0
+    this.playing = false
+    if (this.targetSprite) this.targetSprite.spriteFrame = null
+  }
+
+  reset(actionName = 'move') {
+    this.frameIndex = 0
+    this.play(actionName)
+  }
 
   play(actionName: string) {
     const manifest = this.animationManifest?.json as AnimationAtlasManifest | undefined
@@ -41,6 +74,9 @@ export class AtlasAnimator extends Component {
 
     const actor = findActorAtlas(manifest, this.actorId)
     const action = findAtlasAction(actor, actionName)
+    const request = beginAnimationLoad(this.resetState, this.actorId, actionName)
+    this.resetState = request.state
+    this.loadGeneration = request.token.generation
     this.action = action
     this.elapsed = 0
     this.accumulatedTime = 0
@@ -48,7 +84,7 @@ export class AtlasAnimator extends Component {
     this.playing = false
 
     resources.load(resourcePathForPng(actor.atlas), Texture2D, (error, texture) => {
-      if (error || !texture || this.action !== action) return
+      if (error || !texture || !acceptAnimationLoad(this.resetState, request.token)) return
       this.texture = texture
       this.frames = this.buildFrames(texture, action)
       this.playing = this.frames.length > 0

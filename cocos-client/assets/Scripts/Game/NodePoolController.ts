@@ -44,7 +44,7 @@ export class NodePoolController extends Component {
     return poolStats(this.state).active < this.capacity
   }
 
-  spawn() {
+  spawn(activate = true) {
     if (!this.prefab && !this.factory) return null
 
     const result = spawnFromPool(this.state)
@@ -57,6 +57,7 @@ export class NodePoolController extends Component {
         despawnFromPool(this.state, result.id)
         return null
       }
+      if (!activate) node.active = false
       if (!node.parent) this.node.addChild(node)
       this.nodes.set(result.id, node)
       node.on('pool-despawn-requested', this.despawnByEvent, this)
@@ -65,12 +66,17 @@ export class NodePoolController extends Component {
     const poolable = node.getComponent(PoolableActor)
     if (poolable) {
       poolable.poolKey = this.poolKey
-      poolable.onSpawn(result.id)
-    } else {
-      node.active = true
+      poolable.poolId = result.id
     }
+    if (activate) this.activateNode(node)
 
     return node
+  }
+
+  activateNode(node: Node) {
+    const poolable = node.getComponent(PoolableActor)
+    if (poolable) poolable.onSpawn(poolable.poolId)
+    else node.active = true
   }
 
   despawn(node: Node) {

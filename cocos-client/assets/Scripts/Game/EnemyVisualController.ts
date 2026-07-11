@@ -1,4 +1,5 @@
-import { _decorator, Component } from 'cc'
+import { _decorator, Color, Component, Sprite, Vec3 } from 'cc'
+import { EnemyProfile } from '../Core/CultivationTypes'
 import { AtlasAnimator } from './AtlasAnimator'
 
 const { ccclass, property } = _decorator
@@ -11,21 +12,49 @@ export class EnemyVisualController extends Component {
   @property
   deathDuration = 0.45
   private defeated = false
+  private eventsBound = false
 
   onEnable() {
+    this.bindEvents()
+  }
+
+  onDisable() {
+    this.unbindEvents()
+  }
+
+  resetForSpawn(profile: EnemyProfile) {
+    this.unscheduleAllCallbacks()
+    this.defeated = false
+    this.cleanVisualNode()
+    this.bindEvents()
+    this.animator?.setActor(profile.id)
+    this.animator?.reset('move')
+  }
+
+  prepareForPool() {
+    this.unscheduleAllCallbacks()
+    this.defeated = false
+    this.animator?.stop()
+    this.unbindEvents()
+    this.cleanVisualNode()
+  }
+
+  private bindEvents() {
+    if (this.eventsBound) return
     this.node.on('enemy-hit', this.onEnemyHit, this)
     this.node.on('enemy-defeated', this.onEnemyDefeated, this)
     this.node.on('enemy-motion', this.onEnemyMotion, this)
     this.node.on('enemy-skill-cast', this.onEnemySkill, this)
-    this.node.on('enemy-runtime-spawned', this.onEnemySpawned, this)
+    this.eventsBound = true
   }
 
-  onDisable() {
+  private unbindEvents() {
+    if (!this.eventsBound) return
     this.node.off('enemy-hit', this.onEnemyHit, this)
     this.node.off('enemy-defeated', this.onEnemyDefeated, this)
     this.node.off('enemy-motion', this.onEnemyMotion, this)
     this.node.off('enemy-skill-cast', this.onEnemySkill, this)
-    this.node.off('enemy-runtime-spawned', this.onEnemySpawned, this)
+    this.eventsBound = false
   }
 
   private onEnemyMotion(action: string) {
@@ -54,7 +83,12 @@ export class EnemyVisualController extends Component {
     }, this.deathDuration)
   }
 
-  private onEnemySpawned() {
-    this.defeated = false
+  private cleanVisualNode() {
+    const visualNode = this.animator?.targetSprite?.node ?? this.node
+    visualNode.setPosition(Vec3.ZERO)
+    visualNode.setScale(Vec3.ONE)
+    visualNode.setRotationFromEuler(Vec3.ZERO)
+    const sprite = visualNode.getComponent(Sprite) ?? this.animator?.targetSprite
+    if (sprite) sprite.color = Color.WHITE
   }
 }

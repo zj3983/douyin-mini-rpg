@@ -17,10 +17,14 @@ export class EnemyController extends Component {
   private moving = false
 
   bindRuntimeEnemy(enemy: BattleEnemy) {
+    this.resetRuntimeState()
     this.runtimeEnemy = enemy
-    this.cooldownLeft = 0
-    this.moving = false
     this.syncRuntimePosition()
+  }
+
+  prepareForPool() {
+    this.resetRuntimeState()
+    this.runtimeEnemy = null
   }
 
   setTarget(worldPosition: Vec3) {
@@ -69,5 +73,13 @@ export class EnemyController extends Component {
     if (!this.runtimeEnemy) return
     const local = this.node.position
     this.runtimeEnemy.position = { x: local.x, y: local.y }
+  }
+
+  private resetRuntimeState() {
+    this.target = null
+    this.targetNode = null
+    this.lockTargetY = false
+    this.cooldownLeft = 0
+    this.moving = false
   }
 }

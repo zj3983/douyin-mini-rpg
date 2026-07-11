@@ -16,6 +16,7 @@ const requiredComponents = [
   ['assets/Scripts/Game/PoolableActor.ts', 'class PoolableActor'],
   ['assets/Scripts/Game/EnemySpawner.ts', 'class EnemySpawner'],
   ['assets/Scripts/Game/EnemyVisualController.ts', 'class EnemyVisualController'],
+  ['assets/Scripts/Core/VisualResetRuntime.ts', 'interface VisualResetState'],
   ['assets/Scripts/Game/BattleRuntimeController.ts', 'class BattleRuntimeController'],
   ['assets/Scripts/Game/DamageNumberController.ts', 'class DamageNumberController'],
   ['assets/Scripts/Game/StageClearPanelController.ts', 'class StageClearPanelController'],
@@ -146,6 +147,16 @@ test('flying sword delegates timing while homing state owns flight and lifecycle
   assert.match(source, /nextPhase === 'finished'[\s\S]*'sword_ride'[\s\S]*resetFlyingSwordTimeline/)
   assert.match(source, /private cancelCast\(\)[\s\S]*this\.homingState = resetHomingSwordCast\(this\.homingState\)[\s\S]*this\.sword\.active = false/)
   assert.match(source, /setRotationFromEuler\(/)
+})
+
+test('enemy visual lifecycle owns exactly-once event wiring', () => {
+  const source = readSource('assets/Scripts/Game/EnemyVisualController.ts')
+
+  assert.match(source, /private eventsBound = false/)
+  assert.match(source, /if \(this\.eventsBound\) return/)
+  assert.match(source, /if \(!this\.eventsBound\) return/)
+  assert.match(source, /this\.eventsBound = true/)
+  assert.match(source, /this\.eventsBound = false/)
 })
 
 test('flying sword has a definition for every private method it calls', () => {
