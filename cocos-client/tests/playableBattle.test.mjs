@@ -130,6 +130,34 @@ test('atlas animator invalidates stale loads and exposes stop and frame-zero res
   assert.match(source, /this\.frameIndex = 0/)
 })
 
+test('atlas animator owns and reuses cached action frames until destruction', () => {
+  const source = read('assets/Scripts/Game/AtlasAnimator.ts')
+
+  assert.match(source, /private frameCache = new Map<string, SpriteFrame\[\]>\(\)/)
+  assert.match(source, /private frameCacheKey\(actorId: string, atlas: string, actionName: string\)/)
+  assert.match(source, /const cached = this\.frameCache\.get\(cacheKey\)/)
+  assert.match(source, /if \(cached\) return cached/)
+  assert.match(source, /this\.frameCache\.set\(cacheKey, frames\)/)
+  assert.match(source, /for \(const frames of this\.frameCache\.values\(\)\)/)
+  assert.match(source, /for \(const frame of frames\) frame\.destroy\(\)/)
+  assert.match(source, /this\.frameCache\.clear\(\)/)
+})
+
+test('atlas animator destruction invalidates late loads and checks every Cocos target', () => {
+  const source = read('assets/Scripts/Game/AtlasAnimator.ts')
+
+  assert.match(source, /private destroyed = false/)
+  assert.match(source, /onDestroy\(\)/)
+  assert.match(source, /this\.destroyed = true/)
+  assert.match(source, /this\.loadGeneration \+= 1/)
+  assert.match(source, /this\.resetState = prepareVisualForPool\(this\.resetState\)/)
+  assert.match(source, /if \(this\.targetSprite\?\.isValid\) this\.targetSprite\.spriteFrame = null/)
+  assert.match(source, /this\.destroyed/)
+  assert.match(source, /!this\.node\.isValid/)
+  assert.match(source, /!this\.targetSprite\?\.isValid/)
+  assert.match(source, /!this\.targetSprite\.node\.isValid/)
+})
+
 test('enemy manifest loading is guarded by the pooled visual generation', () => {
   const bootstrap = read('assets/Scripts/Game/PortraitBattleBootstrap.ts')
   const visual = read('assets/Scripts/Game/EnemyVisualController.ts')

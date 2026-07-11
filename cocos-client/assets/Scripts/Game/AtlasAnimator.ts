@@ -43,6 +43,8 @@ export class AtlasAnimator extends Component {
   private playing = false
   private loadGeneration = 0
   private resetState: VisualResetState = createVisualResetState()
+  private frameCache = new Map<string, SpriteFrame[]>()
+  private destroyed = false
 
   setActor(actorId: string) {
     if (this.actorId === actorId) return
@@ -60,7 +62,21 @@ export class AtlasAnimator extends Component {
     this.accumulatedTime = 0
     this.frameIndex = 0
     this.playing = false
-    if (this.targetSprite) this.targetSprite.spriteFrame = null
+    if (this.targetSprite?.isValid) this.targetSprite.spriteFrame = null
+  }
+
+  onDestroy() {
+    this.destroyed = true
+    this.loadGeneration += 1
+    this.resetState = prepareVisualForPool(this.resetState)
+    this.playing = false
+    this.action = null
+    this.frames = []
+    if (this.targetSprite?.isValid) this.targetSprite.spriteFrame = null
+    for (const frames of this.frameCache.values()) {
+      for (const frame of frames) frame.destroy()
+    }
+    this.frameCache.clear()
   }
 
   reset(actionName = 'move') {
@@ -69,6 +85,7 @@ export class AtlasAnimator extends Component {
   }
 
   play(actionName: string) {
+    if (this.destroyed) return
     const manifest = this.animationManifest?.json as AnimationAtlasManifest | undefined
     if (!manifest) return
 
@@ -84,9 +101,17 @@ export class AtlasAnimator extends Component {
     this.playing = false
 
     resources.load(resourcePathForPng(actor.atlas), Texture2D, (error, texture) => {
-      if (error || !texture || !acceptAnimationLoad(this.resetState, request.token)) return
+      if (
+        error
+        || !texture
+        || this.destroyed
+        || !this.node.isValid
+        || !this.targetSprite?.isValid
+        || !this.targetSprite.node.isValid
+        || !acceptAnimationLoad(this.resetState, request.token)
+      ) return
       this.texture = texture
-      this.frames = this.buildFrames(texture, action)
+      this.frames = this.buildFrames(texture, this.actorId, actor.atlas, action)
       this.playing = this.frames.length > 0
       this.applyFrame()
     })
@@ -118,14 +143,23 @@ export class AtlasAnimator extends Component {
     this.applyFrame()
   }
 
-  private buildFrames(texture: Texture2D, action: AtlasAction) {
-    return action.order.map((frameIndex) => {
+  private buildFrames(texture: Texture2D, actorId: string, atlas: string, action: AtlasAction) {
+    const cacheKey = this.frameCacheKey(actorId, atlas, action.name)
+    const cached = this.frameCache.get(cacheKey)
+    if (cached) return cached
+    const frames = action.order.map((frameIndex) => {
       const rect = action.frames[frameIndex]
       const frame = new SpriteFrame()
       frame.texture = texture
       frame.rect = new Rect(rect.x, rect.y, rect.w, rect.h)
       return frame
     })
+    this.frameCache.set(cacheKey, frames)
+    return frames
+  }
+
+  private frameCacheKey(actorId: string, atlas: string, actionName: string) {
+    return `${actorId}:${atlas}:${actionName}`
   }
 
   private applyFrame() {
