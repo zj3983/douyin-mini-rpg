@@ -17,7 +17,8 @@ test('source and resource manifests are identical and describe twelve complete m
   for (const actor of monsters) {
     assert.deepEqual(actor.actions.map(action => action.name), Object.keys(requiredCounts), actor.id)
     for (const action of actor.actions) {
-      assert.ok(action.frames.length >= requiredCounts[action.name], `${actor.id}/${action.name} frame count`)
+      assert.equal(action.frames.length, requiredCounts[action.name], `${actor.id}/${action.name} frame count`)
+      assert.equal(action.order.length, requiredCounts[action.name], `${actor.id}/${action.name} order count`)
       for (const frame of action.frames) {
         assert.ok(Number.isInteger(frame.x) && Number.isInteger(frame.y) && frame.x >= 0 && frame.y >= 0, `${actor.id}/${action.name} grid origin`)
         assert.deepEqual({ w: frame.w, h: frame.h }, actor.frameSize, `${actor.id}/${action.name} frame size`)

@@ -47,9 +47,12 @@ test('controller wiring uses live world positions and emits facing without scali
   assert.doesNotMatch(visual, /this\.node\.setScale/)
 })
 
-test('visual facing commands leave root and boss scale data independent', async () => {
+test('left-facing source art stays positive on the left and mirrors only on the right', async () => {
   const runtime = await import('../tools/visual-reset-runtime.mjs')
-  const state = runtime.setVisualFacing({ ...runtime.createVisualResetState(), localScale: { x: 2.5, y: 3, z: 4 } }, 1)
-  assert.deepEqual(runtime.visualResetCommands(state).scale, { x: 2.5, y: 3, z: 4 })
-  assert.deepEqual(state.localScale, { x: 2.5, y: 3, z: 4 })
+  const bossState = { ...runtime.createVisualResetState(), localScale: { x: 2.5, y: 3, z: 4 } }
+  const facingLeft = runtime.setVisualFacing(bossState, -1)
+  const facingRight = runtime.setVisualFacing(bossState, 1)
+  assert.deepEqual(runtime.visualResetCommands(facingLeft).scale, { x: 2.5, y: 3, z: 4 })
+  assert.deepEqual(runtime.visualResetCommands(facingRight).scale, { x: -2.5, y: 3, z: 4 })
+  assert.deepEqual(bossState.localScale, { x: 2.5, y: 3, z: 4 })
 })

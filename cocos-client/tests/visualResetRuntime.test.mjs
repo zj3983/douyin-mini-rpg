@@ -103,7 +103,7 @@ test('canonical commands consumed by the controller reset every visual field for
 
     assert.deepEqual(commands, {
       position: { x: 0, y: 0, z: 0 },
-      scale: { x: -1, y: 1, z: 1 },
+      scale: { x: 1, y: 1, z: 1 },
       rotation: { x: 0, y: 0, z: 0 },
       color: { r: 255, g: 255, b: 255, a: 255 },
       actorId: `actor-${cycle}`,

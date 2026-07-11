@@ -76,7 +76,7 @@ export function setVisualFacing(state, facing) {
 export function visualResetCommands(state) {
   return {
     position: { ...state.localPosition },
-    scale: { x: state.localScale.x * state.facing, y: state.localScale.y, z: state.localScale.z },
+    scale: { x: state.localScale.x * -state.facing, y: state.localScale.y, z: state.localScale.z },
     rotation: { ...state.rotation },
     color: { ...state.color, a: Math.min(state.color.a, state.opacity) },
     actorId: state.actorId,
