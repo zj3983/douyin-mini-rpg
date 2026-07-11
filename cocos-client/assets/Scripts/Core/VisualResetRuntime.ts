@@ -13,6 +13,7 @@ export interface VisualResetState {
   attacking: boolean
   playing: boolean
   listenersBound: boolean
+  active: boolean
   loadGeneration: number
 }
 
@@ -20,6 +21,11 @@ export interface AnimationLoadToken {
   generation: number
   actorId: string
   action: string
+}
+
+export interface ManifestLoadToken {
+  generation: number
+  actorId: string | null
 }
 
 export function createVisualResetState(): VisualResetState {
@@ -38,6 +44,7 @@ export function createVisualResetState(): VisualResetState {
     attacking: false,
     playing: false,
     listenersBound: false,
+    active: false,
     loadGeneration: 0,
   }, { actorId: null, facing: -1 })
 }
@@ -61,6 +68,7 @@ export function resetVisualForSpawn(
     hit: false,
     attacking: false,
     playing: false,
+    active: true,
     loadGeneration: state.loadGeneration + 1,
   }
 }
@@ -69,6 +77,43 @@ export function prepareVisualForPool(state: VisualResetState): VisualResetState 
   return {
     ...resetVisualForSpawn(state, { actorId: null, facing: -1 }),
     listenersBound: false,
+    active: false,
+  }
+}
+
+export function beginManifestLoad(state: VisualResetState): ManifestLoadToken {
+  return { generation: state.loadGeneration, actorId: state.actorId }
+}
+
+export function acceptManifestLoad(state: VisualResetState, token: ManifestLoadToken) {
+  return state.active
+    && state.loadGeneration === token.generation
+    && state.actorId === token.actorId
+}
+
+export function setVisualActionState(state: VisualResetState, action: string): VisualResetState {
+  return {
+    ...state,
+    action,
+    frameIndex: 0,
+    defeated: action === 'death' ? true : state.defeated,
+    hit: action === 'hurt',
+    attacking: action === 'attack',
+  }
+}
+
+export function visualResetCommands(state: VisualResetState) {
+  return {
+    position: { ...state.localPosition },
+    scale: { x: state.localScale.x * state.facing, y: state.localScale.y, z: state.localScale.z },
+    rotation: { ...state.rotation },
+    color: { ...state.color, a: Math.min(state.color.a, state.opacity) },
+    actorId: state.actorId,
+    action: state.action,
+    frameIndex: state.frameIndex,
+    defeated: state.defeated,
+    hit: state.hit,
+    attacking: state.attacking,
   }
 }
 

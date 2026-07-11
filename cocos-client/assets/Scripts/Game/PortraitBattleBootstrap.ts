@@ -374,10 +374,9 @@ export class PortraitBattleBootstrap extends Component {
     node.layer = UI_LAYER
     const transform = node.addComponent(UITransform)
     transform.setContentSize(210, 336)
-    const sprite = node.addComponent(Sprite)
-    sprite.sizeMode = Sprite.SizeMode.CUSTOM
-    const animator = node.addComponent(AtlasAnimator)
-    animator.targetSprite = sprite
+    const visualNode = this.createSpriteNode('Visual', node, 210, 336)
+    const animator = visualNode.node.addComponent(AtlasAnimator)
+    animator.targetSprite = visualNode.sprite
     animator.updateInterval = 0.05
     const controller = node.addComponent(EnemyController)
     controller.moveSpeed = 78
@@ -385,9 +384,8 @@ export class PortraitBattleBootstrap extends Component {
     visual.animator = animator
     node.addComponent(PoolableActor)
     node.on('enemy-runtime-spawned', (_enemyId: number, profile: { id: string; role: string }) => {
-      animator.actorId = profile.id
       controller.moveSpeed = profile.role === 'boss' ? 54 : profile.role === 'flying' ? 86 : 76
-      this.bindAnimationManifest(animator, 'move')
+      this.bindAnimationManifest(visual, animator, 'move')
     }, this)
     return node
   }
@@ -441,9 +439,11 @@ export class PortraitBattleBootstrap extends Component {
     return node
   }
 
-  private bindAnimationManifest(animator: AtlasAnimator, initialAction: string) {
+  private bindAnimationManifest(visual: EnemyVisualController, animator: AtlasAnimator, initialAction: string) {
+    const token = visual.beginManifestLoad()
     resources.load('Data/animation-atlas', JsonAsset, (error, asset) => {
       if (error || !asset || !animator.node.isValid) return
+      if (!visual.acceptManifestLoad(token)) return
       animator.animationManifest = asset
       animator.play(initialAction)
     })

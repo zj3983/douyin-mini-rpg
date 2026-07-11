@@ -108,7 +108,7 @@ test('pooled enemy lifecycle resets combat and visual state before spawn events'
   assert.match(visual, /resetForSpawn\(profile:/)
   assert.match(visual, /prepareForPool\(\)/)
   assert.match(visual, /unscheduleAllCallbacks\(\)/)
-  assert.match(visual, /this\.animator\?\.reset\('move'\)/)
+  assert.match(visual, /this\.animator\?\.reset\(commands\.action\)/)
   assert.match(visual, /this\.animator\?\.stop\(\)/)
 
   const resetIndex = spawner.indexOf('visual?.resetForSpawn')
@@ -128,6 +128,33 @@ test('atlas animator invalidates stale loads and exposes stop and frame-zero res
   assert.match(source, /reset\(actionName = 'move'\)/)
   assert.match(source, /acceptAnimationLoad\(/)
   assert.match(source, /this\.frameIndex = 0/)
+})
+
+test('enemy manifest loading is guarded by the pooled visual generation', () => {
+  const bootstrap = read('assets/Scripts/Game/PortraitBattleBootstrap.ts')
+  const visual = read('assets/Scripts/Game/EnemyVisualController.ts')
+
+  assert.match(bootstrap, /const token = visual\.beginManifestLoad\(\)/)
+  assert.match(bootstrap, /if \(!visual\.acceptManifestLoad\(token\)\) return/)
+  assert.match(bootstrap, /bindAnimationManifest\(visual, animator, 'move'\)/)
+  assert.match(visual, /beginManifestLoad\(\)/)
+  assert.match(visual, /acceptManifestLoad\(token:/)
+})
+
+test('enemy visual controller applies canonical reset commands instead of detached defaults', () => {
+  const source = read('assets/Scripts/Game/EnemyVisualController.ts')
+
+  assert.match(source, /private visualState: VisualResetState = createVisualResetState\(\)/)
+  assert.match(source, /this\.visualState = resetVisualForSpawn\(/)
+  assert.match(source, /this\.visualState = prepareVisualForPool\(/)
+  assert.match(source, /const commands = visualResetCommands\(this\.visualState\)/)
+  assert.match(source, /setPosition\(commands\.position\.x, commands\.position\.y, commands\.position\.z\)/)
+  assert.match(source, /setScale\(commands\.scale\.x, commands\.scale\.y, commands\.scale\.z\)/)
+  assert.match(source, /setRotationFromEuler\(commands\.rotation\.x, commands\.rotation\.y, commands\.rotation\.z\)/)
+  assert.match(source, /new Color\(commands\.color\.r, commands\.color\.g, commands\.color\.b, commands\.color\.a\)/)
+  assert.match(source, /setVisualActionState\(this\.visualState, 'hurt'\)/)
+  assert.match(source, /setVisualActionState\(this\.visualState, 'attack'\)/)
+  assert.match(source, /setVisualActionState\(this\.visualState, 'death'\)/)
 })
 
 test('stage rebuild drains controller-scheduled boss effects after cancelling cleanup callbacks', () => {
@@ -222,7 +249,8 @@ test('runtime-created enemies contain sprite animation combat and pool component
   ]) {
     assert.equal(source.includes(marker), true, `missing ${marker}`)
   }
-  assert.match(source, /animator\.actorId = profile\.id/)
+  assert.match(source, /bindAnimationManifest\(visual, animator, 'move'\)/)
+  assert.match(source, /createSpriteNode\('Visual', node, 210, 336\)/)
   for (const actorId of ['moss-wolf', 'green-wing-moth', 'bamboo-warden']) {
     assert.equal(manifest.includes(`\"id\": \"${actorId}\"`), true, `missing ${actorId}`)
   }
