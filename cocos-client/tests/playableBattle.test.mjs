@@ -152,9 +152,26 @@ test('enemy visual controller applies canonical reset commands instead of detach
   assert.match(source, /setScale\(commands\.scale\.x, commands\.scale\.y, commands\.scale\.z\)/)
   assert.match(source, /setRotationFromEuler\(commands\.rotation\.x, commands\.rotation\.y, commands\.rotation\.z\)/)
   assert.match(source, /new Color\(commands\.color\.r, commands\.color\.g, commands\.color\.b, commands\.color\.a\)/)
-  assert.match(source, /setVisualActionState\(this\.visualState, 'hurt'\)/)
-  assert.match(source, /setVisualActionState\(this\.visualState, 'attack'\)/)
-  assert.match(source, /setVisualActionState\(this\.visualState, 'death'\)/)
+  assert.match(source, /this\.applyActionState\('hurt'\)/)
+  assert.match(source, /this\.applyActionState\('attack'\)/)
+  assert.match(source, /this\.applyActionState\('death'\)/)
+})
+
+test('enemy visual controller consumes every canonical combat flag', () => {
+  const source = read('assets/Scripts/Game/EnemyVisualController.ts')
+
+  assert.match(source, /private defeated = false/)
+  assert.match(source, /private hit = false/)
+  assert.match(source, /private attacking = false/)
+  assert.match(source, /this\.defeated = commands\.defeated/)
+  assert.match(source, /this\.hit = commands\.hit/)
+  assert.match(source, /this\.attacking = commands\.attacking/)
+
+  for (const action of ['move', 'hurt', 'attack', 'death']) {
+    assert.match(source, new RegExp(`applyActionState\\(['"]${action}['"]\\)`))
+  }
+  assert.match(source, /private applyActionState\(action: string\)/)
+  assert.match(source, /this\.applyCombatFlags\(visualResetCommands\(this\.visualState\)\)/)
 })
 
 test('stage rebuild drains controller-scheduled boss effects after cancelling cleanup callbacks', () => {

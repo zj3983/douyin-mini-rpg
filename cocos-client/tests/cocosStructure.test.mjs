@@ -74,8 +74,8 @@ test('enemy visual controller reacts to hit and defeat events', () => {
 
   assert.equal(source.includes('enemy-hit'), true)
   assert.equal(source.includes('enemy-defeated'), true)
-  assert.equal(source.includes("play('hurt')"), true)
-  assert.equal(source.includes("play('death')"), true)
+  assert.equal(source.includes("applyActionState('hurt')"), true)
+  assert.equal(source.includes("applyActionState('death')"), true)
   assert.equal(source.includes('enemy-visual-hit'), true)
   assert.equal(source.includes('enemy-visual-death'), true)
 })

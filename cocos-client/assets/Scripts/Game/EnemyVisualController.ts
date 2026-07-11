@@ -24,6 +24,8 @@ export class EnemyVisualController extends Component {
   @property
   deathDuration = 0.45
   private defeated = false
+  private hit = false
+  private attacking = false
   private eventsBound = false
   private visualState: VisualResetState = createVisualResetState()
 
@@ -79,32 +81,26 @@ export class EnemyVisualController extends Component {
   }
 
   private onEnemyMotion(action: string) {
-    this.visualState = setVisualActionState(this.visualState, action)
-    this.animator?.play(action)
+    this.applyActionState(action)
   }
 
   private onEnemySkill() {
-    this.visualState = setVisualActionState(this.visualState, 'attack')
-    this.animator?.play('attack')
+    this.applyActionState('attack')
     this.node.emit('enemy-attack-visual')
   }
 
   private onEnemyHit(event: unknown) {
-    this.visualState = setVisualActionState(this.visualState, 'hurt')
-    this.animator?.play('hurt')
+    this.applyActionState('hurt')
     this.node.emit('enemy-visual-hit', event)
     this.scheduleOnce(() => {
       if (!this.defeated && this.node.active) {
-        this.visualState = setVisualActionState(this.visualState, 'move')
-        this.animator?.play('move')
+        this.applyActionState('move')
       }
     }, 0.18)
   }
 
   private onEnemyDefeated(enemyId: number) {
-    this.visualState = setVisualActionState(this.visualState, 'death')
-    this.defeated = this.visualState.defeated
-    this.animator?.play('death')
+    this.applyActionState('death')
     this.node.emit('enemy-visual-death', enemyId)
     this.scheduleOnce(() => {
       this.node.emit('enemy-despawn-ready', enemyId)
@@ -113,7 +109,7 @@ export class EnemyVisualController extends Component {
 
   private applyVisualState(playAction = true) {
     const commands = visualResetCommands(this.visualState)
-    this.defeated = commands.defeated
+    this.applyCombatFlags(commands)
     const visualNode = this.animator?.targetSprite?.node ?? this.node
     visualNode.setPosition(commands.position.x, commands.position.y, commands.position.z)
     visualNode.setScale(commands.scale.x, commands.scale.y, commands.scale.z)
@@ -123,5 +119,17 @@ export class EnemyVisualController extends Component {
     if (!commands.actorId) return
     this.animator?.setActor(commands.actorId)
     if (playAction && commands.frameIndex === 0) this.animator?.reset(commands.action)
+  }
+
+  private applyActionState(action: string) {
+    this.visualState = setVisualActionState(this.visualState, action)
+    this.applyCombatFlags(visualResetCommands(this.visualState))
+    this.animator?.play(action)
+  }
+
+  private applyCombatFlags(commands: { defeated: boolean; hit: boolean; attacking: boolean }) {
+    this.defeated = commands.defeated
+    this.hit = commands.hit
+    this.attacking = commands.attacking
   }
 }
