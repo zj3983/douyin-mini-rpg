@@ -249,7 +249,6 @@ export function canSummonWorldBoss(
 ) {
   return stats.bossReady
     && !stats.bossAlive
-    && stats.aliveOrdinaryEnemies === 0
     && pendingDeathRecycles === 0
 }
 
@@ -294,7 +293,6 @@ export function spawnBoss(runtime: BattleRuntime) {
     runtime.bossSpawned
     || runtime.stageCleared
     || defeatedOrdinaryEnemies(runtime) < runtime.defeatTarget
-    || aliveOrdinaryEnemies(runtime) > 0
   ) {
     return { ok: false, enemy: null }
   }
