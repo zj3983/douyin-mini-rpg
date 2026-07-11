@@ -1,13 +1,15 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import {
+import * as esmRuntime from '../tools/stage-flow-runtime.mjs'
+
+const {
   completeDrain,
   createStageFlow,
   markPlayerDefeated,
   recordBossDefeat,
   recordOrdinaryDefeat,
-} from '../tools/stage-flow-runtime.mjs'
+} = esmRuntime
 
 const unchanged = { changed: false, command: null }
 
@@ -78,20 +80,60 @@ test('player defeat terminates any active phase and terminal phases are idempote
   assert.equal(settled.phase, 'settled')
 })
 
-test('TypeScript runtime exposes the same engine-independent API and commands', () => {
+async function loadTypeScriptRuntime() {
   const source = readFileSync(new URL('../assets/Scripts/Core/StageFlowRuntime.ts', import.meta.url), 'utf8')
-
   assert.doesNotMatch(source, /from ['"]cc['"]|require\(['"]cc['"]\)/)
-  for (const name of [
-    'createStageFlow',
-    'recordOrdinaryDefeat',
-    'completeDrain',
-    'recordBossDefeat',
-    'markPlayerDefeated',
-  ]) {
-    assert.match(source, new RegExp(`export function ${name}\\b`))
+
+  const executable = source
+    .replace(/^export type .*$/gm, '')
+    .replace(/^export interface \w+ \{[\s\S]*?^\}$/gm, '')
+    .replace(/:\s*(?:StageFlowState|StageFlowTransition|number)(?=\s*(?:=>|[,)={]))/g, '')
+  return import(`data:text/javascript;base64,${Buffer.from(executable).toString('base64')}`)
+}
+
+function runScenario(runtime, { defeatTarget, generation, steps }) {
+  const state = runtime.createStageFlow(defeatTarget, generation)
+  const trace = [{ state: { ...state } }]
+  for (const [operation, ...args] of steps) {
+    trace.push({
+      operation,
+      result: runtime[operation](state, ...args),
+      state: { ...state },
+    })
   }
-  for (const value of ['clearing', 'draining', 'boss', 'settled', 'defeated', 'beginDrain', 'spawnBoss', 'settle']) {
-    assert.match(source, new RegExp(`['"]${value}['"]`))
+  return trace
+}
+
+test('TypeScript and ESM runtimes execute every transition identically', async () => {
+  const tsRuntime = await loadTypeScriptRuntime()
+  const scenarios = [
+    {
+      defeatTarget: 2.9,
+      generation: 7.8,
+      steps: [
+        ['completeDrain', 7],
+        ['recordBossDefeat'],
+        ['recordOrdinaryDefeat'],
+        ['recordOrdinaryDefeat'],
+        ['recordOrdinaryDefeat'],
+        ['completeDrain', 6],
+        ['completeDrain', 7],
+        ['completeDrain', 7],
+        ['recordBossDefeat'],
+        ['recordBossDefeat'],
+        ['markPlayerDefeated'],
+      ],
+    },
+    { defeatTarget: 1, generation: 1, steps: [['markPlayerDefeated'], ['markPlayerDefeated'], ['recordOrdinaryDefeat']] },
+    { defeatTarget: 1, generation: 2, steps: [['recordOrdinaryDefeat'], ['markPlayerDefeated'], ['completeDrain', 2]] },
+    {
+      defeatTarget: 1,
+      generation: 3,
+      steps: [['recordOrdinaryDefeat'], ['completeDrain', 3], ['markPlayerDefeated'], ['recordBossDefeat']],
+    },
+  ]
+
+  for (const scenario of scenarios) {
+    assert.deepEqual(runScenario(tsRuntime, scenario), runScenario(esmRuntime, scenario))
   }
 })
