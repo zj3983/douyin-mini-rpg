@@ -190,27 +190,36 @@ test('flying sword uses the transparent v2 asset at a long-sword ratio', () => {
   assert.doesNotMatch(source, /Assets\/Skills\/FlyingSword\/sword_projectile\/spriteFrame/)
 })
 
-test('flying sword hit geometry follows a bounded arc instead of a flat line', () => {
-  const controller = read('assets/Scripts/Game/BattleRuntimeController.ts')
-  const runtime = read('assets/Scripts/Core/BattleRuntime.ts')
-
-  assert.match(controller, /arcHeight/)
-  assert.match(controller, /buildArcPath/)
-  assert.match(controller, /applyFlyingSwordPathHit/)
-  assert.match(runtime, /export function segmentHitEnemiesAlongPath/)
-  assert.match(runtime, /const seen = new Set<number>\(\)/)
-})
-
-test('one captured player-relative path drives both sword visuals and hit passes', () => {
+test('flying sword visual and damage consume the same per-frame swept segment', () => {
   const controller = read('assets/Scripts/Game/BattleRuntimeController.ts')
   const skill = read('assets/Scripts/Game/FlyingSwordSkill.ts')
 
-  assert.match(controller, /createFlyingSwordPath\(\)/)
-  assert.match(controller, /target\?\.position \?\? null/)
-  assert.match(controller, /createPlayerSwordPath\(/)
-  assert.match(skill, /private activePath:/)
-  assert.match(skill, /this\.activePath = this\.battleRuntime\?\.createFlyingSwordPath\(\)/)
-  assert.match(skill, /castFlyingSwordPass\(path\.from, path\.to\)/)
+  assert.match(skill, /const step = stepHomingSword\(/)
+  assert.match(skill, /applySwordPose\(step\.previousPosition, step\.nextPosition\)/)
+  assert.match(skill, /resolveHomingSwordSegment\(this\.homingState, step\.previousPosition, step\.nextPosition\)/)
+  assert.match(controller, /points: \[from, to\]/)
+  assert.doesNotMatch(skill, /timeline\.progress|Math\.sin|Math\.cos/)
+})
+
+test('flying sword refreshes live targets every frame so dead targets retarget next frame', () => {
+  const controller = read('assets/Scripts/Game/BattleRuntimeController.ts')
+  const skill = read('assets/Scripts/Game/FlyingSwordSkill.ts')
+
+  assert.match(controller, /getLivingSwordTargets\(\)[\s\S]*filter\(\(enemy\) => enemy\.alive\)/)
+  assert.match(skill, /updateHomingSword\(deltaTime\)/)
+  const updateBody = skill.match(/private updateHomingSword\(deltaTime: number\) \{([\s\S]*?)\n  \}/)?.[1] ?? ''
+  assert.match(updateBody, /getLivingSwordTargets\(\)/)
+  assert.match(updateBody, /stepHomingSword\(this\.homingState, deltaTime, targets,/)
+  assert.doesNotMatch(skill, /cachedTargets|activeTarget/)
+})
+
+test('one homing cast records geometric hits before damage and never damages the same enemy twice', () => {
+  const controller = read('assets/Scripts/Game/BattleRuntimeController.ts')
+
+  assert.match(controller, /for \(const enemy of geometricHits\)/)
+  assert.match(controller, /if \(!recordSwordHit\(state, String\(enemy\.id\)\)\) continue/)
+  assert.match(controller, /enemies: \[enemy\]/)
+  assert.match(controller, /points: \[from, to\]/)
 })
 
 test('automatic flying sword keeps a forgiving hit corridor for moving enemies', () => {

@@ -21,6 +21,7 @@ import {
   rollbackSpawnedEnemy,
   retryBossSpawnFlow,
   scheduleBossSettlement,
+  segmentHitEnemiesAlongPath,
   spawnBoss,
   tickBossSkill as tickBossSkillRuntime,
   tickContactDamageGate,
@@ -31,7 +32,7 @@ import {
   StageFlowState,
 } from '../Core/StageFlowRuntime'
 import { CultivationDesignData, stageProfileFromDesign } from '../Core/CultivationRuntime'
-import { createPlayerSwordPath } from '../Core/FlyingSwordRuntime'
+import { HomingSwordState, recordSwordHit, SwordPoint } from '../Core/HomingSwordRuntime'
 import { stageVisualFor } from '../Core/StageVisualCatalog'
 import { BattleHudController } from './BattleHudController'
 import { DamageNumberController } from './DamageNumberController'
@@ -55,11 +56,8 @@ export class BattleRuntimeController extends Component {
   @property(Node) playerNode: Node | null = null
   @property stageNumber = 1
   @property heroAttack = 44
-  @property swordStartX = -210
-  @property swordEndX = 330
-  @property swordY = -30
   @property swordHitWidth = 72
-  @property swordArcHeight = 104
+  public swordArcHeight = 0
   @property deathRecycleDelay = 0.45
   @property playerMaxHealth = 220
   @property contactDamageCooldown = 0.65
@@ -119,35 +117,50 @@ export class BattleRuntimeController extends Component {
     this.tickBossSkill(deltaTime)
   }
 
-  castFlyingSwordPass(from: Vec3, to: Vec3) {
-    return this.resolveFlyingSwordHit(from, to, 6)
-  }
-
-  castFlyingSword() {
-    const path = this.createFlyingSwordPath()
-    return this.resolveFlyingSwordHit(path.from, path.to, 3)
-  }
-
-  createFlyingSwordPath() {
-    const playerPosition = this.playerNode?.position ?? new Vec3(this.swordStartX, this.swordY, 0)
-    const target = this.runtime?.enemies
+  getLivingSwordTargets() {
+    return (this.runtime?.enemies ?? [])
       .filter((enemy) => enemy.alive)
-      .sort((left, right) => {
-        const leftDistance = (left.position.x - playerPosition.x) ** 2 + (left.position.y - playerPosition.y) ** 2
-        const rightDistance = (right.position.x - playerPosition.x) ** 2 + (right.position.y - playerPosition.y) ** 2
-        return leftDistance - rightDistance
-      })[0]
-    const path = createPlayerSwordPath(
-      { x: playerPosition.x, y: playerPosition.y },
-      target?.position ?? null,
-    )
-    this.swordStartX = path.from.x
-    this.swordY = path.from.y
-    this.swordEndX = path.to.x
-    return {
-      from: new Vec3(path.from.x, path.from.y, 0),
-      to: new Vec3(path.to.x, path.to.y, 0),
+      .map((enemy) => ({
+        id: String(enemy.id),
+        position: { ...enemy.position },
+        alive: true,
+      }))
+  }
+
+  getCurrentPlayerPosition() {
+    const position = this.playerNode?.position ?? Vec3.ZERO
+    return { x: position.x, y: position.y }
+  }
+
+  resolveHomingSwordSegment(state: HomingSwordState, from: SwordPoint, to: SwordPoint) {
+    const empty: ReturnType<typeof applyFlyingSwordPathHit> = {
+      hitCount: 0,
+      damageEvents: [],
+      defeatedEnemyIds: [],
+      stageClear: false,
     }
+    if (!this.runtime || this.battleFrozen) return empty
+    const geometricHits = segmentHitEnemiesAlongPath(this.runtime, {
+      points: [from, to],
+      width: this.swordHitWidth,
+      pierce: this.runtime.enemies.length,
+    })
+    const result = { ...empty }
+    for (const enemy of geometricHits) {
+      if (!recordSwordHit(state, String(enemy.id))) continue
+      const isolatedRuntime = { ...this.runtime, enemies: [enemy] }
+      const applied = applyFlyingSwordPathHit(isolatedRuntime, 1, 1, {
+        points: [from, to],
+        width: this.swordHitWidth,
+      })
+      result.hitCount += applied.hitCount
+      result.damageEvents.push(...applied.damageEvents)
+      result.defeatedEnemyIds.push(...applied.defeatedEnemyIds)
+      result.stageClear ||= applied.stageClear
+    }
+    if (result.stageClear) this.runtime.stageCleared = true
+    this.presentFlyingSwordHit(result)
+    return result
   }
 
   isBattleFrozen() {
@@ -227,14 +240,7 @@ export class BattleRuntimeController extends Component {
     }
   }
 
-  private resolveFlyingSwordHit(from: Vec3, to: Vec3, pierce: number) {
-    if (!this.runtime || this.battleFrozen) return { hitCount: 0, damageEvents: [], defeatedEnemyIds: [], stageClear: false }
-    const points = this.buildArcPath(from, to, this.swordArcHeight)
-    const result = applyFlyingSwordPathHit(this.runtime, pierce, 1, {
-      points: points.map(({ x, y }) => ({ x, y })),
-      width: this.swordHitWidth,
-    })
-
+  private presentFlyingSwordHit(result: ReturnType<typeof applyFlyingSwordPathHit>) {
     for (const event of result.damageEvents) {
       const enemyNode = this.enemyNodes.get(event.enemyId)
       enemyNode?.emit('enemy-hit', event)
@@ -248,21 +254,6 @@ export class BattleRuntimeController extends Component {
     }
 
     for (const enemyId of result.defeatedEnemyIds) this.handleEnemyDefeat(enemyId)
-    return result
-  }
-
-  private buildArcPath(from: Vec3, to: Vec3, arcHeight: number) {
-    const points: Vec3[] = []
-    const segments = 8
-    for (let index = 0; index <= segments; index += 1) {
-      const progress = index / segments
-      points.push(new Vec3(
-        from.x + (to.x - from.x) * progress,
-        from.y + (to.y - from.y) * progress + Math.sin(progress * Math.PI) * arcHeight,
-        0,
-      ))
-    }
-    return points
   }
 
   private handleEnemyDefeat(enemyId: number) {
