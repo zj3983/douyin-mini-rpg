@@ -43,14 +43,20 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
-export function createPlayerSwordPath(playerPosition: FlyingSwordPathPoint): FlyingSwordPath {
+export function createPlayerSwordPath(
+  playerPosition: FlyingSwordPathPoint,
+  targetPosition?: FlyingSwordPathPoint | null,
+): FlyingSwordPath {
   const from = {
     x: clamp(playerPosition.x + 28, -300, 100),
     y: clamp(playerPosition.y + 24, -390, 390),
   }
   return {
     from,
-    to: {
+    to: targetPosition ? {
+      x: clamp(targetPosition.x, -300, 330),
+      y: clamp(targetPosition.y, -390, 390),
+    } : {
       x: clamp(from.x + 520, 260, 330),
       y: -30,
     },

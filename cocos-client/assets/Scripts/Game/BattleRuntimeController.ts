@@ -123,7 +123,17 @@ export class BattleRuntimeController extends Component {
 
   createFlyingSwordPath() {
     const playerPosition = this.playerNode?.position ?? new Vec3(this.swordStartX, this.swordY, 0)
-    const path = createPlayerSwordPath({ x: playerPosition.x, y: playerPosition.y })
+    const target = this.runtime?.enemies
+      .filter((enemy) => enemy.alive)
+      .sort((left, right) => {
+        const leftDistance = (left.position.x - playerPosition.x) ** 2 + (left.position.y - playerPosition.y) ** 2
+        const rightDistance = (right.position.x - playerPosition.x) ** 2 + (right.position.y - playerPosition.y) ** 2
+        return leftDistance - rightDistance
+      })[0]
+    const path = createPlayerSwordPath(
+      { x: playerPosition.x, y: playerPosition.y },
+      target?.position ?? null,
+    )
     this.swordStartX = path.from.x
     this.swordY = path.from.y
     this.swordEndX = path.to.x

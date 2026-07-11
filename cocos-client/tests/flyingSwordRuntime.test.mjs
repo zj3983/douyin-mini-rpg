@@ -133,3 +133,13 @@ test('flying sword path starts at the current player position and stays inside b
     to: { x: 260, y: -30 },
   })
 })
+
+test('flying sword can lock a nearby ground target when the player is high', () => {
+  assert.deepEqual(
+    swordRuntime.createPlayerSwordPath({ x: 180, y: 280 }, { x: 225, y: -42 }),
+    {
+      from: { x: 100, y: 304 },
+      to: { x: 225, y: -42 },
+    },
+  )
+})

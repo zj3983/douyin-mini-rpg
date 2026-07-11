@@ -189,7 +189,8 @@ test('one captured player-relative path drives both sword visuals and hit passes
   const skill = read('assets/Scripts/Game/FlyingSwordSkill.ts')
 
   assert.match(controller, /createFlyingSwordPath\(\)/)
-  assert.match(controller, /createPlayerSwordPath\(\{ x: playerPosition\.x, y: playerPosition\.y \}\)/)
+  assert.match(controller, /target\?\.position \?\? null/)
+  assert.match(controller, /createPlayerSwordPath\(/)
   assert.match(skill, /private activePath:/)
   assert.match(skill, /this\.activePath = this\.battleRuntime\?\.createFlyingSwordPath\(\)/)
   assert.match(skill, /castFlyingSwordPass\(path\.from, path\.to\)/)
