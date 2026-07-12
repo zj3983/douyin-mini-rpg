@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import { StageBackgroundRuntime } from '../tools/stage-background-runtime.mjs'
@@ -146,4 +147,20 @@ test('destroy releases active and resolved pending assets once, then releases la
     'release:late-stage1-mid',
   ])
   assert.equal(new Set(harness.released.map(({ resource: value }) => value)).size, harness.released.length)
+})
+
+test('stage resource controller delegates background first and owns only its resource runtime', () => {
+  const source = readFileSync(new URL('../assets/Scripts/Game/StageResourceController.ts', import.meta.url), 'utf8')
+  const activateBody = source.match(/activate\(stageId: number\)[\s\S]*?\n  }/)?.[0] ?? ''
+
+  assert.ok(activateBody.indexOf('backgroundController.showStage(stageId)') >= 0)
+  assert.ok(activateBody.indexOf('runtime.activate(stageResourcePlanFor(stageId))') > activateBody.indexOf('backgroundController.showStage(stageId)'))
+  assert.match(source, /new StageResourceRuntime<Asset>/)
+  assert.match(source, /asset\.kind === 'spriteFrame' \? SpriteFrame : Texture2D/)
+  assert.match(source, /loaded\.addRef\(\)/)
+  assert.match(source, /release: \(_asset, resource\) => resource\.decRef\(\)/)
+  assert.match(source, /if \(stageId < 1 \|\| stageId >= 4\) return false/)
+  assert.match(source, /prefetch\(stageResourcePlanFor\(stageId \+ 1\)\)/)
+  assert.match(source, /destroy\(\)[\s\S]*this\.runtime\.destroy\(\)/)
+  assert.doesNotMatch(source, /backgroundController\.destroy\(\)/)
 })

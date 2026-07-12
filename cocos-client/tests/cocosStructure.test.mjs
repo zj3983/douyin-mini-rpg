@@ -204,7 +204,9 @@ test('portrait bootstrap assembles the approved compact playable scene', () => {
     assert.match(source, new RegExp(`['\"]${name}['\"]`), `bootstrap should create ${name}`)
   }
 
-  assert.match(source, /stageBackgroundController\.showStage\(1\)/)
+  assert.match(source, /stageResourceController = new StageResourceController\(this\.stageBackgroundController\)/)
+  assert.match(source, /stageResourceController\.activate\(1\)/)
+  assert.doesNotMatch(source, /createWorld\([\s\S]*?prefetchNext\(1\)[\s\S]*?private createPlayer/)
   assert.match(stageVisualCatalog, /Assets\/World\/MistBamboo\/far\/spriteFrame/)
   assert.match(stageVisualCatalog, /Assets\/World\/MistBamboo\/mid\/spriteFrame/)
   assert.match(source, /Assets\/Skills\/FlyingSword\/sword-projectile-v2\/spriteFrame/)
@@ -217,6 +219,10 @@ test('portrait bootstrap assembles the approved compact playable scene', () => {
   assert.match(source, /bindInputArea\(/)
   assert.match(source, /schedule\(bindRuntime\)/)
   assert.match(source, /unschedule\(bindRuntime\)/)
+  assert.match(source, /skill\.battleRuntime = state\.runtime[\s\S]*stageResourceController\?\.prefetchNext\(this\.currentStageId\)/)
+  assert.match(source, /onStageChanged[\s\S]*currentStageId = payload\.stageId[\s\S]*stageResourceController\?\.activate\(payload\.stageId\)[\s\S]*stageResourceController\?\.prefetchNext\(payload\.stageId\)/)
+  assert.match(source, /stageResourceController\?\.activate\(payload\.stageId\)\s+if \(!this\.battleOperational\) return\s+this\.stageResourceController\?\.prefetchNext\(payload\.stageId\)/)
+  assert.match(source, /stageResourceController\?\.destroy\(\)[\s\S]*stageBackgroundController\?\.destroy\(\)/)
   assert.match(source, /Sprite\.SizeMode\.CUSTOM/)
   assert.match(source, /new UITransform|addComponent\(UITransform\)/)
 

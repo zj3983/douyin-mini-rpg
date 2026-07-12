@@ -3,8 +3,14 @@ import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import test from 'node:test'
+import ts from 'typescript'
 
-import { planBackgroundRelease, planBackgroundRequest, stageVisualFor } from '../tools/stage-visual-catalog.mjs'
+import {
+  planBackgroundRelease,
+  planBackgroundRequest,
+  stageResourcePlanFor,
+  stageVisualFor,
+} from '../tools/stage-visual-catalog.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 
@@ -45,6 +51,48 @@ test('stage visual catalog exposes background and theme metadata', () => {
     stageVisualFor(1).farPath = 'mutated'
   }, TypeError)
   assert.equal(stageVisualFor(1).farPath, 'Assets/World/MistBamboo/far/spriteFrame')
+})
+
+test('stage resource plans map catalog backgrounds and manifest monster atlases only', () => {
+  const manifest = JSON.parse(readFileSync(join(root, 'assets', 'resources', 'Data', 'animation-atlas.json'), 'utf8'))
+  const atlasByActor = new Map(manifest.actors.map((actor) => [actor.id, actor.atlas.replace(/\.png$/, '')]))
+  const expectedActors = [
+    ['moss-wolf', 'green-wing-moth', 'bamboo-warden'],
+    ['fog-spider', 'lantern-wraith', 'mist-deer-king'],
+    ['lava-lizard', 'ember-crow', 'flame-ogre'],
+    ['star-armored-beast', 'void-wing-spirit', 'meteor-guardian'],
+  ]
+
+  for (const stageId of [1, 2, 3, 4]) {
+    const visual = stageVisualFor(stageId)
+    const resourcePlan = stageResourcePlanFor(stageId)
+    assert.deepEqual(visual.monsterActorIds, expectedActors[stageId - 1])
+    assert.equal(Object.isFrozen(visual.monsterActorIds), true)
+    assert.deepEqual(resourcePlan, {
+      stageId,
+      assets: [
+        { path: visual.farPath, kind: 'spriteFrame' },
+        ...(visual.midPath ? [{ path: visual.midPath, kind: 'spriteFrame' }] : []),
+        ...expectedActors[stageId - 1].map((actorId) => ({ path: atlasByActor.get(actorId), kind: 'texture' })),
+      ],
+    })
+    assert.equal(resourcePlan.assets.some(({ path }) => /character|skill|artifact|Generated/i.test(path)), false)
+  }
+
+  assert.throws(() => stageResourcePlanFor(5), /Unknown stage visual: 5/)
+})
+
+test('TypeScript and ESM stage resource plans stay behaviorally identical', async () => {
+  const source = readFileSync(join(root, 'assets', 'Scripts', 'Core', 'StageVisualCatalog.ts'), 'utf8')
+  const javascript = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+  }).outputText
+  const typescriptCatalog = await import(`data:text/javascript;base64,${Buffer.from(javascript).toString('base64')}`)
+
+  assert.deepEqual(
+    [1, 2, 3, 4].map(typescriptCatalog.stageResourcePlanFor),
+    [1, 2, 3, 4].map(stageResourcePlanFor),
+  )
 })
 
 test('release plan frees every previous stage asset after a successful swap', () => {
@@ -120,9 +168,13 @@ test('battle runtime announces rebuilt stage visual metadata', () => {
 test('bootstrap delegates stage background lifecycle and tears its listener down', () => {
   const bootstrap = readFileSync(join(root, 'assets', 'Scripts', 'Game', 'PortraitBattleBootstrap.ts'), 'utf8')
   const controller = readFileSync(join(root, 'assets', 'Scripts', 'Game', 'StageBackgroundController.ts'), 'utf8')
+  const resourceController = readFileSync(join(root, 'assets', 'Scripts', 'Game', 'StageResourceController.ts'), 'utf8')
 
   assert.match(bootstrap, /battle-stage-changed/)
   assert.match(bootstrap, /new StageBackgroundController/)
+  assert.match(bootstrap, /new StageResourceController\(this\.stageBackgroundController\)/)
+  assert.match(bootstrap, /stageResourceController\.activate\(1\)/)
+  assert.match(bootstrap, /stageResourceController\?\.destroy\(\)/)
   assert.match(bootstrap, /stageBackgroundController\?\.destroy\(\)/)
   assert.match(bootstrap, /\.off\('battle-stage-changed'/)
   assert.doesNotMatch(bootstrap, /backgroundLoadGeneration|resources\.release/)
@@ -131,4 +183,5 @@ test('bootstrap delegates stage background lifecycle and tears its listener down
   assert.match(controller, /release: \(_path, resource\) => resource\.decRef\(\)/)
   assert.match(controller, /midSprite\.spriteFrame = null/)
   assert.match(controller, /midSprite\.node\.active = false/)
+  assert.match(resourceController, /stageResourcePlanFor/)
 })

@@ -44,7 +44,7 @@ export class StageBackgroundController {
     })
   }
 
-  showStage(stageId: number) {
+  showStage(stageId: number): boolean {
     try {
       return this.runtime.request(stageVisualFor(stageId))
     } catch (error) {
@@ -62,7 +62,7 @@ export class StageBackgroundController {
     this.midSprite.node.setPosition(Math.sin(this.driftElapsed * 0.22) * 8, 0, 0)
   }
 
-  destroy() {
+  destroy(): void {
     this.runtime.destroy()
   }
 }

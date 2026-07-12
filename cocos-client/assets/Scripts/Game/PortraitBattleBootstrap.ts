@@ -36,6 +36,7 @@ import { SoulOrbController } from './SoulOrbController'
 import { StageClearPanelController } from './StageClearPanelController'
 import { DamageNumberController } from './DamageNumberController'
 import { StageBackgroundController } from './StageBackgroundController'
+import { StageResourceController } from './StageResourceController'
 
 const { ccclass } = _decorator
 const WIDTH = 750
@@ -70,6 +71,9 @@ export class PortraitBattleBootstrap extends Component {
   private assembled = false
   private runtimeNode: Node | null = null
   private stageBackgroundController: StageBackgroundController | null = null
+  private stageResourceController: StageResourceController | null = null
+  private currentStageId = 1
+  private battleOperational = false
 
   onLoad() {
     view.setDesignResolutionSize(750, 1334, ResolutionPolicy.FIXED_WIDTH)
@@ -81,6 +85,7 @@ export class PortraitBattleBootstrap extends Component {
     this.destroyed = true
     this.stopRuntimeBinding()
     this.runtimeNode?.off('battle-stage-changed', this.onStageChanged, this)
+    this.stageResourceController?.destroy()
     this.stageBackgroundController?.destroy()
     view.off('canvas-resize', this.relayoutVisibleArea, this)
   }
@@ -168,7 +173,8 @@ export class PortraitBattleBootstrap extends Component {
     this.farBackground = far.node
     this.midBackground = mid.node
     this.stageBackgroundController = new StageBackgroundController(far.sprite, mid.sprite)
-    this.stageBackgroundController.showStage(1)
+    this.stageResourceController = new StageResourceController(this.stageBackgroundController)
+    this.stageResourceController.activate(1)
   }
 
   private createPlayer(parent: Node) {
@@ -234,7 +240,10 @@ export class PortraitBattleBootstrap extends Component {
   }
 
   private onStageChanged(payload: { stageId: number; backgroundId: string; theme: string }) {
-    this.stageBackgroundController?.showStage(payload.stageId)
+    this.currentStageId = payload.stageId
+    this.stageResourceController?.activate(payload.stageId)
+    if (!this.battleOperational) return
+    this.stageResourceController?.prefetchNext(payload.stageId)
   }
 
   private createFlyingSword(
@@ -259,6 +268,8 @@ export class PortraitBattleBootstrap extends Component {
       }
       if (state.status !== 'ready') return
       skill.battleRuntime = state.runtime
+      this.battleOperational = true
+      this.stageResourceController?.prefetchNext(this.currentStageId)
       this.stopRuntimeBinding(bindRuntime)
     }
     this.bindRuntimeCallback = bindRuntime
