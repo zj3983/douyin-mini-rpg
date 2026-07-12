@@ -1,5 +1,6 @@
 import argparse
 import json
+from collections import deque
 from pathlib import Path
 
 from PIL import Image
@@ -9,6 +10,7 @@ FRAME_SIZE = 256
 GRID_COLUMNS = 4
 GRID_ROWS = 5
 SAFE_EXTENT = int(FRAME_SIZE * 0.8)
+SOURCE_INSET_RATIO = 0.07
 ACTION_ROWS = {
     "idle": (0, 2, 6, True),
     "move": (1, 4, 8, True),
@@ -59,7 +61,14 @@ def normalize_grid(source: Image.Image) -> Image.Image:
         for column in range(GRID_COLUMNS):
             source_left = round(column * source.width / GRID_COLUMNS)
             source_right = round((column + 1) * source.width / GRID_COLUMNS)
-            cell = source.crop((source_left, source_top, source_right, source_bottom))
+            inset_x = round((source_right - source_left) * SOURCE_INSET_RATIO)
+            inset_y = round((source_bottom - source_top) * SOURCE_INSET_RATIO)
+            cell = source.crop((
+                source_left + inset_x,
+                source_top + inset_y,
+                source_right - inset_x,
+                source_bottom - inset_y,
+            ))
             bounds = cell.getchannel("A").getbbox()
             if bounds is None:
                 continue
@@ -70,10 +79,70 @@ def normalize_grid(source: Image.Image) -> Image.Image:
                 max(1, round(subject.height * scale)),
             )
             subject = subject.resize(size, Image.Resampling.LANCZOS)
-            x = column * FRAME_SIZE + (FRAME_SIZE - subject.width) // 2
-            y = row * FRAME_SIZE + (FRAME_SIZE - subject.height) // 2
-            atlas.alpha_composite(subject, (x, y))
+            frame = Image.new("RGBA", (FRAME_SIZE, FRAME_SIZE), (0, 0, 0, 0))
+            frame.alpha_composite(subject, ((FRAME_SIZE - subject.width) // 2, (FRAME_SIZE - subject.height) // 2))
+            frame = remove_edge_fragments(frame)
+            atlas.alpha_composite(frame, (column * FRAME_SIZE, row * FRAME_SIZE))
     return atlas
+
+
+def remove_edge_fragments(frame: Image.Image) -> Image.Image:
+    alpha = frame.getchannel("A")
+    pixels = alpha.load()
+    visited = bytearray(FRAME_SIZE * FRAME_SIZE)
+    components = []
+
+    for start_y in range(FRAME_SIZE):
+        for start_x in range(FRAME_SIZE):
+            offset = start_y * FRAME_SIZE + start_x
+            if visited[offset] or pixels[start_x, start_y] <= 12:
+                continue
+            queue = deque([(start_x, start_y)])
+            visited[offset] = 1
+            points = []
+            while queue:
+                x, y = queue.popleft()
+                points.append((x, y))
+                for nx in range(max(0, x - 1), min(FRAME_SIZE, x + 2)):
+                    for ny in range(max(0, y - 1), min(FRAME_SIZE, y + 2)):
+                        neighbor = ny * FRAME_SIZE + nx
+                        if not visited[neighbor] and pixels[nx, ny] > 12:
+                            visited[neighbor] = 1
+                            queue.append((nx, ny))
+            components.append(points)
+
+    if not components:
+        return frame
+
+    largest = max(components, key=len)
+    edge = (FRAME_SIZE - SAFE_EXTENT) // 2 + 4
+    output = frame.copy()
+    output_pixels = output.load()
+    for component in components:
+        if component is largest or len(component) < 30:
+            continue
+        xs = [point[0] for point in component]
+        ys = [point[1] for point in component]
+        touches_safe_edge = (
+            min(xs) <= edge
+            or min(ys) <= edge
+            or max(xs) >= FRAME_SIZE - edge - 1
+            or max(ys) >= FRAME_SIZE - edge - 1
+        )
+        if touches_safe_edge:
+            for x, y in component:
+                output_pixels[x, y] = (0, 0, 0, 0)
+
+    bounds = output.getchannel("A").getbbox()
+    if bounds is None:
+        return output
+    subject = output.crop(bounds)
+    scale = min(SAFE_EXTENT / subject.width, SAFE_EXTENT / subject.height, 1.0)
+    size = (max(1, round(subject.width * scale)), max(1, round(subject.height * scale)))
+    subject = subject.resize(size, Image.Resampling.LANCZOS)
+    normalized = Image.new("RGBA", (FRAME_SIZE, FRAME_SIZE), (0, 0, 0, 0))
+    normalized.alpha_composite(subject, ((FRAME_SIZE - subject.width) // 2, (FRAME_SIZE - subject.height) // 2))
+    return normalized
 
 
 def main() -> None:

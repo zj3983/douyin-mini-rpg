@@ -32,8 +32,34 @@ test('source and resource manifests are identical and describe twelve complete m
 test('monster atlas pixels have transparent margins and distinct consecutive frames', () => {
   const script = String.raw`
 import json, sys
+from collections import deque
 from pathlib import Path
 from PIL import Image
+
+def connected_components(alpha):
+    width, height = alpha.size
+    pixels = alpha.load()
+    visited = bytearray(width * height)
+    found = []
+    for start_y in range(height):
+        for start_x in range(width):
+            offset = start_y * width + start_x
+            if visited[offset] or pixels[start_x, start_y] <= 12:
+                continue
+            queue = deque([(start_x, start_y)])
+            visited[offset] = 1
+            points = []
+            while queue:
+                x, y = queue.popleft()
+                points.append((x, y))
+                for nx in range(max(0, x - 1), min(width, x + 2)):
+                    for ny in range(max(0, y - 1), min(height, y + 2)):
+                        neighbor = ny * width + nx
+                        if not visited[neighbor] and pixels[nx, ny] > 12:
+                            visited[neighbor] = 1
+                            queue.append((nx, ny))
+            found.append(points)
+    return found
 
 root = Path(sys.argv[1])
 manifest = json.loads((root / 'assets/Data/animation-atlas.json').read_text(encoding='utf-8'))
@@ -57,6 +83,15 @@ for actor in [item for item in manifest['actors'] if item['type'] == 'monster']:
                 margin = min(left / rect['w'], top / rect['h'], (rect['w'] - right) / rect['w'], (rect['h'] - bottom) / rect['h'])
                 if margin < 0.08:
                     errors.append(f"{actor['id']}/{action['name']}[{index}] margin {margin:.3f} < 0.08")
+                components = sorted(connected_components(alpha), key=len, reverse=True)
+                for component in components[1:]:
+                    if len(component) < 30:
+                        continue
+                    xs = [point[0] for point in component]
+                    ys = [point[1] for point in component]
+                    near_safe_edge = min(xs) <= 30 or min(ys) <= 30 or max(xs) >= rect['w'] - 31 or max(ys) >= rect['h'] - 31
+                    if near_safe_edge:
+                        errors.append(f"{actor['id']}/{action['name']}[{index}] isolated edge fragment area {len(component)}")
             digest = frame.tobytes()
             if previous == digest:
                 errors.append(f"{actor['id']}/{action['name']}[{index}] identical to previous")
