@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
 import test from 'node:test'
@@ -116,6 +116,44 @@ print(json.dumps({
   })
 })
 
+test('optimize_png rejects changed dimensions, alpha, and low PSNR without changing source bytes', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'runtime-png-public-rejections-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const source = join(root, 'source.png')
+  const dimensions = join(root, 'dimensions.png')
+  const alpha = join(root, 'alpha.png')
+  const lowPsnr = join(root, 'low-psnr.png')
+  createFixture(source)
+  createFixture(dimensions, { width: 63 })
+  createFixture(alpha, { alphaOffset: 1 })
+  createFixture(lowPsnr, { rgbOffset: 100 })
+
+  const result = invokeModule(`
+import json
+import shutil
+from unittest.mock import patch
+
+source = pathlib.Path(sys.argv[2])
+before = source.read_bytes()
+results = {}
+for candidate_name in sys.argv[3:]:
+    candidate = pathlib.Path(candidate_name)
+    with patch.object(module, "_write_candidate", side_effect=lambda _source, temporary, fixture=candidate: shutil.copyfile(fixture, temporary)):
+        optimized = module.optimize_png(source, apply=True, min_psnr=42.0)
+    results[candidate.stem] = {
+        "reason": optimized["reason"],
+        "sourceUnchanged": source.read_bytes() == before,
+    }
+print(json.dumps(results))
+`, [source, dimensions, alpha, lowPsnr])
+
+  assert.deepEqual(result, {
+    dimensions: { reason: 'dimensions-changed', sourceUnchanged: true },
+    alpha: { reason: 'alpha-changed', sourceUnchanged: true },
+    'low-psnr': { reason: 'psnr-below-threshold', sourceUnchanged: true },
+  })
+})
+
 test('accepts only a strictly smaller candidate and preserves dimensions, alpha, and PSNR', (t) => {
   const root = mkdtempSync(join(tmpdir(), 'runtime-png-accepted-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
@@ -215,19 +253,153 @@ test('--check evaluates files without changing source bytes and emits JSON lines
   })
 })
 
-test('temporary candidates are removed after success and rejection', (t) => {
-  const root = mkdtempSync(join(tmpdir(), 'runtime-png-cleanup-'))
+test('CLI rejects --check and --apply together', () => {
+  const result = spawnSync(python, [scriptPath, '--check', '--apply'], { encoding: 'utf8' })
+
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /not allowed with argument|mutually exclusive/i)
+})
+
+test('CLI resolves the default project root from its own tools directory', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'runtime-png-default-root-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const copiedScript = join(root, 'cocos-client', 'tools', 'optimize-runtime-pngs.py')
+  const asset = join(root, 'cocos-client', 'assets/resources/Assets/World/Fixture/far.png')
+  mkdirSync(dirname(copiedScript), { recursive: true })
+  copyFileSync(scriptPath, copiedScript)
+  createFixture(asset)
+
+  const result = spawnSync(python, [copiedScript, '--check'], {
+    cwd: root,
+    encoding: 'utf8',
+  })
+
+  assert.equal(result.status, 0, result.stderr)
+  const lines = result.stdout.trim().split(/\r?\n/).map((line) => JSON.parse(line))
+  assert.equal(lines[0].path, 'assets/resources/Assets/World/Fixture/far.png')
+  assert.equal(lines.at(-1).totals.files, 1)
+})
+
+test('CLI exits nonzero for an invalid PNG and identifies its project-relative path', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'runtime-png-invalid-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const relativeAsset = 'assets/resources/Assets/World/Broken/broken.png'
+  const asset = join(root, relativeAsset)
+  mkdirSync(dirname(asset), { recursive: true })
+  writeFileSync(asset, 'not a png')
+
+  const result = spawnSync(python, [scriptPath, '--check', '--project-root', root], { encoding: 'utf8' })
+
+  assert.notEqual(result.status, 0)
+  assert.equal(result.stdout, '')
+  assert.match(result.stderr, /Failed to optimize assets\/resources\/Assets\/World\/Broken\/broken\.png:/)
+})
+
+test('temporary candidate is removed after a successful apply', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'runtime-png-cleanup-success-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const asset = join(root, 'asset.png')
   createFixture(asset)
 
-  invokeModule(`module.optimize_png(pathlib.Path(sys.argv[2]), apply=False)`, [asset])
-
-  const remaining = invokeModule(`
+  const result = invokeModule(`
 import json
-print(json.dumps(sorted(path.name for path in pathlib.Path(sys.argv[2]).iterdir())))
-`, [root])
-  assert.deepEqual(remaining, ['asset.png'])
+print(json.dumps(module.optimize_png(pathlib.Path(sys.argv[2]), apply=True)))
+`, [asset])
+
+  assert.equal(result.accepted, true)
+  assert.deepEqual(readdirSync(root), ['asset.png'])
+})
+
+test('temporary candidates are removed after not-smaller and quality rejections', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'runtime-png-cleanup-rejections-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const notSmaller = join(root, 'not-smaller.png')
+  const lowQuality = join(root, 'low-quality.png')
+  createFixture(notSmaller)
+  createFixture(lowQuality)
+
+  const results = invokeModule(`
+import json
+not_smaller = pathlib.Path(sys.argv[2])
+low_quality = pathlib.Path(sys.argv[3])
+module.optimize_png(not_smaller, apply=True)
+print(json.dumps([
+    module.optimize_png(not_smaller, apply=True)["reason"],
+    module.optimize_png(low_quality, apply=True, min_psnr=1000.0)["reason"],
+]))
+`, [notSmaller, lowQuality])
+
+  assert.deepEqual(results, ['not-smaller', 'psnr-below-threshold'])
+  assert.deepEqual(readdirSync(root).sort(), ['low-quality.png', 'not-smaller.png'])
+})
+
+test('temporary candidate is removed when processing raises', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'runtime-png-cleanup-error-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const asset = join(root, 'asset.png')
+  createFixture(asset)
+
+  const result = invokeModule(`
+import json
+from unittest.mock import patch
+
+def fail_after_write(_source, candidate):
+    candidate.write_bytes(b"partial candidate")
+    raise RuntimeError("fixture processing failure")
+
+try:
+    with patch.object(module, "_write_candidate", side_effect=fail_after_write):
+        module.optimize_png(pathlib.Path(sys.argv[2]), apply=True)
+except RuntimeError as error:
+    print(json.dumps({"error": str(error)}))
+`, [asset])
+
+  assert.equal(result.error, 'fixture processing failure')
+  assert.deepEqual(readdirSync(root), ['asset.png'])
+})
+
+test('apply=False never replaces while accepted apply=True replaces exactly once', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'runtime-png-replace-spy-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const checkAsset = join(root, 'check.png')
+  const applyAsset = join(root, 'apply.png')
+  createFixture(checkAsset)
+  copyFileSync(checkAsset, applyAsset)
+  const checkBefore = snapshot(checkAsset)
+  const applyBefore = snapshot(applyAsset)
+
+  const result = invokeModule(`
+import json
+from unittest.mock import patch
+
+original_replace = pathlib.Path.replace
+calls = []
+def replace_spy(candidate, target):
+    calls.append([candidate.name, pathlib.Path(target).name])
+    return original_replace(candidate, target)
+
+with patch.object(pathlib.Path, "replace", replace_spy):
+    checked = module.optimize_png(pathlib.Path(sys.argv[2]), apply=False)
+    check_calls = len(calls)
+    applied = module.optimize_png(pathlib.Path(sys.argv[3]), apply=True)
+
+print(json.dumps({
+    "checkedAccepted": checked["accepted"],
+    "appliedAccepted": applied["accepted"],
+    "checkCalls": check_calls,
+    "totalCalls": len(calls),
+}))
+`, [checkAsset, applyAsset])
+
+  assert.deepEqual(result, {
+    checkedAccepted: true,
+    appliedAccepted: true,
+    checkCalls: 0,
+    totalCalls: 1,
+  })
+  assert.equal(snapshot(checkAsset), checkBefore)
+  assert.notEqual(snapshot(applyAsset), applyBefore)
+  assert.deepEqual(readdirSync(root).sort(), ['apply.png', 'check.png'])
 })
 
 test('package exposes the runtime PNG optimization command', () => {

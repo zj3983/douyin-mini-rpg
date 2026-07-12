@@ -140,8 +140,12 @@ def main() -> int:
     results: list[dict[str, object]] = []
 
     for path in discover_runtime_pngs(project_root):
-        result = optimize_png(path, apply=args.apply, min_psnr=args.min_psnr)
-        result["path"] = path.relative_to(project_root).as_posix()
+        relative_path = path.relative_to(project_root).as_posix()
+        try:
+            result = optimize_png(path, apply=args.apply, min_psnr=args.min_psnr)
+        except Exception as error:
+            raise RuntimeError(f"Failed to optimize {relative_path}: {error}") from error
+        result["path"] = relative_path
         results.append(result)
         print(json.dumps(result, separators=(",", ":"), sort_keys=True))
 
