@@ -115,11 +115,14 @@ def remove_edge_fragments(frame: Image.Image) -> Image.Image:
         return frame
 
     largest = max(components, key=len)
+    largest_xs = [point[0] for point in largest]
+    largest_ys = [point[1] for point in largest]
+    largest_box = (min(largest_xs), min(largest_ys), max(largest_xs), max(largest_ys))
     edge = (FRAME_SIZE - SAFE_EXTENT) // 2 + 4
     output = frame.copy()
     output_pixels = output.load()
     for component in components:
-        if component is largest or len(component) < 30:
+        if component is largest or len(component) < 4:
             continue
         xs = [point[0] for point in component]
         ys = [point[1] for point in component]
@@ -129,7 +132,10 @@ def remove_edge_fragments(frame: Image.Image) -> Image.Image:
             or max(xs) >= FRAME_SIZE - edge - 1
             or max(ys) >= FRAME_SIZE - edge - 1
         )
-        if touches_safe_edge:
+        horizontal_gap = max(largest_box[0] - max(xs) - 1, min(xs) - largest_box[2] - 1, 0)
+        vertical_gap = max(largest_box[1] - max(ys) - 1, min(ys) - largest_box[3] - 1, 0)
+        detached_from_subject = horizontal_gap > 6 or vertical_gap > 6
+        if touches_safe_edge or detached_from_subject:
             for x, y in component:
                 output_pixels[x, y] = (0, 0, 0, 0)
 
@@ -142,6 +148,10 @@ def remove_edge_fragments(frame: Image.Image) -> Image.Image:
     subject = subject.resize(size, Image.Resampling.LANCZOS)
     normalized = Image.new("RGBA", (FRAME_SIZE, FRAME_SIZE), (0, 0, 0, 0))
     normalized.alpha_composite(subject, ((FRAME_SIZE - subject.width) // 2, (FRAME_SIZE - subject.height) // 2))
+    normalized.putdata([
+        pixel if pixel[3] > 12 else (0, 0, 0, 0)
+        for pixel in normalized.get_flattened_data()
+    ])
     return normalized
 
 

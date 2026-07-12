@@ -44,7 +44,7 @@ def connected_components(alpha):
     for start_y in range(height):
         for start_x in range(width):
             offset = start_y * width + start_x
-            if visited[offset] or pixels[start_x, start_y] <= 12:
+            if visited[offset] or pixels[start_x, start_y] == 0:
                 continue
             queue = deque([(start_x, start_y)])
             visited[offset] = 1
@@ -55,7 +55,7 @@ def connected_components(alpha):
                 for nx in range(max(0, x - 1), min(width, x + 2)):
                     for ny in range(max(0, y - 1), min(height, y + 2)):
                         neighbor = ny * width + nx
-                        if not visited[neighbor] and pixels[nx, ny] > 12:
+                        if not visited[neighbor] and pixels[nx, ny] > 0:
                             visited[neighbor] = 1
                             queue.append((nx, ny))
             found.append(points)
@@ -84,14 +84,19 @@ for actor in [item for item in manifest['actors'] if item['type'] == 'monster']:
                 if margin < 0.08:
                     errors.append(f"{actor['id']}/{action['name']}[{index}] margin {margin:.3f} < 0.08")
                 components = sorted(connected_components(alpha), key=len, reverse=True)
+                largest_xs = [point[0] for point in components[0]]
+                largest_ys = [point[1] for point in components[0]]
+                largest_box = (min(largest_xs), min(largest_ys), max(largest_xs), max(largest_ys))
                 for component in components[1:]:
-                    if len(component) < 30:
+                    if len(component) < 4:
                         continue
                     xs = [point[0] for point in component]
                     ys = [point[1] for point in component]
                     near_safe_edge = min(xs) <= 30 or min(ys) <= 30 or max(xs) >= rect['w'] - 31 or max(ys) >= rect['h'] - 31
-                    if near_safe_edge:
-                        errors.append(f"{actor['id']}/{action['name']}[{index}] isolated edge fragment area {len(component)}")
+                    horizontal_gap = max(largest_box[0] - max(xs) - 1, min(xs) - largest_box[2] - 1, 0)
+                    vertical_gap = max(largest_box[1] - max(ys) - 1, min(ys) - largest_box[3] - 1, 0)
+                    if near_safe_edge or horizontal_gap > 6 or vertical_gap > 6:
+                        errors.append(f"{actor['id']}/{action['name']}[{index}] isolated fragment area {len(component)}")
             digest = frame.tobytes()
             if previous == digest:
                 errors.append(f"{actor['id']}/{action['name']}[{index}] identical to previous")
