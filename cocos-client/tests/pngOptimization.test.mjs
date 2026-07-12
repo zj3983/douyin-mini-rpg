@@ -432,6 +432,43 @@ test('CLI rejects a project-root junction instead of resolving away the reparse 
   assert.match(result.stderr, /junction|reparse|symbolic link/i)
 })
 
+test('Windows reparse attributes reject junctions when pathlib has no is_junction API', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'runtime-png-no-junction-api-'))
+  const outside = mkdtempSync(join(tmpdir(), 'runtime-png-no-junction-api-outside-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  t.after(() => rmSync(outside, { recursive: true, force: true }))
+  const world = join(root, 'assets/resources/Assets/World')
+  const junction = join(world, 'Escape')
+  mkdirSync(world, { recursive: true })
+  createFixture(join(outside, 'outside.png'))
+  try {
+    symlinkSync(outside, junction, 'junction')
+  } catch (error) {
+    if (error.code === 'EPERM') {
+      t.skip('junction creation is not permitted in this environment')
+      return
+    }
+    throw error
+  }
+
+  const result = runPython(`${loadScriptPrelude()}
+import json
+from unittest.mock import patch
+
+try:
+    with patch.object(pathlib.Path, "is_junction", None, create=True):
+        module.discover_runtime_pngs(pathlib.Path(sys.argv[2]))
+except RuntimeError as error:
+    print(json.dumps({"rejected": True, "message": str(error)}))
+`, [scriptPath, root])
+
+  assert.equal(result.status, 0, result.stderr)
+  const rejection = JSON.parse(result.stdout)
+  assert.equal(rejection.rejected, true)
+  assert.match(rejection.message, /Escape/)
+  assert.match(rejection.message, /reparse/i)
+})
+
 test('CLI rejects a PNG file symlink before it can escape the allowed root', (t) => {
   const root = mkdtempSync(join(tmpdir(), 'runtime-png-symlink-root-'))
   const outside = mkdtempSync(join(tmpdir(), 'runtime-png-symlink-outside-'))

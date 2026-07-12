@@ -19,7 +19,9 @@ def _is_reparse_point(path: Path) -> bool:
         return False
     file_attributes = getattr(path_stat, "st_file_attributes", 0)
     reparse_attribute = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
-    return path.is_symlink() or path.is_junction() or bool(file_attributes & reparse_attribute)
+    is_junction = getattr(path, "is_junction", None)
+    junction = bool(is_junction()) if callable(is_junction) else False
+    return path.is_symlink() or junction or bool(file_attributes & reparse_attribute)
 
 
 def _reject_reparse_point(path: Path) -> None:
