@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  copyFileSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
 import test from 'node:test'
@@ -51,7 +60,7 @@ image.save(pathlib.Path(sys.argv[1]), compress_level=compress_level)
 function invokeModule(expression, args = []) {
   const result = runPython(`${loadScriptPrelude()}\n${expression}`, [scriptPath, ...args])
   assert.equal(result.status, 0, result.stderr)
-  return result.stdout.trim() ? JSON.parse(result.stdout) : undefined
+  return result.stdout.trim() ? JSON.parse(result.stdout.replace(/\bInfinity\b/g, '1e999')) : undefined
 }
 
 function snapshot(path) {
@@ -138,7 +147,7 @@ before = source.read_bytes()
 results = {}
 for candidate_name in sys.argv[3:]:
     candidate = pathlib.Path(candidate_name)
-    with patch.object(module, "_write_candidate", side_effect=lambda _source, temporary, fixture=candidate: shutil.copyfile(fixture, temporary)):
+    with patch.object(module, "_encode_candidate", side_effect=lambda _source, fixture=candidate: fixture.read_bytes()):
         optimized = module.optimize_png(source, apply=True, min_psnr=42.0)
     results[candidate.stem] = {
         "reason": optimized["reason"],
@@ -189,6 +198,26 @@ with Image.open(sys.argv[1]) as image:
     decoded.alpha.slice(0, 128),
     Array.from({ length: 128 }, (_, index) => ((index % 64) * 7 + Math.floor(index / 64) * 11) % 256),
   )
+})
+
+test('lossless RGB candidates use infinite PSNR and pass any finite threshold', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'runtime-png-infinite-psnr-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const source = join(root, 'asset.png')
+  createFixture(source)
+
+  const result = invokeModule(`
+import json
+import math
+optimized = module.optimize_png(pathlib.Path(sys.argv[2]), apply=False, min_psnr=1000.0)
+print(json.dumps({
+    "accepted": optimized["accepted"],
+    "infinite": math.isinf(optimized["psnr"]),
+    "reason": optimized["reason"],
+}))
+`, [source])
+
+  assert.deepEqual(result, { accepted: true, infinite: true, reason: null })
 })
 
 test('rejects a candidate that is not smaller and leaves source bytes untouched', (t) => {
@@ -242,6 +271,7 @@ test('--check evaluates files without changing source bytes and emits JSON lines
   const lines = result.stdout.trim().split(/\r?\n/).map((line) => JSON.parse(line))
   assert.equal(lines.length, 2)
   assert.equal(lines[0].path, relative(root, asset).replaceAll('\\', '/'))
+  assert.equal(lines[0].psnr, 'infinite')
   assert.deepEqual(lines[1], {
     totals: {
       files: 1,
@@ -251,6 +281,63 @@ test('--check evaluates files without changing source bytes and emits JSON lines
       savedBytes: lines[0].originalBytes - lines[0].candidateBytes,
     },
   })
+})
+
+test('apply=False evaluates entirely in memory without creating a temporary directory entry', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'runtime-png-memory-check-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const asset = join(root, 'asset.png')
+  createFixture(asset)
+
+  const result = invokeModule(`
+import json
+from unittest.mock import patch
+
+directory = pathlib.Path(sys.argv[2])
+source = pathlib.Path(sys.argv[3])
+before = sorted(path.name for path in directory.iterdir())
+observed_entries = []
+original_temporary = module.tempfile.NamedTemporaryFile
+
+def monitored_temporary(*args, **kwargs):
+    temporary = original_temporary(*args, **kwargs)
+    observed_entries.extend(sorted(path.name for path in directory.iterdir() if path.name not in before))
+    return temporary
+
+with patch.object(module.tempfile, "NamedTemporaryFile", side_effect=monitored_temporary):
+    optimized = module.optimize_png(source, apply=False)
+
+print(json.dumps({
+    "accepted": optimized["accepted"],
+    "observedEntries": observed_entries,
+    "after": sorted(path.name for path in directory.iterdir()),
+}))
+`, [root, asset])
+
+  assert.deepEqual(result, { accepted: true, observedEntries: [], after: ['asset.png'] })
+})
+
+test('apply=True rejection evaluates entirely in memory without creating a temporary file', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'runtime-png-memory-reject-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const asset = join(root, 'asset.png')
+  const lowQuality = join(root, 'low-quality.png')
+  createFixture(asset)
+  createFixture(lowQuality, { rgbOffset: 100 })
+
+  const result = invokeModule(`
+import json
+from unittest.mock import patch
+
+candidate_bytes = pathlib.Path(sys.argv[3]).read_bytes()
+with patch.object(module, "_encode_candidate", return_value=candidate_bytes), patch.object(
+    module.tempfile, "NamedTemporaryFile", side_effect=AssertionError("temporary file created")
+):
+    optimized = module.optimize_png(pathlib.Path(sys.argv[2]), apply=True, min_psnr=42.0)
+print(json.dumps({"accepted": optimized["accepted"], "reason": optimized["reason"]}))
+`, [asset, lowQuality])
+
+  assert.deepEqual(result, { accepted: false, reason: 'psnr-below-threshold' })
 })
 
 test('CLI rejects --check and --apply together', () => {
@@ -295,6 +382,82 @@ test('CLI exits nonzero for an invalid PNG and identifies its project-relative p
   assert.match(result.stderr, /Failed to optimize assets\/resources\/Assets\/World\/Broken\/broken\.png:/)
 })
 
+test('CLI rejects a World junction before it can escape the allowed root', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'runtime-png-junction-root-'))
+  const outside = mkdtempSync(join(tmpdir(), 'runtime-png-junction-outside-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  t.after(() => rmSync(outside, { recursive: true, force: true }))
+  const world = join(root, 'assets/resources/Assets/World')
+  const junction = join(world, 'Escape')
+  mkdirSync(world, { recursive: true })
+  createFixture(join(outside, 'outside.png'))
+  try {
+    symlinkSync(outside, junction, 'junction')
+  } catch (error) {
+    if (error.code === 'EPERM') {
+      t.skip('junction creation is not permitted in this environment')
+      return
+    }
+    throw error
+  }
+
+  const result = spawnSync(python, [scriptPath, '--check', '--project-root', root], { encoding: 'utf8' })
+
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /Escape/)
+  assert.match(result.stderr, /junction|reparse|symbolic link/i)
+})
+
+test('CLI rejects a project-root junction instead of resolving away the reparse parent', (t) => {
+  const container = mkdtempSync(join(tmpdir(), 'runtime-png-project-junction-'))
+  const actualRoot = mkdtempSync(join(tmpdir(), 'runtime-png-project-target-'))
+  t.after(() => rmSync(container, { recursive: true, force: true }))
+  t.after(() => rmSync(actualRoot, { recursive: true, force: true }))
+  const linkedRoot = join(container, 'linked-project')
+  createFixture(join(actualRoot, 'assets/resources/Assets/World/Fixture/far.png'))
+  try {
+    symlinkSync(actualRoot, linkedRoot, 'junction')
+  } catch (error) {
+    if (error.code === 'EPERM') {
+      t.skip('junction creation is not permitted in this environment')
+      return
+    }
+    throw error
+  }
+
+  const result = spawnSync(python, [scriptPath, '--check', '--project-root', linkedRoot], { encoding: 'utf8' })
+
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /linked-project/)
+  assert.match(result.stderr, /junction|reparse|symbolic link/i)
+})
+
+test('CLI rejects a PNG file symlink before it can escape the allowed root', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'runtime-png-symlink-root-'))
+  const outside = mkdtempSync(join(tmpdir(), 'runtime-png-symlink-outside-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  t.after(() => rmSync(outside, { recursive: true, force: true }))
+  const target = join(outside, 'outside.png')
+  const linked = join(root, 'assets/resources/Assets/World/linked.png')
+  createFixture(target)
+  mkdirSync(dirname(linked), { recursive: true })
+  try {
+    symlinkSync(target, linked, 'file')
+  } catch (error) {
+    if (error.code === 'EPERM') {
+      t.skip('file symlink creation is not permitted in this environment')
+      return
+    }
+    throw error
+  }
+
+  const result = spawnSync(python, [scriptPath, '--check', '--project-root', root], { encoding: 'utf8' })
+
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /linked\.png/)
+  assert.match(result.stderr, /symlink|reparse|symbolic link/i)
+})
+
 test('temporary candidate is removed after a successful apply', (t) => {
   const root = mkdtempSync(join(tmpdir(), 'runtime-png-cleanup-success-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
@@ -316,7 +479,7 @@ test('temporary candidates are removed after not-smaller and quality rejections'
   const notSmaller = join(root, 'not-smaller.png')
   const lowQuality = join(root, 'low-quality.png')
   createFixture(notSmaller)
-  createFixture(lowQuality)
+  createFixture(lowQuality, { rgbOffset: 1 })
 
   const results = invokeModule(`
 import json
@@ -343,12 +506,11 @@ test('temporary candidate is removed when processing raises', (t) => {
 import json
 from unittest.mock import patch
 
-def fail_after_write(_source, candidate):
-    candidate.write_bytes(b"partial candidate")
+def fail_after_write(_source):
     raise RuntimeError("fixture processing failure")
 
 try:
-    with patch.object(module, "_write_candidate", side_effect=fail_after_write):
+    with patch.object(module, "_encode_candidate", side_effect=fail_after_write):
         module.optimize_png(pathlib.Path(sys.argv[2]), apply=True)
 except RuntimeError as error:
     print(json.dumps({"error": str(error)}))
@@ -373,21 +535,29 @@ import json
 from unittest.mock import patch
 
 original_replace = pathlib.Path.replace
+original_fsync = __import__("os").fsync
 calls = []
+fsync_calls = []
 def replace_spy(candidate, target):
     calls.append([candidate.name, pathlib.Path(target).name])
     return original_replace(candidate, target)
+def fsync_spy(file_descriptor):
+    fsync_calls.append(file_descriptor)
+    return original_fsync(file_descriptor)
 
-with patch.object(pathlib.Path, "replace", replace_spy):
+with patch.object(pathlib.Path, "replace", replace_spy), patch("os.fsync", fsync_spy):
     checked = module.optimize_png(pathlib.Path(sys.argv[2]), apply=False)
     check_calls = len(calls)
+    check_fsync_calls = len(fsync_calls)
     applied = module.optimize_png(pathlib.Path(sys.argv[3]), apply=True)
 
 print(json.dumps({
     "checkedAccepted": checked["accepted"],
     "appliedAccepted": applied["accepted"],
     "checkCalls": check_calls,
+    "checkFsyncCalls": check_fsync_calls,
     "totalCalls": len(calls),
+    "totalFsyncCalls": len(fsync_calls),
 }))
 `, [checkAsset, applyAsset])
 
@@ -395,7 +565,9 @@ print(json.dumps({
     checkedAccepted: true,
     appliedAccepted: true,
     checkCalls: 0,
+    checkFsyncCalls: 0,
     totalCalls: 1,
+    totalFsyncCalls: 1,
   })
   assert.equal(snapshot(checkAsset), checkBefore)
   assert.notEqual(snapshot(applyAsset), applyBefore)
