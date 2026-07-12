@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs'
 import { extname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { gzipSync } from 'node:zlib'
@@ -22,8 +22,11 @@ function collectFiles(buildRoot) {
   function visit(directory) {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const absolutePath = resolve(directory, entry.name)
-      if (entry.isDirectory()) visit(absolutePath)
-      if (entry.isFile()) files.push(absolutePath)
+      const stats = lstatSync(absolutePath)
+      const relativePath = relative(buildRoot, absolutePath).replaceAll('\\', '/')
+      if (stats.isSymbolicLink()) throw new Error(`Symbolic link not allowed: ${relativePath}`)
+      if (stats.isDirectory()) visit(absolutePath)
+      if (stats.isFile()) files.push(absolutePath)
     }
   }
 
@@ -33,9 +36,15 @@ function collectFiles(buildRoot) {
 
 export function reportBuildSize(buildRoot, { largestCount = 20 } = {}) {
   const absoluteRoot = resolve(buildRoot)
-  if (!existsSync(absoluteRoot) || !statSync(absoluteRoot).isDirectory()) {
+  let rootStats
+  try {
+    rootStats = lstatSync(absoluteRoot)
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error
     throw new Error(`Build root not found: ${absoluteRoot}`)
   }
+  if (rootStats.isSymbolicLink()) throw new Error(`Symbolic link not allowed: ${absoluteRoot}`)
+  if (!rootStats.isDirectory()) throw new Error(`Build root not found: ${absoluteRoot}`)
 
   const report = {
     fileCount: 0,
@@ -69,14 +78,19 @@ export function reportBuildSize(buildRoot, { largestCount = 20 } = {}) {
   return report
 }
 
-const isCli = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+const isCli = process.argv[1]
+  && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
 
 if (isCli) {
-  const buildRoot = resolve(process.argv[2] ?? '')
-  try {
-    console.log(JSON.stringify(reportBuildSize(buildRoot), null, 2))
-  } catch (error) {
-    console.error(error.message)
-    process.exitCode = 1
+  if (!process.argv[2]) {
+    console.error('Usage: node tools/report-web-build-size.mjs <build-root>')
+    process.exitCode = 2
+  } else {
+    try {
+      console.log(JSON.stringify(reportBuildSize(process.argv[2]), null, 2))
+    } catch (error) {
+      console.error(error.message)
+      process.exitCode = 1
+    }
   }
 }

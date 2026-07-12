@@ -8,6 +8,7 @@ import {
   readdirSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -26,8 +27,10 @@ function createFixture() {
     ['assets/config.json', Buffer.from('{"level":1,"name":"void-trial"}\n'.repeat(4))],
     ['assets/hero.png', Buffer.from([0x89, 0x50, 0x4e, 0x47, ...Array(60).fill(0x7f)])],
     ['main.js', Buffer.from('export const stage = "void";\n'.repeat(8))],
+    ['nested/a-equal.bin', Buffer.alloc(65, 0x61)],
     ['nested/notes.txt', Buffer.from('build-note\n'.repeat(3))],
     ['nested/raw.dat', Buffer.from(Array(64).fill(0x42))],
+    ['nested/z-equal.bin', Buffer.alloc(65, 0x7a)],
   ])
 
   for (const [path, contents] of files) {
@@ -91,17 +94,44 @@ test('recognizes only build formats eligible for gzip estimation', () => {
   }
 })
 
-test('sorts largest files by bytes then relative path and honors largestCount', (t) => {
+test('sorts largest files by bytes then POSIX relative path and honors largestCount', (t) => {
   const { root } = createFixture()
   t.after(() => rmSync(root, { recursive: true, force: true }))
 
-  const report = reportBuildSize(root, { largestCount: 3 })
+  const report = reportBuildSize(root, { largestCount: 5 })
 
   assert.deepEqual(report.largestFiles, [
     { path: 'main.js', bytes: 232 },
     { path: 'assets/config.json', bytes: 128 },
+    { path: 'nested/a-equal.bin', bytes: 65 },
+    { path: 'nested/z-equal.bin', bytes: 65 },
     { path: 'assets/hero.png', bytes: 64 },
   ])
+})
+
+test('rejects nested directory junctions instead of silently omitting their files', (t) => {
+  const { root } = createFixture()
+  const targetRoot = mkdtempSync(join(tmpdir(), 'cocos-build-link-target-'))
+  writeFileSync(join(targetRoot, 'linked.js'), 'export const linked = true\n')
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  t.after(() => rmSync(targetRoot, { recursive: true, force: true }))
+
+  try {
+    symlinkSync(targetRoot, join(root, 'linked-assets'), 'junction')
+  } catch (error) {
+    if (error.code === 'EPERM') {
+      t.skip('junction creation is not permitted in this environment')
+      return
+    }
+    throw error
+  }
+
+  assert.throws(() => reportBuildSize(root), /Symbolic link not allowed: linked-assets/)
+
+  const result = spawnSync(process.execPath, [reportScript, root], { encoding: 'utf8' })
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /Symbolic link not allowed: linked-assets/)
+  assert.equal(result.stdout, '')
 })
 
 test('CLI exits with an absolute error when the build root is missing', () => {
@@ -111,6 +141,40 @@ test('CLI exits with an absolute error when the build root is missing', () => {
   assert.equal(result.status, 1)
   assert.match(result.stderr, new RegExp(`Build root not found: ${missingRoot.replaceAll('\\', '\\\\')}`))
   assert.equal(result.stdout, '')
+})
+
+test('CLI prints usage and exits 2 when the build root argument is omitted', () => {
+  const result = spawnSync(process.execPath, [reportScript], { encoding: 'utf8', cwd: clientRoot })
+
+  assert.equal(result.status, 2)
+  assert.equal(result.stderr, 'Usage: node tools/report-web-build-size.mjs <build-root>\n')
+  assert.equal(result.stdout, '')
+})
+
+test('CLI still runs when launched through a junction script path', (t) => {
+  const { root, files } = createFixture()
+  const linkRoot = mkdtempSync(join(tmpdir(), 'cocos-build-script-link-'))
+  const toolsLink = join(linkRoot, 'linked-tools')
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  t.after(() => rmSync(linkRoot, { recursive: true, force: true }))
+
+  try {
+    symlinkSync(resolve(clientRoot, 'tools'), toolsLink, 'junction')
+  } catch (error) {
+    if (error.code === 'EPERM') {
+      t.skip('junction creation is not permitted in this environment')
+      return
+    }
+    throw error
+  }
+
+  const linkedScript = join(toolsLink, 'report-web-build-size.mjs')
+  const result = spawnSync(process.execPath, [linkedScript, root], { encoding: 'utf8' })
+
+  assert.equal(result.status, 0)
+  assert.match(result.stdout, /^\{/)
+  assert.equal(JSON.parse(result.stdout).fileCount, files.size)
+  assert.equal(result.stderr, '')
 })
 
 test('package exposes the repeatable web build size command', () => {
