@@ -1676,87 +1676,115 @@
     {
       "id": "lava-lizard",
       "type": "monster",
-      "atlas": "Assets/Combat/FlameRavine/lava-lizard-strip.png",
+      "atlas": "Assets/ActorAtlases/LavaLizard/atlas.png",
       "frameSize": {
-        "w": 320,
-        "h": 512
+        "w": 256,
+        "h": 256
       },
       "actions": [
         {
           "name": "idle",
-          "atlas": "Assets/Combat/FlameRavine/lava-lizard-strip.png",
-          "fps": 4,
+          "atlas": "Assets/ActorAtlases/LavaLizard/atlas.png",
+          "fps": 6,
           "loop": true,
           "order": [
-            0
+            0,
+            1
           ],
           "frames": [
             {
               "x": 0,
               "y": 0,
-              "w": 320,
-              "h": 512
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 0,
+              "w": 256,
+              "h": 256
             }
           ]
         },
         {
           "name": "move",
-          "atlas": "Assets/Combat/FlameRavine/lava-lizard-strip.png",
+          "atlas": "Assets/ActorAtlases/LavaLizard/atlas.png",
           "fps": 8,
           "loop": true,
           "order": [
             0,
-            1
+            1,
+            2,
+            3
           ],
           "frames": [
             {
-              "x": 320,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 0,
+              "y": 256,
+              "w": 256,
+              "h": 256
             },
             {
-              "x": 640,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 256,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 256,
+              "w": 256,
+              "h": 256
             }
           ]
         },
         {
           "name": "attack",
-          "atlas": "Assets/Combat/FlameRavine/lava-lizard-strip.png",
+          "atlas": "Assets/ActorAtlases/LavaLizard/atlas.png",
           "fps": 10,
           "loop": false,
           "order": [
             0,
             1,
-            2
+            2,
+            3
           ],
           "frames": [
             {
-              "x": 640,
-              "y": 0,
-              "w": 320,
-              "h": 512
-            },
-            {
-              "x": 960,
-              "y": 0,
-              "w": 320,
-              "h": 512
-            },
-            {
               "x": 0,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 512,
+              "w": 256,
+              "h": 256
             }
           ]
         },
         {
           "name": "hurt",
-          "atlas": "Assets/Combat/FlameRavine/lava-lizard-strip.png",
+          "atlas": "Assets/ActorAtlases/LavaLizard/atlas.png",
           "fps": 8,
           "loop": false,
           "order": [
@@ -1765,42 +1793,54 @@
           ],
           "frames": [
             {
-              "x": 1280,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 0,
+              "y": 768,
+              "w": 256,
+              "h": 256
             },
             {
-              "x": 0,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 256,
+              "y": 768,
+              "w": 256,
+              "h": 256
             }
           ]
         },
         {
           "name": "death",
-          "atlas": "Assets/Combat/FlameRavine/lava-lizard-strip.png",
+          "atlas": "Assets/ActorAtlases/LavaLizard/atlas.png",
           "fps": 8,
           "loop": false,
           "order": [
             0,
             1,
-            1,
-            1
+            2,
+            3
           ],
           "frames": [
             {
-              "x": 1280,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 0,
+              "y": 1024,
+              "w": 256,
+              "h": 256
             },
             {
-              "x": 1600,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 256,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 1024,
+              "w": 256,
+              "h": 256
             }
           ]
         }
@@ -1809,87 +1849,115 @@
     {
       "id": "ember-crow",
       "type": "monster",
-      "atlas": "Assets/Combat/FlameRavine/ember-crow-strip.png",
+      "atlas": "Assets/ActorAtlases/EmberCrow/atlas.png",
       "frameSize": {
-        "w": 320,
-        "h": 512
+        "w": 256,
+        "h": 256
       },
       "actions": [
         {
           "name": "idle",
-          "atlas": "Assets/Combat/FlameRavine/ember-crow-strip.png",
-          "fps": 4,
+          "atlas": "Assets/ActorAtlases/EmberCrow/atlas.png",
+          "fps": 6,
           "loop": true,
           "order": [
-            0
+            0,
+            1
           ],
           "frames": [
             {
               "x": 0,
               "y": 0,
-              "w": 320,
-              "h": 512
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 0,
+              "w": 256,
+              "h": 256
             }
           ]
         },
         {
           "name": "move",
-          "atlas": "Assets/Combat/FlameRavine/ember-crow-strip.png",
+          "atlas": "Assets/ActorAtlases/EmberCrow/atlas.png",
           "fps": 8,
           "loop": true,
           "order": [
             0,
-            1
+            1,
+            2,
+            3
           ],
           "frames": [
             {
-              "x": 320,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 0,
+              "y": 256,
+              "w": 256,
+              "h": 256
             },
             {
-              "x": 640,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 256,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 256,
+              "w": 256,
+              "h": 256
             }
           ]
         },
         {
           "name": "attack",
-          "atlas": "Assets/Combat/FlameRavine/ember-crow-strip.png",
+          "atlas": "Assets/ActorAtlases/EmberCrow/atlas.png",
           "fps": 10,
           "loop": false,
           "order": [
             0,
             1,
-            2
+            2,
+            3
           ],
           "frames": [
             {
-              "x": 640,
-              "y": 0,
-              "w": 320,
-              "h": 512
-            },
-            {
-              "x": 960,
-              "y": 0,
-              "w": 320,
-              "h": 512
-            },
-            {
               "x": 0,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 512,
+              "w": 256,
+              "h": 256
             }
           ]
         },
         {
           "name": "hurt",
-          "atlas": "Assets/Combat/FlameRavine/ember-crow-strip.png",
+          "atlas": "Assets/ActorAtlases/EmberCrow/atlas.png",
           "fps": 8,
           "loop": false,
           "order": [
@@ -1898,42 +1966,54 @@
           ],
           "frames": [
             {
-              "x": 1280,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 0,
+              "y": 768,
+              "w": 256,
+              "h": 256
             },
             {
-              "x": 0,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 256,
+              "y": 768,
+              "w": 256,
+              "h": 256
             }
           ]
         },
         {
           "name": "death",
-          "atlas": "Assets/Combat/FlameRavine/ember-crow-strip.png",
+          "atlas": "Assets/ActorAtlases/EmberCrow/atlas.png",
           "fps": 8,
           "loop": false,
           "order": [
             0,
             1,
-            1,
-            1
+            2,
+            3
           ],
           "frames": [
             {
-              "x": 1280,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 0,
+              "y": 1024,
+              "w": 256,
+              "h": 256
             },
             {
-              "x": 1600,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 256,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 1024,
+              "w": 256,
+              "h": 256
             }
           ]
         }
@@ -1942,87 +2022,115 @@
     {
       "id": "flame-ogre",
       "type": "monster",
-      "atlas": "Assets/Combat/FlameRavine/flame-ogre-strip.png",
+      "atlas": "Assets/ActorAtlases/FlameOgre/atlas.png",
       "frameSize": {
-        "w": 320,
-        "h": 512
+        "w": 256,
+        "h": 256
       },
       "actions": [
         {
           "name": "idle",
-          "atlas": "Assets/Combat/FlameRavine/flame-ogre-strip.png",
-          "fps": 4,
+          "atlas": "Assets/ActorAtlases/FlameOgre/atlas.png",
+          "fps": 6,
           "loop": true,
           "order": [
-            0
+            0,
+            1
           ],
           "frames": [
             {
               "x": 0,
               "y": 0,
-              "w": 320,
-              "h": 512
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 0,
+              "w": 256,
+              "h": 256
             }
           ]
         },
         {
           "name": "move",
-          "atlas": "Assets/Combat/FlameRavine/flame-ogre-strip.png",
+          "atlas": "Assets/ActorAtlases/FlameOgre/atlas.png",
           "fps": 8,
           "loop": true,
           "order": [
             0,
-            1
+            1,
+            2,
+            3
           ],
           "frames": [
             {
-              "x": 320,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 0,
+              "y": 256,
+              "w": 256,
+              "h": 256
             },
             {
-              "x": 640,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 256,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 256,
+              "w": 256,
+              "h": 256
             }
           ]
         },
         {
           "name": "attack",
-          "atlas": "Assets/Combat/FlameRavine/flame-ogre-strip.png",
+          "atlas": "Assets/ActorAtlases/FlameOgre/atlas.png",
           "fps": 10,
           "loop": false,
           "order": [
             0,
             1,
-            2
+            2,
+            3
           ],
           "frames": [
             {
-              "x": 640,
-              "y": 0,
-              "w": 320,
-              "h": 512
-            },
-            {
-              "x": 960,
-              "y": 0,
-              "w": 320,
-              "h": 512
-            },
-            {
               "x": 0,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 512,
+              "w": 256,
+              "h": 256
             }
           ]
         },
         {
           "name": "hurt",
-          "atlas": "Assets/Combat/FlameRavine/flame-ogre-strip.png",
+          "atlas": "Assets/ActorAtlases/FlameOgre/atlas.png",
           "fps": 8,
           "loop": false,
           "order": [
@@ -2031,42 +2139,54 @@
           ],
           "frames": [
             {
-              "x": 1280,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 0,
+              "y": 768,
+              "w": 256,
+              "h": 256
             },
             {
-              "x": 0,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 256,
+              "y": 768,
+              "w": 256,
+              "h": 256
             }
           ]
         },
         {
           "name": "death",
-          "atlas": "Assets/Combat/FlameRavine/flame-ogre-strip.png",
+          "atlas": "Assets/ActorAtlases/FlameOgre/atlas.png",
           "fps": 8,
           "loop": false,
           "order": [
             0,
             1,
-            1,
-            1
+            2,
+            3
           ],
           "frames": [
             {
-              "x": 1280,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 0,
+              "y": 1024,
+              "w": 256,
+              "h": 256
             },
             {
-              "x": 1600,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 256,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 1024,
+              "w": 256,
+              "h": 256
             }
           ]
         }
@@ -2075,87 +2195,115 @@
     {
       "id": "star-armored-beast",
       "type": "monster",
-      "atlas": "Assets/Combat/StarAbyss/star-armored-beast-strip.png",
+      "atlas": "Assets/ActorAtlases/StarArmoredBeast/atlas.png",
       "frameSize": {
-        "w": 320,
-        "h": 512
+        "w": 256,
+        "h": 256
       },
       "actions": [
         {
           "name": "idle",
-          "atlas": "Assets/Combat/StarAbyss/star-armored-beast-strip.png",
-          "fps": 4,
+          "atlas": "Assets/ActorAtlases/StarArmoredBeast/atlas.png",
+          "fps": 6,
           "loop": true,
           "order": [
-            0
+            0,
+            1
           ],
           "frames": [
             {
               "x": 0,
               "y": 0,
-              "w": 320,
-              "h": 512
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 0,
+              "w": 256,
+              "h": 256
             }
           ]
         },
         {
           "name": "move",
-          "atlas": "Assets/Combat/StarAbyss/star-armored-beast-strip.png",
+          "atlas": "Assets/ActorAtlases/StarArmoredBeast/atlas.png",
           "fps": 8,
           "loop": true,
           "order": [
             0,
-            1
+            1,
+            2,
+            3
           ],
           "frames": [
             {
-              "x": 320,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 0,
+              "y": 256,
+              "w": 256,
+              "h": 256
             },
             {
-              "x": 640,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 256,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 256,
+              "w": 256,
+              "h": 256
             }
           ]
         },
         {
           "name": "attack",
-          "atlas": "Assets/Combat/StarAbyss/star-armored-beast-strip.png",
+          "atlas": "Assets/ActorAtlases/StarArmoredBeast/atlas.png",
           "fps": 10,
           "loop": false,
           "order": [
             0,
             1,
-            2
+            2,
+            3
           ],
           "frames": [
             {
-              "x": 640,
-              "y": 0,
-              "w": 320,
-              "h": 512
-            },
-            {
-              "x": 960,
-              "y": 0,
-              "w": 320,
-              "h": 512
-            },
-            {
               "x": 0,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 512,
+              "w": 256,
+              "h": 256
             }
           ]
         },
         {
           "name": "hurt",
-          "atlas": "Assets/Combat/StarAbyss/star-armored-beast-strip.png",
+          "atlas": "Assets/ActorAtlases/StarArmoredBeast/atlas.png",
           "fps": 8,
           "loop": false,
           "order": [
@@ -2164,42 +2312,54 @@
           ],
           "frames": [
             {
-              "x": 1280,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 0,
+              "y": 768,
+              "w": 256,
+              "h": 256
             },
             {
-              "x": 0,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 256,
+              "y": 768,
+              "w": 256,
+              "h": 256
             }
           ]
         },
         {
           "name": "death",
-          "atlas": "Assets/Combat/StarAbyss/star-armored-beast-strip.png",
+          "atlas": "Assets/ActorAtlases/StarArmoredBeast/atlas.png",
           "fps": 8,
           "loop": false,
           "order": [
             0,
             1,
-            1,
-            1
+            2,
+            3
           ],
           "frames": [
             {
-              "x": 1280,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 0,
+              "y": 1024,
+              "w": 256,
+              "h": 256
             },
             {
-              "x": 1600,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 256,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 1024,
+              "w": 256,
+              "h": 256
             }
           ]
         }
@@ -2208,87 +2368,115 @@
     {
       "id": "void-wing-spirit",
       "type": "monster",
-      "atlas": "Assets/Combat/StarAbyss/void-wing-spirit-strip.png",
+      "atlas": "Assets/ActorAtlases/VoidWingSpirit/atlas.png",
       "frameSize": {
-        "w": 320,
-        "h": 512
+        "w": 256,
+        "h": 256
       },
       "actions": [
         {
           "name": "idle",
-          "atlas": "Assets/Combat/StarAbyss/void-wing-spirit-strip.png",
-          "fps": 4,
+          "atlas": "Assets/ActorAtlases/VoidWingSpirit/atlas.png",
+          "fps": 6,
           "loop": true,
           "order": [
-            0
+            0,
+            1
           ],
           "frames": [
             {
               "x": 0,
               "y": 0,
-              "w": 320,
-              "h": 512
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 0,
+              "w": 256,
+              "h": 256
             }
           ]
         },
         {
           "name": "move",
-          "atlas": "Assets/Combat/StarAbyss/void-wing-spirit-strip.png",
+          "atlas": "Assets/ActorAtlases/VoidWingSpirit/atlas.png",
           "fps": 8,
           "loop": true,
           "order": [
             0,
-            1
+            1,
+            2,
+            3
           ],
           "frames": [
             {
-              "x": 320,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 0,
+              "y": 256,
+              "w": 256,
+              "h": 256
             },
             {
-              "x": 640,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 256,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 256,
+              "w": 256,
+              "h": 256
             }
           ]
         },
         {
           "name": "attack",
-          "atlas": "Assets/Combat/StarAbyss/void-wing-spirit-strip.png",
+          "atlas": "Assets/ActorAtlases/VoidWingSpirit/atlas.png",
           "fps": 10,
           "loop": false,
           "order": [
             0,
             1,
-            2
+            2,
+            3
           ],
           "frames": [
             {
-              "x": 640,
-              "y": 0,
-              "w": 320,
-              "h": 512
-            },
-            {
-              "x": 960,
-              "y": 0,
-              "w": 320,
-              "h": 512
-            },
-            {
               "x": 0,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 512,
+              "w": 256,
+              "h": 256
             }
           ]
         },
         {
           "name": "hurt",
-          "atlas": "Assets/Combat/StarAbyss/void-wing-spirit-strip.png",
+          "atlas": "Assets/ActorAtlases/VoidWingSpirit/atlas.png",
           "fps": 8,
           "loop": false,
           "order": [
@@ -2297,42 +2485,54 @@
           ],
           "frames": [
             {
-              "x": 1280,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 0,
+              "y": 768,
+              "w": 256,
+              "h": 256
             },
             {
-              "x": 0,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 256,
+              "y": 768,
+              "w": 256,
+              "h": 256
             }
           ]
         },
         {
           "name": "death",
-          "atlas": "Assets/Combat/StarAbyss/void-wing-spirit-strip.png",
+          "atlas": "Assets/ActorAtlases/VoidWingSpirit/atlas.png",
           "fps": 8,
           "loop": false,
           "order": [
             0,
             1,
-            1,
-            1
+            2,
+            3
           ],
           "frames": [
             {
-              "x": 1280,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 0,
+              "y": 1024,
+              "w": 256,
+              "h": 256
             },
             {
-              "x": 1600,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 256,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 1024,
+              "w": 256,
+              "h": 256
             }
           ]
         }
@@ -2341,87 +2541,115 @@
     {
       "id": "meteor-guardian",
       "type": "monster",
-      "atlas": "Assets/Combat/StarAbyss/meteor-guardian-strip.png",
+      "atlas": "Assets/ActorAtlases/MeteorGuardian/atlas.png",
       "frameSize": {
-        "w": 320,
-        "h": 512
+        "w": 256,
+        "h": 256
       },
       "actions": [
         {
           "name": "idle",
-          "atlas": "Assets/Combat/StarAbyss/meteor-guardian-strip.png",
-          "fps": 4,
+          "atlas": "Assets/ActorAtlases/MeteorGuardian/atlas.png",
+          "fps": 6,
           "loop": true,
           "order": [
-            0
+            0,
+            1
           ],
           "frames": [
             {
               "x": 0,
               "y": 0,
-              "w": 320,
-              "h": 512
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 0,
+              "w": 256,
+              "h": 256
             }
           ]
         },
         {
           "name": "move",
-          "atlas": "Assets/Combat/StarAbyss/meteor-guardian-strip.png",
+          "atlas": "Assets/ActorAtlases/MeteorGuardian/atlas.png",
           "fps": 8,
           "loop": true,
           "order": [
             0,
-            1
+            1,
+            2,
+            3
           ],
           "frames": [
             {
-              "x": 320,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 0,
+              "y": 256,
+              "w": 256,
+              "h": 256
             },
             {
-              "x": 640,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 256,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 256,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 256,
+              "w": 256,
+              "h": 256
             }
           ]
         },
         {
           "name": "attack",
-          "atlas": "Assets/Combat/StarAbyss/meteor-guardian-strip.png",
+          "atlas": "Assets/ActorAtlases/MeteorGuardian/atlas.png",
           "fps": 10,
           "loop": false,
           "order": [
             0,
             1,
-            2
+            2,
+            3
           ],
           "frames": [
             {
-              "x": 640,
-              "y": 0,
-              "w": 320,
-              "h": 512
-            },
-            {
-              "x": 960,
-              "y": 0,
-              "w": 320,
-              "h": 512
-            },
-            {
               "x": 0,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 256,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 512,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 512,
+              "w": 256,
+              "h": 256
             }
           ]
         },
         {
           "name": "hurt",
-          "atlas": "Assets/Combat/StarAbyss/meteor-guardian-strip.png",
+          "atlas": "Assets/ActorAtlases/MeteorGuardian/atlas.png",
           "fps": 8,
           "loop": false,
           "order": [
@@ -2430,42 +2658,54 @@
           ],
           "frames": [
             {
-              "x": 1280,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 0,
+              "y": 768,
+              "w": 256,
+              "h": 256
             },
             {
-              "x": 0,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 256,
+              "y": 768,
+              "w": 256,
+              "h": 256
             }
           ]
         },
         {
           "name": "death",
-          "atlas": "Assets/Combat/StarAbyss/meteor-guardian-strip.png",
+          "atlas": "Assets/ActorAtlases/MeteorGuardian/atlas.png",
           "fps": 8,
           "loop": false,
           "order": [
             0,
             1,
-            1,
-            1
+            2,
+            3
           ],
           "frames": [
             {
-              "x": 1280,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 0,
+              "y": 1024,
+              "w": 256,
+              "h": 256
             },
             {
-              "x": 1600,
-              "y": 0,
-              "w": 320,
-              "h": 512
+              "x": 256,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 512,
+              "y": 1024,
+              "w": 256,
+              "h": 256
+            },
+            {
+              "x": 768,
+              "y": 1024,
+              "w": 256,
+              "h": 256
             }
           ]
         }
