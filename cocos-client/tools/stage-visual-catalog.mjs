@@ -1,16 +1,16 @@
 const monsterAtlasPaths = Object.freeze({
-  'moss-wolf': 'Assets/ActorAtlases/MossWolf/atlas',
-  'green-wing-moth': 'Assets/ActorAtlases/GreenWingMoth/atlas',
-  'bamboo-warden': 'Assets/ActorAtlases/BambooWarden/atlas',
-  'fog-spider': 'Assets/ActorAtlases/FogSpider/atlas',
-  'lantern-wraith': 'Assets/ActorAtlases/LanternWraith/atlas',
-  'mist-deer-king': 'Assets/ActorAtlases/MistDeerKing/atlas',
-  'lava-lizard': 'Assets/ActorAtlases/LavaLizard/atlas',
-  'ember-crow': 'Assets/ActorAtlases/EmberCrow/atlas',
-  'flame-ogre': 'Assets/ActorAtlases/FlameOgre/atlas',
-  'star-armored-beast': 'Assets/ActorAtlases/StarArmoredBeast/atlas',
-  'void-wing-spirit': 'Assets/ActorAtlases/VoidWingSpirit/atlas',
-  'meteor-guardian': 'Assets/ActorAtlases/MeteorGuardian/atlas',
+  'moss-wolf': 'Assets/ActorAtlases/MossWolf/atlas/texture',
+  'green-wing-moth': 'Assets/ActorAtlases/GreenWingMoth/atlas/texture',
+  'bamboo-warden': 'Assets/ActorAtlases/BambooWarden/atlas/texture',
+  'fog-spider': 'Assets/ActorAtlases/FogSpider/atlas/texture',
+  'lantern-wraith': 'Assets/ActorAtlases/LanternWraith/atlas/texture',
+  'mist-deer-king': 'Assets/ActorAtlases/MistDeerKing/atlas/texture',
+  'lava-lizard': 'Assets/ActorAtlases/LavaLizard/atlas/texture',
+  'ember-crow': 'Assets/ActorAtlases/EmberCrow/atlas/texture',
+  'flame-ogre': 'Assets/ActorAtlases/FlameOgre/atlas/texture',
+  'star-armored-beast': 'Assets/ActorAtlases/StarArmoredBeast/atlas/texture',
+  'void-wing-spirit': 'Assets/ActorAtlases/VoidWingSpirit/atlas/texture',
+  'meteor-guardian': 'Assets/ActorAtlases/MeteorGuardian/atlas/texture',
 })
 
 const stageVisuals = Object.freeze({

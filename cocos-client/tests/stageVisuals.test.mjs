@@ -11,6 +11,7 @@ import {
   stageResourcePlanFor,
   stageVisualFor,
 } from '../tools/stage-visual-catalog.mjs'
+import { resourcePathForPng } from '../tools/strip-animation-runtime.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 
@@ -55,7 +56,7 @@ test('stage visual catalog exposes background and theme metadata', () => {
 
 test('stage resource plans map catalog backgrounds and manifest monster atlases only', () => {
   const manifest = JSON.parse(readFileSync(join(root, 'assets', 'resources', 'Data', 'animation-atlas.json'), 'utf8'))
-  const atlasByActor = new Map(manifest.actors.map((actor) => [actor.id, actor.atlas.replace(/\.png$/, '')]))
+  const atlasByActor = new Map(manifest.actors.map((actor) => [actor.id, resourcePathForPng(actor.atlas)]))
   const expectedActors = [
     ['moss-wolf', 'green-wing-moth', 'bamboo-warden'],
     ['fog-spider', 'lantern-wraith', 'mist-deer-king'],
@@ -68,6 +69,10 @@ test('stage resource plans map catalog backgrounds and manifest monster atlases 
     const resourcePlan = stageResourcePlanFor(stageId)
     assert.deepEqual(visual.monsterActorIds, expectedActors[stageId - 1])
     assert.equal(Object.isFrozen(visual.monsterActorIds), true)
+    assert.deepEqual(
+      resourcePlan.assets.filter(({ kind }) => kind === 'texture').map(({ path }) => path),
+      expectedActors[stageId - 1].map((actorId) => atlasByActor.get(actorId)),
+    )
     assert.deepEqual(resourcePlan, {
       stageId,
       assets: [

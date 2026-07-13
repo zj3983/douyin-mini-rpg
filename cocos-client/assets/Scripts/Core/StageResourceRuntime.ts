@@ -61,19 +61,26 @@ export class StageResourceRuntime<T> {
     if (this.activeStageId === plan.stageId && retained && samePlan(retained.plan, plan)) return false
 
     const reusable = [...this.pending.values()].find((batch) => samePlan(batch.plan, plan))
+    const nextStageId = plan.stageId + 1
+    this.cancelPending((batch) => batch !== reusable && (batch.required || batch.plan.stageId !== nextStageId))
+    if (
+      this.prefetchedStageId !== null
+      && this.prefetchedStageId !== plan.stageId
+      && this.prefetchedStageId !== nextStageId
+    ) {
+      this.releaseStage(this.prefetchedStageId)
+    }
+
     if (reusable) {
-      this.cancelPending((batch) => batch !== reusable)
       reusable.required = true
       return true
     }
 
-    this.cancelPending(() => true)
     if (retained && samePlan(retained.plan, plan)) {
-      const previousStageId = this.activeStageId
       this.activeStageId = plan.stageId
       if (this.prefetchedStageId === plan.stageId) this.prefetchedStageId = null
       this.adapter.ready(plan.stageId)
-      this.pruneRetained(new Set([previousStageId, plan.stageId].filter((value): value is number => value !== null)))
+      this.pruneRetained(new Set([plan.stageId, this.prefetchedStageId].filter((value): value is number => value !== null)))
       return true
     }
 
@@ -171,7 +178,10 @@ export class StageResourceRuntime<T> {
       if (this.prefetchedStageId === batch.plan.stageId) this.prefetchedStageId = null
       this.adapter.ready(batch.plan.stageId)
       this.pruneRetained(new Set(
-        [batch.plan.stageId, this.prefetchedStageId]
+        [
+          batch.plan.stageId,
+          this.prefetchedStageId === batch.plan.stageId + 1 ? this.prefetchedStageId : null,
+        ]
           .filter((value): value is number => value !== null),
       ))
       return

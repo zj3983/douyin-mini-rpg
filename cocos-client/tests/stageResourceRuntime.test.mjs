@@ -104,6 +104,24 @@ test('activating a completed prefetch reuses it without load and then stage 3 ca
   assert.deepEqual(harness.runtime.snapshot().pendingStageIds, [3])
 })
 
+test('activating a completed prefetch immediately releases the previous active stage', () => {
+  const harness = createHarness()
+  const stages = [1, 2, 3].map((stageId) => plan(stageId))
+
+  harness.runtime.activate(stages[0]); harness.resolvePlan(stages[0])
+  harness.runtime.prefetch(stages[1]); harness.resolvePlan(stages[1])
+  const loadsBeforeActivate = harness.actions.filter((action) => action.startsWith('load:')).length
+
+  harness.runtime.activate(stages[1])
+  assert.equal(harness.actions.filter((action) => action.startsWith('load:')).length, loadsBeforeActivate)
+  assert.deepEqual(harness.runtime.snapshot().retainedStageIds, [2])
+  assert.equal(harness.actions.filter((action) => action.startsWith('release:stage-1/')).length, 4)
+
+  harness.runtime.prefetch(stages[2]); harness.reject(stages[2].assets[0])
+  assert.deepEqual(harness.runtime.snapshot().retainedStageIds, [2])
+  assert.equal(harness.actions.filter((action) => action.startsWith('release:stage-1/')).length, 4)
+})
+
 test('completed next-stage prefetch prunes older resources and retains active plus next', () => {
   const harness = createHarness()
   const stages = [1, 2, 3, 4].map((stageId) => plan(stageId))
@@ -113,7 +131,7 @@ test('completed next-stage prefetch prunes older resources and retains active pl
   harness.runtime.activate(stages[1])
   harness.runtime.prefetch(stages[2]); harness.resolvePlan(stages[2])
   harness.runtime.activate(stages[2])
-  assert.deepEqual(harness.runtime.snapshot().retainedStageIds, [2, 3])
+  assert.deepEqual(harness.runtime.snapshot().retainedStageIds, [3])
   assert.equal(harness.actions.filter((action) => action.startsWith('release:stage-1/')).length, 4)
 
   harness.runtime.prefetch(stages[3]); harness.resolvePlan(stages[3])
@@ -232,7 +250,7 @@ test('activate promotes an in-flight prefetch for the same plan without duplicat
   assert.equal(harness.actions.filter((action) => action === 'ready:2').length, 1)
 })
 
-test('required failure keeps the old active stage while unrelated optional work cannot ready and is cancelled on retry', () => {
+test('required failure keeps the old active stage and preserves valid pending next-stage work for retry', () => {
   const harness = createHarness()
   const stages = [1, 2, 3].map((stageId) => plan(stageId))
 
@@ -248,15 +266,57 @@ test('required failure keeps the old active stage while unrelated optional work 
   assert.equal(harness.actions.some((action) => action.startsWith('release:stage-1/')), false)
   assert.equal(harness.actions.includes('ready:3'), false)
   assert.equal(harness.runtime.activate(stages[1]), true)
-  assert.equal(harness.released.has(optionalLoaded), true)
+  assert.equal(harness.released.has(optionalLoaded), false)
   harness.resolvePlan(stages[1], 1)
-  const lateOptional = stages[2].assets.slice(1).map((descriptor) => harness.resolve(descriptor))
+  const completedOptional = stages[2].assets.slice(1).map((descriptor) => harness.resolve(descriptor))
 
   assert.equal(harness.runtime.snapshot().activeStageId, 2)
-  assert.deepEqual(harness.runtime.snapshot().retainedStageIds, [2])
+  assert.deepEqual(harness.runtime.snapshot().retainedStageIds, [2, 3])
   assert.equal(harness.actions.filter((action) => action.startsWith('release:stage-1/')).length, 4)
   assert.equal(harness.actions.includes('ready:3'), false)
-  assert.equal(lateOptional.every((resource) => harness.released.has(resource)), true)
+  assert.equal(harness.released.has(optionalLoaded), false)
+  assert.equal(completedOptional.every((resource) => harness.released.has(resource)), false)
+})
+
+test('cross-stage activation drops a stale prefetch and retains a concurrently completed next stage', () => {
+  const harness = createHarness()
+  const stages = [1, 2, 3, 4].map((stageId) => plan(stageId))
+
+  harness.runtime.activate(stages[0]); harness.resolvePlan(stages[0])
+  harness.runtime.prefetch(stages[1]); harness.resolvePlan(stages[1])
+  harness.runtime.activate(stages[2])
+
+  assert.deepEqual(harness.runtime.snapshot().retainedStageIds, [1])
+  assert.equal(harness.actions.filter((action) => action.startsWith('release:stage-2/')).length, 4)
+
+  harness.runtime.prefetch(stages[3])
+  harness.resolvePlan(stages[2])
+  harness.resolvePlan(stages[3])
+
+  assert.deepEqual(harness.runtime.snapshot().retainedStageIds, [3, 4])
+  assert.equal(harness.actions.filter((action) => action.startsWith('release:stage-1/')).length, 4)
+  assert.equal(harness.actions.filter((action) => action.startsWith('release:stage-2/')).length, 4)
+})
+
+test('required retry preserves its completed next-stage prefetch but not an older stale prefetch', () => {
+  const harness = createHarness()
+  const stages = [1, 2, 3, 4].map((stageId) => plan(stageId))
+
+  harness.runtime.activate(stages[0]); harness.resolvePlan(stages[0])
+  harness.runtime.prefetch(stages[1]); harness.resolvePlan(stages[1])
+  harness.runtime.activate(stages[2])
+  harness.runtime.prefetch(stages[3]); harness.resolvePlan(stages[3])
+  harness.reject(stages[2].assets[0])
+
+  assert.deepEqual(harness.runtime.snapshot().retainedStageIds, [1, 4])
+  assert.equal(harness.actions.filter((action) => action.startsWith('release:stage-2/')).length, 4)
+  const loadsBeforeRetry = harness.actions.filter((action) => action.startsWith('load:stage-4/')).length
+
+  harness.runtime.activate(stages[2]); harness.resolvePlan(stages[2], 1)
+  assert.equal(harness.actions.filter((action) => action.startsWith('load:stage-4/')).length, loadsBeforeRetry)
+  assert.deepEqual(harness.runtime.snapshot().retainedStageIds, [3, 4])
+  assert.equal(harness.actions.filter((action) => action.startsWith('release:stage-1/')).length, 4)
+  assert.equal(harness.actions.filter((action) => action.startsWith('release:stage-2/')).length, 4)
 })
 
 test('failed required activation preserves active stage, warns once, and can retry', () => {
