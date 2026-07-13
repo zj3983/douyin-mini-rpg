@@ -268,3 +268,9 @@ test('keeps immutable asset caching and validates a dynamically discovered gzipp
   assert.match(workflow, /grep[^\n]*Vary:[^\n]*Accept-Encoding[^\n]*"\$GZIP_HEADERS"/i);
   assert.match(workflow, /grep[^\n]*Cache-Control:[^\n]*public[^\n]*max-age=2592000[^\n]*immutable[^\n]*"\$GZIP_HEADERS"/i);
 });
+
+test('public gzip verification retries after nginx reload and reports final headers', () => {
+  assert.match(workflow, /for i in \$\(seq 1 10\); do[\s\S]*?Accept-Encoding: gzip[\s\S]*?sleep 1[\s\S]*?done/);
+  assert.match(workflow, /GZIP_READY=0[\s\S]*?GZIP_READY=1/);
+  assert.match(workflow, /if \[ "\$GZIP_READY" -ne 1 \]; then[\s\S]*?cat "\$GZIP_HEADERS"[\s\S]*?exit 1/);
+});

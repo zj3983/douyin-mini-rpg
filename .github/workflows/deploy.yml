@@ -535,10 +535,22 @@ jobs:
             JS_URL="/game/douyin-mini-rpg/cocos-js/$JS_FILE"
             GZIP_HEADERS="$(mktemp)"
             trap 'rm -f "$GZIP_HEADERS"' EXIT
-            curl -fsS -D "$GZIP_HEADERS" -o /dev/null -H 'Host: mcp.edcedc.cn' -H 'Accept-Encoding: gzip' "http://${{ env.DEPLOY_HOST }}$JS_URL"
-            grep -qiE '^Content-Encoding:[[:space:]]*gzip([[:space:]]|\r)*$' "$GZIP_HEADERS"
-            grep -qiE '^Vary:.*Accept-Encoding' "$GZIP_HEADERS"
-            grep -qiE '^Cache-Control:.*public.*max-age=2592000.*immutable' "$GZIP_HEADERS"
+            GZIP_READY=0
+            for i in $(seq 1 10); do
+              if curl -fsS -D "$GZIP_HEADERS" -o /dev/null -H 'Host: mcp.edcedc.cn' -H 'Accept-Encoding: gzip' "http://${{ env.DEPLOY_HOST }}$JS_URL" \
+                && grep -qiE '^Content-Encoding:[[:space:]]*gzip([[:space:]]|\r)*$' "$GZIP_HEADERS" \
+                && grep -qiE '^Vary:.*Accept-Encoding' "$GZIP_HEADERS" \
+                && grep -qiE '^Cache-Control:.*public.*max-age=2592000.*immutable' "$GZIP_HEADERS"; then
+                GZIP_READY=1
+                break
+              fi
+              sleep 1
+            done
+            if [ "$GZIP_READY" -ne 1 ]; then
+              echo "Gzip response validation failed after nginx reload"
+              cat "$GZIP_HEADERS"
+              exit 1
+            fi
             rm -f "$GZIP_HEADERS"
             trap - EXIT
 
