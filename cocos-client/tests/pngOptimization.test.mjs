@@ -930,6 +930,100 @@ print(json.dumps(module.optimize_png(pathlib.Path(sys.argv[2]), apply=True)))
   assert.deepEqual(readdirSync(root), ['asset.png'])
 })
 
+test('apply reopens and validates the temporary PNG before replacing the source', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'runtime-png-disk-validation-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const asset = join(root, 'asset.png')
+  createFixture(asset)
+
+  const result = invokeModule(`
+import json
+from unittest.mock import patch
+
+source = pathlib.Path(sys.argv[2])
+before = source.read_bytes()
+validation_calls = []
+copystat_calls = []
+
+def reject_written_candidate(original, candidate, *, min_psnr):
+    validation_calls.append({
+        "source": original.name,
+        "candidateExists": candidate.exists(),
+        "candidateReadable": bool(candidate.read_bytes()),
+        "minPsnr": min_psnr,
+    })
+    return {"candidateBytes": candidate.stat().st_size, "psnr": None,
+            "accepted": False, "reason": "dimensions-changed"}
+
+def copystat_spy(original, candidate, *, follow_symlinks=True):
+    copystat_calls.append([original.name, candidate.name, follow_symlinks])
+
+error = None
+try:
+    with patch.object(module, "validate_candidate", side_effect=reject_written_candidate), \
+         patch.object(module.shutil, "copystat", side_effect=copystat_spy):
+        module.optimize_png(source, apply=True, min_psnr=47.0)
+except RuntimeError as caught:
+    error = str(caught)
+
+print(json.dumps({
+    "error": error,
+    "validationCalls": validation_calls,
+    "copystatCalls": copystat_calls,
+    "sourceUnchanged": source.read_bytes() == before,
+    "entries": sorted(path.name for path in source.parent.iterdir()),
+}))
+`, [asset])
+
+  assert.match(result.error, /temporary PNG validation failed.*dimensions-changed/)
+  assert.deepEqual(result.validationCalls, [{
+    source: 'asset.png',
+    candidateExists: true,
+    candidateReadable: true,
+    minPsnr: 47,
+  }])
+  assert.deepEqual(result.copystatCalls, [])
+  assert.equal(result.sourceUnchanged, true)
+  assert.deepEqual(result.entries, ['asset.png'])
+})
+
+test('successful apply preserves source metadata before atomic replacement', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'runtime-png-metadata-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const asset = join(root, 'asset.png')
+  createFixture(asset)
+
+  const result = invokeModule(`
+import json
+from unittest.mock import patch
+
+source = pathlib.Path(sys.argv[2])
+original_copystat = module.shutil.copystat
+events = []
+
+def copystat_spy(original, candidate, *, follow_symlinks=True):
+    events.append(["copystat", original.name, candidate.name, follow_symlinks])
+    return original_copystat(original, candidate, follow_symlinks=follow_symlinks)
+
+original_replace = pathlib.Path.replace
+def replace_spy(candidate, target):
+    events.append(["replace", candidate.name, pathlib.Path(target).name])
+    return original_replace(candidate, target)
+
+with patch.object(module.shutil, "copystat", side_effect=copystat_spy), \
+     patch.object(pathlib.Path, "replace", replace_spy):
+    optimized = module.optimize_png(source, apply=True)
+
+print(json.dumps({"accepted": optimized["accepted"], "events": events}))
+`, [asset])
+
+  assert.equal(result.accepted, true)
+  assert.equal(result.events.length, 2)
+  assert.deepEqual(result.events[0].slice(0, 2), ['copystat', 'asset.png'])
+  assert.equal(result.events[0][3], false)
+  assert.deepEqual(result.events[1].slice(0, 3), ['replace', result.events[0][2], 'asset.png'])
+})
+
 test('temporary candidates are removed after not-smaller and quality rejections', (t) => {
   const root = mkdtempSync(join(tmpdir(), 'runtime-png-cleanup-rejections-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))

@@ -5,6 +5,7 @@ import io
 import json
 import math
 import os
+import shutil
 import stat
 import tempfile
 from pathlib import Path
@@ -177,7 +178,7 @@ def _encode_candidate(source: Path) -> bytes:
         return candidate.getvalue()
 
 
-def _replace_with_validated_bytes(source: Path, candidate_data: bytes) -> None:
+def _replace_with_validated_bytes(source: Path, candidate_data: bytes, *, min_psnr: float) -> None:
     temporary = tempfile.NamedTemporaryFile(
         mode="wb",
         prefix=f".{source.name}.",
@@ -192,6 +193,14 @@ def _replace_with_validated_bytes(source: Path, candidate_data: bytes) -> None:
         temporary.flush()
         os.fsync(temporary.fileno())
         temporary.close()
+
+        written_validation = validate_candidate(source, candidate, min_psnr=min_psnr)
+        if not written_validation["accepted"]:
+            raise RuntimeError(
+                f"temporary PNG validation failed: {written_validation['reason']}"
+            )
+
+        shutil.copystat(source, candidate, follow_symlinks=False)
         candidate.replace(source)
     finally:
         if not temporary.closed:
@@ -210,7 +219,7 @@ def optimize_png(source: Path, *, apply: bool, min_psnr: float = 42.0) -> dict[s
         **validation,
     }
     if result["accepted"] and apply:
-        _replace_with_validated_bytes(source, candidate_data)
+        _replace_with_validated_bytes(source, candidate_data, min_psnr=min_psnr)
     return result
 
 
