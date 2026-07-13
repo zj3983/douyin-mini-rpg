@@ -2,6 +2,7 @@
   "name": "void-trial-cocos-client",
   "uuid": "6cb8b9e4-cc8f-4d91-98c6-7d0bd0cbd717",
   "version": "0.1.0",
+  "type": "module",
   "creator": {
     "version": "3.8.8"
   },
