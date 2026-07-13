@@ -84,7 +84,7 @@ export class StageResourceRuntime<T> {
       return true
     }
 
-    if (retained) this.releaseStage(plan.stageId)
+    if (retained && this.activeStageId !== plan.stageId) this.releaseStage(plan.stageId)
     this.startBatch(plan, true)
     return true
   }
@@ -171,11 +171,14 @@ export class StageResourceRuntime<T> {
     if (this.destroyed || !batch.valid || this.pending.get(batch.id) !== batch) return
     batch.valid = false
     this.pending.delete(batch.id)
-    this.retained.set(batch.plan.stageId, { plan: batch.plan, loaded: batch.loaded })
+    const replaced = this.retained.get(batch.plan.stageId)
+    const completed = { plan: batch.plan, loaded: batch.loaded }
+    this.retained.set(batch.plan.stageId, completed)
 
     if (batch.required) {
       this.activeStageId = batch.plan.stageId
       if (this.prefetchedStageId === batch.plan.stageId) this.prefetchedStageId = null
+      if (replaced) this.releaseRetained(replaced)
       this.adapter.ready(batch.plan.stageId)
       this.pruneRetained(new Set(
         [
@@ -214,8 +217,12 @@ export class StageResourceRuntime<T> {
     const stage = this.retained.get(stageId)
     if (!stage) return
     this.retained.delete(stageId)
-    for (const loaded of stage.loaded) this.releaseLoaded(loaded)
+    this.releaseRetained(stage)
     if (this.prefetchedStageId === stageId) this.prefetchedStageId = null
+  }
+
+  private releaseRetained(stage: RetainedStage<T>) {
+    for (const loaded of stage.loaded) this.releaseLoaded(loaded)
   }
 
   private releaseLoaded(loaded: LoadedResource<T>) {

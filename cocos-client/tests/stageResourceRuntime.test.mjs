@@ -338,6 +338,87 @@ test('failed required activation preserves active stage, warns once, and can ret
   assert.equal(harness.runtime.snapshot().activeStageId, 2)
 })
 
+test('failed same-stage plan replacement keeps the old active resources intact', () => {
+  const harness = createHarness()
+  const original = plan(1)
+  const replacement = plan(1, ['replacement-a', 'replacement-b', 'replacement-c', 'replacement-d'])
+
+  harness.runtime.activate(original)
+  const originalResources = harness.resolvePlan(original)
+  harness.runtime.activate(replacement)
+
+  assert.equal(originalResources.some((resource) => harness.released.has(resource)), false)
+  const replacementFirst = harness.resolve(replacement.assets[0])
+  harness.reject(replacement.assets[1])
+  const replacementLate = replacement.assets.slice(2).map((descriptor) => harness.resolve(descriptor))
+
+  assert.equal(harness.runtime.snapshot().activeStageId, 1)
+  assert.deepEqual(harness.runtime.snapshot().retainedStageIds, [1])
+  assert.equal(originalResources.some((resource) => harness.released.has(resource)), false)
+  assert.equal(harness.released.has(replacementFirst), true)
+  assert.equal(replacementLate.every((resource) => harness.released.has(resource)), true)
+})
+
+test('successful same-stage plan replacement installs the new plan before releasing the old resources once', () => {
+  const harness = createHarness()
+  const original = plan(1)
+  const replacement = plan(1, ['replacement-a', 'replacement-b', 'replacement-c', 'replacement-d'])
+
+  harness.runtime.activate(original)
+  const originalResources = harness.resolvePlan(original)
+  harness.runtime.activate(replacement)
+  const replacementFirst = harness.resolve(replacement.assets[0])
+  assert.equal(originalResources.some((resource) => harness.released.has(resource)), false)
+  const replacementRest = replacement.assets.slice(1).map((descriptor) => harness.resolve(descriptor))
+
+  assert.equal(harness.runtime.snapshot().activeStageId, 1)
+  assert.deepEqual(harness.runtime.snapshot().retainedStageIds, [1])
+  assert.equal(originalResources.every((resource) => harness.released.has(resource)), true)
+  assert.equal(harness.actions.filter((action) => action.startsWith('release:stage-1/background:')).length, 1)
+  assert.equal([replacementFirst, ...replacementRest].some((resource) => harness.released.has(resource)), false)
+  assert.equal(harness.actions.filter((action) => action === 'ready:1').length, 2)
+})
+
+test('destroy during same-stage replacement releases old active pending success and late callbacks exactly once', () => {
+  const harness = createHarness()
+  const original = plan(1)
+  const replacement = plan(1, ['replacement-a', 'replacement-b', 'replacement-c', 'replacement-d'])
+
+  harness.runtime.activate(original)
+  const originalResources = harness.resolvePlan(original)
+  harness.runtime.activate(replacement)
+  const replacementFirst = harness.resolve(replacement.assets[0])
+  assert.equal(originalResources.some((resource) => harness.released.has(resource)), false)
+
+  harness.runtime.destroy()
+  harness.runtime.destroy()
+  const replacementLate = replacement.assets.slice(1).map((descriptor) => harness.resolve(descriptor))
+
+  const successful = [...originalResources, replacementFirst, ...replacementLate]
+  assert.equal(harness.released.size, successful.length)
+  assert.equal(successful.every((resource) => harness.released.has(resource)), true)
+  assert.deepEqual(harness.runtime.snapshot().retainedStageIds, [])
+})
+
+test('different-plan replacement of a non-active retained stage can release it before loading', () => {
+  const harness = createHarness()
+  const stage1 = plan(1)
+  const prefetched = plan(2)
+  const replacement = plan(2, ['replacement-a', 'replacement-b', 'replacement-c', 'replacement-d'])
+
+  harness.runtime.activate(stage1); harness.resolvePlan(stage1)
+  harness.runtime.prefetch(prefetched)
+  const prefetchedResources = harness.resolvePlan(prefetched)
+  harness.runtime.activate(replacement)
+  const replacementFirst = harness.resolve(replacement.assets[0])
+  harness.reject(replacement.assets[1])
+
+  assert.equal(prefetchedResources.every((resource) => harness.released.has(resource)), true)
+  assert.equal(harness.released.has(replacementFirst), true)
+  assert.equal(harness.runtime.snapshot().activeStageId, 1)
+  assert.deepEqual(harness.runtime.snapshot().retainedStageIds, [1])
+})
+
 test('rapid changes, stale callbacks, and destroy release every successful load exactly once', () => {
   const harness = createHarness()
   const stages = [1, 2, 3].map((stageId) => plan(stageId))
@@ -395,7 +476,24 @@ function runParitySequence(Runtime) {
   return { snapshot: harness.runtime.snapshot(), actions: harness.actions }
 }
 
+function runAtomicReplacementParitySequence(Runtime) {
+  const harness = createHarness(Runtime)
+  const original = plan(1)
+  const replacement = plan(1, ['replacement-a', 'replacement-b', 'replacement-c', 'replacement-d'])
+  harness.runtime.activate(original); harness.resolvePlan(original)
+  harness.runtime.activate(replacement)
+  harness.resolve(replacement.assets[0]); harness.reject(replacement.assets[1])
+  replacement.assets.slice(2).forEach((descriptor) => harness.resolve(descriptor))
+  harness.runtime.activate(replacement); harness.resolvePlan(replacement, 1)
+  harness.runtime.destroy()
+  return { snapshot: harness.runtime.snapshot(), actions: harness.actions }
+}
+
 test('TypeScript and ESM runtimes produce identical snapshots and adapter actions', async () => {
   const { StageResourceRuntime: TypeScriptRuntime } = await loadTypeScriptRuntime()
   assert.deepEqual(runParitySequence(TypeScriptRuntime), runParitySequence(StageResourceRuntime))
+  assert.deepEqual(
+    runAtomicReplacementParitySequence(TypeScriptRuntime),
+    runAtomicReplacementParitySequence(StageResourceRuntime),
+  )
 })
