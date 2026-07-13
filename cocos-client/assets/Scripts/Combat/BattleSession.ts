@@ -4,8 +4,17 @@ import { parseStageOneConfig } from './StageOneConfig.ts'
 import type { StageOneCombatConfig } from './StageOneConfig.ts'
 
 export type BattlePhase = 'intro' | 'mowing' | 'pressure' | 'boss' | 'settled' | 'defeated'
+type BattleTerminalReason = 'boss-defeated' | 'timeout' | 'button'
 
 export interface EnemySnapshot {
+  readonly id: number
+  readonly kind: EnemyKind
+  readonly position: Readonly<Point2>
+  readonly alive: boolean
+  readonly spawnedAt: number
+}
+
+interface MutableEnemySnapshot {
   id: number
   kind: EnemyKind
   position: Point2
@@ -13,28 +22,22 @@ export interface EnemySnapshot {
   spawnedAt: number
 }
 
-export interface BattleSession {
-  stageId: number
-  generation: number
-  elapsed: number
-  phase: BattlePhase
-  enemies: Map<number, EnemySnapshot>
-  events: CombatEvent[]
-  settled: boolean
-}
-
-interface SessionAuthority {
-  config: StageOneCombatConfig
-  random: () => number
-  nextEnemyId: number
-  nextOrdinaryKind: Exclude<EnemyKind, 'bamboo-warden'>
-  nextSpawnAt: number
-  bossEntered: boolean
-}
-
+const SESSION_TOKEN = Symbol('BattleSession')
+const MAX_EXTERNAL_DELTA_SECONDS = 0.25
 const MAX_SUBSTEP_SECONDS = 1 / 60
+const MAX_SPAWN_ITERATIONS_PER_STEP = 18
 const TIME_EPSILON = 1e-10
-const authorities = new WeakMap<BattleSession, SessionAuthority>()
+const MAX_UINT32 = 0xffffffff
+
+let constructSession: (
+  stageId: number,
+  seed: number,
+  config: StageOneCombatConfig,
+) => BattleSession
+let advanceSession: (session: BattleSession, deltaSeconds: number) => void
+let defeatEnemy: (session: BattleSession, enemyId: number) => boolean
+let settleSession: (session: BattleSession, reason: BattleTerminalReason) => boolean
+let drainSessionEvents: (session: BattleSession) => readonly CombatEvent[]
 
 function normalizeTime(value: number): number {
   const nearestFrame = Math.round(value * 60) / 60
@@ -42,103 +45,231 @@ function normalizeTime(value: number): number {
   return Math.round(value * 1e12) / 1e12
 }
 
-function authorityFor(session: BattleSession): SessionAuthority {
-  const authority = authorities.get(session)
-  if (!authority) throw new Error('BattleSession was not created by createBattleSession')
-  return authority
-}
-
-function aliveCount(session: BattleSession): number {
-  let count = 0
-  for (const enemy of session.enemies.values()) {
-    if (enemy.alive) count += 1
-  }
-  return count
-}
-
-function pushEvent(session: BattleSession, event: CombatEvent): void {
-  session.events.push(event)
-}
-
-function spawnOrdinary(session: BattleSession, authority: SessionAuthority, at: number): void {
-  if (aliveCount(session) >= authority.config.activeEnemyCap) return
-
-  const kind = authority.nextOrdinaryKind
-  authority.nextOrdinaryKind = kind === 'moss-wolf' ? 'green-wing-moth' : 'moss-wolf'
-  const enemy: EnemySnapshot = {
-    id: authority.nextEnemyId,
-    kind,
-    position: {
-      x: authority.random() * 2 - 1,
-      y: authority.random() * 2 - 1,
-    },
-    alive: true,
-    spawnedAt: at,
-  }
-  authority.nextEnemyId += 1
-  session.enemies.set(enemy.id, enemy)
-}
-
-function processOrdinarySpawns(session: BattleSession, authority: SessionAuthority, through: number): void {
-  const cadence = session.phase === 'intro'
-    ? authority.config.spawnCadenceSeconds.intro
-    : session.phase === 'mowing'
-      ? authority.config.spawnCadenceSeconds.mowing
-      : authority.config.spawnCadenceSeconds.pressure
-
-  while (authority.nextSpawnAt <= through + TIME_EPSILON) {
-    spawnOrdinary(session, authority, authority.nextSpawnAt)
-    authority.nextSpawnAt += cadence
+function freezeEventCopy(event: CombatEvent): CombatEvent {
+  switch (event.type) {
+    case 'stage-entered':
+    case 'stage-settled':
+      return Object.freeze({ type: event.type, stageId: event.stageId, at: event.at })
+    case 'animation-requested':
+      return Object.freeze({ type: event.type, actorId: event.actorId, action: event.action, at: event.at })
+    case 'attack-telegraphed':
+      return Object.freeze({
+        type: event.type,
+        enemyId: event.enemyId,
+        attackId: event.attackId,
+        area: Object.freeze({ ...event.area }),
+        at: event.at,
+      })
+    case 'damage-resolved':
+      return Object.freeze({
+        type: event.type,
+        sourceId: event.sourceId,
+        targetId: event.targetId,
+        amount: event.amount,
+        at: event.at,
+      })
+    case 'enemy-defeated':
+    case 'boss-entered':
+      return Object.freeze({ type: event.type, enemyId: event.enemyId, at: event.at })
   }
 }
 
-function enterPhase(session: BattleSession, authority: SessionAuthority, phase: BattlePhase, at: number): void {
-  session.phase = phase
-  if (phase === 'mowing') {
-    authority.nextSpawnAt = at + authority.config.spawnCadenceSeconds.mowing
-  } else if (phase === 'pressure') {
-    authority.nextSpawnAt = at + authority.config.spawnCadenceSeconds.pressure
-  } else if (phase === 'boss' && !authority.bossEntered) {
-    authority.bossEntered = true
-    for (const enemy of session.enemies.values()) {
+function requireBattleSession(value: BattleSession): BattleSession {
+  if (!(value instanceof BattleSession)) throw new TypeError('session must be a BattleSession')
+  return value
+}
+
+export class BattleSession {
+  #stageId: number
+  #generation = 1
+  #elapsed = 0
+  #phase: BattlePhase = 'intro'
+  #settled = false
+  #terminalReason: BattleTerminalReason | null = null
+  #enemies = new Map<number, MutableEnemySnapshot>()
+  #events: CombatEvent[] = []
+  #config: StageOneCombatConfig
+  #random: () => number
+  #nextEnemyId = 1
+  #nextOrdinaryKind: Exclude<EnemyKind, 'bamboo-warden'>
+  #nextSpawnAt: number
+  #bossEntered = false
+
+  private constructor(token: symbol, stageId: number, seed: number, config: StageOneCombatConfig) {
+    if (token !== SESSION_TOKEN) throw new TypeError('BattleSession must be created by createBattleSession')
+    this.#stageId = stageId
+    this.#config = config
+    this.#random = createSeededRandom(seed)
+    this.#nextOrdinaryKind = this.#random() < 0.5 ? 'moss-wolf' : 'green-wing-moth'
+    this.#nextSpawnAt = config.spawnCadenceSeconds.intro
+    this.#pushEvent({ type: 'stage-entered', stageId, at: 0 })
+  }
+
+  static {
+    constructSession = (stageId, seed, config) => new BattleSession(SESSION_TOKEN, stageId, seed, config)
+    advanceSession = (session, deltaSeconds) => session.#advance(deltaSeconds)
+    defeatEnemy = (session, enemyId) => session.#registerEnemyDefeat(enemyId)
+    settleSession = (session, reason) => session.#settle(reason)
+    drainSessionEvents = (session) => session.#drainCombatEvents()
+  }
+
+  get stageId(): number { return this.#stageId }
+  get generation(): number { return this.#generation }
+  get elapsed(): number { return this.#elapsed }
+  get phase(): BattlePhase { return this.#phase }
+  get settled(): boolean { return this.#settled }
+  get terminalReason(): BattleTerminalReason | null { return this.#terminalReason }
+
+  enemySnapshots(): readonly EnemySnapshot[] {
+    const snapshots = Array.from(this.#enemies.values(), (enemy) => Object.freeze({
+      id: enemy.id,
+      kind: enemy.kind,
+      position: Object.freeze({ x: enemy.position.x, y: enemy.position.y }),
+      alive: enemy.alive,
+      spawnedAt: enemy.spawnedAt,
+    }))
+    return Object.freeze(snapshots)
+  }
+
+  #isTerminal(): boolean {
+    return this.#settled || this.#phase === 'settled' || this.#phase === 'defeated'
+  }
+
+  #aliveCount(): number {
+    let count = 0
+    for (const enemy of this.#enemies.values()) {
+      if (enemy.alive) count += 1
+    }
+    return count
+  }
+
+  #pushEvent(event: CombatEvent): void {
+    this.#events.push(event)
+  }
+
+  #spawnOrdinary(at: number): void {
+    if (this.#aliveCount() >= this.#config.activeEnemyCap) return
+
+    const kind = this.#nextOrdinaryKind
+    this.#nextOrdinaryKind = kind === 'moss-wolf' ? 'green-wing-moth' : 'moss-wolf'
+    const enemy: MutableEnemySnapshot = {
+      id: this.#nextEnemyId,
+      kind,
+      position: { x: this.#random() * 2 - 1, y: this.#random() * 2 - 1 },
+      alive: true,
+      spawnedAt: at,
+    }
+    this.#nextEnemyId += 1
+    this.#enemies.set(enemy.id, enemy)
+  }
+
+  #processOrdinarySpawns(through: number): void {
+    const cadence = this.#phase === 'intro'
+      ? this.#config.spawnCadenceSeconds.intro
+      : this.#phase === 'mowing'
+        ? this.#config.spawnCadenceSeconds.mowing
+        : this.#config.spawnCadenceSeconds.pressure
+    const iterationLimit = Math.min(this.#config.activeEnemyCap, MAX_SPAWN_ITERATIONS_PER_STEP)
+    let iterations = 0
+
+    while (this.#nextSpawnAt <= through + TIME_EPSILON && iterations < iterationLimit) {
+      this.#spawnOrdinary(this.#nextSpawnAt)
+      this.#nextSpawnAt += cadence
+      iterations += 1
+    }
+
+    if (this.#nextSpawnAt <= through + TIME_EPSILON) {
+      const skippedIntervals = Math.floor((through + TIME_EPSILON - this.#nextSpawnAt) / cadence) + 1
+      this.#nextSpawnAt += skippedIntervals * cadence
+    }
+  }
+
+  #enterPhase(phase: BattlePhase, at: number): void {
+    this.#phase = phase
+    if (phase === 'mowing') {
+      this.#nextSpawnAt = at + this.#config.spawnCadenceSeconds.mowing
+      return
+    }
+    if (phase === 'pressure') {
+      this.#nextSpawnAt = at + this.#config.spawnCadenceSeconds.pressure
+      return
+    }
+    if (phase !== 'boss' || this.#bossEntered) return
+
+    this.#bossEntered = true
+    for (const enemy of this.#enemies.values()) {
       if (enemy.kind !== 'bamboo-warden') enemy.alive = false
     }
-    const boss: EnemySnapshot = {
-      id: authority.nextEnemyId,
-      kind: authority.config.bossId,
+    const boss: MutableEnemySnapshot = {
+      id: this.#nextEnemyId,
+      kind: this.#config.bossId,
       position: { x: 0, y: 0 },
       alive: true,
       spawnedAt: at,
     }
-    authority.nextEnemyId += 1
-    session.enemies.set(boss.id, boss)
-    pushEvent(session, { type: 'boss-entered', enemyId: boss.id, at })
+    this.#nextEnemyId += 1
+    this.#enemies.set(boss.id, boss)
+    this.#pushEvent({ type: 'boss-entered', enemyId: boss.id, at })
   }
-}
 
-function advanceSubstep(session: BattleSession, authority: SessionAuthority, deltaSeconds: number): void {
-  const target = normalizeTime(session.elapsed + deltaSeconds)
-  const transitions: ReadonlyArray<{ phase: BattlePhase; at: number }> = [
-    { phase: 'mowing', at: authority.config.phaseStarts.mowing },
-    { phase: 'pressure', at: authority.config.phaseStarts.pressure },
-    { phase: 'boss', at: authority.config.phaseStarts.boss },
-  ]
+  #advanceSubstep(deltaSeconds: number): void {
+    const target = normalizeTime(this.#elapsed + deltaSeconds)
+    const transitions: ReadonlyArray<{ phase: BattlePhase; at: number }> = [
+      { phase: 'mowing', at: this.#config.phaseStarts.mowing },
+      { phase: 'pressure', at: this.#config.phaseStarts.pressure },
+      { phase: 'boss', at: this.#config.phaseStarts.boss },
+    ]
 
-  for (const transition of transitions) {
-    if (session.elapsed + TIME_EPSILON >= transition.at || target + TIME_EPSILON < transition.at) continue
-    if (session.phase !== 'boss') {
-      processOrdinarySpawns(session, authority, transition.at - TIME_EPSILON)
+    for (const transition of transitions) {
+      if (this.#elapsed + TIME_EPSILON >= transition.at || target + TIME_EPSILON < transition.at) continue
+      if (this.#phase !== 'boss') this.#processOrdinarySpawns(transition.at - TIME_EPSILON)
+      this.#elapsed = transition.at
+      this.#enterPhase(transition.phase, transition.at)
     }
-    session.elapsed = transition.at
-    enterPhase(session, authority, transition.phase, transition.at)
+
+    if (this.#phase !== 'boss') this.#processOrdinarySpawns(target)
+    this.#elapsed = Math.max(this.#elapsed, target)
+    if (this.#elapsed + TIME_EPSILON >= this.#config.durationSeconds) {
+      this.#elapsed = this.#config.durationSeconds
+      this.#settle('timeout')
+    }
   }
 
-  if (session.phase !== 'boss') processOrdinarySpawns(session, authority, target)
-  session.elapsed = Math.max(session.elapsed, target)
+  #advance(deltaSeconds: number): void {
+    if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0 || this.#isTerminal()) return
 
-  if (session.elapsed + TIME_EPSILON >= authority.config.durationSeconds) {
-    session.elapsed = authority.config.durationSeconds
-    settleBattleSession(session, 'timeout')
+    const clampedDelta = Math.min(deltaSeconds, MAX_EXTERNAL_DELTA_SECONDS)
+    const substepCount = Math.max(1, Math.ceil(clampedDelta / MAX_SUBSTEP_SECONDS - TIME_EPSILON))
+    const substep = clampedDelta / substepCount
+    for (let index = 0; index < substepCount && !this.#isTerminal(); index += 1) {
+      this.#advanceSubstep(substep)
+    }
+  }
+
+  #registerEnemyDefeat(enemyId: number): boolean {
+    if (this.#isTerminal()) return false
+    const enemy = this.#enemies.get(enemyId)
+    if (!enemy || !enemy.alive) return false
+
+    enemy.alive = false
+    this.#pushEvent({ type: 'enemy-defeated', enemyId, at: this.#elapsed })
+    if (enemy.kind === 'bamboo-warden') this.#settle('boss-defeated')
+    return true
+  }
+
+  #settle(reason: BattleTerminalReason): boolean {
+    if (this.#isTerminal()) return false
+    this.#settled = true
+    this.#phase = 'settled'
+    this.#terminalReason = reason
+    this.#pushEvent({ type: 'stage-settled', stageId: this.#stageId, at: this.#elapsed })
+    return true
+  }
+
+  #drainCombatEvents(): readonly CombatEvent[] {
+    const queued = this.#events
+    this.#events = []
+    return Object.freeze(queued.map(freezeEventCopy))
   }
 }
 
@@ -149,70 +280,24 @@ export function createBattleSession(input: {
 }): BattleSession {
   const config = parseStageOneConfig(input.config)
   if (input.stageId !== config.stageId) throw new Error('stageId must match config.stageId')
-
-  const random = createSeededRandom(input.seed)
-  const session: BattleSession = {
-    stageId: input.stageId,
-    generation: 1,
-    elapsed: 0,
-    phase: 'intro',
-    enemies: new Map<number, EnemySnapshot>(),
-    events: [],
-    settled: false,
+  if (!Number.isFinite(input.seed) || !Number.isInteger(input.seed) || input.seed < 0 || input.seed > MAX_UINT32) {
+    throw new Error('seed must be a finite uint32 integer')
   }
-  authorities.set(session, {
-    config,
-    random,
-    nextEnemyId: 1,
-    nextOrdinaryKind: random() < 0.5 ? 'moss-wolf' : 'green-wing-moth',
-    nextSpawnAt: config.spawnCadenceSeconds.intro,
-    bossEntered: false,
-  })
-  pushEvent(session, { type: 'stage-entered', stageId: session.stageId, at: 0 })
-  return session
+  return constructSession(input.stageId, input.seed, config)
 }
 
-export function advanceBattleSession(session: BattleSession, deltaSeconds: number): readonly CombatEvent[] {
-  if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0 || session.settled) return []
-
-  const authority = authorityFor(session)
-  const eventStart = session.events.length
-  const clampedDelta = Math.min(deltaSeconds, 0.25)
-  const substepCount = Math.max(1, Math.ceil(clampedDelta / MAX_SUBSTEP_SECONDS - TIME_EPSILON))
-  const substep = clampedDelta / substepCount
-  for (let index = 0; index < substepCount && !session.settled; index += 1) {
-    advanceSubstep(session, authority, substep)
-  }
-  return session.events.slice(eventStart)
+export function advanceBattleSession(session: BattleSession, deltaSeconds: number): void {
+  advanceSession(requireBattleSession(session), deltaSeconds)
 }
 
-export function registerEnemyDefeat(session: BattleSession, enemyId: number): readonly CombatEvent[] {
-  const enemy = session.enemies.get(enemyId)
-  if (!enemy || !enemy.alive) return []
-
-  authorityFor(session)
-  const eventStart = session.events.length
-  enemy.alive = false
-  pushEvent(session, { type: 'enemy-defeated', enemyId, at: session.elapsed })
-  if (enemy.kind === 'bamboo-warden') settleBattleSession(session, 'boss-defeated')
-  return session.events.slice(eventStart)
+export function registerEnemyDefeat(session: BattleSession, enemyId: number): boolean {
+  return defeatEnemy(requireBattleSession(session), enemyId)
 }
 
-export function settleBattleSession(
-  session: BattleSession,
-  reason: 'boss-defeated' | 'timeout' | 'button',
-): boolean {
-  void reason
-  authorityFor(session)
-  if (session.settled) return false
-
-  session.settled = true
-  session.phase = 'settled'
-  pushEvent(session, { type: 'stage-settled', stageId: session.stageId, at: session.elapsed })
-  return true
+export function settleBattleSession(session: BattleSession, reason: BattleTerminalReason): boolean {
+  return settleSession(requireBattleSession(session), reason)
 }
 
-export function drainCombatEvents(session: BattleSession): CombatEvent[] {
-  authorityFor(session)
-  return session.events.splice(0, session.events.length)
+export function drainCombatEvents(session: BattleSession): readonly CombatEvent[] {
+  return drainSessionEvents(requireBattleSession(session))
 }

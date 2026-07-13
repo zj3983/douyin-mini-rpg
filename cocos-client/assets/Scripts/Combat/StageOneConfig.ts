@@ -1,20 +1,22 @@
 export interface StageOneCombatConfig {
-  stageId: number
-  durationSeconds: number
-  phaseStarts: { mowing: number; pressure: number; boss: number }
-  activeEnemyCap: number
-  spawnCadenceSeconds: { intro: number; mowing: number; pressure: number }
-  bossId: 'bamboo-warden'
-  settlementAutoContinueSeconds: number
+  readonly stageId: number
+  readonly durationSeconds: number
+  readonly phaseStarts: { readonly mowing: number; readonly pressure: number; readonly boss: number }
+  readonly activeEnemyCap: number
+  readonly spawnCadenceSeconds: { readonly intro: number; readonly mowing: number; readonly pressure: number }
+  readonly bossId: 'bamboo-warden'
+  readonly settlementAutoContinueSeconds: number
 }
+
+const MINIMUM_SPAWN_CADENCE_SECONDS = 1 / 120
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-function requireFiniteInteger(value: unknown, name: string, positive: boolean): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value) || (positive && value <= 0)) {
-    throw new Error(`${name} must be a ${positive ? 'positive ' : ''}finite integer`)
+function requirePositiveSafeInteger(value: unknown, name: string): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`${name} must be a positive safe integer`)
   }
   return value
 }
@@ -22,6 +24,13 @@ function requireFiniteInteger(value: unknown, name: string, positive: boolean): 
 function requireFiniteNumber(value: unknown, name: string): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw new Error(`${name} must be finite`)
+  }
+  return value
+}
+
+function requireSpawnCadence(value: unknown, name: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < MINIMUM_SPAWN_CADENCE_SECONDS) {
+    throw new Error(`${name} must be at least 1/120 second`)
   }
   return value
 }
@@ -36,9 +45,9 @@ function requirePositiveFiniteNumber(value: unknown, name: string): number {
 export function parseStageOneConfig(value: unknown): StageOneCombatConfig {
   if (!isRecord(value)) throw new Error('config must be an object')
 
-  const stageId = requireFiniteInteger(value.stageId, 'stageId', false)
-  const durationSeconds = requireFiniteInteger(value.durationSeconds, 'durationSeconds', true)
-  const activeEnemyCap = requireFiniteInteger(value.activeEnemyCap, 'activeEnemyCap', true)
+  const stageId = requirePositiveSafeInteger(value.stageId, 'stageId')
+  const durationSeconds = requirePositiveSafeInteger(value.durationSeconds, 'durationSeconds')
+  const activeEnemyCap = requirePositiveSafeInteger(value.activeEnemyCap, 'activeEnemyCap')
   if (activeEnemyCap > 18) throw new Error('activeEnemyCap must be at most 18')
   if (value.bossId !== 'bamboo-warden') throw new Error('bossId must be bamboo-warden')
 
@@ -51,9 +60,9 @@ export function parseStageOneConfig(value: unknown): StageOneCombatConfig {
   }
 
   if (!isRecord(value.spawnCadenceSeconds)) throw new Error('spawnCadenceSeconds must be an object')
-  const intro = requirePositiveFiniteNumber(value.spawnCadenceSeconds.intro, 'spawnCadenceSeconds.intro')
-  const mowingCadence = requirePositiveFiniteNumber(value.spawnCadenceSeconds.mowing, 'spawnCadenceSeconds.mowing')
-  const pressureCadence = requirePositiveFiniteNumber(value.spawnCadenceSeconds.pressure, 'spawnCadenceSeconds.pressure')
+  const intro = requireSpawnCadence(value.spawnCadenceSeconds.intro, 'spawnCadenceSeconds.intro')
+  const mowingCadence = requireSpawnCadence(value.spawnCadenceSeconds.mowing, 'spawnCadenceSeconds.mowing')
+  const pressureCadence = requireSpawnCadence(value.spawnCadenceSeconds.pressure, 'spawnCadenceSeconds.pressure')
   const settlementAutoContinueSeconds = requirePositiveFiniteNumber(
     value.settlementAutoContinueSeconds,
     'settlementAutoContinueSeconds',
