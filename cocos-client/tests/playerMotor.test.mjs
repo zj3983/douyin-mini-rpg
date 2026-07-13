@@ -1,14 +1,25 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  BATTLE_DESIGN_WIDTH,
+  BATTLE_NAVIGATION_HEIGHT,
+  BATTLE_TOP_HUD_RESERVE,
   computeBattleLayout,
+  PLAYER_DISPLAY_SCALE,
+  PLAYER_FRAME_HEIGHT,
+  PLAYER_FRAME_WIDTH,
 } from '../assets/Scripts/Combat/BattleLayout.ts'
 import {
   createPlayerMotor,
-  lockPlayerAction,
+  PLAYER_COORDINATE_LIMIT,
   requestMove,
+  requestMoveInCoordinateSpace,
+  requestPlayerAction,
+  resetPlayerMotor,
   setPlayerBounds,
+  setPlayerFallbackAction,
   stepPlayerMotor,
+  stopPlayerMotor,
   unlockPlayerAction,
 } from '../assets/Scripts/Combat/PlayerMotor.ts'
 
@@ -81,6 +92,35 @@ test('390x844 layout covers both horizontal halves and keeps navigation below mo
   assert.ok(layout.movement.minX <= -300)
   assert.ok(layout.movement.maxX >= 300)
   assert.ok(layout.navigationTop < layout.movement.minY)
+})
+
+test('displayed player frame remains fully inside actor-safe bounds on supported phones', () => {
+  const insets = [
+    { topInsetPx: 24, bottomInsetPx: 18 },
+    { topInsetPx: 47, bottomInsetPx: 34 },
+    { topInsetPx: 59, bottomInsetPx: 36 },
+  ]
+  const halfWidth = PLAYER_FRAME_WIDTH * PLAYER_DISPLAY_SCALE / 2
+  const halfHeight = PLAYER_FRAME_HEIGHT * PLAYER_DISPLAY_SCALE / 2
+
+  PORTRAIT_VIEWPORTS.forEach((viewport, index) => {
+    const layout = computeBattleLayout({ designWidth: BATTLE_DESIGN_WIDTH, ...viewport, ...insets[index] })
+    assert.ok(layout.movement.minX <= -300)
+    assert.ok(layout.movement.maxX >= 300)
+    assert.ok(layout.movement.minX - halfWidth >= layout.actorSafeRect.minX - EPSILON)
+    assert.ok(layout.movement.maxX + halfWidth <= layout.actorSafeRect.maxX + EPSILON)
+    assert.ok(layout.movement.minY - halfHeight >= layout.actorSafeRect.minY - EPSILON)
+    assert.ok(layout.movement.maxY + halfHeight <= layout.actorSafeRect.maxY + EPSILON)
+    assert.ok(layout.movement.minY - halfHeight >= layout.navigationTop - EPSILON)
+  })
+})
+
+test('layout exports the shared HUD navigation and actor sizing constants', () => {
+  assert.equal(BATTLE_DESIGN_WIDTH, 750)
+  assert.equal(BATTLE_NAVIGATION_HEIGHT, 104)
+  assert.equal(BATTLE_TOP_HUD_RESERVE, 210)
+  assert.equal(PLAYER_FRAME_WIDTH / PLAYER_FRAME_HEIGHT, 320 / 512)
+  assert.ok(PLAYER_FRAME_WIDTH * PLAYER_DISPLAY_SCALE <= 150)
 })
 
 test('CSS safe insets shift top and bottom limits without stretching the viewport', () => {
@@ -181,19 +221,21 @@ test('bounds updates clamp current position and target', () => {
   assert.deepEqual(motor.target, { x: 30, y: 50 })
 })
 
-test('action lock and unlock preserve movement authority', () => {
+test('action tokens preserve movement authority while priorities arbitrate', () => {
   const motor = createPlayerMotor({ x: 2, y: 3 }, 120)
   setPlayerBounds(motor, { minX: -100, maxX: 100, minY: -100, maxY: 100 })
   requestMove(motor, { x: 90, y: -80 })
   const before = motor.snapshot()
 
-  lockPlayerAction(motor, 'cast')
+  const cast = requestPlayerAction(motor, 'hand_seal', 'skill-a')
+  assert.ok(cast.token)
   assert.equal(motor.action, 'cast')
-  lockPlayerAction(motor, 'hurt')
+  const hurt = requestPlayerAction(motor, 'hurt', 'damage-a')
+  assert.ok(hurt.token)
   assert.equal(motor.action, 'hurt')
-  unlockPlayerAction(motor, 'hurt')
+  unlockPlayerAction(motor, hurt.token)
   assert.equal(motor.action, 'cast')
-  unlockPlayerAction(motor, 'cast')
+  unlockPlayerAction(motor, cast.token)
   assert.equal(motor.action, null)
 
   const after = motor.snapshot()
@@ -201,6 +243,109 @@ test('action lock and unlock preserve movement authority', () => {
   assert.deepEqual(after.target, before.target)
   assert.deepEqual(after.bounds, before.bounds)
   assert.equal(after.speed, before.speed)
+})
+
+test('cast arrival keeps cast active and falls back to sword ride after unlock', () => {
+  const motor = createPlayerMotor({ x: 0, y: 0 }, 220)
+  requestMove(motor, { x: 2, y: 0 })
+  const cast = requestPlayerAction(motor, 'hand_seal', 'flying-sword')
+
+  const arrival = stepPlayerMotor(motor, 1 / 60)
+  const pending = setPlayerFallbackAction(motor, 'sword_ride')
+
+  assert.equal(arrival.arrived, true)
+  assert.equal(pending.action, 'hand_seal')
+  assert.equal(pending.changed, false)
+  const released = unlockPlayerAction(motor, cast.token)
+  assert.equal(released.unlocked, true)
+  assert.equal(released.action, 'sword_ride')
+  assert.equal(released.changed, true)
+})
+
+test('overlapping cast and hurt restore the next priority before fallback', () => {
+  const motor = createPlayerMotor({ x: 0, y: 0 }, 220)
+  const cast = requestPlayerAction(motor, 'flying_sword_cast', 'skill')
+  const hurt = requestPlayerAction(motor, 'hurt', 'damage')
+  assert.equal(motor.presentationAction, 'hurt')
+
+  const hurtReleased = unlockPlayerAction(motor, hurt.token)
+  assert.equal(hurtReleased.action, 'flying_sword_cast')
+  assert.equal(motor.action, 'cast')
+  const castReleased = unlockPlayerAction(motor, cast.token)
+  assert.equal(castReleased.action, 'sword_ride')
+  assert.equal(motor.action, null)
+})
+
+test('death outranks all actions and cannot auto-unlock', () => {
+  const motor = createPlayerMotor({ x: 0, y: 0 }, 220)
+  const death = requestPlayerAction(motor, 'death', 'battle-runtime')
+  requestPlayerAction(motor, 'hurt', 'damage')
+  requestPlayerAction(motor, 'hand_seal', 'skill')
+  assert.equal(motor.presentationAction, 'death')
+
+  const release = unlockPlayerAction(motor, death.token)
+  assert.equal(release.unlocked, false)
+  assert.equal(release.action, 'death')
+  assert.equal(motor.action, 'death')
+})
+
+test('stale owner tokens cannot unlock replacement actions', () => {
+  const motor = createPlayerMotor({ x: 0, y: 0 }, 220)
+  const first = requestPlayerAction(motor, 'hand_seal', 'skill')
+  const replacement = requestPlayerAction(motor, 'flying_sword_cast', 'skill')
+
+  const stale = unlockPlayerAction(motor, first.token)
+  assert.equal(stale.unlocked, false)
+  assert.equal(stale.action, 'flying_sword_cast')
+  const current = unlockPlayerAction(motor, replacement.token)
+  assert.equal(current.unlocked, true)
+  assert.equal(current.action, 'sword_ride')
+})
+
+test('resize clamps active movement immediately without disturbing action locks', () => {
+  const motor = createPlayerMotor({ x: 80, y: -90 }, 120)
+  setPlayerBounds(motor, { minX: -100, maxX: 100, minY: -100, maxY: 100 })
+  requestMove(motor, { x: 95, y: 95 })
+  stepPlayerMotor(motor, 1 / 60)
+  const cast = requestPlayerAction(motor, 'hand_seal', 'skill')
+
+  setPlayerBounds(motor, { minX: -20, maxX: 30, minY: -40, maxY: 50 })
+
+  assert.deepEqual(motor.position, { x: 30, y: -40 })
+  assert.deepEqual(motor.target, { x: 30, y: 50 })
+  assert.equal(motor.presentationAction, 'hand_seal')
+  assert.equal(unlockPlayerAction(motor, cast.token).action, 'sword_ride')
+})
+
+test('transformed coordinate adapter requests movement in the shared actor space', () => {
+  const motor = createPlayerMotor({ x: 0, y: 0 }, 220)
+  setPlayerBounds(motor, { minX: -300, maxX: 300, minY: -500, maxY: 500 })
+
+  const requested = requestMoveInCoordinateSpace(motor, { x: 710, y: 920 }, (point) => ({
+    x: (point.x - 110) / 2,
+    y: (point.y - 120) / 2,
+  }))
+
+  assert.equal(requested, true)
+  assert.deepEqual(motor.position, { x: 0, y: 0 })
+  assert.deepEqual(motor.target, { x: 300, y: 400 })
+})
+
+test('stop and reset keep movement enabled state inside motor authority', () => {
+  const motor = createPlayerMotor({ x: -20, y: 10 }, 220)
+  requestMove(motor, { x: 100, y: 100 })
+  stepPlayerMotor(motor, 1 / 60)
+
+  stopPlayerMotor(motor)
+  assert.equal(motor.enabled, false)
+  assert.equal(motor.target, null)
+  assert.equal(requestMove(motor, { x: 30, y: 30 }), false)
+
+  resetPlayerMotor(motor)
+  assert.equal(motor.enabled, true)
+  assert.deepEqual(motor.position, { x: -20, y: 10 })
+  assert.equal(motor.target, null)
+  assert.equal(motor.presentationAction, 'sword_ride')
 })
 
 test('snapshots are immutable and forged or spread motors are rejected', () => {
@@ -254,7 +399,7 @@ test('1000 alternating click targets remain finite and bounded', () => {
 
   for (let index = 0; index < 1000; index += 1) {
     const sign = index % 2 === 0 ? 1 : -1
-    assert.equal(requestMove(motor, { x: sign * 1e9, y: -sign * 1e9 }), true)
+    assert.equal(requestMove(motor, { x: sign * PLAYER_COORDINATE_LIMIT, y: -sign * PLAYER_COORDINATE_LIMIT }), true)
     const frame = stepPlayerMotor(motor, 1 / 60)
     assertFiniteTree(frame)
     assertPointInside(frame.position, bounds)
@@ -263,14 +408,23 @@ test('1000 alternating click targets remain finite and bounded', () => {
   }
 })
 
-test('opposite extreme finite coordinates remain stationary without numeric overflow', () => {
-  const motor = createPlayerMotor({ x: -Number.MAX_VALUE, y: 0 }, 220)
-  assert.equal(requestMove(motor, { x: Number.MAX_VALUE, y: 0 }), true)
+test('coordinate magnitude limit accepts boundaries and rejects larger finite values', () => {
+  const boundary = createPlayerMotor({ x: -PLAYER_COORDINATE_LIMIT, y: PLAYER_COORDINATE_LIMIT }, 220)
+  assert.equal(requestMove(boundary, { x: PLAYER_COORDINATE_LIMIT, y: -PLAYER_COORDINATE_LIMIT }), true)
+  assertFiniteTree(stepPlayerMotor(boundary, 1 / 60))
 
-  const frame = stepPlayerMotor(motor, 1 / 60)
-
-  assertFiniteTree(frame)
-  assert.deepEqual(frame.position, { x: -Number.MAX_VALUE, y: 0 })
-  assert.equal(frame.distanceMoved, 0)
-  assert.equal(frame.arrived, false)
+  assert.throws(
+    () => createPlayerMotor({ x: PLAYER_COORDINATE_LIMIT + 1, y: 0 }, 220),
+    /supported coordinate magnitude/,
+  )
+  assert.equal(requestMove(boundary, { x: PLAYER_COORDINATE_LIMIT + 1, y: 0 }), false)
+  assert.throws(
+    () => setPlayerBounds(boundary, {
+      minX: -PLAYER_COORDINATE_LIMIT - 1,
+      maxX: 0,
+      minY: 0,
+      maxY: 1,
+    }),
+    /supported coordinate magnitude/,
+  )
 })

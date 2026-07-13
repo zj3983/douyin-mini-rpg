@@ -351,7 +351,7 @@ export class BattleRuntimeController extends Component {
     this.playerNode?.emit('player-hit', damage)
     if (this.damageGate.health <= 0 && markPlayerDefeated(this.stageFlow).changed && markBattleAttemptDefeated(this.attemptState)) {
       this.freezeBattle()
-      this.playerNode?.emit('player-action-requested', 'death')
+      this.playerNode?.getComponent(PlayerController)?.requestPresentationAction('death', 'battle-runtime')
       this.playerNode?.emit('player-defeated')
       const generation = this.stageGeneration
       this.scheduleOnce(() => {

@@ -79,6 +79,11 @@ test('portrait bootstrap relayouts visible-height UI when the canvas resizes', (
 
   assert.match(source, /view\.on\('canvas-resize',\s*this\.relayoutVisibleArea,\s*this\)/)
   assert.match(source, /view\.off\('canvas-resize',\s*this\.relayoutVisibleArea,\s*this\)/)
+  assert.match(source, /createDefaultViewportMetricsProvider\(/)
+  assert.match(source, /this\.viewportMetricsCleanup = this\.viewportMetricsProvider\.subscribe\(/)
+  assert.match(source, /this\.viewportMetricsCleanup\?\.\(\)/)
+  assert.match(source, /this\.viewportMetricsProvider\?\.destroy\(\)/)
+  assert.match(source, /this\.viewportMetricsProvider\?\.read\(\)/)
   assert.match(source, /private relayoutVisibleArea\(\)/)
   assert.match(source, /const layout = this\.computeCurrentLayout\(\)/)
   assert.match(source, /for \(const node of this\.fullHeightNodes\)/)
@@ -90,18 +95,29 @@ test('portrait bootstrap relayouts visible-height UI when the canvas resizes', (
   assert.match(source, /this\.bossHud\?\.setPosition\(0, this\.bossHudY\(layout\), 0\)/)
   assert.match(source, /this\.bottomNavigation\?\.setPosition\(0, layout\.navigationTop - NAV_HEIGHT \/ 2, 0\)/)
   assert.match(source, /this\.playerController\?\.configureBounds\(layout\.movement\)/)
-  assert.match(source, /this\.battleInput\?\.configure\(layout\.movement\)/)
+  assert.match(source, /this\.battleInput\?\.configure\(layout\.movement, this\.movementCoordinateSpace\)/)
   assert.doesNotMatch(source, /resizeNode\(this\.player/)
 })
 
-test('portrait bootstrap bridges flying sword action events to the player animator', () => {
+test('portrait bootstrap routes all animation requests through the player controller arbiter', () => {
   const source = readFileSync(resolve('assets/Scripts/Game/PortraitBattleBootstrap.ts'), 'utf8')
   const skillSource = readFileSync(resolve('assets/Scripts/Game/FlyingSwordSkill.ts'), 'utf8')
 
-  assert.match(source, /createFlyingSword\(effectLayer, runtime, animator/)
-  assert.match(source, /skillNode\.on\('player-action-requested',\s*\(action: string\) => animator\.play\(action\)/)
-  assert.doesNotMatch(source, /player-action-ended/)
+  assert.match(source, /player\.node\.on\('player-animation-requested',\s*\(action: string\) => animator\.play\(action\)/)
+  assert.match(source, /createFlyingSword\(effectLayer, runtime, controller/)
+  assert.match(source, /skillNode\.on\('player-action-requested',[\s\S]*controller\.requestPresentationAction\(action, 'flying-sword'\)/)
+  assert.doesNotMatch(source, /skillNode\.on\('player-action-requested',[\s\S]{0,100}animator\.play/)
   assert.match(skillSource, /this\.node\.emit\('player-action-requested', event\.action\)/)
+})
+
+test('portrait bootstrap uses centralized layout dimensions for player and navigation visuals', () => {
+  const source = readFileSync(resolve('assets/Scripts/Game/PortraitBattleBootstrap.ts'), 'utf8')
+  assert.match(source, /PLAYER_FRAME_WIDTH/)
+  assert.match(source, /PLAYER_FRAME_HEIGHT/)
+  assert.match(source, /PLAYER_DISPLAY_SCALE/)
+  assert.match(source, /BATTLE_NAVIGATION_HEIGHT/)
+  assert.match(source, /BATTLE_TOP_HUD_RESERVE/)
+  assert.doesNotMatch(source, /const NAV_HEIGHT = 104|const TOP_HUD_RESERVE = 210/)
 })
 
 test('portrait bootstrap stops runtime binding after ready, failed, or destroyed states', () => {

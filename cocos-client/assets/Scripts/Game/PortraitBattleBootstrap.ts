@@ -21,7 +21,16 @@ import {
   resources,
   view,
 } from 'cc'
-import { computeBattleLayout } from '../Combat/BattleLayout.ts'
+import {
+  BATTLE_DESIGN_WIDTH,
+  BATTLE_MIN_VISIBLE_HEIGHT,
+  BATTLE_NAVIGATION_HEIGHT,
+  BATTLE_TOP_HUD_RESERVE,
+  PLAYER_DISPLAY_SCALE,
+  PLAYER_FRAME_HEIGHT,
+  PLAYER_FRAME_WIDTH,
+  computeBattleLayout,
+} from '../Combat/BattleLayout.ts'
 import type { BattleLayout } from '../Combat/BattleLayout.ts'
 import type { Point2 } from '../Combat/CombatTypes.ts'
 import { AtlasAnimator } from './AtlasAnimator'
@@ -40,12 +49,14 @@ import { StageClearPanelController } from './StageClearPanelController'
 import { DamageNumberController } from './DamageNumberController'
 import { StageBackgroundController } from './StageBackgroundController'
 import { StageResourceController } from './StageResourceController'
+import { createDefaultViewportMetricsProvider } from './ViewportMetrics.ts'
+import type { ViewportMetricsProvider } from './ViewportMetrics.ts'
 
 const { ccclass } = _decorator
-const WIDTH = 750
-const HEIGHT = 1334
-const NAV_HEIGHT = 104
-const TOP_HUD_RESERVE = 210
+const WIDTH = BATTLE_DESIGN_WIDTH
+const HEIGHT = BATTLE_MIN_VISIBLE_HEIGHT
+const NAV_HEIGHT = BATTLE_NAVIGATION_HEIGHT
+const TOP_HUD_RESERVE = BATTLE_TOP_HUD_RESERVE
 const TOP_HUD_OFFSET = 83
 const BOSS_HUD_OFFSET = 179
 const UI_LAYER = Layers.Enum.UI_2D
@@ -78,13 +89,18 @@ export class PortraitBattleBootstrap extends Component {
   private stageResourceController: StageResourceController | null = null
   private playerController: PlayerController | null = null
   private battleInput: BattleInputController | null = null
+  private movementCoordinateSpace: UITransform | null = null
+  private viewportMetricsProvider: ViewportMetricsProvider | null = null
+  private viewportMetricsCleanup: (() => void) | null = null
   private bossSpawn: Readonly<Point2> | null = null
   private bossMaxVisualBounds: Readonly<{ width: number; height: number }> | null = null
   private currentStageId = 1
   private battleOperational = false
 
   onLoad() {
-    view.setDesignResolutionSize(750, 1334, ResolutionPolicy.FIXED_WIDTH)
+    view.setDesignResolutionSize(WIDTH, HEIGHT, ResolutionPolicy.FIXED_WIDTH)
+    this.viewportMetricsProvider = createDefaultViewportMetricsProvider(() => view.getFrameSize())
+    this.viewportMetricsCleanup = this.viewportMetricsProvider.subscribe(() => this.relayoutVisibleArea())
     this.assembleScene()
     view.on('canvas-resize', this.relayoutVisibleArea, this)
   }
@@ -95,6 +111,10 @@ export class PortraitBattleBootstrap extends Component {
     this.runtimeNode?.off('battle-stage-changed', this.onStageChanged, this)
     this.stageResourceController?.destroy()
     this.stageBackgroundController?.destroy()
+    this.viewportMetricsCleanup?.()
+    this.viewportMetricsCleanup = null
+    this.viewportMetricsProvider?.destroy()
+    this.viewportMetricsProvider = null
     view.off('canvas-resize', this.relayoutVisibleArea, this)
   }
 
@@ -122,6 +142,7 @@ export class PortraitBattleBootstrap extends Component {
     const battleRoot = this.createNode('BattleRoot', canvasNode, WIDTH, visibleHeight)
     const worldLayer = this.createNode('WorldLayer', battleRoot, WIDTH, visibleHeight)
     const actorLayer = this.createNode('ActorLayer', battleRoot, WIDTH, visibleHeight)
+    this.movementCoordinateSpace = actorLayer.getComponent(UITransform)
     const effectLayer = this.createNode('EffectLayer', battleRoot, WIDTH, visibleHeight)
     const dropLayer = this.createNode('DropLayer', battleRoot, WIDTH, visibleHeight)
     const inputLayer = this.createNode('InputLayer', battleRoot)
@@ -140,7 +161,7 @@ export class PortraitBattleBootstrap extends Component {
     const damageNumberPool = this.createRuntimePool(effectLayer, 'DamageNumberPool', 'damage-number', 24, () => this.createDamageNumberNode())
     const bossEffectPool = this.createRuntimePool(effectLayer, 'BossEffectPool', 'boss-effect', 4, () => this.createBossEffectNode())
     const hudParts = this.createHud(hudLayer, layout)
-    const battleInput = this.createInput(inputLayer, controller, layout)
+    const battleInput = this.createInput(inputLayer, controller, layout, this.movementCoordinateSpace)
     const runtime = this.loadRuntime(battleRoot, {
       enemySpawner,
       soulOrbPool,
@@ -151,7 +172,7 @@ export class PortraitBattleBootstrap extends Component {
       stageClearPanel: hudParts.stageClearPanel,
       battleInput,
     })
-    this.createFlyingSword(effectLayer, runtime, animator, visibleHeight)
+    this.createFlyingSword(effectLayer, runtime, controller, visibleHeight)
 
     player.setSiblingIndex(0)
   }
@@ -171,27 +192,19 @@ export class PortraitBattleBootstrap extends Component {
     this.bossHud?.setPosition(0, this.bossHudY(layout), 0)
     this.bottomNavigation?.setPosition(0, layout.navigationTop - NAV_HEIGHT / 2, 0)
     this.playerController?.configureBounds(layout.movement)
-    this.battleInput?.configure(layout.movement)
+    if (this.movementCoordinateSpace) this.battleInput?.configure(layout.movement, this.movementCoordinateSpace)
   }
 
   private computeCurrentLayout(): BattleLayout {
     const frameSize = view.getFrameSize()
-    let cssWidth = frameSize.width
-    let cssHeight = frameSize.height
-    let topInsetPx = 0
-    let bottomInsetPx = 0
-    const browserWindow = typeof window === 'undefined' ? null : window
-    if (browserWindow) {
-      cssWidth = browserWindow.innerWidth || cssWidth
-      cssHeight = browserWindow.innerHeight || cssHeight
-      const viewport = browserWindow.visualViewport
-      if (viewport) {
-        cssWidth = viewport.width || cssWidth
-        topInsetPx = Math.max(0, viewport.offsetTop)
-        bottomInsetPx = Math.max(0, cssHeight - viewport.offsetTop - viewport.height)
-      }
-    }
-    return computeBattleLayout({ designWidth: WIDTH, cssWidth, cssHeight, topInsetPx, bottomInsetPx })
+    const metrics = this.viewportMetricsProvider?.read()
+    return computeBattleLayout({
+      designWidth: WIDTH,
+      cssWidth: metrics?.cssWidth ?? frameSize.width,
+      cssHeight: metrics?.cssHeight ?? frameSize.height,
+      topInsetPx: metrics?.topInsetPx ?? 0,
+      bottomInsetPx: metrics?.bottomInsetPx ?? 0,
+    })
   }
 
   private configureInputLayer(node: Node | null, layout: BattleLayout) {
@@ -227,16 +240,16 @@ export class PortraitBattleBootstrap extends Component {
   }
 
   private createPlayer(parent: Node, layout: BattleLayout) {
-    const player = this.createSpriteNode('Player', parent, 320, 512)
+    const player = this.createSpriteNode('Player', parent, PLAYER_FRAME_WIDTH, PLAYER_FRAME_HEIGHT)
     player.node.setPosition(-210, -80, 0)
-    player.node.setScale(0.8, 0.8, 1)
+    player.node.setScale(PLAYER_DISPLAY_SCALE, PLAYER_DISPLAY_SCALE, 1)
     const animator = player.node.addComponent(AtlasAnimator)
     animator.targetSprite = player.sprite
     animator.actorId = 'qinglan-sword-cultivator'
     const controller = player.node.addComponent(PlayerController)
     controller.configureMovement({ x: -210, y: -80 }, controller.moveSpeed, layout.movement)
     this.playerController = controller
-    player.node.on('player-action-requested', (action: string) => animator.play(action), this)
+    player.node.on('player-animation-requested', (action: string) => animator.play(action), this)
 
     const atlasPath = 'Data/animation-atlas'
     resources.load(atlasPath, JsonAsset, (error, asset) => {
@@ -245,7 +258,7 @@ export class PortraitBattleBootstrap extends Component {
         return
       }
       animator.animationManifest = asset
-      animator.play('sword_ride')
+      controller.replayPresentationAction()
     })
     return { player: player.node, controller, animator }
   }
@@ -300,7 +313,7 @@ export class PortraitBattleBootstrap extends Component {
   private createFlyingSword(
     parent: Node,
     getRuntime: () => RuntimeLoadState,
-    animator: AtlasAnimator,
+    controller: PlayerController,
     visibleHeight: number,
   ) {
     const skillNode = this.createNode('FlyingSwordSkill', parent, WIDTH, visibleHeight)
@@ -310,7 +323,9 @@ export class PortraitBattleBootstrap extends Component {
     this.loadSprite('Assets/Skills/FlyingSword/sword-projectile-v2/spriteFrame', sword.sprite)
     const skill = skillNode.addComponent(FlyingSwordSkill)
     skill.sword = sword.node
-    skillNode.on('player-action-requested', (action: string) => animator.play(action), this)
+    skillNode.on('player-action-requested', (action: string) => {
+      controller.requestPresentationAction(action, 'flying-sword')
+    }, this)
     const bindRuntime = () => {
       const state = getRuntime()
       if (this.destroyed || state.status === 'failed') {
@@ -333,12 +348,17 @@ export class PortraitBattleBootstrap extends Component {
     if (this.bindRuntimeCallback === bindRuntime) this.bindRuntimeCallback = null
   }
 
-  private createInput(inputLayer: Node, player: PlayerController, layout: BattleLayout) {
+  private createInput(
+    inputLayer: Node,
+    player: PlayerController,
+    layout: BattleLayout,
+    coordinateSpace: UITransform | null,
+  ) {
     const inputArea = inputLayer.getComponent(UITransform)
     const input = inputLayer.addComponent(BattleInputController)
     input.player = player
     input.bindInputArea(inputArea)
-    input.configure(layout.movement)
+    if (coordinateSpace) input.configure(layout.movement, coordinateSpace)
     this.battleInput = input
     this.bossSpawn = layout.bossSpawn
     this.bossMaxVisualBounds = layout.bossMaxVisualBounds

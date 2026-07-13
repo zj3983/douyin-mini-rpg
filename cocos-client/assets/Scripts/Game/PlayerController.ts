@@ -1,12 +1,16 @@
 import { _decorator, Component, Node, UITransform, Vec3 } from 'cc'
 import type { BattleRect, Point2 } from '../Combat/CombatTypes.ts'
-import type { PlayerActionLock, PlayerMotor } from '../Combat/PlayerMotor.ts'
+import type { PlayerActionToken, PlayerMotor } from '../Combat/PlayerMotor.ts'
 import {
   createPlayerMotor,
-  lockPlayerAction,
   requestMove,
+  requestMoveInCoordinateSpace,
+  requestPlayerAction,
+  resetPlayerMotor,
   setPlayerBounds,
+  setPlayerFallbackAction,
   stepPlayerMotor,
+  stopPlayerMotor,
   unlockPlayerAction,
 } from '../Combat/PlayerMotor.ts'
 
@@ -21,36 +25,38 @@ export class PlayerController extends Component {
   public moveSpeed = 220
 
   private motor: PlayerMotor | null = null
-  private movementSpawn: Point2 = { x: 0, y: 0 }
-  private movementEnabled = true
   private moving = false
   private hoverElapsed = 0
   private swordMountBasePosition = new Vec3()
 
   onLoad() {
     const spawn = this.node.position
-    this.movementSpawn = { x: spawn.x, y: spawn.y }
-    this.motor = createPlayerMotor(this.movementSpawn, this.moveSpeed)
+    this.motor = createPlayerMotor({ x: spawn.x, y: spawn.y }, this.moveSpeed)
     if (this.swordMount) this.swordMountBasePosition.set(this.swordMount.position)
   }
 
   start() {
-    this.requestAction('sword_ride')
+    this.emitPresentationAction(true)
   }
 
   public configureMovement(spawn: Point2, speed: number, bounds: BattleRect) {
     const motor = createPlayerMotor(spawn, speed)
     setPlayerBounds(motor, bounds)
-    this.movementSpawn = { x: spawn.x, y: spawn.y }
     this.moveSpeed = speed
     this.motor = motor
-    this.movementEnabled = true
+    this.syncNodePosition(motor.position)
     this.setMoving(false)
   }
 
   public requestMovement(target: Point2) {
-    if (!this.movementEnabled || !this.motor) return false
-    return requestMove(this.motor, target)
+    return this.motor ? requestMove(this.motor, target) : false
+  }
+
+  public requestMovementInCoordinateSpace(
+    point: Point2,
+    convert: (point: Readonly<Point2>) => Point2,
+  ) {
+    return this.motor ? requestMoveInCoordinateSpace(this.motor, point, convert) : false
   }
 
   public configureBounds(bounds: BattleRect) {
@@ -58,15 +64,28 @@ export class PlayerController extends Component {
       const position = this.node.position
       this.motor = createPlayerMotor({ x: position.x, y: position.y }, this.moveSpeed)
     }
+    const before = this.motor.position
     setPlayerBounds(this.motor, bounds)
+    const after = this.motor.position
+    if (after.x !== before.x || after.y !== before.y) this.syncNodePosition(after)
   }
 
-  public lockAction(action: PlayerActionLock) {
-    if (this.motor) lockPlayerAction(this.motor, action)
+  public requestPresentationAction(action: string, owner: string): Readonly<PlayerActionToken> | null {
+    if (!this.motor) return null
+    const frame = requestPlayerAction(this.motor, action, owner)
+    if (frame.changed) this.node.emit('player-animation-requested', frame.action)
+    return frame.token
   }
 
-  public unlockAction(action: PlayerActionLock) {
-    if (this.motor) unlockPlayerAction(this.motor, action)
+  public completePresentationAction(token: PlayerActionToken) {
+    if (!this.motor) return false
+    const frame = unlockPlayerAction(this.motor, token)
+    if (frame.changed) this.node.emit('player-animation-requested', frame.action)
+    return frame.unlocked
+  }
+
+  public replayPresentationAction() {
+    this.emitPresentationAction(true)
   }
 
   public moveTo(worldPosition: Vec3) {
@@ -76,35 +95,32 @@ export class PlayerController extends Component {
   }
 
   public stop() {
-    if (this.motor) {
-      const bounds = this.motor.bounds
-      const stopped = createPlayerMotor(this.motor.position, this.motor.speed)
-      if (bounds) setPlayerBounds(stopped, bounds)
-      this.motor = stopped
-    }
-    this.movementEnabled = false
+    if (this.motor) stopPlayerMotor(this.motor)
     this.setMoving(false)
   }
 
   public reset() {
-    const speed = this.motor?.speed ?? this.moveSpeed
-    const bounds = this.motor?.bounds ?? null
-    const resetMotor = createPlayerMotor(this.movementSpawn, speed)
-    if (bounds) setPlayerBounds(resetMotor, bounds)
-    this.motor = resetMotor
-    this.movementEnabled = true
+    if (!this.motor) return
+    resetPlayerMotor(this.motor)
     this.hoverElapsed = 0
+    this.syncNodePosition(this.motor.position)
     this.setMoving(false)
-    this.requestAction('sword_ride')
+    this.emitPresentationAction(true)
   }
 
   update(deltaTime: number) {
     if (!this.motor) return
     const frame = stepPlayerMotor(this.motor, deltaTime)
-    this.node.setPosition(frame.position.x, frame.position.y, this.node.position.z)
+    if (frame.distanceMoved > 0) {
+      this.syncNodePosition(frame.position)
+      this.setMoving(true)
+    }
+    if (frame.arrived) this.setMoving(false)
     this.animateSword(deltaTime)
-    this.setMoving(frame.distanceMoved > 0)
-    if (frame.arrived && this.motor.action === null) this.requestAction('sword_ride')
+  }
+
+  private syncNodePosition(position: Readonly<Point2>) {
+    this.node.setPosition(position.x, position.y, this.node.position.z)
   }
 
   private animateSword(deltaTime: number) {
@@ -120,10 +136,15 @@ export class PlayerController extends Component {
   private setMoving(moving: boolean) {
     if (this.moving === moving) return
     this.moving = moving
+    if (this.motor) {
+      const frame = setPlayerFallbackAction(this.motor, moving ? 'move' : 'sword_ride')
+      if (frame.changed) this.node.emit('player-animation-requested', frame.action)
+    }
     this.node.emit('player-motion-changed', moving)
   }
 
-  private requestAction(action: string) {
-    this.node.emit('player-action-requested', action)
+  private emitPresentationAction(force = false) {
+    if (!this.motor || !force) return
+    this.node.emit('player-animation-requested', this.motor.presentationAction)
   }
 }

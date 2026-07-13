@@ -17,8 +17,14 @@ export interface BattleLayout {
   navigationTop: number
 }
 
-const DEFAULT_DESIGN_WIDTH = 750
-const MIN_VISIBLE_HEIGHT = 1334
+export const BATTLE_DESIGN_WIDTH = 750
+export const BATTLE_MIN_VISIBLE_HEIGHT = 1334
+export const BATTLE_NAVIGATION_HEIGHT = 104
+export const BATTLE_TOP_HUD_RESERVE = 210
+export const PLAYER_FRAME_WIDTH = 320
+export const PLAYER_FRAME_HEIGHT = 512
+export const PLAYER_DISPLAY_SCALE = 0.45
+
 const MAX_DIMENSION = 1_000_000
 
 function finiteDimension(value: number, fallback: number): number {
@@ -35,37 +41,36 @@ function frozenRect(minX: number, maxX: number, minY: number, maxY: number): Bat
 }
 
 export function computeBattleLayout(input: LayoutInput): BattleLayout {
-  const designWidth = finiteDimension(input?.designWidth, DEFAULT_DESIGN_WIDTH)
+  const designWidth = finiteDimension(input?.designWidth, BATTLE_DESIGN_WIDTH)
   const cssWidth = finiteDimension(input?.cssWidth, designWidth)
-  const fallbackCssHeight = MIN_VISIBLE_HEIGHT * cssWidth / designWidth
+  const fallbackCssHeight = BATTLE_MIN_VISIBLE_HEIGHT * cssWidth / designWidth
   const cssHeight = finiteDimension(input?.cssHeight, fallbackCssHeight)
   const projectedHeight = designWidth * cssHeight / cssWidth
   const visibleHeight = Math.max(
-    MIN_VISIBLE_HEIGHT,
-    Number.isFinite(projectedHeight) && projectedHeight > 0 ? projectedHeight : MIN_VISIBLE_HEIGHT,
+    BATTLE_MIN_VISIBLE_HEIGHT,
+    Number.isFinite(projectedHeight) && projectedHeight > 0 ? projectedHeight : BATTLE_MIN_VISIBLE_HEIGHT,
   )
   const designPerCssPixel = designWidth / cssWidth
   const maxInset = visibleHeight * 0.15
   const topInset = Math.min(finiteInset(input?.topInsetPx) * designPerCssPixel, maxInset)
   const bottomInset = Math.min(finiteInset(input?.bottomInsetPx) * designPerCssPixel, maxInset)
-  const widthScale = designWidth / DEFAULT_DESIGN_WIDTH
-  const navigationHeight = Math.min(104 * widthScale, visibleHeight * 0.12)
-  const topHudReserve = Math.min(210 * widthScale, visibleHeight * 0.22)
+  const widthScale = designWidth / BATTLE_DESIGN_WIDTH
+  const navigationHeight = Math.min(BATTLE_NAVIGATION_HEIGHT * widthScale, visibleHeight * 0.12)
+  const topHudReserve = Math.min(BATTLE_TOP_HUD_RESERVE * widthScale, visibleHeight * 0.22)
   const visibleMinY = -visibleHeight / 2
   const visibleMaxY = visibleHeight / 2
   const navigationTop = visibleMinY + bottomInset + navigationHeight
   const actorMinY = navigationTop
   const actorMaxY = visibleMaxY - topInset - topHudReserve
   const actorHeight = actorMaxY - actorMinY
-  const movementBottomGap = Math.min(56 * widthScale, actorHeight * 0.15)
-  const movementTopGap = Math.min(48 * widthScale, actorHeight * 0.15)
-  const horizontalMovementGap = 55 * widthScale
+  const playerHalfWidth = PLAYER_FRAME_WIDTH * PLAYER_DISPLAY_SCALE * widthScale / 2
+  const playerHalfHeight = PLAYER_FRAME_HEIGHT * PLAYER_DISPLAY_SCALE * widthScale / 2
   const actorSafeRect = frozenRect(-designWidth / 2, designWidth / 2, actorMinY, actorMaxY)
   const movement = frozenRect(
-    actorSafeRect.minX + horizontalMovementGap,
-    actorSafeRect.maxX - horizontalMovementGap,
-    actorSafeRect.minY + movementBottomGap,
-    actorSafeRect.maxY - movementTopGap,
+    actorSafeRect.minX + playerHalfWidth,
+    actorSafeRect.maxX - playerHalfWidth,
+    actorSafeRect.minY + playerHalfHeight,
+    actorSafeRect.maxY - playerHalfHeight,
   )
   const bossWidth = Math.min(260 * widthScale, designWidth * 0.7)
   const bossHeight = Math.min(420 * widthScale, actorHeight * 0.65)

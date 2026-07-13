@@ -134,6 +134,7 @@ export class FlyingSwordSkill extends Component {
   }
 
   private cancelCast() {
+    this.node.emit('player-action-requested', 'sword_ride')
     if (this.timeline) resetFlyingSwordTimeline(this.timeline)
     this.homingState = resetHomingSwordCast(this.homingState)
     this.hideSword()

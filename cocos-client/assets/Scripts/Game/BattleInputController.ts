@@ -13,6 +13,7 @@ export class BattleInputController extends Component {
   public inputArea: UITransform | null = null
 
   private bounds: Readonly<BattleRect> | null = null
+  private coordinateSpace: UITransform | null = null
   private subscribedNode: Node | null = null
   private inputEnabled = false
 
@@ -26,8 +27,9 @@ export class BattleInputController extends Component {
     this.unsubscribeInputNode()
   }
 
-  public configure(bounds: BattleRect) {
+  public configure(bounds: BattleRect, coordinateSpace: UITransform) {
     this.bounds = Object.freeze({ ...bounds })
+    this.coordinateSpace = coordinateSpace
     if (this.inputEnabled) this.subscribeInputNode()
   }
 
@@ -44,7 +46,7 @@ export class BattleInputController extends Component {
   }
 
   private subscribeInputNode() {
-    const node = this.bounds && this.player ? this.inputArea?.node ?? null : null
+    const node = this.bounds && this.player && this.coordinateSpace ? this.inputArea?.node ?? null : null
     if (!node || this.subscribedNode === node) return
     this.unsubscribeInputNode()
     node.on(Node.EventType.TOUCH_END, this.onTouchEnd, this)
@@ -59,12 +61,13 @@ export class BattleInputController extends Component {
 
   private onTouchEnd(event: EventTouch) {
     if (!this.inputEnabled) return false
-    const { player, inputArea, bounds } = this
-    if (!player || !inputArea || !bounds) return false
+    const { player, inputArea, bounds, coordinateSpace } = this
+    if (!player || !inputArea || !bounds || !coordinateSpace) return false
 
     const location = event.getUILocation()
-    const converted = inputArea.convertToNodeSpaceAR(new Vec3(location.x, location.y, 0))
-    const local = { x: converted.x, y: converted.y }
-    return player.requestMovement(local)
+    return player.requestMovementInCoordinateSpace(location, (point) => {
+      const converted = coordinateSpace.convertToNodeSpaceAR(new Vec3(point.x, point.y, 0))
+      return { x: converted.x, y: converted.y }
+    })
   }
 }

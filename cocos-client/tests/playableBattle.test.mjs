@@ -4,7 +4,13 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import * as swordRuntime from '../tools/homing-sword-runtime.mjs'
 import * as battleRuntime from '../tools/battle-runtime.mjs'
-import * as movementRuntime from '../tools/movement-runtime.mjs'
+import {
+  createPlayerMotor,
+  requestMove,
+  resetPlayerMotor,
+  stepPlayerMotor,
+  stopPlayerMotor,
+} from '../assets/Scripts/Combat/PlayerMotor.ts'
 import { completeDrain, createStageFlow, recordBossDefeat, recordOrdinaryDefeat } from '../tools/stage-flow-runtime.mjs'
 
 const read = (path) => readFileSync(resolve(path), 'utf8')
@@ -15,28 +21,28 @@ test('accepted boss settlement freezes input movement and queued damage until re
   const flow = createStageFlow(1, 4)
   recordOrdinaryDefeat(flow)
   completeDrain(flow, 4)
-  const movement = movementRuntime.createPlayerMovementState({ x: -210, y: -80 })
+  const movement = createPlayerMotor({ x: -210, y: -80 }, 220)
   const damageGate = battleRuntime.createContactDamageGate({ maxHealth: 220, cooldown: 0 })
   const freeze = battleRuntime.createBattleFreezeState()
 
-  assert.equal(movementRuntime.requestPlayerMovement(movement, { x: 40, y: 200 }), true)
+  assert.equal(requestMove(movement, { x: 40, y: 200 }), true)
   const transition = recordBossDefeat(flow)
   assert.deepEqual(transition, { changed: true, command: 'settle' })
   battleRuntime.freezeBattle(freeze)
-  movementRuntime.stopPlayerMovement(movement)
+  stopPlayerMotor(movement)
 
   assert.equal(battleRuntime.canProcessBattleAction(freeze), false)
-  assert.equal(movementRuntime.requestPlayerMovement(movement, { x: 20, y: 120 }), false)
+  assert.equal(requestMove(movement, { x: 20, y: 120 }), false)
   assert.equal(movement.target, null)
-  const delayedFrame = movementRuntime.advancePlayerMovement(movement, { x: -210, y: -80 }, 220, 0.55)
+  const delayedFrame = stepPlayerMotor(movement, 0.55)
   assert.equal(delayedFrame.distanceMoved, 0)
   if (battleRuntime.canProcessBattleAction(freeze)) battleRuntime.applyDirectDamage(damageGate, 35)
   assert.equal(damageGate.health, 220)
 
   battleRuntime.rebuildBattleFreeze(freeze)
-  movementRuntime.resetPlayerMovement(movement)
+  resetPlayerMotor(movement)
   assert.equal(battleRuntime.canProcessBattleAction(freeze), true)
-  assert.equal(movementRuntime.requestPlayerMovement(movement, { x: 20, y: 120 }), true)
+  assert.equal(requestMove(movement, { x: 20, y: 120 }), true)
   if (battleRuntime.canProcessBattleAction(freeze)) battleRuntime.applyDirectDamage(damageGate, 35)
   assert.equal(damageGate.health, 185)
 })
@@ -260,7 +266,7 @@ test('defeat panel retries the current stage after a guarded death presentation'
   const bootstrap = read('assets/Scripts/Game/PortraitBattleBootstrap.ts')
 
   assert.match(runtime, /markBattleAttemptDefeated/)
-  assert.match(runtime, /emit\('player-action-requested', 'death'\)/)
+  assert.match(runtime, /requestPresentationAction\('death', 'battle-runtime'\)/)
   assert.match(runtime, /showDefeat\(this\.stageNumber\)/)
   assert.match(runtime, /retryCurrentStage\(\)/)
   assert.match(panel, /showDefeat\(stageNumber: number\)/)
@@ -279,23 +285,21 @@ test('moving player stops before death and retry restores sword ride without a s
 
   assert.match(player, /public stop\(\)/)
   assert.match(player, /public reset\(\)/)
-  assert.match(player, /createPlayerMotor/)
-  assert.match(player, /setPlayerBounds/)
+  assert.match(player, /stopPlayerMotor/)
+  assert.match(player, /resetPlayerMotor/)
   const stopBody = player.match(/public stop\(\) \{([\s\S]*?)\n  \}/)?.[1] ?? ''
   assert.doesNotMatch(stopBody, /sword_ride/)
-  assert.match(stopBody, /createPlayerMotor\(this\.motor\.position, this\.motor\.speed\)/)
-  assert.match(stopBody, /this\.movementEnabled = false/)
+  assert.match(stopBody, /stopPlayerMotor\(this\.motor\)/)
   const resetBody = player.match(/public reset\(\) \{([\s\S]*?)\n  \}/)?.[1] ?? ''
-  assert.match(resetBody, /createPlayerMotor\(this\.movementSpawn, speed\)/)
-  assert.match(resetBody, /this\.movementEnabled = true/)
-  assert.doesNotMatch(player, /movementBounds/)
+  assert.match(resetBody, /resetPlayerMotor\(this\.motor\)/)
+  assert.doesNotMatch(player, /movementBounds|movementEnabled|movementSpawn/)
 
   const stopIndex = runtime.indexOf('this.freezeBattle()')
-  const deathIndex = runtime.indexOf("emit('player-action-requested', 'death')")
+  const deathIndex = runtime.indexOf("requestPresentationAction('death', 'battle-runtime')")
   assert.ok(stopIndex >= 0 && deathIndex > stopIndex)
   assert.match(runtime, /private freezeBattle\(\)[\s\S]*getComponent\(PlayerController\)\?\.stop\(\)/)
   assert.match(runtime, /playerController\?\.reset\(\)/)
-  assert.match(input, /player\.requestMovement\(local\)/)
+  assert.match(input, /player\.requestMovementInCoordinateSpace/)
   assert.match(bootstrap, /player\.node\.setPosition\(-210, -80, 0\)[\s\S]*addComponent\(PlayerController\)[\s\S]*configureMovement\(/)
 })
 
@@ -378,10 +382,11 @@ test('flying sword visual and damage consume the same per-frame swept segment', 
 test('player controller consumes substep movement and emits motion only for displacement', () => {
   const player = read('assets/Scripts/Game/PlayerController.ts')
   assert.match(player, /stepPlayerMotor\(this\.motor, deltaTime\)/)
-  assert.match(player, /this\.node\.setPosition\(frame\.position\.x, frame\.position\.y/)
-  assert.match(player, /this\.setMoving\(frame\.distanceMoved > 0\)/)
-  assert.match(player, /frame\.arrived && this\.motor\.action === null/)
-  assert.doesNotMatch(player, /Core\/MovementRuntime/)
+  assert.match(player, /if \(frame\.distanceMoved > 0\)/)
+  assert.match(player, /this\.syncNodePosition\(frame\.position\)/)
+  assert.match(player, /if \(frame\.distanceMoved > 0\) \{[\s\S]*this\.setMoving\(true\)/)
+  assert.match(player, /if \(frame\.arrived\) this\.setMoving\(false\)/)
+  assert.match(player, /setPlayerFallbackAction/)
   assert.doesNotMatch(player, /private target: Vec3/)
 })
 
