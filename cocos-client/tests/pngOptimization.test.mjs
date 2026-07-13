@@ -57,6 +57,34 @@ image.save(pathlib.Path(sys.argv[1]), compress_level=compress_level)
   assert.equal(result.status, 0, result.stderr)
 }
 
+function createChannelFixture(path, mode, { width = 64, height = 64, compressLevel = 0 } = {}) {
+  mkdirSync(dirname(path), { recursive: true })
+  const result = runPython(`
+from PIL import Image
+import pathlib
+import sys
+mode = sys.argv[2]
+width, height, compress_level = map(int, sys.argv[3:])
+pixels = []
+for y in range(height):
+    for x in range(width):
+        rgb = ((x * 4) % 256, (y * 4) % 256, ((x + y) * 2) % 256)
+        if mode == "RGB":
+            pixels.append(rgb)
+        elif mode == "opaque-rgba":
+            pixels.append((*rgb, 255))
+        elif mode == "transparent-rgba":
+            pixels.append((*rgb, (x * 7 + y * 11) % 256))
+        else:
+            raise ValueError(f"unsupported fixture mode: {mode}")
+image_mode = "RGB" if mode == "RGB" else "RGBA"
+image = Image.new(image_mode, (width, height))
+image.putdata(pixels)
+image.save(pathlib.Path(sys.argv[1]), compress_level=compress_level)
+`, [path, mode, String(width), String(height), String(compressLevel)])
+  assert.equal(result.status, 0, result.stderr)
+}
+
 function invokeModule(expression, args = []) {
   const result = runPython(`${loadScriptPrelude()}\n${expression}`, [scriptPath, ...args])
   assert.equal(result.status, 0, result.stderr)
@@ -198,6 +226,206 @@ with Image.open(sys.argv[1]) as image:
     decoded.alpha.slice(0, 128),
     Array.from({ length: 128 }, (_, index) => ((index % 64) * 7 + Math.floor(index / 64) * 11) % 256),
   )
+})
+
+test('RGB apply keeps the accepted PNG free of alpha channels and transparency metadata', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'runtime-png-rgb-mode-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const source = join(root, 'asset.png')
+  createChannelFixture(source, 'RGB')
+
+  const result = invokeModule(`
+import io
+import json
+from PIL import Image
+
+source = pathlib.Path(sys.argv[2])
+candidate_data = module._encode_candidate(source)
+with Image.open(io.BytesIO(candidate_data)) as candidate:
+    candidate.load()
+    candidate_mode = candidate.mode
+    candidate_bands = candidate.getbands()
+    candidate_transparency = "transparency" in candidate.info
+optimized = module.optimize_png(source, apply=True)
+with Image.open(source) as final:
+    final.load()
+    final_mode = final.mode
+    final_bands = final.getbands()
+    final_transparency = "transparency" in final.info
+print(json.dumps({
+    "accepted": optimized["accepted"],
+    "candidateMode": candidate_mode,
+    "candidateBands": candidate_bands,
+    "candidateTransparency": candidate_transparency,
+    "finalMode": final_mode,
+    "finalBands": final_bands,
+    "finalTransparency": final_transparency,
+}))
+`, [source])
+
+  assert.deepEqual(result, {
+    accepted: true,
+    candidateMode: 'RGB',
+    candidateBands: ['R', 'G', 'B'],
+    candidateTransparency: false,
+    finalMode: 'RGB',
+    finalBands: ['R', 'G', 'B'],
+    finalTransparency: false,
+  })
+})
+
+test('fully opaque RGBA apply normalizes to smaller RGB without changing visual alpha semantics', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'runtime-png-opaque-rgba-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const source = join(root, 'asset.png')
+  createChannelFixture(source, 'opaque-rgba')
+
+  const result = invokeModule(`
+import json
+from PIL import Image
+
+source = pathlib.Path(sys.argv[2])
+before_bytes = source.stat().st_size
+with Image.open(source) as before:
+    before.load()
+    before_alpha = before.convert("RGBA").getchannel("A").tobytes()
+optimized = module.optimize_png(source, apply=True)
+with Image.open(source) as after:
+    after.load()
+    after_mode = after.mode
+    after_bands = after.getbands()
+    after_transparency = "transparency" in after.info
+    after_alpha = after.convert("RGBA").getchannel("A").tobytes()
+print(json.dumps({
+    "accepted": optimized["accepted"],
+    "smaller": source.stat().st_size < before_bytes,
+    "mode": after_mode,
+    "bands": after_bands,
+    "transparency": after_transparency,
+    "alphaUnchanged": after_alpha == before_alpha,
+    "alphaExtrema": [min(after_alpha), max(after_alpha)],
+}))
+`, [source])
+
+  assert.deepEqual(result, {
+    accepted: true,
+    smaller: true,
+    mode: 'RGB',
+    bands: ['R', 'G', 'B'],
+    transparency: false,
+    alphaUnchanged: true,
+    alphaExtrema: [255, 255],
+  })
+})
+
+test('RGBA with actual transparency keeps RGBA mode and every source alpha byte', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'runtime-png-transparent-rgba-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const source = join(root, 'asset.png')
+  createChannelFixture(source, 'transparent-rgba')
+
+  const result = invokeModule(`
+import json
+from PIL import Image
+
+source = pathlib.Path(sys.argv[2])
+with Image.open(source) as before:
+    before.load()
+    before_alpha = before.convert("RGBA").getchannel("A").tobytes()
+optimized = module.optimize_png(source, apply=True)
+with Image.open(source) as after:
+    after.load()
+    after_alpha = after.convert("RGBA").getchannel("A").tobytes()
+    after_mode = after.mode
+print(json.dumps({
+    "accepted": optimized["accepted"],
+    "mode": after_mode,
+    "alphaUnchanged": after_alpha == before_alpha,
+    "hasActualTransparency": min(after_alpha) < 255,
+}))
+`, [source])
+
+  assert.deepEqual(result, {
+    accepted: true,
+    mode: 'RGBA',
+    alphaUnchanged: true,
+    hasActualTransparency: true,
+  })
+})
+
+test('validation explicitly rejects dropping the alpha channel from an actually transparent source', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'runtime-png-alpha-dropped-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const source = join(root, 'source.png')
+  const candidate = join(root, 'candidate.png')
+  createChannelFixture(source, 'transparent-rgba')
+  createChannelFixture(candidate, 'RGB')
+
+  const result = invokeModule(`
+import json
+validated = module.validate_candidate(
+    pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3]), min_psnr=0.0
+)
+print(json.dumps({"accepted": validated["accepted"], "reason": validated["reason"]}))
+`, [source, candidate])
+
+  assert.deepEqual(result, { accepted: false, reason: 'alpha-dropped' })
+})
+
+test('apply=False evaluates the normalized output mode in memory and never writes it', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'runtime-png-check-mode-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const source = join(root, 'asset.png')
+  createChannelFixture(source, 'opaque-rgba')
+  const before = snapshot(source)
+
+  const result = invokeModule(`
+import io
+import json
+from PIL import Image
+from unittest.mock import patch
+
+source = pathlib.Path(sys.argv[2])
+observed_modes = []
+original_validate = module._validate_candidate_bytes
+def validate_spy(source_path, candidate_data, *, min_psnr):
+    with Image.open(io.BytesIO(candidate_data)) as candidate:
+        candidate.load()
+        observed_modes.append(candidate.mode)
+    return original_validate(source_path, candidate_data, min_psnr=min_psnr)
+
+with patch.object(module, "_validate_candidate_bytes", side_effect=validate_spy), patch.object(
+    module, "_replace_with_validated_bytes", side_effect=AssertionError("source replacement attempted")
+):
+    optimized = module.optimize_png(source, apply=False)
+print(json.dumps({"accepted": optimized["accepted"], "observedModes": observed_modes}))
+`, [source])
+
+  assert.deepEqual(result, { accepted: true, observedModes: ['RGB'] })
+  assert.equal(snapshot(source), before)
+  assert.deepEqual(readdirSync(root), ['asset.png'])
+})
+
+test('two opaque RGBA apply runs are byte-idempotent after RGB normalization', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'runtime-png-mode-idempotent-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const source = join(root, 'asset.png')
+  createChannelFixture(source, 'opaque-rgba')
+
+  const first = invokeModule(`
+import json
+print(json.dumps(module.optimize_png(pathlib.Path(sys.argv[2]), apply=True)))
+`, [source])
+  const afterFirst = snapshot(source)
+  const second = invokeModule(`
+import json
+print(json.dumps(module.optimize_png(pathlib.Path(sys.argv[2]), apply=True)))
+`, [source])
+
+  assert.equal(first.accepted, true)
+  assert.equal(second.accepted, false)
+  assert.equal(second.reason, 'not-smaller')
+  assert.equal(snapshot(source), afterFirst)
 })
 
 test('lossless RGB candidates use infinite PSNR and pass any finite threshold', (t) => {

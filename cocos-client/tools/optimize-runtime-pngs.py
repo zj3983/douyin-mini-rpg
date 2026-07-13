@@ -105,12 +105,15 @@ def discover_runtime_pngs(project_root: Path) -> list[Path]:
     return sorted(paths, key=lambda path: path.relative_to(project_root).as_posix())
 
 
-def _rgba_pixels(source: Path | bytes) -> tuple[tuple[int, int], bytes]:
+def _decoded_png(source: Path | bytes) -> tuple[tuple[int, int], bytes, bool, bool]:
     image_source = io.BytesIO(source) if isinstance(source, bytes) else source
     with Image.open(image_source) as image:
         image.load()
+        has_explicit_alpha = "A" in image.getbands() or "transparency" in image.info
+        has_palette_transparency = image.mode == "P" and "transparency" in image.info
         rgba = image.convert("RGBA")
-        return rgba.size, rgba.tobytes()
+        has_actual_transparency = rgba.getchannel("A").getextrema()[0] < 255 or has_palette_transparency
+        return rgba.size, rgba.tobytes(), has_explicit_alpha, has_actual_transparency
 
 
 def _rgb_psnr(source_rgba: bytes, candidate_rgba: bytes) -> float:
@@ -128,12 +131,15 @@ def _rgb_psnr(source_rgba: bytes, candidate_rgba: bytes) -> float:
 
 
 def _validate_candidate_bytes(source: Path, candidate_data: bytes, *, min_psnr: float) -> dict[str, object]:
-    source_size, source_rgba = _rgba_pixels(source)
-    candidate_size, candidate_rgba = _rgba_pixels(candidate_data)
+    source_size, source_rgba, _, source_has_transparency = _decoded_png(source)
+    candidate_size, candidate_rgba, candidate_has_alpha, _ = _decoded_png(candidate_data)
     candidate_bytes = len(candidate_data)
 
     if candidate_size != source_size:
         return {"candidateBytes": candidate_bytes, "psnr": None, "accepted": False, "reason": "dimensions-changed"}
+
+    if source_has_transparency and not candidate_has_alpha:
+        return {"candidateBytes": candidate_bytes, "psnr": None, "accepted": False, "reason": "alpha-dropped"}
 
     if source_rgba[3::4] != candidate_rgba[3::4]:
         return {"candidateBytes": candidate_bytes, "psnr": None, "accepted": False, "reason": "alpha-changed"}
@@ -155,13 +161,19 @@ def validate_candidate(source: Path, candidate: Path, *, min_psnr: float = 42.0)
 def _encode_candidate(source: Path) -> bytes:
     with Image.open(source) as image:
         image.load()
+        has_palette_transparency = image.mode == "P" and "transparency" in image.info
         rgba = image.convert("RGBA")
         red, green, blue, alpha = rgba.split()
         conservative_lut = [value & 0xFE for value in range(256)]
-        optimized = Image.merge(
-            "RGBA",
-            (red.point(conservative_lut), green.point(conservative_lut), blue.point(conservative_lut), alpha),
+        optimized_rgb = (
+            red.point(conservative_lut),
+            green.point(conservative_lut),
+            blue.point(conservative_lut),
         )
+        if alpha.getextrema()[0] < 255 or has_palette_transparency:
+            optimized = Image.merge("RGBA", (*optimized_rgb, alpha))
+        else:
+            optimized = Image.merge("RGB", optimized_rgb)
         candidate = io.BytesIO()
         optimized.save(candidate, format="PNG", optimize=True, compress_level=9)
         return candidate.getvalue()
