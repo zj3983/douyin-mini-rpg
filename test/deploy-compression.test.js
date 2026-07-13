@@ -32,6 +32,17 @@ function runPatcher(configPath) {
   });
 }
 
+function deployShell() {
+  const lines = workflow.split(/\r?\n/);
+  const step = lines.findIndex((line) => line.trim() === '- name: Deploy archive and route domain');
+  const script = lines.findIndex((line, index) => index > step && line.trim() === 'script: |');
+  assert.ok(step >= 0 && script > step, 'deploy shell block is missing');
+  return lines.slice(script + 1)
+    .map((line) => line.startsWith('            ') ? line.slice(12) : line)
+    .join('\n')
+    .replace(/\$\{\{[^\n]*?\}\}/g, 'GITHUB_VALUE');
+}
+
 test('defines exactly one managed gzip template with the required directives', () => {
   assert.equal(workflow.split(beginMarker).length - 1, 1);
   assert.equal(workflow.split(endMarker).length - 1, 1);
@@ -52,54 +63,63 @@ test('defines exactly one managed gzip template with the required directives', (
   ]) {
     assert.ok(lines.includes(directive), `missing exact directive: ${directive}`);
   }
-});
-
-test('removes the old managed block before inserting gzip after server_name and before locations', () => {
-  const removalIndex = workflow.indexOf("managed_pattern.sub('', block)");
-  const insertionIndex = workflow.indexOf("server_name_pattern.sub(r'\\1' + compression + location, block, count=1)");
-  assert.ok(removalIndex >= 0, 'managed gzip removal is missing');
-  assert.ok(insertionIndex > removalIndex, 'managed gzip must be removed before insertion');
-  assert.match(workflow, /managed_pattern\s*=\s*re\.compile\([\s\S]*?re\.S\)/);
 
   const compressionIndex = workflow.indexOf('compression = r\'\'\'');
   const locationIndex = workflow.indexOf('location = r\'\'\'');
   assert.ok(compressionIndex >= 0 && locationIndex > compressionIndex, 'gzip template must precede game locations');
-  assert.match(workflow, /server_name_pattern\s*=\s*re\.compile\(r'\(\^[^']*server_name[^']*'[^\n]*re\.M\)[\s\S]*?server_name_pattern\.sub\(r'\\1' \+ compression \+ location, block, count=1\)/);
 });
 
-test('patcher only updates the matching server and is byte-idempotent', () => {
+test('patcher lexes exact server directives and balanced locations without touching decoys', () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deploy-compression-'));
   const configPath = path.join(tempDir, 'site.conf');
-  const unrelatedServer = [
+  const targetAtByteZero = [
     'server {',
-    '    server_name unrelated.example;',
-    '    # A comment with misleading braces { } must not affect server parsing.',
-    '    set $brace_text "literal } then {";',
+    '    listen 80;',
+    '    server_name mcp.edcedc.cn alias.example;',
+    `    set $quoted_marker "${beginMarker} inside a value";`,
+    `    ${beginMarker}`,
+    '    gzip_comp_level 1;',
+    `    ${endMarker}`,
+    '    location ^~ /game/douyin-mini-rpg/assets/ {',
+    '        if ($request_method = POST) {',
+    '            return 405;',
+    '        }',
+    '        return 404;',
+    '    }',
+    '    location = /game/douyin-mini-rpg/cocos-js/ { return 404; }',
+    '    location /game/douyin-mini-rpg/src/ { return 404; }',
+    '    location ^~ /game/douyin-mini-rpg/api/ { if ($deny) { return 403; } return 404; }',
+    '    location ^~ /game/douyin-mini-rpg/ { return 404; }',
+    '    location /keep/ { if ($keep) { return 204; } return 200; }',
+    '}',
+  ].join('\n');
+  const untouchedDecoy = [
+    'server {',
+    '    server_name notmcp.edcedc.cn.example;',
+    '    # server_name mcp.edcedc.cn; { ignored comment brace',
+    "    set $single 'server_name mcp.edcedc.cn; } # BEGIN douyin-mini-rpg compression';",
+    '    set $multi "first line {',
+    'server_name mcp.edcedc.cn;',
+    '# BEGIN douyin-mini-rpg compression',
+    'last line }";',
     `    ${beginMarker}`,
     '    gzip off;',
     `    ${endMarker}`,
-    '    location ^~ /game/douyin-mini-rpg/assets/ {',
-    '        return 418;',
-    '    }',
+    '    location ^~ /game/douyin-mini-rpg/assets/ { if ($other) { return 418; } return 419; }',
     '}',
   ].join('\n');
+  const secondTarget = [
+    'server { listen 81; server_name mirror.example mcp.edcedc.cn;',
+    'location ^~ /game/douyin-mini-rpg/assets/ { if ($nested) { return 404; } return 405; }',
+    'location = /game/douyin-mini-rpg/cocos-js/ { return 404; }',
+    '}',
+  ].join('\n');
+  const secondUntouched = 'server { server_name unrelated.example; location /keep-two/ { return 206; } }';
   try {
-    const matchingServer = [
-      'server {',
-      '    listen 80;',
-      '    server_name mcp.edcedc.cn;',
-      `    ${beginMarker}`,
-      '    gzip_comp_level 1;',
-      `    ${endMarker}`,
-      '    location ^~ /game/douyin-mini-rpg/assets/ {',
-      '        return 404;',
-      '    }',
-      '    gzip_static on;',
-      '    location /keep/ { return 204; }',
-      '}',
-    ].join('\n');
-    const secondMatchingServer = matchingServer.replace('listen 80;', 'listen 81;');
-    fs.writeFileSync(configPath, `${unrelatedServer}\n\n${matchingServer}\n\n${secondMatchingServer}\n`);
+    fs.writeFileSync(
+      configPath,
+      `${targetAtByteZero}\n\n${untouchedDecoy}\n\n${secondTarget}\n\n${secondUntouched}\n`,
+    );
 
     const firstRun = runPatcher(configPath);
     assert.equal(firstRun.status, 0, firstRun.stderr);
@@ -109,16 +129,27 @@ test('patcher only updates the matching server and is byte-idempotent', () => {
     const second = fs.readFileSync(configPath, 'utf8');
 
     assert.equal(second, first);
-    assert.ok(second.startsWith(`${unrelatedServer}\n\n`), 'unrelated server bytes changed');
-    assert.equal(second.split(beginMarker).length - 1, 3);
-    assert.equal(second.match(/server_name mcp\.edcedc\.cn;/g)?.length, 2);
-    assert.equal(second.match(/gzip on;/g)?.length, 2);
-    assert.match(second, /server_name mcp\.edcedc\.cn;[\s\S]*?gzip on;/);
-    assert.match(second, /gzip_static on;/);
-    assert.match(second, /location \/keep\//);
+    assert.ok(second.includes(untouchedDecoy), 'near-domain and quoted/comment decoy bytes changed');
+    assert.ok(second.endsWith(`${secondUntouched}\n`), 'trailing unrelated server bytes changed');
+    assert.equal(second.match(/^\s*gzip_types text\/plain/mg)?.length, 2);
+    assert.equal(second.match(/alias \/var\/www\/game\/douyin-mini-rpg\/assets\//g)?.length, 2);
+    assert.equal(second.match(/location \/keep\/ \{ if \(\$keep\)/g)?.length, 1);
+    assert.doesNotMatch(second, /return 405;\n        }\n        return 404;/);
+    assert.doesNotMatch(second, /location = \/game\/douyin-mini-rpg\/cocos-js\/ \{ return 404; \}/);
+    assert.match(second, new RegExp(`set \\$quoted_marker "${beginMarker} inside a value";`));
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
+});
+
+test('deploy Actions shell is syntactically valid', (t) => {
+  const probe = spawnSync('bash', ['--version'], { encoding: 'utf8' });
+  if (probe.error?.code === 'ENOENT') {
+    t.skip('bash is not installed');
+    return;
+  }
+  const result = spawnSync('bash', ['-n'], { encoding: 'utf8', input: deployShell() });
+  assert.equal(result.status, 0, result.stderr);
 });
 
 test('patcher fails without changing a file that has no matching server', () => {

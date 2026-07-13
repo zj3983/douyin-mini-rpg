@@ -150,25 +150,28 @@ jobs:
             sudo find /etc/nginx -type f -name '*.bak-douyin-mini-rpg' -delete
 
             NGINX_CONFS="$(mktemp)"
-            sudo find /etc/nginx/conf.d /etc/nginx/sites-enabled -maxdepth 1 \( -type f -o -type l \) -print | while IFS= read -r conf; do
-              if sudo grep -qE '^[[:space:]]*server_name[[:space:]].*mcp\.edcedc\.cn' "$conf"; then
-                echo "$conf"
-              fi
-            done | sort -u > "$NGINX_CONFS" || true
-            if [ ! -s "$NGINX_CONFS" ]; then
-              echo "No existing mcp.edcedc.cn config found"
-              exit 1
-            fi
+            sudo find /etc/nginx/conf.d /etc/nginx/sites-enabled -maxdepth 1 \( -type f -o -type l \) -print | sort -u > "$NGINX_CONFS"
 
+            PATCHED_SERVERS=0
             while IFS= read -r NGINX_CONF; do
               sudo cp "$NGINX_CONF" "/tmp/$(basename "$NGINX_CONF").bak-douyin-mini-rpg"
-              sudo python3 - "$NGINX_CONF" <<'PY'
+              if PATCHED_IN_FILE="$(sudo python3 - "$NGINX_CONF" <<'PY'
             from pathlib import Path
-            import re
+            from collections import namedtuple
             import sys
 
-            path = Path(sys.argv[1])
-            text = path.read_bytes().decode('utf-8')
+            Token = namedtuple('Token', 'kind value start end')
+            target_domain = 'mcp.edcedc.cn'
+            managed_name = 'douyin-mini-rpg compression'
+            begin_marker = '# BEGIN ' + managed_name
+            end_marker = '# END ' + managed_name
+            target_routes = {
+                '/game/douyin-mini-rpg/assets/',
+                '/game/douyin-mini-rpg/cocos-js/',
+                '/game/douyin-mini-rpg/src/',
+                '/game/douyin-mini-rpg/api/',
+                '/game/douyin-mini-rpg/',
+            }
             compression = r'''
 
                 # BEGIN douyin-mini-rpg compression
@@ -219,109 +222,275 @@ jobs:
                 }
             '''
 
-            managed_name = 'douyin-mini-rpg compression'
-            managed_pattern = re.compile(
-                r'(?:\n[ \t]*)+# BEGIN ' + re.escape(managed_name)
-                + r'[ \t]*\n.*?\n[ \t]*# END ' + re.escape(managed_name)
-                + r'[ \t]*(?=\n)',
-                re.S,
-            )
-            server_name_pattern = re.compile(r'(^[ \t]*server_name[ \t]+[^;]*mcp\.edcedc\.cn[^;]*;[ \t]*$)', re.M)
-
-            def skip_quoted(source, index):
-                quote = source[index]
-                index += 1
-                while index < len(source):
-                    if source[index] == '\\':
-                        index += 2
-                    elif source[index] == quote:
-                        return index + 1
-                    else:
-                        index += 1
-                raise SystemExit('unterminated quoted string in nginx config')
-
-            def skip_comment(source, index):
-                newline = source.find('\n', index)
-                return len(source) if newline < 0 else newline + 1
-
-            def find_block_end(source, opening):
-                depth = 0
-                index = opening
-                while index < len(source):
-                    char = source[index]
-                    if char in "'\"":
-                        index = skip_quoted(source, index)
-                    elif char == '#':
-                        index = skip_comment(source, index)
-                    elif char == '\\':
-                        index += 2
-                    else:
-                        if char == '{':
-                            depth += 1
-                        elif char == '}':
-                            depth -= 1
-                            if depth == 0:
-                                return index + 1
-                        index += 1
-                raise SystemExit('unbalanced nginx server block')
-
-            def server_spans(source):
-                spans = []
+            def tokenize(source):
+                tokens = []
                 index = 0
                 while index < len(source):
                     char = source[index]
-                    if char in "'\"":
-                        index = skip_quoted(source, index)
+                    if char.isspace():
+                        index += 1
                         continue
                     if char == '#':
-                        index = skip_comment(source, index)
+                        end = source.find('\n', index)
+                        end = len(source) if end < 0 else end
+                        tokens.append(Token('comment', source[index:end], index, end))
+                        index = end
                         continue
-                    if char == '\\':
-                        index += 2
+                    if char in "'\"":
+                        start = index
+                        quote = char
+                        index += 1
+                        value = []
+                        while index < len(source):
+                            if source[index] == '\\':
+                                if index + 1 >= len(source):
+                                    raise ValueError('unterminated escape in nginx quoted string')
+                                value.append(source[index + 1])
+                                index += 2
+                            elif source[index] == quote:
+                                index += 1
+                                tokens.append(Token('quoted', ''.join(value), start, index))
+                                break
+                            else:
+                                value.append(source[index])
+                                index += 1
+                        else:
+                            raise ValueError('unterminated quoted string in nginx config')
                         continue
-                    if source.startswith('server', index):
-                        before = source[index - 1] if index else ''
-                        after_index = index + len('server')
-                        after = source[after_index] if after_index < len(source) else ''
-                        if not (before.isalnum() or before in '_-') and not (after.isalnum() or after in '_-'):
-                            opening = after_index
-                            while opening < len(source):
-                                if source[opening].isspace():
-                                    opening += 1
-                                elif source[opening] == '#':
-                                    opening = skip_comment(source, opening)
-                                else:
-                                    break
-                            if opening < len(source) and source[opening] == '{':
-                                end = find_block_end(source, opening)
-                                spans.append((index, end))
-                                index = end
-                                continue
+                    if char in '{};':
+                        tokens.append(Token(char, char, index, index + 1))
+                        index += 1
+                        continue
+
+                    start = index
+                    value = []
+                    while index < len(source) and not source[index].isspace() and source[index] not in "#{};'\"":
+                        if source[index] == '\\':
+                            if index + 1 >= len(source):
+                                raise ValueError('unterminated escape in nginx token')
+                            value.append(source[index + 1])
+                            index += 2
+                        else:
+                            value.append(source[index])
+                            index += 1
+                    if not value:
+                        raise ValueError(f'unexpected nginx character at byte {index}')
+                    tokens.append(Token('bare', ''.join(value), start, index))
+                return tokens
+
+            def next_significant(tokens, index, limit=None):
+                limit = len(tokens) if limit is None else limit
+                while index < limit and tokens[index].kind == 'comment':
+                    index += 1
+                return index
+
+            def matching_brace(tokens, opening, limit=None):
+                limit = len(tokens) if limit is None else limit
+                depth = 0
+                for index in range(opening, limit):
+                    if tokens[index].kind == '{':
+                        depth += 1
+                    elif tokens[index].kind == '}':
+                        depth -= 1
+                        if depth == 0:
+                            return index
+                raise ValueError('unbalanced nginx block')
+
+            def server_spans(source):
+                tokens = tokenize(source)
+                spans = []
+                index = 0
+                while index < len(tokens):
+                    token = tokens[index]
+                    if token.kind == 'bare' and token.value == 'server':
+                        opening = next_significant(tokens, index + 1)
+                        if opening < len(tokens) and tokens[opening].kind == '{':
+                            closing = matching_brace(tokens, opening)
+                            spans.append((token.start, tokens[closing].end))
+                            index = closing + 1
+                            continue
                     index += 1
                 return spans
 
+            def outer_server(tokens):
+                index = next_significant(tokens, 0)
+                if index >= len(tokens) or tokens[index].kind != 'bare' or tokens[index].value != 'server':
+                    raise ValueError('expected nginx server block')
+                opening = next_significant(tokens, index + 1)
+                if opening >= len(tokens) or tokens[opening].kind != '{':
+                    raise ValueError('expected opening brace for nginx server')
+                return opening, matching_brace(tokens, opening)
+
+            def top_level_statements(source):
+                tokens = tokenize(source)
+                opening, closing = outer_server(tokens)
+                statements = []
+                index = opening + 1
+                while index < closing:
+                    index = next_significant(tokens, index, closing)
+                    if index >= closing:
+                        break
+                    start = index
+                    cursor = index
+                    while cursor < closing:
+                        token = tokens[cursor]
+                        if token.kind == ';':
+                            header = [item for item in tokens[start:cursor] if item.kind != 'comment']
+                            statements.append(('directive', header, tokens[start].start, token.end))
+                            index = cursor + 1
+                            break
+                        if token.kind == '{':
+                            block_end = matching_brace(tokens, cursor, closing + 1)
+                            header = [item for item in tokens[start:cursor] if item.kind != 'comment']
+                            statements.append(('block', header, tokens[start].start, tokens[block_end].end))
+                            index = block_end + 1
+                            break
+                        cursor += 1
+                    else:
+                        raise ValueError('unterminated nginx directive in server block')
+                return tokens, opening, closing, statements
+
+            def matching_server_name(source):
+                _, _, _, statements = top_level_statements(source)
+                for kind, header, start, end in statements:
+                    if kind != 'directive' or not header:
+                        continue
+                    if header[0].kind == 'bare' and header[0].value == 'server_name':
+                        if any(token.kind == 'bare' and token.value == target_domain for token in header[1:]):
+                            return start, end
+                return None
+
+            def top_level_comments(source):
+                tokens = tokenize(source)
+                opening, closing = outer_server(tokens)
+                depth = 0
+                comments = []
+                for token in tokens[opening + 1:closing]:
+                    if token.kind == '{':
+                        depth += 1
+                    elif token.kind == '}':
+                        depth -= 1
+                    elif token.kind == 'comment' and depth == 0:
+                        comments.append(token)
+                return comments
+
+            def expanded_line_span(source, start, end):
+                line_start = source.rfind('\n', 0, start) + 1
+                if not source[line_start:start].strip():
+                    remove_start = line_start
+                    while remove_start > 0:
+                        previous_end = remove_start - 1
+                        previous_start = source.rfind('\n', 0, previous_end) + 1
+                        if source[previous_start:previous_end].strip():
+                            break
+                        remove_start = previous_start
+                else:
+                    remove_start = start
+
+                line_end = source.find('\n', end)
+                remove_end = end
+                if line_end >= 0 and not source[end:line_end].strip():
+                    remove_end = line_end + 1
+                    while remove_end < len(source):
+                        next_end = source.find('\n', remove_end)
+                        if next_end < 0:
+                            if not source[remove_end:].strip():
+                                remove_end = len(source)
+                            break
+                        if source[remove_end:next_end].strip():
+                            break
+                        remove_end = next_end + 1
+                return remove_start, remove_end
+
+            def remove_spans(source, spans):
+                merged = []
+                for start, end in sorted(spans):
+                    if merged and start <= merged[-1][1]:
+                        merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+                    else:
+                        merged.append((start, end))
+                for start, end in reversed(merged):
+                    source = source[:start] + source[end:]
+                return source
+
+            def remove_managed_blocks(source):
+                spans = []
+                opening = None
+                for comment in top_level_comments(source):
+                    marker = comment.value.strip()
+                    if marker == begin_marker:
+                        if opening is not None:
+                            raise ValueError('nested managed compression marker')
+                        opening = comment.start
+                    elif marker == end_marker and opening is not None:
+                        spans.append(expanded_line_span(source, opening, comment.end))
+                        opening = None
+                if opening is not None:
+                    raise ValueError('unterminated managed compression marker')
+                return remove_spans(source, spans)
+
+            def target_location(header):
+                if not header or any(token.kind != 'bare' for token in header):
+                    return False
+                values = [token.value for token in header]
+                if len(values) == 2 and values[0] == 'location':
+                    return values[1] in target_routes
+                if len(values) == 3 and values[0] == 'location' and values[1] in {'=', '^~'}:
+                    return values[2] in target_routes
+                return False
+
+            def remove_target_locations(source):
+                _, _, _, statements = top_level_statements(source)
+                spans = [
+                    expanded_line_span(source, start, end)
+                    for kind, header, start, end in statements
+                    if kind == 'block' and target_location(header)
+                ]
+                return remove_spans(source, spans)
+
+            def patch_server(source):
+                source = remove_managed_blocks(source)
+                source = remove_target_locations(source)
+                server_name = matching_server_name(source)
+                if server_name is None:
+                    raise ValueError('matching server_name disappeared during patch')
+                insert_at = server_name[1]
+                return source[:insert_at] + compression + location + source[insert_at:]
+
+            path = Path(sys.argv[1])
+            text = path.read_bytes().decode('utf-8')
             matching_spans = [
                 (start, end)
                 for start, end in server_spans(text)
-                if server_name_pattern.search(text[start:end])
+                if matching_server_name(text[start:end]) is not None
             ]
             if not matching_spans:
-                raise SystemExit('mcp.edcedc.cn server_name not found')
+                print('mcp.edcedc.cn server_name not found', file=sys.stderr)
+                raise SystemExit(3)
 
             for start, end in reversed(matching_spans):
-                block = text[start:end]
-                block = managed_pattern.sub('', block)
-                for route in ["assets", "cocos-js", "src", "api", ""]:
-                    escaped = re.escape(f"/game/douyin-mini-rpg/{route}") if route else re.escape("/game/douyin-mini-rpg/")
-                    block = re.sub(rf'\n\s*location\s+(?:=\s+|\^~\s+)?{escaped}(?:/)?\s*\{{.*?\n[ \t]*\}}[ \t]*(?:\n[ \t]*(?=\n))*', '', block, flags=re.S)
-                block = server_name_pattern.sub(r'\1' + compression + location, block, count=1)
-                text = text[:start] + block + text[end:]
+                text = text[:start] + patch_server(text[start:end]) + text[end:]
 
             path.write_bytes(text.encode('utf-8'))
+            print(len(matching_spans))
             PY
-              echo "Patched $NGINX_CONF"
+              )"; then
+                PATCHED_SERVERS=$((PATCHED_SERVERS + PATCHED_IN_FILE))
+                echo "Patched $PATCHED_IN_FILE server block(s) in $NGINX_CONF"
+              else
+                PATCH_STATUS=$?
+                if [ "$PATCH_STATUS" -eq 3 ]; then
+                  echo "Skipped $NGINX_CONF (no exact mcp.edcedc.cn server_name token)"
+                else
+                  exit "$PATCH_STATUS"
+                fi
+              fi
             done < "$NGINX_CONFS"
             rm -f "$NGINX_CONFS"
+            if [ "$PATCHED_SERVERS" -eq 0 ]; then
+              echo "No existing mcp.edcedc.cn server block found"
+              exit 1
+            fi
 
             sudo nginx -t
             sudo nginx -s reload || true
