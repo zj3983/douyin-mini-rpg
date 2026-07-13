@@ -142,6 +142,8 @@ export class PlayerMotor {
   #actionLocks = new Map<number, MutableActionLock>()
   #ownerTokens = new Map<string, number>()
   #nextActionToken = 1
+  #cachedSnapshot: Readonly<PlayerMotorSnapshot> | null = null
+  #cachedStationaryFrame: PlayerMotorFrame | null = null
 
   private constructor(token: symbol, spawn: Point2, speed: number) {
     if (token !== MOTOR_TOKEN) throw new TypeError('PlayerMotor must be created by createPlayerMotor')
@@ -171,7 +173,8 @@ export class PlayerMotor {
   get presentationAction(): string { return this.#activeActionLock()?.requestedAction ?? this.#fallbackAction }
 
   snapshot(): Readonly<PlayerMotorSnapshot> {
-    return Object.freeze({
+    if (this.#cachedSnapshot) return this.#cachedSnapshot
+    this.#cachedSnapshot = Object.freeze({
       position: this.position,
       target: this.target,
       speed: this.#speed,
@@ -180,6 +183,23 @@ export class PlayerMotor {
       action: this.action,
       presentationAction: this.presentationAction,
     })
+    return this.#cachedSnapshot
+  }
+
+  #invalidateCaches(): void {
+    this.#cachedSnapshot = null
+    this.#cachedStationaryFrame = null
+  }
+
+  #stationaryFrame(): PlayerMotorFrame {
+    if (!this.#cachedStationaryFrame) {
+      this.#cachedStationaryFrame = Object.freeze({
+        position: this.position,
+        distanceMoved: 0,
+        arrived: false,
+      })
+    }
+    return this.#cachedStationaryFrame
   }
 
   #activeActionLock(): MutableActionLock | null {
@@ -200,6 +220,7 @@ export class PlayerMotor {
       this.#target.x = clampCoordinate(this.#target.x, bounds.minX, bounds.maxX)
       this.#target.y = clampCoordinate(this.#target.y, bounds.minY, bounds.maxY)
     }
+    this.#invalidateCaches()
   }
 
   #requestMove(target: Point2): boolean {
@@ -208,12 +229,13 @@ export class PlayerMotor {
     const bounds = this.#bounds
     this.#target.x = bounds ? clampCoordinate(target.x, bounds.minX, bounds.maxX) : target.x
     this.#target.y = bounds ? clampCoordinate(target.y, bounds.minY, bounds.maxY) : target.y
+    this.#invalidateCaches()
     return true
   }
 
   #step(deltaSeconds: number): PlayerMotorFrame {
     if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0 || !this.#enabled || !this.#target) {
-      return Object.freeze({ position: this.position, distanceMoved: 0, arrived: false })
+      return this.#stationaryFrame()
     }
 
     const clampedDelta = Math.min(deltaSeconds, MAX_EXTERNAL_DELTA_SECONDS)
@@ -242,12 +264,15 @@ export class PlayerMotor {
       distanceMoved += maxDistance
     }
 
+    this.#invalidateCaches()
     return Object.freeze({ position: this.position, distanceMoved, arrived })
   }
 
   #stop(): void {
+    if (!this.#enabled && !this.#target) return
     this.#enabled = false
     this.#target = null
+    this.#invalidateCaches()
   }
 
   #reset(): void {
@@ -262,11 +287,13 @@ export class PlayerMotor {
     this.#fallbackAction = 'sword_ride'
     this.#actionLocks.clear()
     this.#ownerTokens.clear()
+    this.#invalidateCaches()
   }
 
   #requestPlayerAction(requestedAction: string, owner: string): PlayerActionFrame {
     const before = this.presentationAction
     if (isFallbackAction(requestedAction)) {
+      const fallbackChanged = this.#fallbackAction !== requestedAction
       this.#fallbackAction = requestedAction
       const ownerToken = this.#ownerTokens.get(owner)
       const ownerLock = ownerToken === undefined ? null : this.#actionLocks.get(ownerToken) ?? null
@@ -276,6 +303,7 @@ export class PlayerMotor {
         this.#ownerTokens.delete(owner)
         unlocked = true
       }
+      if (fallbackChanged || unlocked) this.#invalidateCaches()
       const after = this.presentationAction
       return freezeActionFrame(after, after !== before, null, unlocked)
     }
@@ -298,13 +326,16 @@ export class PlayerMotor {
       priority: ACTION_PRIORITY[action],
       sequence: token.id,
     })
+    this.#invalidateCaches()
     const after = this.presentationAction
     return freezeActionFrame(after, after !== before, token, false)
   }
 
   #setFallbackAction(action: PlayerFallbackAction): PlayerActionFrame {
     const before = this.presentationAction
+    if (this.#fallbackAction === action) return freezeActionFrame(before, false, null, false)
     this.#fallbackAction = action
+    this.#invalidateCaches()
     const after = this.presentationAction
     return freezeActionFrame(after, after !== before, null, false)
   }
@@ -317,6 +348,7 @@ export class PlayerMotor {
     }
     this.#actionLocks.delete(lock.token.id)
     if (this.#ownerTokens.get(lock.token.owner) === lock.token.id) this.#ownerTokens.delete(lock.token.owner)
+    this.#invalidateCaches()
     const after = this.presentationAction
     return freezeActionFrame(after, after !== before, null, true)
   }

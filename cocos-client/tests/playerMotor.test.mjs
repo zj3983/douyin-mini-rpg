@@ -165,6 +165,24 @@ test('malformed dimensions and insets never produce nonfinite layout output', ()
   }
 })
 
+test('extreme finite design width keeps scaled layout rectangles ordered', () => {
+  const layout = computeBattleLayout({
+    designWidth: 3000,
+    cssWidth: 3000,
+    cssHeight: 1,
+    topInsetPx: 0,
+    bottomInsetPx: 0,
+  })
+
+  assert.equal(layout.visibleHeight, 3000 * 1334 / 750)
+  for (const rect of [layout.actorSafeRect, layout.movement]) {
+    assert.ok(rect.minX <= rect.maxX)
+    assert.ok(rect.minY <= rect.maxY)
+    assert.ok(rect.maxX - rect.minX > 0)
+    assert.ok(rect.maxY - rect.minY > 0)
+  }
+})
+
 test('rapid target replacement advances from current position without teleporting', () => {
   const motor = createPlayerMotor({ x: 0, y: 0 }, 120)
   setPlayerBounds(motor, { minX: -300, maxX: 300, minY: -500, maxY: 500 })
@@ -180,6 +198,33 @@ test('rapid target replacement advances from current position without teleportin
   assert.ok(second.distanceMoved <= 120 / 60 + EPSILON)
   assert.ok(Math.hypot(second.position.x - beforeReplacement.x, second.position.y - beforeReplacement.y) <= 120 / 60 + EPSILON)
   assert.notDeepEqual(second.position, motor.target)
+})
+
+test('idle motor frames and snapshots reuse frozen references until authority changes', () => {
+  const motor = createPlayerMotor({ x: 0, y: 0 }, 120)
+
+  const firstFrame = stepPlayerMotor(motor, 0)
+  const firstSnapshot = motor.snapshot()
+  assert.strictEqual(stepPlayerMotor(motor, -1), firstFrame)
+  assert.strictEqual(stepPlayerMotor(motor, NaN), firstFrame)
+  assert.strictEqual(motor.snapshot(), firstSnapshot)
+
+  requestMove(motor, { x: 20, y: 0 })
+  const targetedFrame = stepPlayerMotor(motor, 0)
+  const targetedSnapshot = motor.snapshot()
+  assert.notStrictEqual(targetedFrame, firstFrame)
+  assert.notStrictEqual(targetedSnapshot, firstSnapshot)
+  assert.strictEqual(stepPlayerMotor(motor, Infinity), targetedFrame)
+  assert.strictEqual(motor.snapshot(), targetedSnapshot)
+
+  const movedFrame = stepPlayerMotor(motor, 1 / 60)
+  assert.notStrictEqual(movedFrame, targetedFrame)
+  const movedSnapshot = motor.snapshot()
+  assert.notStrictEqual(movedSnapshot, targetedSnapshot)
+
+  setPlayerBounds(motor, { minX: -10, maxX: 10, minY: -10, maxY: 10 })
+  assert.notStrictEqual(stepPlayerMotor(motor, 0), movedFrame)
+  assert.notStrictEqual(motor.snapshot(), movedSnapshot)
 })
 
 test('near target arrives exactly without overshoot', () => {

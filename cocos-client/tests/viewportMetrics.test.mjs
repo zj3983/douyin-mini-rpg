@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { BATTLE_DESIGN_WIDTH, computeBattleLayout } from '../assets/Scripts/Combat/BattleLayout.ts'
 import { createViewportMetricsProvider } from '../assets/Scripts/Game/ViewportMetrics.ts'
 
 function createEventTarget(initial = {}) {
@@ -77,7 +78,7 @@ test('Douyin safe area values are finite-clamped without rejecting valid dimensi
   })
 })
 
-test('browser metrics combine mocked CSS env insets with visual viewport geometry', () => {
+test('browser metrics reserve visual viewport occlusion once against layout viewport dimensions', () => {
   const visualViewport = createEventTarget({ width: 390, height: 700, offsetTop: 20 })
   const browserWindow = createEventTarget({ innerWidth: 390, innerHeight: 844, visualViewport })
   const provider = createViewportMetricsProvider({
@@ -90,12 +91,15 @@ test('browser metrics combine mocked CSS env insets with visual viewport geometr
   const metrics = provider.read()
   assert.deepEqual(metrics, {
     cssWidth: 390,
-    cssHeight: 700,
+    cssHeight: 844,
     topInsetPx: 30,
     bottomInsetPx: 136,
     source: 'browser',
   })
   assert.equal(Object.isFrozen(metrics), true)
+
+  const layout = computeBattleLayout({ designWidth: BATTLE_DESIGN_WIDTH, ...metrics })
+  assert.equal(layout.visibleHeight, BATTLE_DESIGN_WIDTH * 844 / 390)
 })
 
 test('invalid platform and browser dimensions fall back to Cocos frame with zero insets', () => {
@@ -151,6 +155,11 @@ test('resize listeners register once across window visual viewport and Douyin th
   assert.equal(notifications, 4)
 
   firstCleanup()
+  browserWindow.emit('resize')
+  assert.equal(notifications, 5)
+  assert.equal(browserWindow.listenerCount('resize'), 1)
+  assert.equal(browserWindow.removeCount('resize'), 0)
+
   duplicateCleanup()
   assert.equal(browserWindow.listenerCount('resize'), 0)
   assert.equal(visualViewport.listenerCount('resize'), 0)

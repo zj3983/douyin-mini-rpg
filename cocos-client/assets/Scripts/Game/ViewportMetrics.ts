@@ -98,13 +98,14 @@ function readBrowserMetrics(environment: ViewportMetricsEnvironment): Readonly<V
   const browserWindow = environment.browserWindow
   if (!browserWindow) return null
   const viewport = browserWindow.visualViewport
-  const cssWidth = isDimension(viewport?.width) ? viewport.width : browserWindow.innerWidth
-  const cssHeight = isDimension(viewport?.height) ? viewport.height : browserWindow.innerHeight
+  const cssWidth = isDimension(browserWindow.innerWidth) ? browserWindow.innerWidth : viewport?.width
+  const cssHeight = isDimension(browserWindow.innerHeight) ? browserWindow.innerHeight : viewport?.height
   if (!isDimension(cssWidth) || !isDimension(cssHeight)) return null
   const probe = environment.probeBrowserSafeArea?.() ?? { top: 0, bottom: 0 }
   const offsetTop = finiteNonNegative(viewport?.offsetTop)
   const layoutHeight = isDimension(browserWindow.innerHeight) ? browserWindow.innerHeight : cssHeight + offsetTop
-  const occludedBottom = viewport ? Math.max(0, layoutHeight - offsetTop - cssHeight) : 0
+  const visualHeight = isDimension(viewport?.height) ? viewport.height : layoutHeight - offsetTop
+  const occludedBottom = viewport ? Math.max(0, layoutHeight - offsetTop - visualHeight) : 0
   return freezeMetrics(
     cssWidth,
     cssHeight,
@@ -123,11 +124,12 @@ function readCocosMetrics(getFrameSize: ViewportMetricsEnvironment['getFrameSize
 
 class RuntimeViewportMetricsProvider implements ViewportMetricsProvider {
   readonly #environment: ViewportMetricsEnvironment
-  readonly #listeners = new Set<(metrics: Readonly<ViewportMetrics>) => void>()
+  readonly #listeners = new Map<(metrics: Readonly<ViewportMetrics>) => void, number>()
   readonly #nativeListener = () => {
     const metrics = this.read()
-    for (const listener of this.#listeners) listener(metrics)
+    for (const listener of this.#listeners.keys()) listener(metrics)
   }
+  #subscriptionCount = 0
   #listening = false
 
   constructor(environment: ViewportMetricsEnvironment) {
@@ -142,19 +144,24 @@ class RuntimeViewportMetricsProvider implements ViewportMetricsProvider {
 
   subscribe(listener: (metrics: Readonly<ViewportMetrics>) => void): () => void {
     if (typeof listener !== 'function') throw new TypeError('listener must be a function')
-    this.#listeners.add(listener)
+    this.#listeners.set(listener, (this.#listeners.get(listener) ?? 0) + 1)
+    this.#subscriptionCount += 1
     if (!this.#listening) this.#attachNativeListeners()
     let active = true
     return () => {
       if (!active) return
       active = false
-      this.#listeners.delete(listener)
-      if (this.#listeners.size === 0) this.#detachNativeListeners()
+      const count = this.#listeners.get(listener) ?? 0
+      if (count <= 1) this.#listeners.delete(listener)
+      else this.#listeners.set(listener, count - 1)
+      this.#subscriptionCount = Math.max(0, this.#subscriptionCount - 1)
+      if (this.#subscriptionCount === 0) this.#detachNativeListeners()
     }
   }
 
   destroy(): void {
     this.#listeners.clear()
+    this.#subscriptionCount = 0
     this.#detachNativeListeners()
   }
 
