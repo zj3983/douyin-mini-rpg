@@ -169,6 +169,17 @@ jobs:
 
             path = Path(sys.argv[1])
             text = path.read_text()
+            compression = r'''
+
+                # BEGIN douyin-mini-rpg compression
+                gzip on;
+                gzip_vary on;
+                gzip_proxied any;
+                gzip_comp_level 6;
+                gzip_min_length 1024;
+                gzip_types text/plain text/css text/xml application/json application/javascript application/xml application/xml+rss image/svg+xml application/wasm;
+                # END douyin-mini-rpg compression
+            '''
             location = r'''
 
                 location ^~ /game/douyin-mini-rpg/assets/ {
@@ -208,13 +219,21 @@ jobs:
                 }
             '''
 
+            managed_name = 'douyin-mini-rpg compression'
+            managed_pattern = re.compile(
+                r'(?:\n[ \t]*)+# BEGIN ' + re.escape(managed_name)
+                + r'[ \t]*\n.*?\n[ \t]*# END ' + re.escape(managed_name)
+                + r'[ \t]*(?=\n)',
+                re.S,
+            )
+            text = managed_pattern.sub('', text)
             for route in ["assets", "cocos-js", "src", "api", ""]:
                 escaped = re.escape(f"/game/douyin-mini-rpg/{route}") if route else re.escape("/game/douyin-mini-rpg/")
-                text = re.sub(rf'\n\s*location\s+(?:=\s+|\^~\s+)?{escaped}(?:/)?\s*\{{.*?\n\s*\}}', '', text, flags=re.S)
-            pattern = re.compile(r'(^\s*server_name\s+[^;]*mcp\.edcedc\.cn[^;]*;\s*$)', re.M)
+                text = re.sub(rf'\n\s*location\s+(?:=\s+|\^~\s+)?{escaped}(?:/)?\s*\{{.*?\n[ \t]*\}}[ \t]*(?:\n[ \t]*(?=\n))*', '', text, flags=re.S)
+            pattern = re.compile(r'(^[ \t]*server_name[ \t]+[^;]*mcp\.edcedc\.cn[^;]*;[ \t]*$)', re.M)
             if not pattern.search(text):
                 raise SystemExit('mcp.edcedc.cn server_name not found')
-            text = pattern.sub(r'\1' + location, text)
+            text = pattern.sub(r'\1' + compression + location, text)
             path.write_text(text)
             PY
               echo "Patched $NGINX_CONF"
@@ -223,6 +242,21 @@ jobs:
 
             sudo nginx -t
             sudo nginx -s reload || true
+
+            JS_FILE="$(find "$APP_DIR/cocos-js" -type f -name '*.js' -printf '%s\t%P\n' | sort -nr | head -n 1 | cut -f2-)"
+            if [ -z "$JS_FILE" ]; then
+              echo "No deployed cocos-js JavaScript file found"
+              exit 1
+            fi
+            JS_URL="/game/douyin-mini-rpg/cocos-js/$JS_FILE"
+            GZIP_HEADERS="$(mktemp)"
+            trap 'rm -f "$GZIP_HEADERS"' EXIT
+            curl -fsS -D "$GZIP_HEADERS" -o /dev/null -H 'Host: mcp.edcedc.cn' -H 'Accept-Encoding: gzip' "http://${{ env.DEPLOY_HOST }}$JS_URL"
+            grep -qiE '^Content-Encoding:[[:space:]]*gzip([[:space:]]|\r)*$' "$GZIP_HEADERS"
+            grep -qiE '^Vary:.*Accept-Encoding' "$GZIP_HEADERS"
+            grep -qiE '^Cache-Control:.*public.*max-age=2592000.*immutable' "$GZIP_HEADERS"
+            rm -f "$GZIP_HEADERS"
+            trap - EXIT
 
             PUBLIC_HOST_HTML="$(curl -fsS -H 'Host: mcp.edcedc.cn' http://${{ env.DEPLOY_HOST }}/game/douyin-mini-rpg/?deploy-check=1)"
             echo "$PUBLIC_HOST_HTML" | grep -F 'Cocos3dGameContainer'
