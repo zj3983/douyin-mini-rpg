@@ -110,9 +110,8 @@ def _decoded_png(source: Path | bytes) -> tuple[tuple[int, int], bytes, bool, bo
     with Image.open(image_source) as image:
         image.load()
         has_explicit_alpha = "A" in image.getbands() or "transparency" in image.info
-        has_palette_transparency = image.mode == "P" and "transparency" in image.info
         rgba = image.convert("RGBA")
-        has_actual_transparency = rgba.getchannel("A").getextrema()[0] < 255 or has_palette_transparency
+        has_actual_transparency = rgba.getchannel("A").getextrema()[0] < 255
         return rgba.size, rgba.tobytes(), has_explicit_alpha, has_actual_transparency
 
 
@@ -161,7 +160,6 @@ def validate_candidate(source: Path, candidate: Path, *, min_psnr: float = 42.0)
 def _encode_candidate(source: Path) -> bytes:
     with Image.open(source) as image:
         image.load()
-        has_palette_transparency = image.mode == "P" and "transparency" in image.info
         rgba = image.convert("RGBA")
         red, green, blue, alpha = rgba.split()
         conservative_lut = [value & 0xFE for value in range(256)]
@@ -170,7 +168,7 @@ def _encode_candidate(source: Path) -> bytes:
             green.point(conservative_lut),
             blue.point(conservative_lut),
         )
-        if alpha.getextrema()[0] < 255 or has_palette_transparency:
+        if alpha.getextrema()[0] < 255:
             optimized = Image.merge("RGBA", (*optimized_rgb, alpha))
         else:
             optimized = Image.merge("RGB", optimized_rgb)

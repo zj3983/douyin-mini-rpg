@@ -85,6 +85,91 @@ image.save(pathlib.Path(sys.argv[1]), compress_level=compress_level)
   assert.equal(result.status, 0, result.stderr)
 }
 
+function createTransparencyFixture(path, kind, { width = 64, height = 64, compressLevel = 0 } = {}) {
+  mkdirSync(dirname(path), { recursive: true })
+  const result = runPython(`
+from PIL import Image
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+kind = sys.argv[2]
+width, height, compress_level = map(int, sys.argv[3:])
+pixel_count = width * height
+
+if kind.startswith("palette-"):
+    image = Image.new("P", (width, height))
+    palette = []
+    for index in range(256):
+        palette.extend(((index * 4) % 256, (index * 6) % 256, (index * 10) % 256))
+    image.putpalette(palette)
+    if kind == "palette-unused-index":
+        image.putdata([index % 2 for index in range(pixel_count)])
+        transparency = 2
+    elif kind == "palette-opaque-table":
+        image.putdata([index % 4 for index in range(pixel_count)])
+        transparency = bytes([255] * 256)
+    elif kind == "palette-used-index":
+        image.putdata([index % 2 for index in range(pixel_count)])
+        transparency = bytes([255, 64])
+    else:
+        raise ValueError(f"unsupported fixture kind: {kind}")
+    image.save(path, transparency=transparency, compress_level=compress_level)
+elif kind.startswith("l-trns-"):
+    image = Image.new("L", (width, height))
+    if kind == "l-trns-unused":
+        image.putdata([(index * 2) % 256 for index in range(pixel_count)])
+        transparency = 127
+    elif kind == "l-trns-used":
+        image.putdata([128 if index % 3 == 0 else 64 for index in range(pixel_count)])
+        transparency = 128
+    else:
+        raise ValueError(f"unsupported fixture kind: {kind}")
+    image.save(path, transparency=transparency, compress_level=compress_level)
+elif kind.startswith("la-"):
+    image = Image.new("LA", (width, height))
+    if kind == "la-opaque":
+        image.putdata([((index * 2) % 256, 255) for index in range(pixel_count)])
+    elif kind == "la-transparent":
+        image.putdata([((index * 2) % 256, 80 if index % 3 == 0 else 255) for index in range(pixel_count)])
+    else:
+        raise ValueError(f"unsupported fixture kind: {kind}")
+    image.save(path, compress_level=compress_level)
+else:
+    raise ValueError(f"unsupported fixture kind: {kind}")
+`, [path, kind, String(width), String(height), String(compressLevel)])
+  assert.equal(result.status, 0, result.stderr)
+}
+
+function optimizeAndInspectTransparency(path) {
+  return invokeModule(`
+import json
+from PIL import Image
+
+source = pathlib.Path(sys.argv[2])
+with Image.open(source) as before:
+    before.load()
+    source_mode = before.mode
+    source_has_transparency_metadata = "transparency" in before.info
+    source_alpha = before.convert("RGBA").getchannel("A").tobytes()
+optimized = module.optimize_png(source, apply=True)
+with Image.open(source) as after:
+    after.load()
+    after_alpha = after.convert("RGBA").getchannel("A").tobytes()
+    after_mode = after.mode
+    after_has_transparency_metadata = "transparency" in after.info
+print(json.dumps({
+    "accepted": optimized["accepted"],
+    "sourceMode": source_mode,
+    "sourceHasTransparencyMetadata": source_has_transparency_metadata,
+    "sourceAlphaExtrema": [min(source_alpha), max(source_alpha)],
+    "afterMode": after_mode,
+    "afterHasTransparencyMetadata": after_has_transparency_metadata,
+    "alphaUnchanged": after_alpha == source_alpha,
+}))
+`, [path])
+}
+
 function invokeModule(expression, args = []) {
   const result = runPython(`${loadScriptPrelude()}\n${expression}`, [scriptPath, ...args])
   assert.equal(result.status, 0, result.stderr)
@@ -350,6 +435,113 @@ print(json.dumps({
     mode: 'RGBA',
     alphaUnchanged: true,
     hasActualTransparency: true,
+  })
+})
+
+test('palette unused transparent index normalizes to RGB from decoded opaque pixels', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'runtime-png-palette-unused-transparency-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const unusedIndex = join(root, 'unused-index.png')
+  createTransparencyFixture(unusedIndex, 'palette-unused-index')
+
+  assert.deepEqual(optimizeAndInspectTransparency(unusedIndex), {
+    accepted: true,
+    sourceMode: 'P',
+    sourceHasTransparencyMetadata: true,
+    sourceAlphaExtrema: [255, 255],
+    afterMode: 'RGB',
+    afterHasTransparencyMetadata: false,
+    alphaUnchanged: true,
+  })
+})
+
+test('palette all-255 transparency table normalizes to RGB from decoded opaque pixels', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'runtime-png-palette-opaque-table-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const opaqueTable = join(root, 'opaque-table.png')
+  createTransparencyFixture(opaqueTable, 'palette-opaque-table')
+
+  assert.deepEqual(optimizeAndInspectTransparency(opaqueTable), {
+    accepted: true,
+    sourceMode: 'P',
+    sourceHasTransparencyMetadata: true,
+    sourceAlphaExtrema: [255, 255],
+    afterMode: 'RGB',
+    afterHasTransparencyMetadata: false,
+    alphaUnchanged: true,
+  })
+})
+
+test('palette used transparent index keeps RGBA and every decoded alpha byte', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'runtime-png-palette-used-transparency-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const usedIndex = join(root, 'used-index.png')
+  createTransparencyFixture(usedIndex, 'palette-used-index')
+
+  assert.deepEqual(optimizeAndInspectTransparency(usedIndex), {
+    accepted: true,
+    sourceMode: 'P',
+    sourceHasTransparencyMetadata: true,
+    sourceAlphaExtrema: [64, 255],
+    afterMode: 'RGBA',
+    afterHasTransparencyMetadata: false,
+    alphaUnchanged: true,
+  })
+})
+
+test('L tRNS transparency is based on whether decoded pixels use the transparent value', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'runtime-png-l-transparency-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const unused = join(root, 'unused.png')
+  const used = join(root, 'used.png')
+  createTransparencyFixture(unused, 'l-trns-unused')
+  createTransparencyFixture(used, 'l-trns-used')
+
+  assert.deepEqual(optimizeAndInspectTransparency(unused), {
+    accepted: true,
+    sourceMode: 'L',
+    sourceHasTransparencyMetadata: true,
+    sourceAlphaExtrema: [255, 255],
+    afterMode: 'RGB',
+    afterHasTransparencyMetadata: false,
+    alphaUnchanged: true,
+  })
+  assert.deepEqual(optimizeAndInspectTransparency(used), {
+    accepted: true,
+    sourceMode: 'L',
+    sourceHasTransparencyMetadata: true,
+    sourceAlphaExtrema: [0, 255],
+    afterMode: 'RGBA',
+    afterHasTransparencyMetadata: false,
+    alphaUnchanged: true,
+  })
+})
+
+test('LA transparency is based on decoded alpha extrema and preserves every alpha byte', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'runtime-png-la-transparency-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const opaque = join(root, 'opaque.png')
+  const transparent = join(root, 'transparent.png')
+  createTransparencyFixture(opaque, 'la-opaque')
+  createTransparencyFixture(transparent, 'la-transparent')
+
+  assert.deepEqual(optimizeAndInspectTransparency(opaque), {
+    accepted: true,
+    sourceMode: 'LA',
+    sourceHasTransparencyMetadata: false,
+    sourceAlphaExtrema: [255, 255],
+    afterMode: 'RGB',
+    afterHasTransparencyMetadata: false,
+    alphaUnchanged: true,
+  })
+  assert.deepEqual(optimizeAndInspectTransparency(transparent), {
+    accepted: true,
+    sourceMode: 'LA',
+    sourceHasTransparencyMetadata: false,
+    sourceAlphaExtrema: [80, 255],
+    afterMode: 'RGBA',
+    afterHasTransparencyMetadata: false,
+    alphaUnchanged: true,
   })
 })
 
