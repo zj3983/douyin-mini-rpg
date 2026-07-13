@@ -39,6 +39,13 @@ export function checkCocosBuildOutput({ buildRoot, projectRoot = process.cwd() }
     const mainIndex = readFileSync(mainIndexPath, 'utf8')
     if (!mainIndex.includes('PortraitBattleBootstrap')) errors.push('built main index omits PortraitBattleBootstrap')
     if (!mainIndex.includes(classId)) errors.push(`built main index omits class ID ${classId}`)
+    if (!mainIndex.includes('StageResourceRuntime')) errors.push('built main index omits StageResourceRuntime')
+    const unsafeIteratorSpread = /\.concat\(\s*this\.(?:pending\.values|retained\.keys)\(\)\s*\)/
+    const materializesPending = /Array\.from\(\s*this\.pending\.values\(\)\s*\)/.test(mainIndex)
+    const materializesRetained = /Array\.from\(\s*this\.retained\.keys\(\)\s*\)/.test(mainIndex)
+    if (unsafeIteratorSpread.test(mainIndex) || !materializesPending || !materializesRetained) {
+      errors.push('built StageResourceRuntime has unsafe Map iterator materialization')
+    }
   }
 
   const sceneFile = collectFiles(join(resolvedBuildRoot, 'assets/main/import'))

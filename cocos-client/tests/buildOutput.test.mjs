@@ -13,6 +13,7 @@ import {
 const projectRoot = process.cwd()
 const meta = JSON.parse(readFileSync(resolve('assets/Scripts/Game/PortraitBattleBootstrap.ts.meta'), 'utf8'))
 const classId = compressScriptUuid(meta.uuid)
+const validMainIndex = `PortraitBattleBootstrap ${classId} StageResourceRuntime Array.from(this.pending.values()) Array.from(this.retained.keys())`
 
 function writeFixture(root, path, source) {
   const target = join(root, path)
@@ -34,7 +35,7 @@ test('build-output check fails when the compiled bootstrap is missing', () => {
 
 test('build-output check accepts a compiled script and serialized MainBattle component', () => {
   const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-complete-'))
-  writeFixture(buildRoot, 'assets/main/index.js', `PortraitBattleBootstrap ${classId}`)
+  writeFixture(buildRoot, 'assets/main/index.js', validMainIndex)
   writeFixture(buildRoot, 'assets/main/import/main-battle.json', `["MainBattle","${classId}"]`)
 
   const report = checkCocosBuildOutput({ buildRoot, projectRoot })
@@ -44,9 +45,24 @@ test('build-output check accepts a compiled script and serialized MainBattle com
   assert.equal(Boolean(report.sceneFile), true)
 })
 
+test('build-output check rejects the Cocos Map iterator spread regression', () => {
+  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-iterator-regression-'))
+  writeFixture(
+    buildRoot,
+    'assets/main/index.js',
+    `PortraitBattleBootstrap ${classId} StageResourceRuntime [].concat(this.pending.values()) [].concat(this.retained.keys())`,
+  )
+  writeFixture(buildRoot, 'assets/main/import/main-battle.json', `["MainBattle","${classId}"]`)
+
+  const report = checkCocosBuildOutput({ buildRoot, projectRoot })
+
+  assert.equal(report.ok, false)
+  assert.equal(report.errors.some((error) => error.includes('Map iterator materialization')), true)
+})
+
 test('formal build verifier combines readiness and bootstrap output checks', () => {
   const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-verified-'))
-  writeFixture(buildRoot, 'assets/main/index.js', `PortraitBattleBootstrap ${classId}`)
+  writeFixture(buildRoot, 'assets/main/index.js', validMainIndex)
   writeFixture(buildRoot, 'assets/main/import/main-battle.json', `["MainBattle","${classId}"]`)
 
   const missingIndex = verifyCocosBuildOutput({
@@ -81,7 +97,7 @@ test('verify:build-output is mandatory and accepts an explicit build root', () =
 
   const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-command-'))
   writeFixture(buildRoot, 'index.html', '<!doctype html>')
-  writeFixture(buildRoot, 'assets/main/index.js', `PortraitBattleBootstrap ${classId}`)
+  writeFixture(buildRoot, 'assets/main/index.js', validMainIndex)
   writeFixture(buildRoot, 'assets/main/import/main-battle.json', `["MainBattle","${classId}"]`)
   const verified = spawnSync(process.execPath, ['tools/check-cocos-build-output.mjs'], {
     cwd: projectRoot,
