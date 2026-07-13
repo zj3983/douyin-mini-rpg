@@ -167,12 +167,11 @@ export class StageResourceRuntime<T> {
     this.retained.set(batch.plan.stageId, { plan: batch.plan, loaded: batch.loaded })
 
     if (batch.required) {
-      const previousStageId = this.activeStageId
       this.activeStageId = batch.plan.stageId
       if (this.prefetchedStageId === batch.plan.stageId) this.prefetchedStageId = null
       this.adapter.ready(batch.plan.stageId)
       this.pruneRetained(new Set(
-        [previousStageId, batch.plan.stageId, this.prefetchedStageId]
+        [batch.plan.stageId, this.prefetchedStageId]
           .filter((value): value is number => value !== null),
       ))
       return
