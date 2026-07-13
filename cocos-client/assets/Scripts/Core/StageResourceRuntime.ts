@@ -24,7 +24,7 @@ interface LoadedResource<T> {
 interface ResourceBatch<T> {
   readonly id: number
   readonly plan: StageResourcePlan
-  readonly required: boolean
+  required: boolean
   readonly loaded: LoadedResource<T>[]
   remaining: number
   valid: boolean
@@ -60,7 +60,14 @@ export class StageResourceRuntime<T> {
     const retained = this.retained.get(plan.stageId)
     if (this.activeStageId === plan.stageId && retained && samePlan(retained.plan, plan)) return false
 
-    this.cancelPending()
+    const reusable = [...this.pending.values()].find((batch) => samePlan(batch.plan, plan))
+    if (reusable) {
+      this.cancelPending((batch) => batch !== reusable)
+      reusable.required = true
+      return true
+    }
+
+    this.cancelPending(() => true)
     if (retained && samePlan(retained.plan, plan)) {
       const previousStageId = this.activeStageId
       this.activeStageId = plan.stageId
@@ -80,8 +87,9 @@ export class StageResourceRuntime<T> {
     const retained = this.retained.get(plan.stageId)
     if (retained && samePlan(retained.plan, plan)) return false
     if ([...this.pending.values()].some((batch) => samePlan(batch.plan, plan))) return false
+    if ([...this.pending.values()].some((batch) => batch.required && batch.plan.stageId === plan.stageId)) return false
 
-    this.cancelPending()
+    this.cancelPending((batch) => !batch.required)
     if (retained) this.releaseStage(plan.stageId)
     this.startBatch(plan, false)
     return true
@@ -90,7 +98,7 @@ export class StageResourceRuntime<T> {
   destroy() {
     if (this.destroyed) return
     this.destroyed = true
-    this.cancelPending()
+    this.cancelPending(() => true)
     for (const stageId of [...this.retained.keys()]) this.releaseStage(stageId)
     this.activeStageId = null
     this.prefetchedStageId = null
@@ -163,7 +171,10 @@ export class StageResourceRuntime<T> {
       this.activeStageId = batch.plan.stageId
       if (this.prefetchedStageId === batch.plan.stageId) this.prefetchedStageId = null
       this.adapter.ready(batch.plan.stageId)
-      this.pruneRetained(new Set([previousStageId, batch.plan.stageId].filter((value): value is number => value !== null)))
+      this.pruneRetained(new Set(
+        [previousStageId, batch.plan.stageId, this.prefetchedStageId]
+          .filter((value): value is number => value !== null),
+      ))
       return
     }
 
@@ -171,8 +182,10 @@ export class StageResourceRuntime<T> {
     this.pruneRetained(new Set([this.activeStageId, this.prefetchedStageId].filter((value): value is number => value !== null)))
   }
 
-  private cancelPending() {
-    for (const batch of [...this.pending.values()]) this.invalidateBatch(batch)
+  private cancelPending(shouldCancel: (batch: ResourceBatch<T>) => boolean) {
+    for (const batch of [...this.pending.values()]) {
+      if (shouldCancel(batch)) this.invalidateBatch(batch)
+    }
   }
 
   private invalidateBatch(batch: ResourceBatch<T>) {

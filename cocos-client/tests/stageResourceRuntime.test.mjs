@@ -140,6 +140,100 @@ test('failed optional prefetch never becomes ready and required activation retri
   assert.equal(harness.actions.filter((action) => action.startsWith('load:stage-2/')).length, 8)
 })
 
+test('optional prefetch can finish before an in-flight required activation without cancelling it', () => {
+  const harness = createHarness()
+  const stage1 = plan(1)
+  const stage2 = plan(2)
+
+  harness.runtime.activate(stage1)
+  assert.equal(harness.runtime.prefetch(stage2), true)
+  harness.resolvePlan(stage2)
+  harness.resolvePlan(stage1)
+
+  assert.deepEqual(harness.runtime.snapshot(), {
+    activeStageId: 1,
+    prefetchedStageId: 2,
+    pendingStageIds: [],
+    retainedStageIds: [1, 2],
+    destroyed: false,
+  })
+  assert.equal(harness.actions.filter((action) => action === 'ready:1').length, 1)
+  assert.equal(harness.actions.includes('ready:2'), false)
+  assert.equal(harness.actions.some((action) => action.startsWith('release:')), false)
+})
+
+test('prefetch after a failed optional load never cancels the required retry', () => {
+  const harness = createHarness()
+  const stage2 = plan(2)
+  const stage3 = plan(3)
+
+  harness.runtime.prefetch(stage2)
+  harness.reject(stage2.assets[0])
+  assert.equal(harness.runtime.activate(stage2), true)
+  assert.equal(harness.runtime.prefetch(stage3), true)
+  harness.resolvePlan(stage2, 1)
+
+  assert.equal(harness.actions.filter((action) => action === 'ready:2').length, 1)
+  assert.equal(harness.runtime.snapshot().activeStageId, 2)
+  harness.resolvePlan(stage3)
+  assert.deepEqual(harness.runtime.snapshot().retainedStageIds, [2, 3])
+  assert.equal(harness.runtime.snapshot().prefetchedStageId, 3)
+})
+
+test('required completion preserves a completed prefetch and optional completion preserves active state', () => {
+  const harness = createHarness()
+  const stages = [1, 2, 3].map((stageId) => plan(stageId))
+
+  harness.runtime.activate(stages[0]); harness.resolvePlan(stages[0])
+  harness.runtime.activate(stages[1])
+  harness.runtime.prefetch(stages[2]); harness.resolvePlan(stages[2])
+  assert.deepEqual(harness.runtime.snapshot().retainedStageIds, [1, 3])
+
+  harness.resolvePlan(stages[1])
+  assert.deepEqual(harness.runtime.snapshot().retainedStageIds, [1, 2, 3])
+  assert.equal(harness.runtime.snapshot().activeStageId, 2)
+  assert.equal(harness.runtime.snapshot().prefetchedStageId, 3)
+})
+
+test('activate promotes an in-flight prefetch for the same plan without duplicate loads', () => {
+  const harness = createHarness()
+  const stage2 = plan(2)
+
+  harness.runtime.prefetch(stage2)
+  const loadsBeforeActivate = harness.actions.filter((action) => action.startsWith('load:')).length
+  assert.equal(harness.runtime.activate(stage2), true)
+  assert.equal(harness.actions.filter((action) => action.startsWith('load:')).length, loadsBeforeActivate)
+  harness.resolvePlan(stage2)
+
+  assert.equal(harness.runtime.snapshot().activeStageId, 2)
+  assert.equal(harness.runtime.snapshot().prefetchedStageId, null)
+  assert.equal(harness.actions.filter((action) => action === 'ready:2').length, 1)
+})
+
+test('required failure keeps the old active stage while unrelated optional work cannot ready and is cancelled on retry', () => {
+  const harness = createHarness()
+  const stages = [1, 2, 3].map((stageId) => plan(stageId))
+
+  harness.runtime.activate(stages[0]); harness.resolvePlan(stages[0])
+  harness.runtime.activate(stages[1])
+  harness.runtime.prefetch(stages[2])
+  assert.deepEqual(harness.runtime.snapshot().pendingStageIds, [2, 3])
+  const optionalLoaded = harness.resolve(stages[2].assets[0])
+  harness.reject(stages[1].assets[0])
+
+  assert.equal(harness.runtime.snapshot().activeStageId, 1)
+  assert.equal(harness.actions.includes('ready:3'), false)
+  assert.equal(harness.runtime.activate(stages[1]), true)
+  assert.equal(harness.released.has(optionalLoaded), true)
+  harness.resolvePlan(stages[1], 1)
+  const lateOptional = stages[2].assets.slice(1).map((descriptor) => harness.resolve(descriptor))
+
+  assert.equal(harness.runtime.snapshot().activeStageId, 2)
+  assert.deepEqual(harness.runtime.snapshot().retainedStageIds, [1, 2])
+  assert.equal(harness.actions.includes('ready:3'), false)
+  assert.equal(lateOptional.every((resource) => harness.released.has(resource)), true)
+})
+
 test('failed required activation preserves active stage, warns once, and can retry', () => {
   const harness = createHarness()
   const stage1 = plan(1)
@@ -204,12 +298,15 @@ async function loadTypeScriptRuntime() {
 
 function runParitySequence(Runtime) {
   const harness = createHarness(Runtime)
-  const stages = [1, 2, 3].map((stageId) => plan(stageId))
-  harness.runtime.activate(stages[0]); harness.resolvePlan(stages[0])
-  harness.runtime.prefetch(stages[1]); harness.resolvePlan(stages[1])
+  const stages = [1, 2, 3, 4].map((stageId) => plan(stageId))
+  harness.runtime.activate(stages[0])
+  harness.runtime.prefetch(stages[1]); harness.resolvePlan(stages[1]); harness.resolvePlan(stages[0])
   harness.runtime.activate(stages[1])
-  harness.runtime.prefetch(stages[2]); harness.reject(stages[2].assets[2])
+  harness.runtime.activate(stages[2])
+  harness.runtime.prefetch(stages[3]); harness.resolve(stages[3].assets[0])
+  harness.reject(stages[2].assets[2])
   harness.runtime.activate(stages[2]); harness.resolvePlan(stages[2], 1)
+  stages[3].assets.slice(1).forEach((descriptor) => harness.resolve(descriptor))
   return { snapshot: harness.runtime.snapshot(), actions: harness.actions }
 }
 
