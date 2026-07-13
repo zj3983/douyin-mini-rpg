@@ -149,41 +149,43 @@ Expose exactly these session functions:
 ```ts
 export type BattlePhase = 'intro' | 'mowing' | 'pressure' | 'boss' | 'settled' | 'defeated'
 export interface EnemySnapshot {
-  id: number
-  kind: EnemyKind
-  position: Point2
-  alive: boolean
-  spawnedAt: number
+  readonly id: number
+  readonly kind: EnemyKind
+  readonly position: Readonly<Point2>
+  readonly alive: boolean
+  readonly spawnedAt: number
 }
-export interface BattleSession {
-  stageId: number
-  generation: number
-  elapsed: number
-  phase: BattlePhase
-  enemies: Map<number, EnemySnapshot>
-  events: CombatEvent[]
-  settled: boolean
+export class BattleSession {
+  get stageId(): number
+  get generation(): number
+  get elapsed(): number
+  get phase(): BattlePhase
+  get settled(): boolean
+  get terminalReason(): 'boss-defeated' | 'timeout' | 'button' | null
+  enemySnapshots(): readonly EnemySnapshot[]
 }
 export interface StageOneCombatConfig {
-  stageId: number
-  durationSeconds: number
-  phaseStarts: { mowing: number; pressure: number; boss: number }
-  activeEnemyCap: number
-  spawnCadenceSeconds: { intro: number; mowing: number; pressure: number }
-  bossId: 'bamboo-warden'
-  settlementAutoContinueSeconds: number
+  readonly stageId: number
+  readonly durationSeconds: number
+  readonly phaseStarts: { readonly mowing: number; readonly pressure: number; readonly boss: number }
+  readonly activeEnemyCap: number
+  readonly spawnCadenceSeconds: { readonly intro: number; readonly mowing: number; readonly pressure: number }
+  readonly bossId: 'bamboo-warden'
+  readonly settlementAutoContinueSeconds: number
 }
 export function parseStageOneConfig(value: unknown): StageOneCombatConfig
 export function createBattleSession(input: { stageId: number; seed: number; config: StageOneCombatConfig }): BattleSession
-export function advanceBattleSession(session: BattleSession, deltaSeconds: number): readonly CombatEvent[]
-export function registerEnemyDefeat(session: BattleSession, enemyId: number): readonly CombatEvent[]
+export function advanceBattleSession(session: BattleSession, deltaSeconds: number): void
+export function registerEnemyDefeat(session: BattleSession, enemyId: number): boolean
 export function settleBattleSession(session: BattleSession, reason: 'boss-defeated' | 'timeout' | 'button'): boolean
-export function drainCombatEvents(session: BattleSession): CombatEvent[]
+export function drainCombatEvents(session: BattleSession): readonly CombatEvent[]
 ```
 
 Clamp each advance to deterministic substeps of at most `1 / 30` second and cap external delta at `0.25` second.
 
 `StageOneConfig.ts` validates JSON structure, finite values, ordered phase times, positive cadence, stage duration, and the 18-enemy hard ceiling. Node tests read the source JSON; the later Cocos adapter loads the resource JSON as `JsonAsset` and passes the validated value into `createBattleSession`. No gameplay constants are duplicated in TypeScript.
+
+`BattleSession` is nominal and owns all mutable authority in runtime-private fields. Public getters expose only scalars; `enemySnapshots()` and `drainCombatEvents()` return defensive immutable copies. Commands never return event objects. `drainCombatEvents()` is the only event-consumption path, so adapters cannot process one event twice.
 
 - [ ] **Step 4: Add the 90-second seeded simulation test**
 
