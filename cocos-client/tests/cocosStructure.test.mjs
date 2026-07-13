@@ -80,25 +80,24 @@ test('enemy visual controller reacts to hit and defeat events', () => {
   assert.equal(source.includes('enemy-visual-death'), true)
 })
 
-test('portrait battle input clamps touch-end coordinates before moving the player', () => {
+test('portrait battle input converts touch-end coordinates before requesting authoritative movement', () => {
   const source = readSource('assets/Scripts/Game/BattleInputController.ts')
 
   assert.match(source, /import\s*{[^}]*EventTouch[^}]*UITransform[^}]*}\s*from\s*'cc'/s)
-  assert.match(source, /import\s*{[^}]*clampBattleTarget[^}]*}\s*from\s*'\.\.\/Core\/MovementRuntime'/s)
+  assert.match(source, /import type\s*{[^}]*BattleRect[^}]*}\s*from\s*'\.\.\/Combat\/CombatTypes\.ts'/s)
   assert.match(source, /Node\.EventType\.TOUCH_END/)
   assert.match(source, /\.on\(Node\.EventType\.TOUCH_END/)
   assert.match(source, /\.off\(Node\.EventType\.TOUCH_END/)
   assert.match(source, /getUILocation\(\)/)
   assert.match(source, /convertToNodeSpaceAR\(new Vec3\(/)
-  assert.match(source, /clampBattleTarget\(/)
-  assert.match(source, /convertToWorldSpaceAR\(new Vec3\(clamped\.x, clamped\.y, 0\)\)/)
-  assert.match(source, /player\.moveTo\(worldTarget\)/)
+  assert.match(source, /public configure\(bounds: BattleRect\)/)
+  assert.match(source, /player\.requestMovement\(local\)/)
+  assert.doesNotMatch(source, /public (?:minX|maxX|minY|maxY)/)
+  assert.doesNotMatch(source, /clampBattleTarget|convertToWorldSpaceAR/)
 
   const localIndex = source.indexOf('convertToNodeSpaceAR')
-  const clampIndex = source.indexOf('clampBattleTarget(local')
-  const worldIndex = source.indexOf('convertToWorldSpaceAR')
-  const moveIndex = source.indexOf('player.moveTo(worldTarget)')
-  assert.ok(localIndex < clampIndex && clampIndex < worldIndex && worldIndex < moveIndex)
+  const moveIndex = source.indexOf('player.requestMovement(local)')
+  assert.ok(localIndex < moveIndex)
 })
 
 test('portrait battle input rebinds the actual subscribed node without duplicates', () => {
@@ -113,16 +112,20 @@ test('portrait battle input rebinds the actual subscribed node without duplicate
   assert.match(source, /this\.subscribedNode = null/)
 })
 
-test('player movement uses fixed-speed runtime steps and emits motion transitions', () => {
+test('player movement uses the encapsulated motor and emits motion transitions', () => {
   const source = readSource('assets/Scripts/Game/PlayerController.ts')
 
-  assert.match(source, /import\s*{[^}]*stepTowardTarget[^}]*}\s*from\s*'\.\.\/Core\/MovementRuntime'/s)
-  assert.match(source, /stepTowardTarget\(/)
+  assert.match(source, /from '\.\.\/Combat\/PlayerMotor\.ts'/)
+  assert.doesNotMatch(source, /Core\/MovementRuntime/)
+  assert.match(source, /public configureMovement\(spawn: Point2, speed: number, bounds: BattleRect\)/)
+  assert.match(source, /public requestMovement\(target: Point2\)/)
+  assert.match(source, /public configureBounds\(bounds: BattleRect\)/)
+  assert.match(source, /stepPlayerMotor\(/)
+  assert.match(source, /this\.node\.setPosition\(frame\.position\.x, frame\.position\.y/)
   assert.doesNotMatch(source, /Date\.now/)
   assert.doesNotMatch(source, /Vec3\.lerp/)
-  assert.match(source, /hoverElapsed\s*\+=\s*deltaTime/)
   assert.match(source, /emit\('player-motion-changed', moving\)/)
-  assert.match(source, /emit\('player-action-requested', 'sword_ride'\)/)
+  assert.match(source, /requestAction\('sword_ride'\)/)
 })
 
 test('flying sword delegates timing while homing state owns flight and lifecycle', () => {

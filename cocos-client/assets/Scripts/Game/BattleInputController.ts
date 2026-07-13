@@ -1,5 +1,5 @@
 import { _decorator, Component, EventTouch, Node, UITransform, Vec3 } from 'cc'
-import { clampBattleTarget } from '../Core/MovementRuntime'
+import type { BattleRect } from '../Combat/CombatTypes.ts'
 import { PlayerController } from './PlayerController'
 
 const { ccclass, property } = _decorator
@@ -12,18 +12,7 @@ export class BattleInputController extends Component {
   @property(UITransform)
   public inputArea: UITransform | null = null
 
-  @property
-  public minX = -300
-
-  @property
-  public maxX = 50
-
-  @property
-  public minY = -430
-
-  @property
-  public maxY = 410
-
+  private bounds: Readonly<BattleRect> | null = null
   private subscribedNode: Node | null = null
   private inputEnabled = false
 
@@ -35,6 +24,11 @@ export class BattleInputController extends Component {
   onDisable() {
     this.inputEnabled = false
     this.unsubscribeInputNode()
+  }
+
+  public configure(bounds: BattleRect) {
+    this.bounds = Object.freeze({ ...bounds })
+    if (this.inputEnabled) this.subscribeInputNode()
   }
 
   public bindInputArea(inputArea: UITransform | null) {
@@ -50,7 +44,7 @@ export class BattleInputController extends Component {
   }
 
   private subscribeInputNode() {
-    const node = this.inputArea?.node ?? null
+    const node = this.bounds && this.player ? this.inputArea?.node ?? null : null
     if (!node || this.subscribedNode === node) return
     this.unsubscribeInputNode()
     node.on(Node.EventType.TOUCH_END, this.onTouchEnd, this)
@@ -65,18 +59,12 @@ export class BattleInputController extends Component {
 
   private onTouchEnd(event: EventTouch) {
     if (!this.inputEnabled) return false
-    const { player, inputArea } = this
-    if (!player || !inputArea) return false
+    const { player, inputArea, bounds } = this
+    if (!player || !inputArea || !bounds) return false
 
     const location = event.getUILocation()
-    const local = inputArea.convertToNodeSpaceAR(new Vec3(location.x, location.y, 0))
-    const clamped = clampBattleTarget(local, {
-      minX: this.minX,
-      maxX: this.maxX,
-      minY: this.minY,
-      maxY: this.maxY,
-    })
-    const worldTarget = inputArea.convertToWorldSpaceAR(new Vec3(clamped.x, clamped.y, 0))
-    return player.moveTo(worldTarget)
+    const converted = inputArea.convertToNodeSpaceAR(new Vec3(location.x, location.y, 0))
+    const local = { x: converted.x, y: converted.y }
+    return player.requestMovement(local)
   }
 }

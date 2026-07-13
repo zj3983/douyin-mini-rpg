@@ -1,17 +1,14 @@
-import { _decorator, Component, Node, Vec3 } from 'cc'
+import { _decorator, Component, Node, UITransform, Vec3 } from 'cc'
+import type { BattleRect, Point2 } from '../Combat/CombatTypes.ts'
+import type { PlayerActionLock, PlayerMotor } from '../Combat/PlayerMotor.ts'
 import {
-  advancePlayerControllerFrame,
-  applyPlayerActionEvent,
-  createPlayerMovementState,
-  createPlayerPresentationState,
-  PlayerMovementState,
-  PlayerPresentationState,
-  requestPlayerMovement,
-  resetPlayerMovement,
-  resetPlayerPresentationState,
-  stepTowardTarget,
-  stopPlayerMovement,
-} from '../Core/MovementRuntime'
+  createPlayerMotor,
+  lockPlayerAction,
+  requestMove,
+  setPlayerBounds,
+  stepPlayerMotor,
+  unlockPlayerAction,
+} from '../Combat/PlayerMotor.ts'
 
 const { ccclass, property } = _decorator
 
@@ -23,78 +20,110 @@ export class PlayerController extends Component {
   @property
   public moveSpeed = 220
 
-  private movementState: PlayerMovementState = createPlayerMovementState({ x: 0, y: 0 })
-  private presentationState: PlayerPresentationState = createPlayerPresentationState()
+  private motor: PlayerMotor | null = null
+  private movementSpawn: Point2 = { x: 0, y: 0 }
+  private movementEnabled = true
+  private moving = false
+  private hoverElapsed = 0
   private swordMountBasePosition = new Vec3()
 
   onLoad() {
-    const spawnPosition = this.node.worldPosition
-    this.movementState = createPlayerMovementState({ x: spawnPosition.x, y: spawnPosition.y })
-    if (this.swordMount) {
-      this.swordMountBasePosition.set(this.swordMount.position)
-      this.presentationState = createPlayerPresentationState(this.swordMountBasePosition.y)
-    }
+    const spawn = this.node.position
+    this.movementSpawn = { x: spawn.x, y: spawn.y }
+    this.motor = createPlayerMotor(this.movementSpawn, this.moveSpeed)
+    if (this.swordMount) this.swordMountBasePosition.set(this.swordMount.position)
   }
 
   start() {
     this.requestAction('sword_ride')
   }
 
+  public configureMovement(spawn: Point2, speed: number, bounds: BattleRect) {
+    const motor = createPlayerMotor(spawn, speed)
+    setPlayerBounds(motor, bounds)
+    this.movementSpawn = { x: spawn.x, y: spawn.y }
+    this.moveSpeed = speed
+    this.motor = motor
+    this.movementEnabled = true
+    this.setMoving(false)
+  }
+
+  public requestMovement(target: Point2) {
+    if (!this.movementEnabled || !this.motor) return false
+    return requestMove(this.motor, target)
+  }
+
+  public configureBounds(bounds: BattleRect) {
+    if (!this.motor) {
+      const position = this.node.position
+      this.motor = createPlayerMotor({ x: position.x, y: position.y }, this.moveSpeed)
+    }
+    setPlayerBounds(this.motor, bounds)
+  }
+
+  public lockAction(action: PlayerActionLock) {
+    if (this.motor) lockPlayerAction(this.motor, action)
+  }
+
+  public unlockAction(action: PlayerActionLock) {
+    if (this.motor) unlockPlayerAction(this.motor, action)
+  }
+
   public moveTo(worldPosition: Vec3) {
-    if (!requestPlayerMovement(this.movementState, worldPosition)) return false
-    return true
+    const parentTransform = this.node.parent?.getComponent(UITransform)
+    const local = parentTransform?.convertToNodeSpaceAR(worldPosition) ?? worldPosition
+    return this.requestMovement({ x: local.x, y: local.y })
   }
 
   public stop() {
-    stopPlayerMovement(this.movementState)
+    if (this.motor) {
+      const bounds = this.motor.bounds
+      const stopped = createPlayerMotor(this.motor.position, this.motor.speed)
+      if (bounds) setPlayerBounds(stopped, bounds)
+      this.motor = stopped
+    }
+    this.movementEnabled = false
     this.setMoving(false)
   }
 
   public reset() {
-    const spawnPosition = resetPlayerMovement(this.movementState)
-    resetPlayerPresentationState(this.presentationState)
-    this.node.setWorldPosition(spawnPosition.x, spawnPosition.y, this.node.worldPosition.z)
+    const speed = this.motor?.speed ?? this.moveSpeed
+    const bounds = this.motor?.bounds ?? null
+    const resetMotor = createPlayerMotor(this.movementSpawn, speed)
+    if (bounds) setPlayerBounds(resetMotor, bounds)
+    this.motor = resetMotor
+    this.movementEnabled = true
+    this.hoverElapsed = 0
     this.setMoving(false)
     this.requestAction('sword_ride')
   }
 
   update(deltaTime: number) {
-    const current = this.node.worldPosition
-    // Presentation helper validates deltaTime before hoverElapsed += deltaTime.
-    // Runtime applies bounded stepTowardTarget(...) substeps before returning one frame result.
-    const frame = advancePlayerControllerFrame(
-      this.movementState,
-      this.presentationState,
-      current,
-      this.moveSpeed,
-      deltaTime,
-    )
-    this.animateSword(frame.hoverY)
-    if (frame.emitMove) {
-      this.node.setWorldPosition(frame.position.x, frame.position.y, current.z)
-    }
-    for (const moving of frame.motionChanges) this.node.emit('player-motion-changed', moving)
-    if (frame.action) this.requestAction(frame.action, frame.position)
+    if (!this.motor) return
+    const frame = stepPlayerMotor(this.motor, deltaTime)
+    this.node.setPosition(frame.position.x, frame.position.y, this.node.position.z)
+    this.animateSword(deltaTime)
+    this.setMoving(frame.distanceMoved > 0)
+    if (frame.arrived && this.motor.action === null) this.requestAction('sword_ride')
   }
 
-  private animateSword(hoverY: number) {
+  private animateSword(deltaTime: number) {
     if (!this.swordMount) return
+    if (Number.isFinite(deltaTime) && deltaTime > 0) this.hoverElapsed += Math.min(deltaTime, 0.25)
     this.swordMount.setPosition(
       this.swordMountBasePosition.x,
-      hoverY,
+      this.swordMountBasePosition.y + Math.sin(this.hoverElapsed * 4) * 2,
       this.swordMountBasePosition.z,
     )
   }
 
   private setMoving(moving: boolean) {
-    if (this.presentationState.moving === moving) return
-    this.presentationState.moving = moving
+    if (this.moving === moving) return
+    this.moving = moving
     this.node.emit('player-motion-changed', moving)
   }
 
-  private requestAction(action: string, position = this.node.worldPosition) {
-    const decision = applyPlayerActionEvent(this.movementState, this.presentationState, position, action)
-    // Arrival resolves to emit('player-action-requested', 'sword_ride') through the runtime decision.
-    if (decision.emitAction) this.node.emit('player-action-requested', decision.action)
+  private requestAction(action: string) {
+    this.node.emit('player-action-requested', action)
   }
 }

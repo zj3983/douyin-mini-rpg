@@ -279,22 +279,24 @@ test('moving player stops before death and retry restores sword ride without a s
 
   assert.match(player, /public stop\(\)/)
   assert.match(player, /public reset\(\)/)
-  assert.match(player, /stopPlayerMovement/)
-  assert.match(player, /resetPlayerMovement/)
+  assert.match(player, /createPlayerMotor/)
+  assert.match(player, /setPlayerBounds/)
   const stopBody = player.match(/public stop\(\) \{([\s\S]*?)\n  \}/)?.[1] ?? ''
   assert.doesNotMatch(stopBody, /sword_ride/)
-  assert.match(stopBody, /stopPlayerMovement\(this\.movementState\)/)
+  assert.match(stopBody, /createPlayerMotor\(this\.motor\.position, this\.motor\.speed\)/)
+  assert.match(stopBody, /this\.movementEnabled = false/)
   const resetBody = player.match(/public reset\(\) \{([\s\S]*?)\n  \}/)?.[1] ?? ''
-  assert.match(resetBody, /resetPlayerMovement\(this\.movementState\)/)
-  assert.match(resetBody, /resetPlayerPresentationState\(this\.presentationState\)/)
+  assert.match(resetBody, /createPlayerMotor\(this\.movementSpawn, speed\)/)
+  assert.match(resetBody, /this\.movementEnabled = true/)
+  assert.doesNotMatch(player, /movementBounds/)
 
   const stopIndex = runtime.indexOf('this.freezeBattle()')
   const deathIndex = runtime.indexOf("emit('player-action-requested', 'death')")
   assert.ok(stopIndex >= 0 && deathIndex > stopIndex)
   assert.match(runtime, /private freezeBattle\(\)[\s\S]*getComponent\(PlayerController\)\?\.stop\(\)/)
   assert.match(runtime, /playerController\?\.reset\(\)/)
-  assert.match(input, /player\.moveTo\(worldTarget\)/)
-  assert.match(bootstrap, /player\.node\.setPosition\(-210, -80, 0\)[\s\S]*addComponent\(PlayerController\)/)
+  assert.match(input, /player\.requestMovement\(local\)/)
+  assert.match(bootstrap, /player\.node\.setPosition\(-210, -80, 0\)[\s\S]*addComponent\(PlayerController\)[\s\S]*configureMovement\(/)
 })
 
 test('stage changes clear soul nodes and reject stale pickup callbacks', () => {
@@ -375,10 +377,11 @@ test('flying sword visual and damage consume the same per-frame swept segment', 
 
 test('player controller consumes substep movement and emits motion only for displacement', () => {
   const player = read('assets/Scripts/Game/PlayerController.ts')
-  assert.match(player, /advancePlayerControllerFrame\(/)
-  assert.match(player, /applyPlayerActionEvent\(/)
-  assert.match(player, /if \(frame\.emitMove\)/)
-  assert.match(player, /if \(frame\.action\)/)
+  assert.match(player, /stepPlayerMotor\(this\.motor, deltaTime\)/)
+  assert.match(player, /this\.node\.setPosition\(frame\.position\.x, frame\.position\.y/)
+  assert.match(player, /this\.setMoving\(frame\.distanceMoved > 0\)/)
+  assert.match(player, /frame\.arrived && this\.motor\.action === null/)
+  assert.doesNotMatch(player, /Core\/MovementRuntime/)
   assert.doesNotMatch(player, /private target: Vec3/)
 })
 
@@ -396,8 +399,8 @@ test('cast hit and death events cannot mutate player movement or create a lunge'
 
 test('sword hover is subtle and always derives from its captured base transform', () => {
   const player = read('assets/Scripts/Game/PlayerController.ts')
-  assert.match(player, /frame\.hoverY/)
-  assert.match(player, /createPlayerPresentationState\(this\.swordMountBasePosition\.y\)/)
+  assert.match(player, /this\.swordMountBasePosition\.set\(this\.swordMount\.position\)/)
+  assert.match(player, /this\.swordMountBasePosition\.y \+ Math\.sin\(this\.hoverElapsed \* 4\) \* 2/)
   assert.doesNotMatch(player, /swordMount\.position\.y \+ yOffset/)
 })
 
