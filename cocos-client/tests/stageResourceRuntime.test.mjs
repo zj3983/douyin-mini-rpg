@@ -464,6 +464,99 @@ test('destroy after latest activation cancellation releases old active and repla
   assert.equal(harness.actions.filter((action) => action === 'ready:1').length, 1)
 })
 
+test('rolling back to the active stage cancels a stale pending optional and releases late callbacks', () => {
+  const harness = createHarness()
+  const stages = [1, 2, 3].map((stageId) => plan(stageId))
+
+  harness.runtime.activate(stages[0])
+  const activeResources = harness.resolvePlan(stages[0])
+  harness.runtime.activate(stages[1])
+  harness.runtime.prefetch(stages[2])
+  const optionalFirst = harness.resolve(stages[2].assets[0])
+
+  assert.equal(harness.runtime.activate(stages[0]), false)
+  assert.deepEqual(harness.runtime.snapshot().pendingStageIds, [])
+  assert.equal(harness.released.has(optionalFirst), true)
+  const optionalLate = stages[2].assets.slice(1).map((descriptor) => harness.resolve(descriptor))
+  const requiredLate = harness.resolvePlan(stages[1])
+
+  assert.equal(optionalLate.every((resource) => harness.released.has(resource)), true)
+  assert.equal(requiredLate.every((resource) => harness.released.has(resource)), true)
+  assert.equal(activeResources.some((resource) => harness.released.has(resource)), false)
+  assert.deepEqual(harness.runtime.snapshot().retainedStageIds, [1])
+  assert.equal(harness.actions.some((action) => action === 'ready:2' || action === 'ready:3'), false)
+})
+
+test('rolling back to the active stage releases a completed stale prefetch', () => {
+  const harness = createHarness()
+  const stages = [1, 2, 3].map((stageId) => plan(stageId))
+
+  harness.runtime.activate(stages[0]); harness.resolvePlan(stages[0])
+  harness.runtime.activate(stages[1])
+  harness.runtime.prefetch(stages[2])
+  const optionalResources = harness.resolvePlan(stages[2])
+  assert.deepEqual(harness.runtime.snapshot().retainedStageIds, [1, 3])
+
+  assert.equal(harness.runtime.activate(stages[0]), false)
+  assert.equal(optionalResources.every((resource) => harness.released.has(resource)), true)
+  assert.deepEqual(harness.runtime.snapshot().retainedStageIds, [1])
+  assert.equal(harness.runtime.snapshot().prefetchedStageId, null)
+})
+
+test('active-stage no-op preserves its valid pending next-stage prefetch', () => {
+  const harness = createHarness()
+  const stage1 = plan(1)
+  const stage2 = plan(2)
+
+  harness.runtime.activate(stage1); harness.resolvePlan(stage1)
+  harness.runtime.prefetch(stage2)
+  const optionalFirst = harness.resolve(stage2.assets[0])
+
+  assert.equal(harness.runtime.activate(stage1), false)
+  assert.deepEqual(harness.runtime.snapshot().pendingStageIds, [2])
+  assert.equal(harness.released.has(optionalFirst), false)
+  const optionalRest = stage2.assets.slice(1).map((descriptor) => harness.resolve(descriptor))
+
+  assert.deepEqual(harness.runtime.snapshot().retainedStageIds, [1, 2])
+  assert.equal([optionalFirst, ...optionalRest].some((resource) => harness.released.has(resource)), false)
+  assert.equal(harness.actions.includes('ready:2'), false)
+})
+
+test('active-stage no-op preserves its valid completed next-stage prefetch', () => {
+  const harness = createHarness()
+  const stage1 = plan(1)
+  const stage2 = plan(2)
+
+  harness.runtime.activate(stage1); harness.resolvePlan(stage1)
+  harness.runtime.prefetch(stage2)
+  const optionalResources = harness.resolvePlan(stage2)
+
+  assert.equal(harness.runtime.activate(stage1), false)
+  assert.deepEqual(harness.runtime.snapshot().retainedStageIds, [1, 2])
+  assert.equal(harness.runtime.snapshot().prefetchedStageId, 2)
+  assert.equal(optionalResources.some((resource) => harness.released.has(resource)), false)
+})
+
+test('destroy after rollback cleanup releases active and all stale callbacks exactly once', () => {
+  const harness = createHarness()
+  const stages = [1, 2, 3].map((stageId) => plan(stageId))
+
+  harness.runtime.activate(stages[0])
+  const activeResources = harness.resolvePlan(stages[0])
+  harness.runtime.activate(stages[1])
+  harness.runtime.prefetch(stages[2])
+  const optionalFirst = harness.resolve(stages[2].assets[0])
+  harness.runtime.activate(stages[0])
+  harness.runtime.destroy()
+  harness.runtime.destroy()
+  const requiredLate = harness.resolvePlan(stages[1])
+  const optionalLate = stages[2].assets.slice(1).map((descriptor) => harness.resolve(descriptor))
+
+  const successful = [...activeResources, optionalFirst, ...requiredLate, ...optionalLate]
+  assert.equal(harness.released.size, successful.length)
+  assert.equal(successful.every((resource) => harness.released.has(resource)), true)
+})
+
 test('repeated activation of the same pending required plan reuses its batch', () => {
   const harness = createHarness()
   const stage1 = plan(1)
@@ -569,11 +662,31 @@ function runAtomicReplacementParitySequence(Runtime) {
   return { snapshot: harness.runtime.snapshot(), actions: harness.actions }
 }
 
+function runRollbackOwnershipParitySequence(Runtime) {
+  const harness = createHarness(Runtime)
+  const stages = [1, 2, 3].map((stageId) => plan(stageId))
+  harness.runtime.activate(stages[0]); harness.resolvePlan(stages[0])
+  harness.runtime.activate(stages[1])
+  harness.runtime.prefetch(stages[2]); harness.resolve(stages[2].assets[0])
+  harness.runtime.activate(stages[0])
+  harness.resolvePlan(stages[1])
+  stages[2].assets.slice(1).forEach((descriptor) => harness.resolve(descriptor))
+  harness.runtime.prefetch(stages[1]); harness.resolve(stages[1].assets[0], 1)
+  harness.runtime.activate(stages[0])
+  stages[1].assets.slice(1).forEach((descriptor) => harness.resolve(descriptor, 1))
+  harness.runtime.destroy()
+  return { snapshot: harness.runtime.snapshot(), actions: harness.actions }
+}
+
 test('TypeScript and ESM runtimes produce identical snapshots and adapter actions', async () => {
   const { StageResourceRuntime: TypeScriptRuntime } = await loadTypeScriptRuntime()
   assert.deepEqual(runParitySequence(TypeScriptRuntime), runParitySequence(StageResourceRuntime))
   assert.deepEqual(
     runAtomicReplacementParitySequence(TypeScriptRuntime),
     runAtomicReplacementParitySequence(StageResourceRuntime),
+  )
+  assert.deepEqual(
+    runRollbackOwnershipParitySequence(TypeScriptRuntime),
+    runRollbackOwnershipParitySequence(StageResourceRuntime),
   )
 })

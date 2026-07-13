@@ -22,13 +22,18 @@ export class StageResourceRuntime {
   activate(plan) {
     if (this.destroyed) return false
     const retained = this.retained.get(plan.stageId)
+    const nextStageId = plan.stageId + 1
     if (this.activeStageId === plan.stageId && retained && samePlan(retained.plan, plan)) {
-      this.cancelPending((batch) => batch.required && !samePlan(batch.plan, plan))
+      this.cancelPending((batch) => batch.required
+        ? !samePlan(batch.plan, plan)
+        : batch.plan.stageId !== nextStageId)
+      if (this.prefetchedStageId !== null && this.prefetchedStageId !== nextStageId) {
+        this.releaseStage(this.prefetchedStageId)
+      }
       return false
     }
 
     const reusable = [...this.pending.values()].find((batch) => samePlan(batch.plan, plan))
-    const nextStageId = plan.stageId + 1
     this.cancelPending((batch) => batch !== reusable && (batch.required || batch.plan.stageId !== nextStageId))
     if (
       this.prefetchedStageId !== null
