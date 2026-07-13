@@ -96,10 +96,14 @@ git commit -m "feat: establish single-source combat domain"
 ```js
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { createBattleSession, advanceBattleSession, settleBattleSession } from '../assets/Scripts/Combat/BattleSession.ts'
+import { parseStageOneConfig } from '../assets/Scripts/Combat/StageOneConfig.ts'
+
+const config = parseStageOneConfig(JSON.parse(readFileSync(new URL('../assets/Data/stage-one-combat.json', import.meta.url), 'utf8')))
 
 test('stage one reaches pressure and boss phases on schedule', () => {
-  const session = createBattleSession({ stageId: 1, seed: 19 })
+  const session = createBattleSession({ stageId: 1, seed: 19, config })
   const advanceFor = (seconds) => {
     for (let frame = 0; frame < seconds * 60; frame += 1) advanceBattleSession(session, 1 / 60)
   }
@@ -112,7 +116,7 @@ test('stage one reaches pressure and boss phases on schedule', () => {
 })
 
 test('settlement is accepted exactly once', () => {
-  const session = createBattleSession({ stageId: 1, seed: 19 })
+  const session = createBattleSession({ stageId: 1, seed: 19, config })
   assert.equal(settleBattleSession(session, 'boss-defeated'), true)
   assert.equal(settleBattleSession(session, 'timeout'), false)
 })
@@ -144,6 +148,13 @@ Expose exactly these session functions:
 
 ```ts
 export type BattlePhase = 'intro' | 'mowing' | 'pressure' | 'boss' | 'settled' | 'defeated'
+export interface EnemySnapshot {
+  id: number
+  kind: EnemyKind
+  position: Point2
+  alive: boolean
+  spawnedAt: number
+}
 export interface BattleSession {
   stageId: number
   generation: number
@@ -153,7 +164,17 @@ export interface BattleSession {
   events: CombatEvent[]
   settled: boolean
 }
-export function createBattleSession(input: { stageId: number; seed: number }): BattleSession
+export interface StageOneCombatConfig {
+  stageId: number
+  durationSeconds: number
+  phaseStarts: { mowing: number; pressure: number; boss: number }
+  activeEnemyCap: number
+  spawnCadenceSeconds: { intro: number; mowing: number; pressure: number }
+  bossId: 'bamboo-warden'
+  settlementAutoContinueSeconds: number
+}
+export function parseStageOneConfig(value: unknown): StageOneCombatConfig
+export function createBattleSession(input: { stageId: number; seed: number; config: StageOneCombatConfig }): BattleSession
 export function advanceBattleSession(session: BattleSession, deltaSeconds: number): readonly CombatEvent[]
 export function registerEnemyDefeat(session: BattleSession, enemyId: number): readonly CombatEvent[]
 export function settleBattleSession(session: BattleSession, reason: 'boss-defeated' | 'timeout' | 'button'): boolean
@@ -161,6 +182,8 @@ export function drainCombatEvents(session: BattleSession): CombatEvent[]
 ```
 
 Clamp each advance to deterministic substeps of at most `1 / 30` second and cap external delta at `0.25` second.
+
+`StageOneConfig.ts` validates JSON structure, finite values, ordered phase times, positive cadence, stage duration, and the 18-enemy hard ceiling. Node tests read the source JSON; the later Cocos adapter loads the resource JSON as `JsonAsset` and passes the validated value into `createBattleSession`. No gameplay constants are duplicated in TypeScript.
 
 - [ ] **Step 4: Add the 90-second seeded simulation test**
 
