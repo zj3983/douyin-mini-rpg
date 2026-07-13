@@ -16,6 +16,43 @@ export function createSeededRandom(seed: number): () => number {
   return () => ((state = (Math.imul(state, 1664525) + 1013904223) >>> 0) / 0x100000000)
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+function isBattleRect(value: unknown): value is BattleRect {
+  return isRecord(value)
+    && isFiniteNumber(value.minX)
+    && isFiniteNumber(value.maxX)
+    && isFiniteNumber(value.minY)
+    && isFiniteNumber(value.maxY)
+}
+
 export function isCombatEvent(value: unknown): value is CombatEvent {
-  return Boolean(value && typeof value === 'object' && 'type' in value && 'at' in value)
+  if (!isRecord(value) || !isFiniteNumber(value.at)) return false
+
+  switch (value.type) {
+    case 'stage-entered':
+    case 'stage-settled':
+      return typeof value.stageId === 'number'
+    case 'animation-requested':
+      return typeof value.actorId === 'string' && typeof value.action === 'string'
+    case 'attack-telegraphed':
+      return typeof value.enemyId === 'number'
+        && typeof value.attackId === 'string'
+        && isBattleRect(value.area)
+    case 'damage-resolved':
+      return typeof value.sourceId === 'string'
+        && typeof value.targetId === 'string'
+        && typeof value.amount === 'number'
+    case 'enemy-defeated':
+    case 'boss-entered':
+      return typeof value.enemyId === 'number'
+    default:
+      return false
+  }
 }
