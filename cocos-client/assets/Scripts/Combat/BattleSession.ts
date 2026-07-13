@@ -5,6 +5,10 @@ import type { StageOneCombatConfig } from './StageOneConfig.ts'
 
 export type BattlePhase = 'intro' | 'mowing' | 'pressure' | 'boss' | 'settled' | 'defeated'
 type BattleTerminalReason = 'boss-defeated' | 'timeout' | 'button'
+export type DeepReadonly<T> = T extends object
+  ? { readonly [Key in keyof T]: DeepReadonly<T[Key]> }
+  : T
+export type ReadonlyCombatEvent = DeepReadonly<CombatEvent>
 
 export interface EnemySnapshot {
   readonly id: number
@@ -26,7 +30,8 @@ const SESSION_TOKEN = Symbol('BattleSession')
 const MAX_EXTERNAL_DELTA_SECONDS = 0.25
 const MAX_SUBSTEP_SECONDS = 1 / 60
 const MAX_SPAWN_ITERATIONS_PER_STEP = 18
-const TIME_EPSILON = 1e-10
+const CLOCK_SNAP_TOLERANCE = 1e-10
+const SPAWN_TIME_EPSILON = 1e-10
 const MAX_UINT32 = 0xffffffff
 
 let constructSession: (
@@ -37,15 +42,17 @@ let constructSession: (
 let advanceSession: (session: BattleSession, deltaSeconds: number) => void
 let defeatEnemy: (session: BattleSession, enemyId: number) => boolean
 let settleSession: (session: BattleSession, reason: BattleTerminalReason) => boolean
-let drainSessionEvents: (session: BattleSession) => readonly CombatEvent[]
+let drainSessionEvents: (session: BattleSession) => readonly ReadonlyCombatEvent[]
 
-function normalizeTime(value: number): number {
+function normalizeTime(value: number, deltaSeconds: number): number {
   const nearestFrame = Math.round(value * 60) / 60
-  if (Math.abs(value - nearestFrame) <= TIME_EPSILON) return nearestFrame
+  const frameDelta = deltaSeconds * 60
+  const advancesWholeFrames = Math.abs(frameDelta - Math.round(frameDelta)) <= Number.EPSILON * 8
+  if (advancesWholeFrames && Math.abs(value - nearestFrame) <= CLOCK_SNAP_TOLERANCE) return nearestFrame
   return Math.round(value * 1e12) / 1e12
 }
 
-function freezeEventCopy(event: CombatEvent): CombatEvent {
+function freezeEventCopy(event: CombatEvent): ReadonlyCombatEvent {
   switch (event.type) {
     case 'stage-entered':
     case 'stage-settled':
@@ -79,6 +86,10 @@ function requireBattleSession(value: BattleSession): BattleSession {
   return value
 }
 
+function isBattleTerminalReason(value: unknown): value is BattleTerminalReason {
+  return value === 'boss-defeated' || value === 'timeout' || value === 'button'
+}
+
 export class BattleSession {
   #stageId: number
   #generation = 1
@@ -93,6 +104,7 @@ export class BattleSession {
   #nextEnemyId = 1
   #nextOrdinaryKind: Exclude<EnemyKind, 'bamboo-warden'>
   #nextSpawnAt: number
+  #nextPhaseTransitionIndex = 0
   #bossEntered = false
 
   private constructor(token: symbol, stageId: number, seed: number, config: StageOneCombatConfig) {
@@ -163,23 +175,27 @@ export class BattleSession {
     this.#enemies.set(enemy.id, enemy)
   }
 
-  #processOrdinarySpawns(through: number): void {
+  #processOrdinarySpawns(through: number, inclusive = true): void {
     const cadence = this.#phase === 'intro'
       ? this.#config.spawnCadenceSeconds.intro
       : this.#phase === 'mowing'
         ? this.#config.spawnCadenceSeconds.mowing
         : this.#config.spawnCadenceSeconds.pressure
     const iterationLimit = Math.min(this.#config.activeEnemyCap, MAX_SPAWN_ITERATIONS_PER_STEP)
+    const isDue = () => inclusive
+      ? this.#nextSpawnAt <= through + SPAWN_TIME_EPSILON
+      : this.#nextSpawnAt < through
     let iterations = 0
 
-    while (this.#nextSpawnAt <= through + TIME_EPSILON && iterations < iterationLimit) {
+    while (isDue() && iterations < iterationLimit) {
       this.#spawnOrdinary(this.#nextSpawnAt)
       this.#nextSpawnAt += cadence
       iterations += 1
     }
 
-    if (this.#nextSpawnAt <= through + TIME_EPSILON) {
-      const skippedIntervals = Math.floor((through + TIME_EPSILON - this.#nextSpawnAt) / cadence) + 1
+    if (isDue()) {
+      const spawnLimit = inclusive ? through + SPAWN_TIME_EPSILON : through
+      const skippedIntervals = Math.floor((spawnLimit - this.#nextSpawnAt) / cadence) + 1
       this.#nextSpawnAt += skippedIntervals * cadence
     }
   }
@@ -213,23 +229,25 @@ export class BattleSession {
   }
 
   #advanceSubstep(deltaSeconds: number): void {
-    const target = normalizeTime(this.#elapsed + deltaSeconds)
+    const target = normalizeTime(this.#elapsed + deltaSeconds, deltaSeconds)
     const transitions: ReadonlyArray<{ phase: BattlePhase; at: number }> = [
       { phase: 'mowing', at: this.#config.phaseStarts.mowing },
       { phase: 'pressure', at: this.#config.phaseStarts.pressure },
       { phase: 'boss', at: this.#config.phaseStarts.boss },
     ]
 
-    for (const transition of transitions) {
-      if (this.#elapsed + TIME_EPSILON >= transition.at || target + TIME_EPSILON < transition.at) continue
-      if (this.#phase !== 'boss') this.#processOrdinarySpawns(transition.at - TIME_EPSILON)
+    while (this.#nextPhaseTransitionIndex < transitions.length) {
+      const transition = transitions[this.#nextPhaseTransitionIndex]
+      if (transition.at > target) break
+      if (this.#phase !== 'boss') this.#processOrdinarySpawns(transition.at, false)
       this.#elapsed = transition.at
       this.#enterPhase(transition.phase, transition.at)
+      this.#nextPhaseTransitionIndex += 1
     }
 
     if (this.#phase !== 'boss') this.#processOrdinarySpawns(target)
     this.#elapsed = Math.max(this.#elapsed, target)
-    if (this.#elapsed + TIME_EPSILON >= this.#config.durationSeconds) {
+    if (this.#elapsed >= this.#config.durationSeconds) {
       this.#elapsed = this.#config.durationSeconds
       this.#settle('timeout')
     }
@@ -239,7 +257,7 @@ export class BattleSession {
     if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0 || this.#isTerminal()) return
 
     const clampedDelta = Math.min(deltaSeconds, MAX_EXTERNAL_DELTA_SECONDS)
-    const substepCount = Math.max(1, Math.ceil(clampedDelta / MAX_SUBSTEP_SECONDS - TIME_EPSILON))
+    const substepCount = Math.max(1, Math.ceil(clampedDelta / MAX_SUBSTEP_SECONDS - CLOCK_SNAP_TOLERANCE))
     const substep = clampedDelta / substepCount
     for (let index = 0; index < substepCount && !this.#isTerminal(); index += 1) {
       this.#advanceSubstep(substep)
@@ -266,7 +284,7 @@ export class BattleSession {
     return true
   }
 
-  #drainCombatEvents(): readonly CombatEvent[] {
+  #drainCombatEvents(): readonly ReadonlyCombatEvent[] {
     const queued = this.#events
     this.#events = []
     return Object.freeze(queued.map(freezeEventCopy))
@@ -295,9 +313,10 @@ export function registerEnemyDefeat(session: BattleSession, enemyId: number): bo
 }
 
 export function settleBattleSession(session: BattleSession, reason: BattleTerminalReason): boolean {
+  if (!isBattleTerminalReason(reason)) return false
   return settleSession(requireBattleSession(session), reason)
 }
 
-export function drainCombatEvents(session: BattleSession): readonly CombatEvent[] {
+export function drainCombatEvents(session: BattleSession): readonly ReadonlyCombatEvent[] {
   return drainSessionEvents(requireBattleSession(session))
 }

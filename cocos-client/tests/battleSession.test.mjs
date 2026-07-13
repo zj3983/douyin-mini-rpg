@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import test from 'node:test'
 
 import {
@@ -210,6 +211,53 @@ test('events are consumed once only through an immutable drain', () => {
   assert.deepEqual(drainCombatEvents(session), [])
 })
 
+test('drained event types are recursively readonly under strict TypeScript', async () => {
+  const imported = await import('../../node_modules/typescript/lib/typescript.js')
+  const ts = imported.default ?? imported
+  const fixturePath = resolve('tests/battleSession-readonly.fixture.ts').replaceAll('\\', '/')
+  const fixtureSource = `
+    import { drainCombatEvents } from '../assets/Scripts/Combat/BattleSession.ts'
+    import type { BattleSession, ReadonlyCombatEvent } from '../assets/Scripts/Combat/BattleSession.ts'
+
+    declare const session: BattleSession
+    const drained = drainCombatEvents(session)
+    declare const telegraph: Extract<ReadonlyCombatEvent, { readonly type: 'attack-telegraphed' }>
+
+    // @ts-expect-error drained arrays are readonly
+    drained.push(drained[0])
+    // @ts-expect-error event fields are readonly
+    drained[0].at = 1
+    // @ts-expect-error nested event fields are readonly
+    telegraph.area.minX = 1
+  `
+  const options = {
+    allowImportingTsExtensions: true,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    noEmit: true,
+    skipLibCheck: true,
+    strict: true,
+    target: ts.ScriptTarget.ES2022,
+  }
+  const host = ts.createCompilerHost(options)
+  const readFile = host.readFile.bind(host)
+  const fileExists = host.fileExists.bind(host)
+  const getSourceFile = host.getSourceFile.bind(host)
+  const isFixture = (path) => path.replaceAll('\\', '/') === fixturePath
+  host.fileExists = (path) => isFixture(path) || fileExists(path)
+  host.readFile = (path) => isFixture(path) ? fixtureSource : readFile(path)
+  host.getSourceFile = (path, languageVersion, onError, shouldCreateNewSourceFile) => isFixture(path)
+    ? ts.createSourceFile(path, fixtureSource, languageVersion, true)
+    : getSourceFile(path, languageVersion, onError, shouldCreateNewSourceFile)
+
+  const program = ts.createProgram([fixturePath], options, host)
+  const diagnostics = ts.getPreEmitDiagnostics(program).map((diagnostic) => ts.flattenDiagnosticMessageText(
+    diagnostic.messageText,
+    '\n',
+  ))
+  assert.deepEqual(diagnostics, [])
+})
+
 test('settlement stores one terminal reason and terminal commands are no-ops', () => {
   const session = createSession()
   advanceFor(session, 2)
@@ -229,6 +277,17 @@ test('settlement stores one terminal reason and terminal commands are no-ops', (
   assert.equal(registerEnemyDefeat(session, enemy.id), false)
   assert.equal(session.elapsed, elapsed)
   assert.equal(snapshots(session).find((snapshot) => snapshot.id === enemy.id).alive, true)
+  assert.deepEqual(drainCombatEvents(session), [])
+})
+
+test('unknown settlement reasons are rejected without mutating or emitting', () => {
+  const session = createSession()
+  drainCombatEvents(session)
+
+  assert.equal(settleBattleSession(session, 'not-a-terminal-reason'), false)
+  assert.equal(session.phase, 'intro')
+  assert.equal(session.settled, false)
+  assert.equal(session.terminalReason, null)
   assert.deepEqual(drainCombatEvents(session), [])
 })
 
@@ -283,6 +342,51 @@ test('15, 40, 60, and 90 boundaries are exact across partition patterns', () => 
       if (boundary.at === 90) assert.equal(session.terminalReason, 'timeout')
     }
   }
+})
+
+test('epsilon-close ordered phases all transition and remain partition-equivalent', () => {
+  const closeConfig = parseStageOneConfig({
+    ...sourceValue,
+    durationSeconds: 2,
+    phaseStarts: { mowing: 1, pressure: 1.00000000005, boss: 1.00000000009 },
+  })
+  const quarter = createSession(88, closeConfig)
+  const mixed = createSession(88, closeConfig)
+  drainCombatEvents(quarter)
+  drainCombatEvents(mixed)
+
+  advanceTo(quarter, 1.25, [0.25])
+  advanceTo(mixed, 1.25, [0.07, 0.13, 0.05])
+  const quarterEvents = drainCombatEvents(quarter)
+  const mixedEvents = drainCombatEvents(mixed)
+
+  assert.equal(quarter.phase, 'boss')
+  assert.equal(mixed.phase, 'boss')
+  assert.deepEqual(snapshots(quarter), snapshots(mixed))
+  assert.equal(snapshots(quarter).filter((enemy) => enemy.kind === 'bamboo-warden').length, 1)
+  assert.deepEqual(quarterEvents, mixedEvents)
+  assert.deepEqual(quarterEvents.filter((event) => event.type === 'boss-entered'), [
+    { type: 'boss-entered', enemyId: snapshots(quarter).find((enemy) => enemy.kind === 'bamboo-warden').id, at: 1.00000000009 },
+  ])
+})
+
+test('one external step processes every ordered phase transition it crosses', () => {
+  const compactConfig = parseStageOneConfig({
+    ...sourceValue,
+    durationSeconds: 2,
+    phaseStarts: { mowing: 0.05, pressure: 0.1, boss: 0.15 },
+  })
+  const session = createSession(99, compactConfig)
+  drainCombatEvents(session)
+
+  advanceBattleSession(session, 0.25)
+
+  const boss = snapshots(session).filter((enemy) => enemy.kind === 'bamboo-warden')
+  assert.equal(session.phase, 'boss')
+  assert.equal(boss.length, 1)
+  assert.deepEqual(drainCombatEvents(session), [
+    { type: 'boss-entered', enemyId: boss[0].id, at: 0.15 },
+  ])
 })
 
 test('same seeds reproduce finite enemy snapshots while different seeds diverge', () => {
