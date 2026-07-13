@@ -172,6 +172,14 @@ jobs:
                 '/game/douyin-mini-rpg/api/',
                 '/game/douyin-mini-rpg/',
             }
+            compression_directives = {
+                'gzip',
+                'gzip_vary',
+                'gzip_proxied',
+                'gzip_comp_level',
+                'gzip_min_length',
+                'gzip_types',
+            }
             compression = r'''
 
                 # BEGIN douyin-mini-rpg compression
@@ -452,8 +460,23 @@ jobs:
                 ]
                 return remove_spans(source, spans)
 
+            def remove_server_compression_directives(source):
+                _, _, _, statements = top_level_statements(source)
+                spans = [
+                    expanded_line_span(source, start, end)
+                    for kind, header, start, end in statements
+                    if (
+                        kind == 'directive'
+                        and header
+                        and header[0].kind == 'bare'
+                        and header[0].value in compression_directives
+                    )
+                ]
+                return remove_spans(source, spans)
+
             def patch_server(source):
                 source = remove_managed_blocks(source)
+                source = remove_server_compression_directives(source)
                 source = remove_target_locations(source)
                 server_name = matching_server_name(source)
                 if server_name is None:

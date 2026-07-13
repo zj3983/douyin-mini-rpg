@@ -173,6 +173,55 @@ test('single-line server with a retained location is byte-idempotent', () => {
   }
 });
 
+test('patcher replaces existing server-level gzip directives without touching nested directives', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deploy-compression-'));
+  const configPath = path.join(tempDir, 'site.conf');
+  const original = [
+    'server {',
+    '    listen 80;',
+    '    server_name mcp.edcedc.cn;',
+    '    gzip off;',
+    '    gzip_vary off;',
+    '    gzip_proxied expired;',
+    '    gzip_comp_level 1;',
+    '    gzip_min_length 256;',
+    '    gzip_types text/plain;',
+    '    location /keep/ {',
+    '        gzip off;',
+    '        gzip_comp_level 2;',
+    '        return 200;',
+    '    }',
+    '}',
+  ].join('\n');
+
+  try {
+    fs.writeFileSync(configPath, `${original}\n`);
+    const firstRun = runPatcher(configPath);
+    assert.equal(firstRun.status, 0, firstRun.stderr);
+    const first = fs.readFileSync(configPath, 'utf8');
+    const secondRun = runPatcher(configPath);
+    assert.equal(secondRun.status, 0, secondRun.stderr);
+    const second = fs.readFileSync(configPath, 'utf8');
+
+    assert.equal(second, first, 'patch must remain byte-idempotent');
+    for (const directive of [
+      'gzip on;',
+      'gzip_vary on;',
+      'gzip_proxied any;',
+      'gzip_comp_level 6;',
+      'gzip_min_length 1024;',
+    ]) {
+      assert.equal(second.split(directive).length - 1, 1, `duplicate directive: ${directive}`);
+    }
+    assert.equal(second.match(/^\s*gzip_types /mg)?.length, 1);
+    assert.match(second, /location \/keep\/ \{\s+gzip off;\s+gzip_comp_level 2;/);
+    assert.doesNotMatch(second, /^ {4}gzip off;/m);
+    assert.doesNotMatch(second, /^ {4}gzip_comp_level 1;/m);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('deploy Actions shell is syntactically valid', (t) => {
   const probe = spawnSync('bash', ['--version'], { encoding: 'utf8' });
   if (probe.error?.code === 'ENOENT') {
