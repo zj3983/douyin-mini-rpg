@@ -22,7 +22,10 @@ export class StageResourceRuntime {
   activate(plan) {
     if (this.destroyed) return false
     const retained = this.retained.get(plan.stageId)
-    if (this.activeStageId === plan.stageId && retained && samePlan(retained.plan, plan)) return false
+    if (this.activeStageId === plan.stageId && retained && samePlan(retained.plan, plan)) {
+      this.cancelPending((batch) => batch.required && !samePlan(batch.plan, plan))
+      return false
+    }
 
     const reusable = [...this.pending.values()].find((batch) => samePlan(batch.plan, plan))
     const nextStageId = plan.stageId + 1

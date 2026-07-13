@@ -400,6 +400,87 @@ test('destroy during same-stage replacement releases old active pending success 
   assert.deepEqual(harness.runtime.snapshot().retainedStageIds, [])
 })
 
+test('latest activation cancels an unresolved same-stage replacement before treating the active plan as a no-op', () => {
+  const harness = createHarness()
+  const original = plan(1)
+  const replacement = plan(1, ['replacement-a', 'replacement-b', 'replacement-c', 'replacement-d'])
+
+  harness.runtime.activate(original)
+  const originalResources = harness.resolvePlan(original)
+  harness.runtime.activate(replacement)
+  assert.equal(harness.runtime.activate(original), false)
+  assert.deepEqual(harness.runtime.snapshot().pendingStageIds, [])
+
+  const replacementLate = harness.resolvePlan(replacement)
+  assert.equal(replacementLate.every((resource) => harness.released.has(resource)), true)
+  assert.equal(originalResources.some((resource) => harness.released.has(resource)), false)
+  assert.equal(harness.actions.filter((action) => action === 'ready:1').length, 1)
+  assert.deepEqual(harness.runtime.snapshot().retainedStageIds, [1])
+})
+
+test('latest activation releases partial replacement resources once and rejects every late success', () => {
+  const harness = createHarness()
+  const original = plan(1)
+  const replacement = plan(1, ['replacement-a', 'replacement-b', 'replacement-c', 'replacement-d'])
+
+  harness.runtime.activate(original)
+  const originalResources = harness.resolvePlan(original)
+  harness.runtime.activate(replacement)
+  const replacementFirst = harness.resolve(replacement.assets[0])
+
+  assert.equal(harness.runtime.activate(original), false)
+  assert.equal(harness.released.has(replacementFirst), true)
+  const replacementLate = replacement.assets.slice(1).map((descriptor) => harness.resolve(descriptor))
+
+  assert.equal(replacementLate.every((resource) => harness.released.has(resource)), true)
+  assert.equal(originalResources.some((resource) => harness.released.has(resource)), false)
+  assert.equal(harness.actions.filter((action) => action === 'ready:1').length, 1)
+  assert.deepEqual(harness.runtime.snapshot(), {
+    activeStageId: 1,
+    prefetchedStageId: null,
+    pendingStageIds: [],
+    retainedStageIds: [1],
+    destroyed: false,
+  })
+})
+
+test('destroy after latest activation cancellation releases old active and replacement callbacks exactly once', () => {
+  const harness = createHarness()
+  const original = plan(1)
+  const replacement = plan(1, ['replacement-a', 'replacement-b', 'replacement-c', 'replacement-d'])
+
+  harness.runtime.activate(original)
+  const originalResources = harness.resolvePlan(original)
+  harness.runtime.activate(replacement)
+  const replacementFirst = harness.resolve(replacement.assets[0])
+  harness.runtime.activate(original)
+  harness.runtime.destroy()
+  harness.runtime.destroy()
+  const replacementLate = replacement.assets.slice(1).map((descriptor) => harness.resolve(descriptor))
+
+  const successful = [...originalResources, replacementFirst, ...replacementLate]
+  assert.equal(harness.released.size, successful.length)
+  assert.equal(successful.every((resource) => harness.released.has(resource)), true)
+  assert.equal(harness.actions.filter((action) => action === 'ready:1').length, 1)
+})
+
+test('repeated activation of the same pending required plan reuses its batch', () => {
+  const harness = createHarness()
+  const stage1 = plan(1)
+  const stage2 = plan(2)
+
+  harness.runtime.activate(stage1); harness.resolvePlan(stage1)
+  harness.runtime.activate(stage2)
+  const stage2First = harness.resolve(stage2.assets[0])
+  const loadsBeforeRepeat = harness.actions.filter((action) => action.startsWith('load:stage-2/')).length
+
+  assert.equal(harness.runtime.activate(stage2), true)
+  assert.equal(harness.actions.filter((action) => action.startsWith('load:stage-2/')).length, loadsBeforeRepeat)
+  assert.equal(harness.released.has(stage2First), false)
+  stage2.assets.slice(1).forEach((descriptor) => harness.resolve(descriptor))
+  assert.equal(harness.actions.filter((action) => action === 'ready:2').length, 1)
+})
+
 test('different-plan replacement of a non-active retained stage can release it before loading', () => {
   const harness = createHarness()
   const stage1 = plan(1)
@@ -482,9 +563,8 @@ function runAtomicReplacementParitySequence(Runtime) {
   const replacement = plan(1, ['replacement-a', 'replacement-b', 'replacement-c', 'replacement-d'])
   harness.runtime.activate(original); harness.resolvePlan(original)
   harness.runtime.activate(replacement)
-  harness.resolve(replacement.assets[0]); harness.reject(replacement.assets[1])
-  replacement.assets.slice(2).forEach((descriptor) => harness.resolve(descriptor))
-  harness.runtime.activate(replacement); harness.resolvePlan(replacement, 1)
+  harness.resolve(replacement.assets[0]); harness.runtime.activate(original)
+  replacement.assets.slice(1).forEach((descriptor) => harness.resolve(descriptor))
   harness.runtime.destroy()
   return { snapshot: harness.runtime.snapshot(), actions: harness.actions }
 }
