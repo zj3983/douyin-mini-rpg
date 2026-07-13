@@ -69,7 +69,7 @@ export class StageResourceRuntime<T> {
       return false
     }
 
-    const reusable = [...this.pending.values()].find((batch) => samePlan(batch.plan, plan))
+    const reusable = Array.from(this.pending.values()).find((batch) => samePlan(batch.plan, plan))
     this.cancelPending((batch) => batch !== reusable && (batch.required || batch.plan.stageId !== nextStageId))
     if (
       this.prefetchedStageId !== null
@@ -101,8 +101,8 @@ export class StageResourceRuntime<T> {
     if (this.destroyed || this.activeStageId === plan.stageId) return false
     const retained = this.retained.get(plan.stageId)
     if (retained && samePlan(retained.plan, plan)) return false
-    if ([...this.pending.values()].some((batch) => samePlan(batch.plan, plan))) return false
-    if ([...this.pending.values()].some((batch) => batch.required && batch.plan.stageId === plan.stageId)) return false
+    if (Array.from(this.pending.values()).some((batch) => samePlan(batch.plan, plan))) return false
+    if (Array.from(this.pending.values()).some((batch) => batch.required && batch.plan.stageId === plan.stageId)) return false
 
     this.cancelPending((batch) => !batch.required)
     if (retained) this.releaseStage(plan.stageId)
@@ -114,7 +114,7 @@ export class StageResourceRuntime<T> {
     if (this.destroyed) return
     this.destroyed = true
     this.cancelPending(() => true)
-    for (const stageId of [...this.retained.keys()]) this.releaseStage(stageId)
+    for (const stageId of Array.from(this.retained.keys())) this.releaseStage(stageId)
     this.activeStageId = null
     this.prefetchedStageId = null
   }
@@ -123,8 +123,9 @@ export class StageResourceRuntime<T> {
     return {
       activeStageId: this.activeStageId,
       prefetchedStageId: this.prefetchedStageId,
-      pendingStageIds: [...new Set([...this.pending.values()].map(({ plan }) => plan.stageId))].sort((a, b) => a - b),
-      retainedStageIds: [...this.retained.keys()].sort((a, b) => a - b),
+      pendingStageIds: Array.from(new Set(Array.from(this.pending.values()).map(({ plan }) => plan.stageId)))
+        .sort((a, b) => a - b),
+      retainedStageIds: Array.from(this.retained.keys()).sort((a, b) => a - b),
       destroyed: this.destroyed,
     }
   }
@@ -203,7 +204,7 @@ export class StageResourceRuntime<T> {
   }
 
   private cancelPending(shouldCancel: (batch: ResourceBatch<T>) => boolean) {
-    for (const batch of [...this.pending.values()]) {
+    for (const batch of Array.from(this.pending.values())) {
       if (shouldCancel(batch)) this.invalidateBatch(batch)
     }
   }
@@ -216,7 +217,7 @@ export class StageResourceRuntime<T> {
   }
 
   private pruneRetained(keep: ReadonlySet<number>) {
-    for (const stageId of [...this.retained.keys()]) {
+    for (const stageId of Array.from(this.retained.keys())) {
       if (!keep.has(stageId)) this.releaseStage(stageId)
     }
   }

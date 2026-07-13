@@ -628,6 +628,15 @@ test('stage 4 remains active without any implicit stage 5 request', () => {
   assert.equal(harness.runtime.snapshot().activeStageId, 4)
 })
 
+test('Cocos runtime materializes Map iterators without spread syntax', () => {
+  const source = readFileSync(new URL('../assets/Scripts/Core/StageResourceRuntime.ts', import.meta.url), 'utf8')
+
+  assert.doesNotMatch(source, /\[\.\.\.this\.(?:pending\.values|retained\.keys)\(\)\]/)
+  assert.doesNotMatch(source, /\[\.\.\.new Set\(/)
+  assert.match(source, /Array\.from\(this\.pending\.values\(\)\)/)
+  assert.match(source, /Array\.from\(this\.retained\.keys\(\)\)/)
+})
+
 async function loadTypeScriptRuntime() {
   const source = readFileSync(new URL('../assets/Scripts/Core/StageResourceRuntime.ts', import.meta.url), 'utf8')
   const javascript = ts.transpileModule(source, {
