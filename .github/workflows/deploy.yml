@@ -356,7 +356,7 @@ jobs:
                     if kind != 'directive' or not header:
                         continue
                     if header[0].kind == 'bare' and header[0].value == 'server_name':
-                        if any(token.kind == 'bare' and token.value == target_domain for token in header[1:]):
+                        if any(token.kind in {'bare', 'quoted'} and token.value == target_domain for token in header[1:]):
                             return start, end
                 return None
 
@@ -430,13 +430,17 @@ jobs:
                 return remove_spans(source, spans)
 
             def target_location(header):
-                if not header or any(token.kind != 'bare' for token in header):
+                if not header or header[0].kind != 'bare' or header[0].value != 'location':
                     return False
-                values = [token.value for token in header]
-                if len(values) == 2 and values[0] == 'location':
-                    return values[1] in target_routes
-                if len(values) == 3 and values[0] == 'location' and values[1] in {'=', '^~'}:
-                    return values[2] in target_routes
+                if len(header) == 2 and header[1].kind in {'bare', 'quoted'}:
+                    return header[1].value in target_routes
+                if (
+                    len(header) == 3
+                    and header[1].kind == 'bare'
+                    and header[1].value in {'=', '^~'}
+                    and header[2].kind in {'bare', 'quoted'}
+                ):
+                    return header[2].value in target_routes
                 return False
 
             def remove_target_locations(source):
@@ -455,7 +459,12 @@ jobs:
                 if server_name is None:
                     raise ValueError('matching server_name disappeared during patch')
                 insert_at = server_name[1]
-                return source[:insert_at] + compression + location + source[insert_at:]
+                content_at = insert_at
+                while content_at < len(source) and source[content_at].isspace():
+                    content_at += 1
+                whitespace = source[insert_at:content_at]
+                indentation = whitespace.rsplit('\n', 1)[-1] if '\n' in whitespace else whitespace
+                return source[:insert_at] + compression + location + indentation + source[content_at:]
 
             path = Path(sys.argv[1])
             text = path.read_bytes().decode('utf-8')

@@ -114,11 +114,21 @@ test('patcher lexes exact server directives and balanced locations without touch
     'location = /game/douyin-mini-rpg/cocos-js/ { return 404; }',
     '}',
   ].join('\n');
+  const quotedTarget = [
+    'server {',
+    '    server_name "mcp.edcedc.cn";',
+    '    location ^~ "/game/douyin-mini-rpg/assets/" { return 451; }',
+    '    location = "/game/douyin-mini-rpg/cocos-js/" { return 452; }',
+    '    location "/game/douyin-mini-rpg/src/" { return 453; }',
+    '    location ^~ "/game/douyin-mini-rpg/api/" { if ($quoted) { return 454; } }',
+    '    location ^~ "/game/douyin-mini-rpg/" { return 455; }',
+    '}',
+  ].join('\n');
   const secondUntouched = 'server { server_name unrelated.example; location /keep-two/ { return 206; } }';
   try {
     fs.writeFileSync(
       configPath,
-      `${targetAtByteZero}\n\n${untouchedDecoy}\n\n${secondTarget}\n\n${secondUntouched}\n`,
+      `${targetAtByteZero}\n\n${untouchedDecoy}\n\n${secondTarget}\n\n${quotedTarget}\n\n${secondUntouched}\n`,
     );
 
     const firstRun = runPatcher(configPath);
@@ -131,12 +141,33 @@ test('patcher lexes exact server directives and balanced locations without touch
     assert.equal(second, first);
     assert.ok(second.includes(untouchedDecoy), 'near-domain and quoted/comment decoy bytes changed');
     assert.ok(second.endsWith(`${secondUntouched}\n`), 'trailing unrelated server bytes changed');
-    assert.equal(second.match(/^\s*gzip_types text\/plain/mg)?.length, 2);
-    assert.equal(second.match(/alias \/var\/www\/game\/douyin-mini-rpg\/assets\//g)?.length, 2);
+    assert.equal(second.match(/^\s*gzip_types text\/plain/mg)?.length, 3);
+    assert.equal(second.match(/alias \/var\/www\/game\/douyin-mini-rpg\/assets\//g)?.length, 3);
     assert.equal(second.match(/location \/keep\/ \{ if \(\$keep\)/g)?.length, 1);
     assert.doesNotMatch(second, /return 405;\n        }\n        return 404;/);
     assert.doesNotMatch(second, /location = \/game\/douyin-mini-rpg\/cocos-js\/ \{ return 404; \}/);
+    assert.doesNotMatch(second, /return 45[1-5];/);
     assert.match(second, new RegExp(`set \\$quoted_marker "${beginMarker} inside a value";`));
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('single-line server with a retained location is byte-idempotent', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deploy-compression-'));
+  const configPath = path.join(tempDir, 'site.conf');
+  const keep = 'location /keep/ { return 200; }';
+  try {
+    fs.writeFileSync(configPath, `server { server_name mcp.edcedc.cn; ${keep} }\n`);
+    const firstRun = runPatcher(configPath);
+    assert.equal(firstRun.status, 0, firstRun.stderr);
+    const first = fs.readFileSync(configPath, 'utf8');
+    const secondRun = runPatcher(configPath);
+    assert.equal(secondRun.status, 0, secondRun.stderr);
+    const second = fs.readFileSync(configPath, 'utf8');
+
+    assert.equal(second, first);
+    assert.equal(second.match(/location \/keep\/ \{ return 200; \}/g)?.length, 1);
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
