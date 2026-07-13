@@ -16,6 +16,22 @@ const workflow = fs.readFileSync(
 const beginMarker = '# BEGIN douyin-mini-rpg compression';
 const endMarker = '# END douyin-mini-rpg compression';
 
+function embeddedPatcher() {
+  const lines = workflow.split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim() === 'from pathlib import Path');
+  const end = lines.findIndex((line, index) => index > start && line.trim() === 'PY');
+  assert.ok(start >= 0 && end > start, 'embedded nginx patcher is missing');
+  return lines.slice(start, end).map((line) => line.slice(12)).join('\n');
+}
+
+function runPatcher(configPath) {
+  const python = process.platform === 'win32' ? 'python' : 'python3';
+  return spawnSync(python, ['-', configPath], {
+    encoding: 'utf8',
+    input: embeddedPatcher(),
+  });
+}
+
 test('defines exactly one managed gzip template with the required directives', () => {
   assert.equal(workflow.split(beginMarker).length - 1, 1);
   assert.equal(workflow.split(endMarker).length - 1, 1);
@@ -39,8 +55,8 @@ test('defines exactly one managed gzip template with the required directives', (
 });
 
 test('removes the old managed block before inserting gzip after server_name and before locations', () => {
-  const removalIndex = workflow.indexOf("managed_pattern.sub('', text)");
-  const insertionIndex = workflow.indexOf("pattern.sub(r'\\1' + compression + location, text)");
+  const removalIndex = workflow.indexOf("managed_pattern.sub('', block)");
+  const insertionIndex = workflow.indexOf("server_name_pattern.sub(r'\\1' + compression + location, block, count=1)");
   assert.ok(removalIndex >= 0, 'managed gzip removal is missing');
   assert.ok(insertionIndex > removalIndex, 'managed gzip must be removed before insertion');
   assert.match(workflow, /managed_pattern\s*=\s*re\.compile\([\s\S]*?re\.S\)/);
@@ -48,45 +64,73 @@ test('removes the old managed block before inserting gzip after server_name and 
   const compressionIndex = workflow.indexOf('compression = r\'\'\'');
   const locationIndex = workflow.indexOf('location = r\'\'\'');
   assert.ok(compressionIndex >= 0 && locationIndex > compressionIndex, 'gzip template must precede game locations');
-  assert.match(workflow, /pattern\s*=\s*re\.compile\(r'\(\^[^']*server_name[^']*'[^\n]*re\.M\)[\s\S]*?pattern\.sub\(r'\\1' \+ compression \+ location, text\)/);
+  assert.match(workflow, /server_name_pattern\s*=\s*re\.compile\(r'\(\^[^']*server_name[^']*'[^\n]*re\.M\)[\s\S]*?server_name_pattern\.sub\(r'\\1' \+ compression \+ location, block, count=1\)/);
 });
 
-test('patcher is idempotent and preserves unmanaged nginx directives', () => {
-  const lines = workflow.split(/\r?\n/);
-  const start = lines.findIndex((line) => line.trim() === 'from pathlib import Path');
-  const end = lines.findIndex((line, index) => index > start && line.trim() === 'PY');
-  assert.ok(start >= 0 && end > start, 'embedded nginx patcher is missing');
-  const patcher = lines.slice(start, end).map((line) => line.slice(12)).join('\n');
-
+test('patcher only updates the matching server and is byte-idempotent', () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deploy-compression-'));
   const configPath = path.join(tempDir, 'site.conf');
+  const unrelatedServer = [
+    'server {',
+    '    server_name unrelated.example;',
+    '    # A comment with misleading braces { } must not affect server parsing.',
+    '    set $brace_text "literal } then {";',
+    `    ${beginMarker}`,
+    '    gzip off;',
+    `    ${endMarker}`,
+    '    location ^~ /game/douyin-mini-rpg/assets/ {',
+    '        return 418;',
+    '    }',
+    '}',
+  ].join('\n');
   try {
-    fs.writeFileSync(configPath, [
+    const matchingServer = [
       'server {',
       '    listen 80;',
       '    server_name mcp.edcedc.cn;',
+      `    ${beginMarker}`,
+      '    gzip_comp_level 1;',
+      `    ${endMarker}`,
+      '    location ^~ /game/douyin-mini-rpg/assets/ {',
+      '        return 404;',
+      '    }',
       '    gzip_static on;',
       '    location /keep/ { return 204; }',
       '}',
-      '',
-    ].join('\n'));
+    ].join('\n');
+    const secondMatchingServer = matchingServer.replace('listen 80;', 'listen 81;');
+    fs.writeFileSync(configPath, `${unrelatedServer}\n\n${matchingServer}\n\n${secondMatchingServer}\n`);
 
-    const python = process.platform === 'win32' ? 'python' : 'python3';
-    const runPatcher = () => spawnSync(python, ['-', configPath], {
-      encoding: 'utf8',
-      input: patcher,
-    });
-    const firstRun = runPatcher();
+    const firstRun = runPatcher(configPath);
     assert.equal(firstRun.status, 0, firstRun.stderr);
     const first = fs.readFileSync(configPath, 'utf8');
-    const secondRun = runPatcher();
+    const secondRun = runPatcher(configPath);
     assert.equal(secondRun.status, 0, secondRun.stderr);
     const second = fs.readFileSync(configPath, 'utf8');
 
     assert.equal(second, first);
-    assert.equal(second.split(beginMarker).length - 1, 1);
+    assert.ok(second.startsWith(`${unrelatedServer}\n\n`), 'unrelated server bytes changed');
+    assert.equal(second.split(beginMarker).length - 1, 3);
+    assert.equal(second.match(/server_name mcp\.edcedc\.cn;/g)?.length, 2);
+    assert.equal(second.match(/gzip on;/g)?.length, 2);
+    assert.match(second, /server_name mcp\.edcedc\.cn;[\s\S]*?gzip on;/);
     assert.match(second, /gzip_static on;/);
     assert.match(second, /location \/keep\//);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('patcher fails without changing a file that has no matching server', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deploy-compression-'));
+  const configPath = path.join(tempDir, 'site.conf');
+  const original = 'server {\n    server_name unrelated.example;\n    location / { return 204; }\n}\n';
+  try {
+    fs.writeFileSync(configPath, original);
+    const result = runPatcher(configPath);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /mcp\.edcedc\.cn server_name not found/);
+    assert.equal(fs.readFileSync(configPath, 'utf8'), original);
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
