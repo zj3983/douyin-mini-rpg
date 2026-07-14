@@ -345,7 +345,9 @@ test('defeat panel retries the current stage after a guarded death presentation'
   assert.match(panel, /重新挑战/)
   assert.match(panel, /onRetry/)
   assert.match(bootstrap, /onRetry = \(\) => runtime\.retryCurrentStage\(\)/)
-  assert.doesNotMatch(panel, /location\.reload|scheduleOnce/)
+  const defeatBody = panel.match(/showDefeat\(stageNumber: number\) \{([\s\S]*?)\n  \}/)?.[1] ?? ''
+  assert.doesNotMatch(panel, /location\.reload/)
+  assert.doesNotMatch(defeatBody, /scheduleAutoContinue|scheduleOnce/)
 })
 
 test('moving player stops before death and retry restores sword ride without a stale target', () => {
@@ -579,11 +581,20 @@ test('soul orbs magnet to the player and publish pickup amount before recycling'
   assert.match(source, /Math\.min\(distance, this\.magnetSpeed \* deltaTime\)/)
 })
 
-test('stage clear panel is compact, click-driven, and has one-line rewards', () => {
+test('stage clear panel is compact, click-driven, auto-continues clear, and has one-line rewards', () => {
   const source = read('assets/Scripts/Game/StageClearPanelController.ts')
+  const bootstrap = read('assets/Scripts/Game/PortraitBattleBootstrap.ts')
 
   assert.match(source, /rewardLabel\.string = \[/)
   assert.match(source, /\.join\('   '\)/)
   assert.match(source, /nextStageButton\?\.node\.on\(Button\.EventType\.CLICK/)
-  assert.doesNotMatch(source, /scheduleOnce/)
+  assert.match(source, /@property\s+autoContinueSeconds = 3/)
+  assert.match(source, /private scheduleAutoContinue\(\)/)
+  assert.match(source, /this\.scheduleOnce\(this\.handleAutoContinue, this\.autoContinueSeconds\)/)
+  assert.match(source, /this\.unschedule\(this\.handleAutoContinue\)/)
+  assert.match(source, /this\.scheduleAutoContinue\(\)/)
+  assert.match(source, /private handleAutoContinue\(\)[\s\S]*this\.handleContinue\(\)/)
+  assert.match(source, /private handleContinue\(\)[\s\S]*this\.unschedule\(this\.handleAutoContinue\)/)
+  assert.match(bootstrap, /createNode\('StageClearPanel', parent, 472, 214\)/)
+  assert.doesNotMatch(bootstrap, /createNode\('StageClearPanel', parent, 520, 258\)/)
 })
