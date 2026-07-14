@@ -11,6 +11,7 @@
     "build:check": "node tools/check-cocos-build-readiness.mjs",
     "verify:build-output": "node tools/check-cocos-build-output.mjs",
     "report:size": "node tools/report-web-build-size.mjs build/web-mobile",
+    "report:resources": "node tools/report-resource-budget.mjs",
     "optimize:png": "python tools/optimize-runtime-pngs.py --apply"
   },
   "devDependencies": {}
