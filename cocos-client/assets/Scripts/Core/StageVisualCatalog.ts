@@ -9,19 +9,33 @@ export interface StageVisual {
   readonly monsterActorIds: readonly string[]
 }
 
-const MONSTER_ATLAS_PATHS: Readonly<Record<string, string>> = Object.freeze({
-  'moss-wolf': 'Assets/ActorAtlases/MossWolf/atlas/texture',
-  'green-wing-moth': 'Assets/ActorAtlases/GreenWingMoth/atlas/texture',
-  'bamboo-warden': 'Assets/ActorAtlases/BambooWarden/atlas/texture',
-  'fog-spider': 'Assets/ActorAtlases/FogSpider/atlas/texture',
-  'lantern-wraith': 'Assets/ActorAtlases/LanternWraith/atlas/texture',
-  'mist-deer-king': 'Assets/ActorAtlases/MistDeerKing/atlas/texture',
-  'lava-lizard': 'Assets/ActorAtlases/LavaLizard/atlas/texture',
-  'ember-crow': 'Assets/ActorAtlases/EmberCrow/atlas/texture',
-  'flame-ogre': 'Assets/ActorAtlases/FlameOgre/atlas/texture',
-  'star-armored-beast': 'Assets/ActorAtlases/StarArmoredBeast/atlas/texture',
-  'void-wing-spirit': 'Assets/ActorAtlases/VoidWingSpirit/atlas/texture',
-  'meteor-guardian': 'Assets/ActorAtlases/MeteorGuardian/atlas/texture',
+const MONSTER_ATLAS_PATHS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  'moss-wolf': Object.freeze([
+    'Assets/ActorAtlases/MossWolf/idle/texture',
+    'Assets/ActorAtlases/MossWolf/move/texture',
+    'Assets/ActorAtlases/MossWolf/telegraph/texture',
+    'Assets/ActorAtlases/MossWolf/attack/texture',
+    'Assets/ActorAtlases/MossWolf/hurt/texture',
+    'Assets/ActorAtlases/MossWolf/death/texture',
+  ]),
+  'green-wing-moth': Object.freeze([
+    'Assets/ActorAtlases/GreenWingMoth/idle/texture',
+    'Assets/ActorAtlases/GreenWingMoth/move/texture',
+    'Assets/ActorAtlases/GreenWingMoth/dive/texture',
+    'Assets/ActorAtlases/GreenWingMoth/cast/texture',
+    'Assets/ActorAtlases/GreenWingMoth/hurt/texture',
+    'Assets/ActorAtlases/GreenWingMoth/death/texture',
+  ]),
+  'bamboo-warden': Object.freeze(['Assets/ActorAtlases/BambooWarden/atlas/texture']),
+  'fog-spider': Object.freeze(['Assets/ActorAtlases/FogSpider/atlas/texture']),
+  'lantern-wraith': Object.freeze(['Assets/ActorAtlases/LanternWraith/atlas/texture']),
+  'mist-deer-king': Object.freeze(['Assets/ActorAtlases/MistDeerKing/atlas/texture']),
+  'lava-lizard': Object.freeze(['Assets/ActorAtlases/LavaLizard/atlas/texture']),
+  'ember-crow': Object.freeze(['Assets/ActorAtlases/EmberCrow/atlas/texture']),
+  'flame-ogre': Object.freeze(['Assets/ActorAtlases/FlameOgre/atlas/texture']),
+  'star-armored-beast': Object.freeze(['Assets/ActorAtlases/StarArmoredBeast/atlas/texture']),
+  'void-wing-spirit': Object.freeze(['Assets/ActorAtlases/VoidWingSpirit/atlas/texture']),
+  'meteor-guardian': Object.freeze(['Assets/ActorAtlases/MeteorGuardian/atlas/texture']),
 })
 
 const STAGE_VISUALS: Readonly<Record<number, StageVisual>> = Object.freeze({
@@ -72,10 +86,10 @@ export function stageResourcePlanFor(stageId: number): StageResourcePlan {
     assets: Object.freeze([
       Object.freeze({ path: visual.farPath, kind: 'spriteFrame' as const }),
       ...(visual.midPath ? [Object.freeze({ path: visual.midPath, kind: 'spriteFrame' as const })] : []),
-      ...visual.monsterActorIds.map((actorId) => Object.freeze({
-        path: MONSTER_ATLAS_PATHS[actorId],
+      ...visual.monsterActorIds.flatMap((actorId) => MONSTER_ATLAS_PATHS[actorId].map((path) => Object.freeze({
+        path,
         kind: 'texture' as const,
-      })),
+      }))),
     ]),
   })
 }

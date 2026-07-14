@@ -56,7 +56,10 @@ test('stage visual catalog exposes background and theme metadata', () => {
 
 test('stage resource plans map catalog backgrounds and manifest monster atlases only', () => {
   const manifest = JSON.parse(readFileSync(join(root, 'assets', 'resources', 'Data', 'animation-atlas.json'), 'utf8'))
-  const atlasByActor = new Map(manifest.actors.map((actor) => [actor.id, resourcePathForPng(actor.atlas)]))
+  const atlasPathsByActor = new Map(manifest.actors.map((actor) => [
+    actor.id,
+    [...new Set(actor.actions.map((action) => resourcePathForPng(action.atlas ?? actor.atlas)))],
+  ]))
   const expectedActors = [
     ['moss-wolf', 'green-wing-moth', 'bamboo-warden'],
     ['fog-spider', 'lantern-wraith', 'mist-deer-king'],
@@ -71,14 +74,14 @@ test('stage resource plans map catalog backgrounds and manifest monster atlases 
     assert.equal(Object.isFrozen(visual.monsterActorIds), true)
     assert.deepEqual(
       resourcePlan.assets.filter(({ kind }) => kind === 'texture').map(({ path }) => path),
-      expectedActors[stageId - 1].map((actorId) => atlasByActor.get(actorId)),
+      expectedActors[stageId - 1].flatMap((actorId) => atlasPathsByActor.get(actorId)),
     )
     assert.deepEqual(resourcePlan, {
       stageId,
       assets: [
         { path: visual.farPath, kind: 'spriteFrame' },
         ...(visual.midPath ? [{ path: visual.midPath, kind: 'spriteFrame' }] : []),
-        ...expectedActors[stageId - 1].map((actorId) => ({ path: atlasByActor.get(actorId), kind: 'texture' })),
+        ...expectedActors[stageId - 1].flatMap((actorId) => atlasPathsByActor.get(actorId).map((path) => ({ path, kind: 'texture' }))),
       ],
     })
     assert.equal(resourcePlan.assets.some(({ path }) => /character|skill|artifact|Generated/i.test(path)), false)

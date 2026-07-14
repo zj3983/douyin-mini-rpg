@@ -3,6 +3,7 @@ import argparse
 import json
 from pathlib import Path
 from typing import Any
+from collections import deque
 
 from PIL import Image
 
@@ -21,6 +22,37 @@ def _bbox_or_error(image: Image.Image) -> tuple[int, int, int, int]:
     if bbox is None:
         raise ValueError("frame has no visible subject")
     return bbox
+
+
+def remove_small_alpha_components(image: Image.Image, min_area=16):
+    source = image.convert("RGBA")
+    width, height = source.size
+    alpha = source.getchannel("A")
+    pixels = alpha.load()
+    visited = bytearray(width * height)
+    output = source.load()
+    for start_y in range(height):
+        for start_x in range(width):
+            offset = start_y * width + start_x
+            if visited[offset] or pixels[start_x, start_y] == 0:
+                continue
+            queue = deque([(start_x, start_y)])
+            visited[offset] = 1
+            component = []
+            while queue:
+                x, y = queue.popleft()
+                component.append((x, y))
+                for nx in range(max(0, x - 1), min(width, x + 2)):
+                    for ny in range(max(0, y - 1), min(height, y + 2)):
+                        neighbor = ny * width + nx
+                        if not visited[neighbor] and pixels[nx, ny] > 0:
+                            visited[neighbor] = 1
+                            queue.append((nx, ny))
+            if len(component) < min_area:
+                for x, y in component:
+                    red, green, blue, alpha_value = output[x, y]
+                    output[x, y] = (red, green, blue, 0)
+    return source
 
 
 def normalize_frame(image: Image.Image, frame_size, padding_ratio, anchor):
@@ -49,7 +81,7 @@ def normalize_frame(image: Image.Image, frame_size, padding_ratio, anchor):
     paste_x = max(round(target_width * padding_ratio), min(round(target_width * (1 - padding_ratio) - resized.width), paste_x))
     paste_y = max(round(target_height * padding_ratio), min(round(target_height * (1 - padding_ratio) - resized.height), paste_y))
     frame.alpha_composite(resized, (paste_x, paste_y))
-    return frame
+    return remove_small_alpha_components(frame)
 
 
 def validate_subject(frame: Image.Image, padding_ratio):
