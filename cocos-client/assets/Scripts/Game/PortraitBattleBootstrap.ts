@@ -39,6 +39,7 @@ import { BattleHudController } from './BattleHudController'
 import { BattleInputController } from './BattleInputController'
 import { BattleRuntimeController } from './BattleRuntimeController'
 import { BossTelegraphPresenter } from './BossTelegraphPresenter'
+import { CombatAudioController } from './CombatAudioController'
 import { EnemySpawner } from './EnemySpawner'
 import { EnemyController } from './EnemyController'
 import { EnemyVisualController } from './EnemyVisualController'
@@ -89,6 +90,7 @@ export class PortraitBattleBootstrap extends Component {
   private runtimeNode: Node | null = null
   private stageBackgroundController: StageBackgroundController | null = null
   private stageResourceController: StageResourceController | null = null
+  private combatAudioController: CombatAudioController | null = null
   private playerController: PlayerController | null = null
   private battleInput: BattleInputController | null = null
   private movementCoordinateSpace: UITransform | null = null
@@ -162,6 +164,8 @@ export class PortraitBattleBootstrap extends Component {
     enemySpawner.configureBattleLayout(layout)
     const soulOrbPool = this.createRuntimePool(dropLayer, 'SoulOrbPool', 'soul-orb', 24, () => this.createSoulOrbNode())
     const damageNumberPool = this.createRuntimePool(effectLayer, 'DamageNumberPool', 'damage-number', 24, () => this.createDamageNumberNode())
+    const audioController = effectLayer.addComponent(CombatAudioController)
+    this.combatAudioController = audioController
     const bossEffectPool = this.createRuntimePool(
       effectLayer,
       'BossEffectPool',
@@ -287,6 +291,7 @@ export class PortraitBattleBootstrap extends Component {
   }) {
     const runtimeNode = this.createNode('Runtime', parent)
     this.runtimeNode = runtimeNode
+    this.combatAudioController?.bindFeedbackSource(runtimeNode)
     runtimeNode.on('battle-stage-changed', this.onStageChanged, this)
     const designPath = 'Data/cultivation-design'
     let state: RuntimeLoadState = { status: 'loading' }
@@ -330,6 +335,7 @@ export class PortraitBattleBootstrap extends Component {
     visibleHeight: number,
   ) {
     const skillNode = this.createNode('FlyingSwordSkill', parent, WIDTH, visibleHeight)
+    this.combatAudioController?.bindFeedbackSource(skillNode)
     this.fullHeightNodes.push(skillNode)
     const sword = this.createSpriteNode('Sword', skillNode, 176, 44)
     sword.node.active = false

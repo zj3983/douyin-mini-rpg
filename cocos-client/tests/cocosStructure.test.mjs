@@ -18,6 +18,7 @@ const requiredComponents = [
   ['assets/Scripts/Game/EnemyVisualController.ts', 'class EnemyVisualController'],
   ['assets/Scripts/Core/VisualResetRuntime.ts', 'interface VisualResetState'],
   ['assets/Scripts/Game/BattleRuntimeController.ts', 'class BattleRuntimeController'],
+  ['assets/Scripts/Game/CombatAudioController.ts', 'class CombatAudioController'],
   ['assets/Scripts/Game/DamageNumberController.ts', 'class DamageNumberController'],
   ['assets/Scripts/Game/StageClearPanelController.ts', 'class StageClearPanelController'],
   ['assets/Scripts/Game/BattleHudController.ts', 'class BattleHudController'],
@@ -226,6 +227,25 @@ test('battle runtime routes combat feedback through performance quality gates', 
   assert.match(runtime, /this\.node\.emit\('combat-feedback-requested'/)
   assert.match(skill, /emit\('combat-feedback-requested'/)
   assert.match(skill, /type: 'artifact-cast'/)
+})
+
+test('combat audio controller plays catalog bgm and scheduled feedback cues', () => {
+  const source = readSource('assets/Scripts/Game/CombatAudioController.ts')
+  const bootstrap = readSource('assets/Scripts/Game/PortraitBattleBootstrap.ts')
+
+  assert.match(source, /AudioClip/)
+  assert.match(source, /AudioSource/)
+  assert.match(source, /resources\.load\('Data\/audio-catalog'/)
+  assert.match(source, /resources\.load\(entry\.resource,\s*AudioClip/)
+  assert.match(source, /playOneShot\(clip,\s*volume\)/)
+  assert.match(source, /scheduleOnce\(/)
+  assert.match(source, /request\.atMs \/ 1000/)
+  assert.match(source, /combat-feedback-requested/)
+  assert.match(source, /startBgm\('mist-bamboo'\)/)
+  assert.match(source, /musicSource\.loop = true/)
+  assert.match(bootstrap, /CombatAudioController/)
+  assert.match(bootstrap, /combatAudioController\?\.bindFeedbackSource\(runtimeNode\)/)
+  assert.match(bootstrap, /combatAudioController\?\.bindFeedbackSource\(skillNode\)/)
 })
 
 test('portrait bootstrap assembles the approved compact playable scene', () => {
