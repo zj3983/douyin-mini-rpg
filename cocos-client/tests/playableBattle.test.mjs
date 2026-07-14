@@ -58,24 +58,47 @@ test('runtime node pool supports a bounded factory-backed pool', () => {
   assert.match(source, /poolStats\(this\.state\)\.active < this\.capacity/)
 })
 
-test('enemy spawner binds runtime profiles and separates ground, flying, and boss lanes', () => {
+test('enemy spawner binds ordinary kinds, live context providers, and distinct lanes without giving Boss an ordinary brain', () => {
   const source = read('assets/Scripts/Game/EnemySpawner.ts')
 
   assert.match(source, /bindEnemy\(enemy: BattleEnemy\)/)
   assert.match(source, /profile\.role === 'flying'/)
   assert.match(source, /profile\.role === 'boss'/)
+  assert.match(source, /profile\.id === 'moss-wolf'/)
+  assert.match(source, /profile\.id === 'green-wing-moth'/)
   assert.match(source, /enemy\.position = \{ x: spawnX, y: spawnY \}/)
-  assert.match(source, /controller\.bindRuntimeEnemy\(enemy\)/)
+  assert.match(source, /battleBounds:\s*\(\) => this\.currentBattleBounds\(\)/)
+  assert.match(source, /neighbors:\s*\(\) => this\.livingNeighbors\(enemy\.id\)/)
+  assert.match(source, /if \(kind\)[\s\S]*controller\.bindRuntimeEnemy\(enemy,\s*\{[\s\S]*kind,[\s\S]*\}\)[\s\S]*else controller\.bindRuntimeEnemy\(enemy\)/)
+  assert.doesNotMatch(source, /createEnemyBrain\([^\n]*bamboo-warden/)
 })
 
-test('enemy movement continuously synchronizes the combat runtime position', () => {
+test('enemy controller builds live brain context and continuously synchronizes movement to runtime position', () => {
   const source = read('assets/Scripts/Game/EnemyController.ts')
 
   assert.match(source, /private runtimeEnemy: BattleEnemy \| null/)
-  assert.match(source, /bindRuntimeEnemy\(enemy: BattleEnemy\)/)
+  assert.match(source, /private brain: EnemyBrainState \| null/)
+  assert.match(source, /bindRuntimeEnemy\(enemy: BattleEnemy, binding\?: EnemyBrainBinding\)/)
+  assert.match(source, /createEnemyBrain\(binding\.kind, enemy\.id,/)
+  assert.match(source, /stepEnemyBrain\(this\.brain, context, deltaTime\)/)
+  assert.match(source, /player:\s*\{[\s\S]*position:\s*\{ x: liveTarget\.x, y: liveTarget\.y \}/)
+  assert.match(source, /neighbors:\s*this\.brainBinding\.neighbors\(\)/)
+  assert.match(source, /battleBounds:\s*this\.brainBinding\.battleBounds\(\)/)
+  assert.match(source, /case 'move':[\s\S]*this\.brain\.position/)
   assert.match(source, /this\.runtimeEnemy\.position = \{ x: local\.x, y: local\.y \}/)
   assert.match(source, /setTargetNode\(targetNode: Node, lockY:/)
-  assert.match(source, /this\.targetNode\?\.worldPosition/)
+  assert.match(source, /this\.targetNode\?\.position/)
+})
+
+test('enemy controller forwards active-frame commands and never emits direct player damage', () => {
+  const source = read('assets/Scripts/Game/EnemyController.ts')
+
+  assert.match(source, /case 'show-telegraph':[\s\S]*emit\('enemy-telegraph',/)
+  assert.match(source, /case 'activate-hitbox':[\s\S]*emit\('enemy-hitbox-active',/)
+  assert.match(source, /case 'spawn-projectile':[\s\S]*emit\('enemy-projectile-spawned',/)
+  assert.doesNotMatch(source, /enemy-attack-player/)
+  assert.doesNotMatch(source, /attackCooldown|cooldownLeft|contactDamage|contact-damage/)
+  assert.doesNotMatch(source, /new Node\([^\n]*(?:wing|limb)/i)
 })
 
 test('battle controller drives enemy contact damage, stage flow, drops, HUD, and manual clear', () => {
@@ -156,7 +179,9 @@ test('pooled enemy lifecycle resets combat and visual state before spawn events'
   assert.match(enemy, /this\.target = null/)
   assert.match(enemy, /this\.targetNode = null/)
   assert.match(enemy, /this\.lockTargetY = false/)
-  assert.match(enemy, /this\.cooldownLeft = 0/)
+  assert.match(enemy, /this\.brain = null/)
+  assert.match(enemy, /this\.brainBinding = null/)
+  assert.match(enemy, /this\.facing = -1/)
   assert.match(visual, /resetForSpawn\(profile:/)
   assert.match(visual, /prepareForPool\(\)/)
   assert.match(visual, /unscheduleAllCallbacks\(\)/)
@@ -334,7 +359,7 @@ test('battle controller uses a real contact damage gate and zero-health defeat s
   assert.match(controller, /playerHurtDuration/)
   assert.match(controller, /markPlayerDefeated\(this\.stageFlow\)\.changed/)
   assert.match(controller, /markBattleAttemptDefeated\(this\.attemptState\)/)
-  assert.match(enemy, /role === 'boss' \? 10 : 3/)
+  assert.doesNotMatch(enemy, /enemy-attack-player|role === 'boss' \? 10 : 3/)
 })
 
 test('runtime-created enemies contain sprite animation combat and pool components', () => {

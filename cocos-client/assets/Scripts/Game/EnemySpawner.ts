@@ -1,6 +1,9 @@
-import { _decorator, Color, Component, Node, Sprite, Vec3 } from 'cc'
+import { _decorator, Color, Component, Node, Sprite, UITransform, Vec3 } from 'cc'
+import type { BattleRect } from '../Combat/CombatTypes'
+import type { OrdinaryEnemyKind } from '../Combat/EnemyBrain'
 import { BattleEnemy } from '../Core/BattleRuntime'
 import { EnemyController } from './EnemyController'
+import type { EnemyNeighborSnapshot } from './EnemyController'
 import { NodePoolController } from './NodePoolController'
 import { EnemyVisualController } from './EnemyVisualController'
 
@@ -32,6 +35,8 @@ export class EnemySpawner extends Component {
   @property
   bossScale = 1.45
 
+  private ordinaryControllers = new Set<EnemyController>()
+
   spawnEnemy(enemy: BattleEnemy) {
     if (!this.enemyPool) return null
     const node = this.enemyPool.spawn(false)
@@ -53,7 +58,16 @@ export class EnemySpawner extends Component {
     enemy.position = { x: spawnX, y: spawnY }
     const controller = node.getComponent(EnemyController)
     if (controller) {
-      controller.bindRuntimeEnemy(enemy)
+      const kind = this.ordinaryKind(enemy)
+      if (kind) {
+        this.ordinaryControllers.add(controller)
+        controller.bindRuntimeEnemy(enemy, {
+          kind,
+          seed: Math.imul(enemy.id, 2654435761) >>> 0,
+          battleBounds: () => this.currentBattleBounds(),
+          neighbors: () => this.livingNeighbors(enemy.id),
+        })
+      } else controller.bindRuntimeEnemy(enemy)
       if (this.playerTarget) controller.setTargetNode(this.playerTarget, enemy.profile.role === 'ground')
       else controller.setTarget(new Vec3(-180, spawnY, 0))
     }
@@ -74,8 +88,37 @@ export class EnemySpawner extends Component {
   despawnEnemy(node: Node) {
     const visual = node.getComponent(EnemyVisualController)
     const controller = node.getComponent(EnemyController)
+    if (controller) this.ordinaryControllers.delete(controller)
     visual?.prepareForPool()
     controller?.prepareForPool()
     this.enemyPool?.despawn(node)
+  }
+
+  private ordinaryKind(enemy: BattleEnemy): OrdinaryEnemyKind | null {
+    if (enemy.profile.id === 'moss-wolf') return 'moss-wolf'
+    if (enemy.profile.id === 'green-wing-moth') return 'green-wing-moth'
+    return null
+  }
+
+  private livingNeighbors(excludedId: number): readonly EnemyNeighborSnapshot[] {
+    const neighbors: EnemyNeighborSnapshot[] = []
+    for (const controller of this.ordinaryControllers) {
+      const snapshot = controller.enemyNeighborSnapshot()
+      if (snapshot && snapshot.id !== excludedId && snapshot.alive) neighbors.push(snapshot)
+    }
+    neighbors.sort((left, right) => left.id - right.id)
+    return Object.freeze(neighbors)
+  }
+
+  private currentBattleBounds(): Readonly<BattleRect> {
+    const coordinateSpace = this.node.parent?.getComponent(UITransform)
+    const halfWidth = Math.max(375, (coordinateSpace?.contentSize.width ?? 750) / 2)
+    const halfHeight = Math.max(667, (coordinateSpace?.contentSize.height ?? 1334) / 2)
+    return Object.freeze({
+      minX: -halfWidth,
+      maxX: Math.max(halfWidth, this.spawnX),
+      minY: Math.min(-halfHeight, this.groundY),
+      maxY: Math.max(halfHeight, this.flyingY),
+    })
   }
 }
