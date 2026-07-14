@@ -28,6 +28,7 @@ export interface EnemyCombatActorUpdate extends CombatActorUpdate {
 export interface EnemyTelegraphDelivery {
   readonly enemyId: number
   readonly attackId: string
+  readonly telegraphId: string
   readonly area: Readonly<BattleRect>
   readonly duration: number
   readonly visibleAt: number
@@ -283,6 +284,7 @@ export class EnemyCombatResolverAdapter {
         this.#telegraphs.push({
           enemyId,
           attackId: command.attackId,
+          telegraphId,
           area: freezeArea(command.area),
           duration: command.duration,
           visibleAt,

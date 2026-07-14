@@ -45,6 +45,7 @@ import type { EnemyCommand } from '../Combat/EnemyBrain'
 import type { PlayerActionToken } from '../Combat/PlayerMotor.ts'
 import { BattleHudController } from './BattleHudController'
 import { BattleInputController } from './BattleInputController'
+import { BossTelegraphPresenter } from './BossTelegraphPresenter'
 import { DamageNumberController } from './DamageNumberController'
 import { EnemyController } from './EnemyController'
 import { EnemySpawner } from './EnemySpawner'
@@ -74,6 +75,7 @@ export class BattleRuntimeController extends Component {
   @property(NodePoolController) soulOrbPool: NodePoolController | null = null
   @property(NodePoolController) damageNumberPool: NodePoolController | null = null
   @property(NodePoolController) bossSkillEffectPool: NodePoolController | null = null
+  @property(BossTelegraphPresenter) bossTelegraphPresenter: BossTelegraphPresenter | null = null
   @property(StageClearPanelController) stageClearPanel: StageClearPanelController | null = null
   @property(EnemySpawner) enemySpawner: EnemySpawner | null = null
   @property(BattleHudController) hud: BattleHudController | null = null
@@ -198,12 +200,14 @@ export class BattleRuntimeController extends Component {
     if (!this.designData) return
     this.unscheduleAllCallbacks()
     this.playerHurtToken = null
+    this.bossTelegraphPresenter?.hideAll()
     this.bossSkillEffectPool?.despawnAll()
     this.soulOrbPool?.despawnAll()
     this.stageNumber = Math.max(1, Math.floor(stageNumber || 1))
     this.attemptState = beginBattleAttempt(this.attemptState, this.stageNumber)
     this.stageGeneration = this.attemptState.generation
     resetEnemyCombatResolverAdapter(this.enemyCombatResolver, this.stageGeneration)
+    this.bossTelegraphPresenter?.resetGeneration(this.stageGeneration)
     this.setEnemyControllersPaused(false)
     this.stageSettlement = createStageSettlementState(this.stageGeneration)
     const stage = stageProfileFromDesign(this.designData.json as CultivationDesignData, this.stageNumber)
@@ -237,8 +241,6 @@ export class BattleRuntimeController extends Component {
     this.enemyNodes.set(enemy.id, node)
     this.enemyByNode.set(node, enemy)
     this.attachEnemyCombatListeners(node)
-    node.off('enemy-boss-skill', this.onBossSkillVisual, this)
-    node.on('enemy-boss-skill', this.onBossSkillVisual, this)
     this.upsertEnemyCombatActor(enemy, node)
     node.getComponent(EnemyController)?.setCombatPaused(this.battleFrozen)
     if (enemy.profile.role === 'boss') this.updateBossHud(enemy)
@@ -278,6 +280,7 @@ export class BattleRuntimeController extends Component {
     const enemyNode = this.enemyNodes.get(enemyId)
     const enemy = enemyNode ? this.enemyByNode.get(enemyNode) : null
     if (!enemyNode || !enemy) return
+    this.bossTelegraphPresenter?.cancelEnemy(this.stageGeneration, enemyId)
     removeEnemyCombatActor(this.enemyCombatResolver, this.stageGeneration, enemyId)
     enemyNode.emit('enemy-defeated', enemyId)
     this.spawnSoulOrb(enemyNode.position.clone(), enemy.profile.role === 'boss' ? 5 : 1)
@@ -315,6 +318,7 @@ export class BattleRuntimeController extends Component {
     }, this.deathRecycleDelay)
     for (const retiredEnemyId of transition.retiredEnemyIds) {
       const node = this.enemyNodes.get(retiredEnemyId)
+      this.bossTelegraphPresenter?.cancelEnemy(this.stageGeneration, retiredEnemyId)
       removeEnemyCombatActor(this.enemyCombatResolver, this.stageGeneration, retiredEnemyId)
       if (node) {
         this.detachEnemyCombatListeners(node)
@@ -344,22 +348,6 @@ export class BattleRuntimeController extends Component {
     this.soulCollected += amount
     this.hud?.updateSoul(this.soulCollected, this.runtime?.defeatTarget ?? 12)
     this.node.emit('soul-orb-picked', amount)
-  }
-
-  private onBossSkillVisual(command: Extract<EnemyCommand, { type: 'activate-hitbox' }>) {
-    this.node.emit('boss-skill-impact')
-    const effect = this.bossSkillEffectPool?.spawn()
-    if (!effect) return
-    effect.setPosition(
-      (command.area.minX + command.area.maxX) / 2,
-      (command.area.minY + command.area.maxY) / 2,
-      0,
-    )
-    const generation = this.stageGeneration
-    this.scheduleOnce(() => {
-      if (generation !== this.stageGeneration) return
-      this.bossSkillEffectPool?.despawn(effect)
-    }, Math.max(command.duration, 0.12))
   }
 
   private applyResolvedPlayerDamage(damage: number) {
@@ -417,6 +405,7 @@ export class BattleRuntimeController extends Component {
   private freezeBattle() {
     freezeBattle(this.battleFreeze)
     pauseEnemyCombatResolverAdapter(this.enemyCombatResolver, this.stageGeneration, true)
+    this.bossTelegraphPresenter?.hideAll()
     this.setEnemyControllersPaused(true)
     this.playerNode?.getComponent(PlayerController)?.stop()
     this.battleInput?.setInputEnabled(false)
@@ -424,17 +413,20 @@ export class BattleRuntimeController extends Component {
 
   private recycleAllEnemies() {
     for (const [enemyId, node] of this.enemyNodes) {
+      this.bossTelegraphPresenter?.cancelEnemy(this.stageGeneration, enemyId)
       removeEnemyCombatActor(this.enemyCombatResolver, this.stageGeneration, enemyId)
       this.detachEnemyCombatListeners(node)
       this.enemySpawner?.despawnEnemy(node)
     }
     this.enemyNodes.clear()
     this.enemyByNode.clear()
+    this.bossTelegraphPresenter?.hideAll()
   }
 
   onDestroy() {
     this.setEnemyControllersPaused(true)
     for (const node of this.enemyNodes.values()) this.detachEnemyCombatListeners(node)
+    this.bossTelegraphPresenter?.hideAll()
     this.bossSkillEffectPool?.despawnAll()
     resetEnemyCombatResolverAdapter(
       this.enemyCombatResolver,
@@ -448,6 +440,7 @@ export class BattleRuntimeController extends Component {
     node.on('enemy-hitbox-active', this.onEnemyHitboxActive, this)
     node.on('enemy-projectile-spawned', this.onEnemyProjectileSpawned, this)
     node.on('enemy-attack-cancelled', this.onEnemyCombatCancelled, this)
+    node.on('enemy-attack-recovery', this.onEnemyCombatRecovery, this)
   }
 
   private detachEnemyCombatListeners(node: Node) {
@@ -455,15 +448,17 @@ export class BattleRuntimeController extends Component {
     node.off('enemy-hitbox-active', this.onEnemyHitboxActive, this)
     node.off('enemy-projectile-spawned', this.onEnemyProjectileSpawned, this)
     node.off('enemy-attack-cancelled', this.onEnemyCombatCancelled, this)
-    node.off('enemy-boss-skill', this.onBossSkillVisual, this)
+    node.off('enemy-attack-recovery', this.onEnemyCombatRecovery, this)
   }
 
   private onEnemyTelegraph(enemyId: number, command: Extract<EnemyCommand, { type: 'show-telegraph' }>) {
     consumeEnemyCombatCommand(this.enemyCombatResolver, this.stageGeneration, enemyId, command)
+    this.presentQueuedEnemyTelegraphs()
   }
 
   private onEnemyHitboxActive(enemyId: number, command: Extract<EnemyCommand, { type: 'activate-hitbox' }>) {
     consumeEnemyCombatCommand(this.enemyCombatResolver, this.stageGeneration, enemyId, command)
+    if (command.danger) this.bossTelegraphPresenter?.activate(this.stageGeneration, enemyId, command)
   }
 
   private onEnemyProjectileSpawned(enemyId: number, command: Extract<EnemyCommand, { type: 'spawn-projectile' }>) {
@@ -472,6 +467,11 @@ export class BattleRuntimeController extends Component {
 
   private onEnemyCombatCancelled(enemyId: number) {
     cancelEnemyCombatActorAttacks(this.enemyCombatResolver, this.stageGeneration, enemyId)
+    this.bossTelegraphPresenter?.cancelEnemy(this.stageGeneration, enemyId)
+  }
+
+  private onEnemyCombatRecovery(enemyId: number) {
+    this.bossTelegraphPresenter?.recoverEnemy(this.stageGeneration, enemyId)
   }
 
   private setEnemyControllersPaused(paused: boolean) {
@@ -508,12 +508,17 @@ export class BattleRuntimeController extends Component {
   }
 
   private presentEnemyCombatFrame() {
-    for (const telegraph of drainEnemyTelegraphs(this.enemyCombatResolver)) {
-      this.node.emit('enemy-telegraph-presented', telegraph)
-    }
+    this.presentQueuedEnemyTelegraphs()
     for (const event of drainEnemyCombatDamage(this.enemyCombatResolver)) {
       if (event.generation !== this.stageGeneration || this.battleFrozen) continue
       this.applyResolvedPlayerDamage(event.amount)
+    }
+  }
+
+  private presentQueuedEnemyTelegraphs() {
+    for (const telegraph of drainEnemyTelegraphs(this.enemyCombatResolver)) {
+      if (telegraph.danger) this.bossTelegraphPresenter?.present(telegraph)
+      this.node.emit('enemy-telegraph-presented', telegraph)
     }
   }
 }

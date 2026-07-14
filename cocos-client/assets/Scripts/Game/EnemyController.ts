@@ -59,6 +59,7 @@ export class EnemyController extends Component {
   private eventsBound = false
   private combatPaused = false
   private previousTargetSample: { time: number; position: Point2 } | null = null
+  private neighborSnapshotCache: Readonly<EnemyNeighborSnapshot> | null = null
 
   onEnable() {
     this.bindEvents()
@@ -118,11 +119,20 @@ export class EnemyController extends Component {
   enemyNeighborSnapshot(): Readonly<EnemyNeighborSnapshot> | null {
     if (!this.runtimeEnemy || !this.brain) return null
     const position = this.node.position
-    return Object.freeze({
-      id: this.runtimeEnemy.id,
+    const id = this.runtimeEnemy.id
+    const alive = this.runtimeEnemy.alive && this.node.activeInHierarchy
+    const cached = this.neighborSnapshotCache
+    if (cached
+      && cached.id === id
+      && cached.alive === alive
+      && cached.position.x === position.x
+      && cached.position.y === position.y) return cached
+    this.neighborSnapshotCache = Object.freeze({
+      id,
       position: Object.freeze({ x: position.x, y: position.y }),
-      alive: this.runtimeEnemy.alive && this.node.activeInHierarchy,
+      alive,
     })
+    return this.neighborSnapshotCache
   }
 
   update(deltaTime: number) {
@@ -191,6 +201,7 @@ export class EnemyController extends Component {
             : this.bossPresentationAction(command.action)
           this.node.emit('enemy-semantic-animation', command.action, presentationAction)
           this.node.emit('enemy-motion', presentationAction)
+          if (command.action === 'boss-recovery') this.node.emit('enemy-attack-recovery', this.runtimeEnemy?.id)
           break
         }
         case 'show-telegraph':
@@ -316,6 +327,7 @@ export class EnemyController extends Component {
     this.facing = -1
     this.combatPaused = false
     this.previousTargetSample = null
+    this.neighborSnapshotCache = null
   }
 
   private bossPresentationAction(action: string): 'idle' | 'move' | 'attack' | 'hurt' | 'death' {

@@ -80,6 +80,7 @@ test('idle actor overlap causes zero damage while telegraphs are delivered immut
   assert.deepEqual(telegraphs, [{
     enemyId: 1,
     attackId: 'wolf-pounce:1:1',
+    telegraphId: 'wolf-pounce:1:1',
     area: { minX: -30, maxX: 30, minY: -110, maxY: -50 },
     duration: 0.45,
     visibleAt: 0.25,

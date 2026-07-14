@@ -137,3 +137,26 @@ export function computeBossVisualPlacement(
   })
   return Object.freeze({ position, visualSize })
 }
+
+export function computeOrdinaryEnemySpawn(
+  layout: Pick<BattleLayout, 'actorSafeRect'>,
+  visualSize: VisualFrameSize,
+  laneY: number,
+): Readonly<Point2> {
+  const width = visualSize?.width
+  const height = visualSize?.height
+  if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+    throw new TypeError('visualSize width and height must be finite and positive')
+  }
+  if (!Number.isFinite(laneY)) throw new TypeError('laneY must be finite')
+  const bounds = layout.actorSafeRect
+  if (width > bounds.maxX - bounds.minX || height > bounds.maxY - bounds.minY) {
+    throw new RangeError('ordinary enemy visual must fit inside the actor safe rect')
+  }
+  const halfWidth = width * 0.5
+  const halfHeight = height * 0.5
+  return Object.freeze({
+    x: bounds.maxX - halfWidth,
+    y: Math.max(bounds.minY + halfHeight, Math.min(bounds.maxY - halfHeight, laneY)),
+  })
+}

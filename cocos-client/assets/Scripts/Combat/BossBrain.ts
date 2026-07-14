@@ -210,6 +210,12 @@ export class BossBrainState {
   }
   #spikeAreas = new Map<string, Readonly<BattleRect>>()
   #sweepAreas = new Map<string, Readonly<BattleRect>>()
+  #roarAreasByAttack = new Map<string, readonly {
+    readonly waveIndex: number
+    readonly radius: number
+    readonly sector: string
+    readonly area: Readonly<BattleRect>
+  }[]>()
 
   private constructor(token: symbol, id: number, spawn: Point2, seed: number) {
     if (token !== BOSS_TOKEN) throw new TypeError('BossBrainState must be created by createBambooWardenBrain')
@@ -457,7 +463,16 @@ export class BossBrainState {
     if (event.type === 'telegraph' && attack === 'mountain-roar') {
       this.#phase = 'telegraph'
       commands.push({ type: 'animate', action: 'boss-roar-telegraph' })
-      for (const sector of this.#roarAreas(190, context.battleBounds)) {
+      const lockedAreas = Object.freeze([80, 135, 190].flatMap((radius, waveIndex) =>
+        this.#roarAreas(radius, context.battleBounds).map((sector) => Object.freeze({
+          waveIndex,
+          radius,
+          sector: sector.sector,
+          area: freezeRect(sector.area),
+        })),
+      ))
+      this.#roarAreasByAttack.set(baseId, lockedAreas)
+      for (const sector of lockedAreas.filter((locked) => locked.waveIndex === 2)) {
         commands.push({
           type: 'show-telegraph',
           attackId: `${baseId}:sector:${sector.sector}`,
@@ -517,7 +532,8 @@ export class BossBrainState {
       const waveIndex = event.waveIndex as number
       const radius = [80, 135, 190][waveIndex]
       if (waveIndex === 0) commands.push({ type: 'animate', action: 'boss-roar-active' })
-      for (const sector of this.#roarAreas(radius, context.battleBounds)) {
+      const lockedAreas = this.#roarAreasByAttack.get(baseId) ?? []
+      for (const sector of lockedAreas.filter((locked) => locked.waveIndex === waveIndex)) {
         commands.push({
           type: 'activate-hitbox',
           attackId: `${baseId}:wave:${waveIndex}:sector:${sector.sector}`,
@@ -530,6 +546,7 @@ export class BossBrainState {
           danger: this.#roarDanger(waveIndex, radius, sector.sector),
         })
       }
+      if (waveIndex === 2) this.#roarAreasByAttack.delete(baseId)
       return
     }
     if (event.type === 'recovery') {
@@ -576,6 +593,7 @@ export class BossBrainState {
     this.#events = []
     this.#spikeAreas.clear()
     this.#sweepAreas.clear()
+    this.#roarAreasByAttack.clear()
     this.#phase = phase
     this.#schedule({ at: this.#elapsed + 0.25, type: 'resume' })
     return freezeCommands([
@@ -590,6 +608,7 @@ export class BossBrainState {
     this.#events = []
     this.#spikeAreas.clear()
     this.#sweepAreas.clear()
+    this.#roarAreasByAttack.clear()
     this.#phase = 'death'
     return freezeCommands([
       { type: 'move', velocity: { x: 0, y: 0 } },

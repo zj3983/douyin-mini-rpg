@@ -144,3 +144,23 @@ test('EnemyController resize sync keeps the active Boss Brain and roar origin on
   assert.equal((top.area.minX + top.area.maxX) / 2, node.position.x)
   assert.equal((right.area.minY + right.area.maxY) / 2, node.position.y)
 })
+
+test('EnemyController reuses immutable neighbor snapshot identity until observable state changes', async () => {
+  const { EnemyController } = await loadEnemyController()
+  const node = new EventNode()
+  const controller = new EnemyController()
+  controller.node = node
+  controller.bindRuntimeEnemy({ id: 61, hp: 100, alive: true, position: { x: 0, y: 0 } }, binding(61))
+
+  const first = controller.enemyNeighborSnapshot()
+  const stable = controller.enemyNeighborSnapshot()
+  assert.strictEqual(stable, first)
+  assert.equal(Object.isFrozen(first), true)
+  assert.equal(Object.isFrozen(first.position), true)
+
+  node.setPosition(250, -80, 0)
+  const moved = controller.enemyNeighborSnapshot()
+  assert.notStrictEqual(moved, first)
+  assert.deepEqual(moved.position, { x: 250, y: -80 })
+  assert.strictEqual(controller.enemyNeighborSnapshot(), moved)
+})

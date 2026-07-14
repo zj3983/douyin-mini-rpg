@@ -11,6 +11,7 @@ import {
   hurtBambooWarden,
   interruptBambooWarden,
   setBossHealthRatio,
+  setBambooWardenPosition,
   stepBambooWarden,
 } from '../assets/Scripts/Combat/BossBrain.ts'
 import {
@@ -164,6 +165,40 @@ test('mountain roar expands ordered rings while preserving one explicit safe ang
   assert.ok(waveRadii.length >= 3)
   assert.ok(new Set(active.map(({ command }) => command.danger.sector)).size >= 4)
   assert.equal(active.some(({ command }) => command.danger.sector === command.danger.safeGap.sector), false)
+})
+
+test('mountain roar active sectors reuse telegraph-time snapshots after a resize', () => {
+  const brain = createBambooWardenBrain(86, spawn, seedForFirstAttack('mountain-roar', 86))
+  const beforeResize = advanceTrace(brain, 0.7, [0.25])
+  const telegraphTop = beforeResize.find(({ command }) => (
+    command.type === 'show-telegraph'
+    && command.danger?.kind === 'roar-sector'
+    && command.danger.sector === 'top'
+  ))?.command
+  assert.ok(telegraphTop)
+
+  setBambooWardenPosition(brain, { x: 40, y: -120 })
+  const resizedBounds = { minX: -260, maxX: 260, minY: -180, maxY: 220 }
+  const resizedContext = (now) => ({
+    now,
+    player: { id: 'player', position: { x: -40, y: 20 }, alive: true },
+    neighbors: [],
+    battleBounds: resizedBounds,
+  })
+  const afterResize = []
+  while (brain.elapsed < 1.8) {
+    const delta = Math.min(0.25, 1.8 - brain.elapsed)
+    const commands = stepBambooWarden(brain, resizedContext(brain.elapsed + delta), delta)
+    afterResize.push(...commands)
+  }
+  const activeTop = afterResize.find((command) => (
+    command.type === 'activate-hitbox'
+    && command.danger?.kind === 'roar-sector'
+    && command.danger.waveIndex === 2
+    && command.danger.sector === 'top'
+  ))
+  assert.ok(activeTop)
+  assert.deepEqual(activeTop.area, telegraphTop.area)
 })
 
 test('phase two schedules two distinct attacks without shortening warnings and cooldowns prevent immediate repeats', () => {

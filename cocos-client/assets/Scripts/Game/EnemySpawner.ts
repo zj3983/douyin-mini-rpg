@@ -3,6 +3,7 @@ import {
   BattleLayout,
   computeBattleLayout,
   computeBossVisualPlacement,
+  computeOrdinaryEnemySpawn,
 } from '../Combat/BattleLayout'
 import type { BattleRect } from '../Combat/CombatTypes'
 import type { OrdinaryEnemyKind } from '../Combat/EnemyBrain'
@@ -24,9 +25,6 @@ export class EnemySpawner extends Component {
   playerTarget: Node | null = null
 
   @property
-  spawnX = 520
-
-  @property
   groundY = -60
 
   @property
@@ -34,6 +32,7 @@ export class EnemySpawner extends Component {
 
   private ordinaryControllers = new Set<EnemyController>()
   private neighborSnapshot: readonly EnemyNeighborSnapshot[] = Object.freeze([])
+  private neighborSnapshotScratch: EnemyNeighborSnapshot[] = []
   private neighborSnapshotDirty = true
   private battleLayout: BattleLayout = computeBattleLayout({
     designWidth: 750,
@@ -59,8 +58,7 @@ export class EnemySpawner extends Component {
     if (!node) return null
 
     const isBoss = enemy.profile.role === 'boss'
-    const spawnX = isBoss ? this.battleLayout.bossSpawn.x : this.spawnX
-    const spawnY = isBoss ? this.battleLayout.bossSpawn.y : enemy.profile.role === 'flying' ? this.flyingY : this.groundY
+    const laneY = enemy.profile.role === 'flying' ? this.flyingY : this.groundY
     node.setPosition(Vec3.ZERO)
     node.setScale(Vec3.ONE)
     node.setRotationFromEuler(Vec3.ZERO)
@@ -69,10 +67,13 @@ export class EnemySpawner extends Component {
     const visual = node.getComponent(EnemyVisualController)
     node.off('enemy-visual-frame-ready', this.onEnemyVisualFrameReady, this)
     node.on('enemy-visual-frame-ready', this.onEnemyVisualFrameReady, this)
-    this.captureAndRestoreVisualSize(node, visual)
+    const visualSize = this.captureAndRestoreVisualSize(node, visual).root
     visual?.resetForSpawn(enemy.profile)
-    node.setPosition(new Vec3(spawnX, spawnY, 0))
-    enemy.position = { x: spawnX, y: spawnY }
+    const spawn = isBoss
+      ? this.battleLayout.bossSpawn
+      : computeOrdinaryEnemySpawn(this.battleLayout, visualSize, laneY)
+    node.setPosition(new Vec3(spawn.x, spawn.y, 0))
+    enemy.position = { x: spawn.x, y: spawn.y }
     if (isBoss) {
       this.activeBoss = { node, enemy }
       this.applyBossVisualPlacement(node, enemy)
@@ -93,7 +94,7 @@ export class EnemySpawner extends Component {
         })
       } else controller.bindRuntimeEnemy(enemy)
       if (this.playerTarget) controller.setTargetNode(this.playerTarget, enemy.profile.role === 'ground')
-      else controller.setTarget(new Vec3(-180, spawnY, 0))
+      else controller.setTarget(new Vec3(-180, spawn.y, 0))
     }
     this.enemyPool.activateNode(node)
     node.emit('enemy-motion', 'move')
@@ -110,7 +111,6 @@ export class EnemySpawner extends Component {
   }
 
   lateUpdate() {
-    this.neighborSnapshotDirty = true
     this.rebuildNeighborSnapshot()
   }
 
@@ -140,13 +140,16 @@ export class EnemySpawner extends Component {
   }
 
   private rebuildNeighborSnapshot() {
-    const neighbors: EnemyNeighborSnapshot[] = []
+    const neighbors = this.neighborSnapshotScratch
+    neighbors.length = 0
     for (const controller of this.ordinaryControllers) {
       const snapshot = controller.enemyNeighborSnapshot()
       if (snapshot?.alive) neighbors.push(snapshot)
     }
-    neighbors.sort((left, right) => left.id - right.id)
-    this.neighborSnapshot = Object.freeze(neighbors)
+    const changed = this.neighborSnapshotDirty
+      || neighbors.length !== this.neighborSnapshot.length
+      || neighbors.some((snapshot, index) => snapshot !== this.neighborSnapshot[index])
+    if (changed) this.neighborSnapshot = Object.freeze(neighbors.slice())
     this.neighborSnapshotDirty = false
   }
 
@@ -173,6 +176,7 @@ export class EnemySpawner extends Component {
     }
     rootTransform?.setContentSize(defaults.root.width, defaults.root.height)
     visualTransform?.setContentSize(defaults.visual.width, defaults.visual.height)
+    return defaults
   }
 
   private applyBossVisualPlacement(node: Node, enemy: BattleEnemy) {

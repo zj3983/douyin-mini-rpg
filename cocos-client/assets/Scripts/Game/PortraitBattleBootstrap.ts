@@ -37,6 +37,7 @@ import { AtlasAnimator } from './AtlasAnimator'
 import { BattleHudController } from './BattleHudController'
 import { BattleInputController } from './BattleInputController'
 import { BattleRuntimeController } from './BattleRuntimeController'
+import { BOSS_TELEGRAPH_POOL_CAPACITY, BossTelegraphPresenter } from './BossTelegraphPresenter'
 import { EnemySpawner } from './EnemySpawner'
 import { EnemyController } from './EnemyController'
 import { EnemyVisualController } from './EnemyVisualController'
@@ -160,7 +161,15 @@ export class PortraitBattleBootstrap extends Component {
     enemySpawner.configureBattleLayout(layout)
     const soulOrbPool = this.createRuntimePool(dropLayer, 'SoulOrbPool', 'soul-orb', 24, () => this.createSoulOrbNode())
     const damageNumberPool = this.createRuntimePool(effectLayer, 'DamageNumberPool', 'damage-number', 24, () => this.createDamageNumberNode())
-    const bossEffectPool = this.createRuntimePool(effectLayer, 'BossEffectPool', 'boss-effect', 4, () => this.createBossEffectNode())
+    const bossEffectPool = this.createRuntimePool(
+      effectLayer,
+      'BossEffectPool',
+      'boss-effect',
+      BOSS_TELEGRAPH_POOL_CAPACITY,
+      () => this.createBossEffectNode(),
+    )
+    const bossTelegraphPresenter = effectLayer.addComponent(BossTelegraphPresenter)
+    bossTelegraphPresenter.telegraphPool = bossEffectPool
     const hudParts = this.createHud(hudLayer, layout)
     const battleInput = this.createInput(inputLayer, controller, layout, this.movementCoordinateSpace)
     const runtime = this.loadRuntime(battleRoot, {
@@ -168,6 +177,7 @@ export class PortraitBattleBootstrap extends Component {
       soulOrbPool,
       damageNumberPool,
       bossEffectPool,
+      bossTelegraphPresenter,
       player,
       hud: hudParts.hud,
       stageClearPanel: hudParts.stageClearPanel,
@@ -268,6 +278,7 @@ export class PortraitBattleBootstrap extends Component {
     soulOrbPool: NodePoolController
     damageNumberPool: NodePoolController
     bossEffectPool: NodePoolController
+    bossTelegraphPresenter: BossTelegraphPresenter
     player: Node
     hud: BattleHudController
     stageClearPanel: StageClearPanelController
@@ -291,6 +302,7 @@ export class PortraitBattleBootstrap extends Component {
       runtime.soulOrbPool = bindings.soulOrbPool
       runtime.damageNumberPool = bindings.damageNumberPool
       runtime.bossSkillEffectPool = bindings.bossEffectPool
+      runtime.bossTelegraphPresenter = bindings.bossTelegraphPresenter
       runtime.playerNode = bindings.player
       runtime.hud = bindings.hud
       runtime.stageClearPanel = bindings.stageClearPanel
@@ -517,15 +529,8 @@ export class PortraitBattleBootstrap extends Component {
   private createBossEffectNode() {
     const node = new Node('BossSkillEffect')
     node.layer = UI_LAYER
-    node.addComponent(UITransform).setContentSize(190, 190)
-    const effect = node.addComponent(Graphics)
-    effect.fillColor = new Color(55, 190, 126, 72)
-    effect.circle(0, 0, 88)
-    effect.fill()
-    effect.strokeColor = new Color(169, 255, 206, 230)
-    effect.lineWidth = 7
-    effect.circle(0, 0, 72)
-    effect.stroke()
+    node.addComponent(UITransform).setContentSize(1, 1)
+    node.addComponent(Graphics)
     node.addComponent(PoolableActor)
     return node
   }

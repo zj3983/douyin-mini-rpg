@@ -66,7 +66,8 @@ test('enemy spawner binds ordinary and Boss brains to shared live context provid
   assert.match(source, /profile\.role === 'boss'/)
   assert.match(source, /profile\.id === 'moss-wolf'/)
   assert.match(source, /profile\.id === 'green-wing-moth'/)
-  assert.match(source, /enemy\.position = \{ x: spawnX, y: spawnY \}/)
+  assert.match(source, /computeOrdinaryEnemySpawn\(this\.battleLayout, visualSize, laneY\)/)
+  assert.match(source, /enemy\.position = \{ x: spawn\.x, y: spawn\.y \}/)
   assert.match(source, /battleBounds:\s*\(\) => this\.currentBattleBounds\(\)/)
   assert.match(source, /neighbors:\s*\(\) => this\.livingNeighbors\(\)/)
   assert.match(source, /if \(kind \|\| isBoss\)[\s\S]*controller\.bindRuntimeEnemy\(enemy,\s*\{[\s\S]*kind: isBoss \? 'bamboo-warden'/)
@@ -114,7 +115,7 @@ test('battle controller drives resolved enemy damage, stage flow, drops, HUD, an
 
   for (const marker of [
     "'enemy-telegraph-presented'",
-    "'enemy-boss-skill'",
+    'bossTelegraphPresenter',
     "'soul-orb-picked'",
     'spawnSoulOrb',
     'trySpawnBoss',
