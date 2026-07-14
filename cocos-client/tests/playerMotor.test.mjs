@@ -183,6 +183,20 @@ test('extreme finite design width keeps scaled layout rectangles ordered', () =>
   }
 })
 
+test('narrow design width preserves the absolute battle height floor', () => {
+  const layout = computeBattleLayout({
+    designWidth: 375,
+    cssWidth: 375,
+    cssHeight: 1,
+    topInsetPx: 0,
+    bottomInsetPx: 0,
+  })
+
+  assert.equal(layout.visibleHeight, 1334)
+  assert.ok(layout.actorSafeRect.minY < layout.actorSafeRect.maxY)
+  assert.ok(layout.movement.minY < layout.movement.maxY)
+})
+
 test('rapid target replacement advances from current position without teleporting', () => {
   const motor = createPlayerMotor({ x: 0, y: 0 }, 120)
   setPlayerBounds(motor, { minX: -300, maxX: 300, minY: -500, maxY: 500 })

@@ -48,8 +48,9 @@ export function computeBattleLayout(input: LayoutInput): BattleLayout {
   const projectedHeight = designWidth * cssHeight / cssWidth
   const minimumVisibleHeight = BATTLE_MIN_VISIBLE_HEIGHT * designWidth / BATTLE_DESIGN_WIDTH
   const visibleHeight = Math.max(
+    BATTLE_MIN_VISIBLE_HEIGHT,
     minimumVisibleHeight,
-    Number.isFinite(projectedHeight) && projectedHeight > 0 ? projectedHeight : minimumVisibleHeight,
+    Number.isFinite(projectedHeight) && projectedHeight > 0 ? projectedHeight : BATTLE_MIN_VISIBLE_HEIGHT,
   )
   const designPerCssPixel = designWidth / cssWidth
   const maxInset = visibleHeight * 0.15
