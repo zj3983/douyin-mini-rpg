@@ -440,14 +440,16 @@ test('flying sword uses the transparent v2 asset at a long-sword ratio', () => {
   assert.doesNotMatch(source, /Assets\/Skills\/FlyingSword\/sword_projectile\/spriteFrame/)
 })
 
-test('flying sword visual and damage consume the same per-frame swept segment', () => {
+test('flying sword visual and damage consume artifact runtime commands from one authority', () => {
   const controller = read('assets/Scripts/Game/BattleRuntimeController.ts')
   const skill = read('assets/Scripts/Game/FlyingSwordSkill.ts')
+  const artifact = read('assets/Scripts/Combat/ArtifactRuntime.ts')
 
-  assert.match(skill, /const frame = stepHomingSwordCast\(/)
-  assert.match(skill, /applySwordPose\(frame\.presentationSegment\)/)
-  assert.match(skill, /resolveHomingSwordSegment\(this\.homingState, frame\.damageSegment, frame\.step\.previousPhase\)/)
-  assert.match(controller, /points: \[from, to\]/)
+  assert.match(skill, /const commands = stepArtifact\(this\.artifact,/)
+  assert.match(skill, /case 'move-sword':[\s\S]*this\.applySwordPose\(command\)/)
+  assert.match(skill, /case 'resolve-sword-hit':[\s\S]*resolveArtifactSwordHit\(command\.targetId\)/)
+  assert.match(controller, /resolveArtifactSwordHit\(targetId: string\)/)
+  assert.match(artifact, /resolveHits\(path, targets, from, to, phase\)/)
   assert.doesNotMatch(skill, /timeline\.progress|Math\.sin|Math\.cos/)
 })
 
@@ -481,15 +483,17 @@ test('sword hover is subtle and always derives from its captured base transform'
   assert.doesNotMatch(player, /swordMount\.position\.y \+ yOffset/)
 })
 
-test('flying sword refreshes live targets every frame so dead targets retarget next frame', () => {
+test('flying sword refreshes live artifact targets every frame so dead targets retarget next frame', () => {
   const controller = read('assets/Scripts/Game/BattleRuntimeController.ts')
   const skill = read('assets/Scripts/Game/FlyingSwordSkill.ts')
+  const artifact = read('assets/Scripts/Combat/ArtifactRuntime.ts')
 
   assert.match(controller, /getLivingSwordTargets\(\)[\s\S]*snapshotLivingSwordTargets\(this\.runtime\?\.enemies \?\? \[\]\)/)
-  assert.match(skill, /updateHomingSword\(deltaTime\)/)
-  const updateBody = skill.match(/private updateHomingSword\(deltaTime: number\) \{([\s\S]*?)\n  \}/)?.[1] ?? ''
+  assert.match(skill, /stepArtifact\(this\.artifact,/)
+  const updateBody = skill.match(/update\(deltaTime: number\) \{([\s\S]*?)\n  \}/)?.[1] ?? ''
   assert.match(updateBody, /getLivingSwordTargets\(\)/)
-  assert.match(updateBody, /stepHomingSwordCast\(this\.homingState, deltaTime, targets,/)
+  assert.match(updateBody, /stepArtifact\(this\.artifact,/)
+  assert.match(artifact, /const targets = livingTargets\(context\)/)
   assert.doesNotMatch(skill, /cachedTargets|activeTarget/)
 })
 

@@ -1,18 +1,12 @@
 import { _decorator, Component, Node } from 'cc'
 import {
-  advanceFlyingSwordTimeline,
-  createFlyingSwordTimeline,
-  FlyingSwordTimeline,
-  FlyingSwordTimelineEvent,
-  resetFlyingSwordTimeline,
-} from '../Core/FlyingSwordRuntime'
-import {
-  createHomingSwordCast,
-  HomingSwordState,
-  HomingSwordSegment,
-  resetHomingSwordCast,
-  stepHomingSwordCast,
-} from '../Core/HomingSwordRuntime'
+  ArtifactCommand,
+  ArtifactRuntime,
+  createArtifactRuntime,
+  resetArtifact,
+  setArtifactLevel,
+  stepArtifact,
+} from '../Combat/ArtifactRuntime.ts'
 import { BattleRuntimeController } from './BattleRuntimeController'
 
 const { ccclass, property } = _decorator
@@ -26,123 +20,104 @@ export class FlyingSwordSkill extends Component {
   public sword: Node | null = null
 
   @property
-  public cooldown = 1.2
+  public artifactLevel = 1
 
-  @property
-  public handSealDuration = 0.22
-
-  @property
-  public swordSpeed = 760
-
-  @property
-  public maxTurnRadians = 7
-
-  @property
-  public maxOutboundDistance = 760
-
-  @property
-  public returnRadius = 24
-
-  private timeline: FlyingSwordTimeline | null = null
-  private homingState: HomingSwordState | null = null
-  private castActive = false
+  private artifact: ArtifactRuntime | null = null
+  private visiblePathId: string | null = null
+  private casting = false
 
   onLoad() {
-    this.timeline = this.createTimeline()
+    this.artifact = createArtifactRuntime({
+      artifactId: 'flying-sword',
+      level: this.artifactLevel,
+      ownerId: 'player',
+    })
     this.hideSword()
   }
 
   onDisable() {
-    this.cancelCast()
+    this.cancelCast(true)
   }
 
   update(deltaTime: number) {
-    if (!this.battleRuntime) return
+    if (!this.battleRuntime || !this.artifact) return
     if (this.battleRuntime.isBattleFrozen()) {
-      this.cancelCast()
-      return
-    }
-    if (!this.timeline) this.timeline = this.createTimeline()
-    if (this.homingState) {
-      this.updateHomingSword(deltaTime)
+      this.cancelCast(false)
       return
     }
 
-    const events = advanceFlyingSwordTimeline(this.timeline, deltaTime)
-    for (const event of events) this.handleTimelineEvent(event)
-    if (this.timeline.state === 'outbound') this.beginHomingSword()
+    setArtifactLevel(this.artifact, this.artifactLevel)
+    const commands = stepArtifact(this.artifact, {
+      now: performance.now() / 1000,
+      ownerPosition: this.battleRuntime.getCurrentPlayerPosition(),
+      targets: this.battleRuntime.getLivingSwordTargets(),
+      battleBounds: this.battleRuntime.getBattleBounds(),
+    }, deltaTime)
+    for (const command of commands) this.applyArtifactCommand(command)
   }
 
-  private createTimeline() {
-    return createFlyingSwordTimeline({
-      cooldown: this.cooldown,
-      handSealDuration: this.handSealDuration,
-      flightDuration: Number.MAX_VALUE,
-    })
+  public resetForStage(generation: number) {
+    if (!this.artifact) return
+    resetArtifact(this.artifact, generation)
+    this.cancelCast(true)
   }
 
-  private handleTimelineEvent(event: FlyingSwordTimelineEvent) {
-    if (event.type === 'castStarted') {
-      this.castActive = true
-      this.node.emit('sword-cast-started', { phase: 'handSeal' })
-      return
+  private applyArtifactCommand(command: ArtifactCommand) {
+    switch (command.type) {
+      case 'animate-owner':
+        if (command.action === 'hand_seal' && !this.casting) {
+          this.casting = true
+          this.node.emit('sword-cast-started', { phase: 'handSeal' })
+        }
+        this.node.emit('player-action-requested', command.action)
+        return
+      case 'spawn-sword':
+        if (!this.visiblePathId) {
+          this.visiblePathId = command.pathId
+          if (this.sword) {
+            this.sword.setPosition(command.origin.x, command.origin.y, 0)
+            this.sword.active = true
+          }
+        }
+        return
+      case 'move-sword':
+        if (command.pathId === this.visiblePathId) this.applySwordPose(command)
+        return
+      case 'resolve-sword-hit':
+        this.node.emit('sword-pass-resolved', {
+          phase: command.phase,
+          result: this.battleRuntime?.resolveArtifactSwordHit(command.targetId),
+        })
+        return
+      case 'despawn-sword':
+        if (command.pathId !== this.visiblePathId) return
+        this.visiblePathId = null
+        this.finishCast()
+        return
     }
-    if (event.type === 'action') {
-      this.node.emit('player-action-requested', event.action)
-    }
   }
 
-  private beginHomingSword() {
-    if (!this.battleRuntime) return
-    const start = this.battleRuntime.getCurrentPlayerPosition()
-    const targets = this.battleRuntime.getLivingSwordTargets()
-    this.homingState = createHomingSwordCast(start, targets, {
-      speed: this.swordSpeed,
-      maxTurnRadians: this.maxTurnRadians,
-      maxOutboundDistance: this.maxOutboundDistance,
-      returnRadius: this.returnRadius,
-    })
-    if (this.sword) {
-      this.sword.setPosition(start.x, start.y, 0)
-      this.sword.active = true
-    }
-  }
-
-  private updateHomingSword(deltaTime: number) {
-    if (!this.battleRuntime || !this.homingState) return
-    const targets = this.battleRuntime.getLivingSwordTargets()
-    const playerPosition = this.battleRuntime.getCurrentPlayerPosition()
-    const frame = stepHomingSwordCast(this.homingState, deltaTime, targets, playerPosition)
-    this.applySwordPose(frame.presentationSegment)
-    const result = this.battleRuntime.resolveHomingSwordSegment(this.homingState, frame.damageSegment, frame.step.previousPhase)
-    this.node.emit('sword-pass-resolved', { phase: frame.step.previousPhase, result })
-    if (this.timeline && frame.step.nextPhase === 'returning') this.timeline.state = 'returning'
-    if (frame.step.nextPhase === 'finished') this.finishCast()
-  }
-
-  private applySwordPose(segment: HomingSwordSegment) {
+  private applySwordPose(command: Extract<ArtifactCommand, { type: 'move-sword' }>) {
     if (!this.sword) return
-    const { from, to } = segment
+    const { from, to } = command
     const angle = Math.atan2(to.y - from.y, to.x - from.x) * 180 / Math.PI
     this.sword.setPosition(to.x, to.y, 0)
     this.sword.setRotationFromEuler(0, 0, angle)
   }
 
   private finishCast() {
-    if (!this.castActive) return
-    this.castActive = false
+    if (!this.casting) return
+    this.casting = false
     this.node.emit('player-action-completed')
-    if (this.timeline) resetFlyingSwordTimeline(this.timeline)
-    this.homingState = resetHomingSwordCast(this.homingState)
     this.hideSword()
   }
 
-  private cancelCast() {
-    if (!this.castActive) return
-    this.castActive = false
-    this.node.emit('player-action-completed')
-    if (this.timeline) resetFlyingSwordTimeline(this.timeline)
-    this.homingState = resetHomingSwordCast(this.homingState)
+  private cancelCast(forceComplete: boolean) {
+    this.visiblePathId = null
+    if (this.casting || forceComplete) {
+      this.casting = false
+      this.node.emit('player-action-completed')
+    }
     this.hideSword()
   }
 

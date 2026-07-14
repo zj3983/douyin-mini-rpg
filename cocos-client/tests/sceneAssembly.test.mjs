@@ -108,7 +108,7 @@ test('portrait bootstrap routes all animation requests through the player contro
   assert.match(source, /skillNode\.on\('player-action-requested',[\s\S]*controller\.requestPresentationAction\(action, 'flying-sword'\)/)
   assert.match(source, /skillNode\.on\('player-action-completed',[\s\S]*controller\.completePresentationAction\(/)
   assert.doesNotMatch(source, /skillNode\.on\('player-action-requested',[\s\S]{0,100}animator\.play/)
-  assert.match(skillSource, /this\.node\.emit\('player-action-requested', event\.action\)/)
+  assert.match(skillSource, /this\.node\.emit\('player-action-requested', command\.action\)/)
 })
 
 test('portrait bootstrap uses centralized layout dimensions for player and navigation visuals', () => {

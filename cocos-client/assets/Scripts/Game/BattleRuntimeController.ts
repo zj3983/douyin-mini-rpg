@@ -155,6 +155,32 @@ export class BattleRuntimeController extends Component {
     return { x: position.x, y: position.y }
   }
 
+  getBattleBounds() {
+    return { minX: -360, maxX: 360, minY: -260, maxY: 260 }
+  }
+
+  resolveArtifactSwordHit(targetId: string) {
+    const empty: ReturnType<typeof applyFlyingSwordPathHit> = {
+      hitCount: 0,
+      damageEvents: [],
+      defeatedEnemyIds: [],
+      stageClear: false,
+    }
+    if (!this.runtime || this.battleFrozen) return empty
+    const enemyId = Number(targetId)
+    if (!Number.isSafeInteger(enemyId)) return empty
+    const enemy = this.runtime.enemies.find((entry) => entry.id === enemyId && entry.alive)
+    if (!enemy) return empty
+    const isolatedRuntime = { ...this.runtime, enemies: [enemy] }
+    const result = applyFlyingSwordPathHit(isolatedRuntime, 1, 1, {
+      points: [enemy.position, enemy.position],
+      width: Math.max(this.swordHitWidth, enemy.radius + 1),
+    })
+    if (result.stageClear) this.runtime.stageCleared = true
+    this.presentFlyingSwordHit(result)
+    return result
+  }
+
   resolveHomingSwordSegment(state: HomingSwordState, segment: HomingSwordSegment, phase: HomingSwordPhase) {
     const empty: ReturnType<typeof applyFlyingSwordPathHit> = {
       hitCount: 0,
