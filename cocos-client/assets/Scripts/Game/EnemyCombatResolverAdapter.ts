@@ -30,6 +30,8 @@ export interface EnemyTelegraphDelivery {
   readonly attackId: string
   readonly area: Readonly<BattleRect>
   readonly duration: number
+  readonly visibleAt: number
+  readonly activationNotBefore: number
   readonly generation: number
   readonly danger?: Readonly<EnemyDangerDescriptor>
 }
@@ -48,6 +50,17 @@ export interface EnemyCombatDamage {
 const ADAPTER_TOKEN = Symbol('EnemyCombatResolverAdapter')
 const PLAYER_ACTOR_ID = 'player'
 const MAX_TELEGRAPHS = 128
+const MAX_PENDING_HITBOXES = 128
+const MAX_EXTERNAL_DELTA_SECONDS = 0.25
+const TIME_EPSILON = 1e-10
+
+interface PendingEnemyHitbox {
+  readonly order: number
+  readonly sourceId: string
+  readonly authorityKey: string
+  readonly opensAt: number
+  readonly command: Extract<EnemyCommand, { readonly type: 'activate-hitbox' }>
+}
 
 let constructAdapter: (generation: number) => EnemyCombatResolverAdapter
 let updatePlayer: (adapter: EnemyCombatResolverAdapter, update: CombatActorUpdate) => boolean
@@ -102,6 +115,14 @@ function enemyIdFromSource(sourceId: string): number | null {
   return isEnemyId(enemyId) ? enemyId : null
 }
 
+function telegraphAuthorityKey(sourceId: string, telegraphId: string): string {
+  return `${sourceId}\u0000${telegraphId}`
+}
+
+function roundTime(value: number): number {
+  return Math.round(value * 1e9) / 1e9
+}
+
 function freezeArea(area: Readonly<BattleRect>): Readonly<BattleRect> {
   return Object.freeze({ minX: area.minX, maxX: area.maxX, minY: area.minY, maxY: area.maxY })
 }
@@ -129,6 +150,9 @@ export class EnemyCombatResolverAdapter {
   #generation: number
   #registeredActors = new Set<string>()
   #telegraphs: EnemyTelegraphDelivery[] = []
+  #telegraphActivationTimes = new Map<string, number>()
+  #pendingHitboxes: PendingEnemyHitbox[] = []
+  #pendingOrder = 0
   #paused = false
 
   private constructor(token: symbol, generation: number) {
@@ -188,6 +212,7 @@ export class EnemyCombatResolverAdapter {
     if (!this.#isCurrent(generation)) return false
     const actorId = enemyActorId(enemyId)
     this.#registeredActors.delete(actorId)
+    this.#discardSourceAuthority(actorId)
     return removeHurtbox(this.#resolver, actorId, generation)
   }
 
@@ -197,7 +222,10 @@ export class EnemyCombatResolverAdapter {
     if (!this.#isCurrent(generation)) return false
     const sourceId = enemyActorId(enemyId)
     if (!this.#registeredActors.has(sourceId)) return false
+    const pendingCount = this.#pendingHitboxes.length
+    this.#discardSourceAuthority(sourceId)
     return cancelCombatSourceAttacks(this.#resolver, sourceId, generation)
+      || this.#pendingHitboxes.length !== pendingCount
   }
 
   #setPaused(generation: number, paused: boolean): boolean {
@@ -211,7 +239,28 @@ export class EnemyCombatResolverAdapter {
     }
     drainDamageEvents(this.#resolver)
     this.#telegraphs = []
+    this.#telegraphActivationTimes.clear()
+    this.#pendingHitboxes = []
     return true
+  }
+
+  #discardSourceAuthority(sourceId: string): void {
+    const prefix = `${sourceId}\u0000`
+    for (const key of this.#telegraphActivationTimes.keys()) {
+      if (key.startsWith(prefix)) this.#telegraphActivationTimes.delete(key)
+    }
+    this.#pendingHitboxes = this.#pendingHitboxes.filter((pending) => pending.sourceId !== sourceId)
+  }
+
+  #openHitbox(sourceId: string, command: Extract<EnemyCommand, { readonly type: 'activate-hitbox' }>): boolean {
+    return openHitbox(this.#resolver, {
+      sourceId,
+      attackId: command.attackId,
+      area: command.area,
+      damage: command.damage,
+      duration: command.duration,
+      generation: this.#generation,
+    }) !== null
   }
 
   #consume(generation: number, enemyId: number, command: EnemyCommand): boolean {
@@ -223,24 +272,46 @@ export class EnemyCombatResolverAdapter {
     switch (command.type) {
       case 'show-telegraph':
         if (this.#telegraphs.length >= MAX_TELEGRAPHS) throw new RangeError('telegraph capacity exceeded')
+        const visibleAt = roundTime(this.#resolver.snapshot().elapsed)
+        const activationNotBefore = roundTime(visibleAt + command.duration)
+        const telegraphId = command.telegraphId ?? command.attackId
+        const authorityKey = telegraphAuthorityKey(sourceId, telegraphId)
+        this.#telegraphActivationTimes.set(
+          authorityKey,
+          Math.max(this.#telegraphActivationTimes.get(authorityKey) ?? 0, activationNotBefore),
+        )
         this.#telegraphs.push({
           enemyId,
           attackId: command.attackId,
           area: freezeArea(command.area),
           duration: command.duration,
+          visibleAt,
+          activationNotBefore,
           generation,
           ...(command.danger ? { danger: freezeDanger(command.danger) } : {}),
         })
         return true
-      case 'activate-hitbox':
-        return openHitbox(this.#resolver, {
-          sourceId,
-          attackId: command.attackId,
-          area: command.area,
-          damage: command.damage,
-          duration: command.duration,
-          generation,
-        }) !== null
+      case 'activate-hitbox': {
+        const authorityKey = telegraphAuthorityKey(sourceId, command.telegraphId ?? command.attackId)
+        const activationNotBefore = this.#telegraphActivationTimes.get(authorityKey)
+        const now = this.#resolver.snapshot().elapsed
+        if (activationNotBefore !== undefined && activationNotBefore > now + TIME_EPSILON) {
+          if (this.#pendingHitboxes.length >= MAX_PENDING_HITBOXES) {
+            throw new RangeError('pending hitbox capacity exceeded')
+          }
+          this.#pendingHitboxes.push(Object.freeze({
+            order: this.#pendingOrder++,
+            sourceId,
+            authorityKey,
+            opensAt: activationNotBefore,
+            command,
+          }))
+          this.#pendingHitboxes.sort((left, right) => left.opensAt - right.opensAt || left.order - right.order)
+          return true
+        }
+        this.#telegraphActivationTimes.delete(authorityKey)
+        return this.#openHitbox(sourceId, command)
+      }
       case 'spawn-projectile':
         return spawnProjectile(this.#resolver, {
           sourceId,
@@ -261,7 +332,26 @@ export class EnemyCombatResolverAdapter {
 
   #step(deltaSeconds: number): void {
     if (this.#paused) return
-    stepCombatResolver(this.#resolver, deltaSeconds)
+    if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0) {
+      stepCombatResolver(this.#resolver, deltaSeconds)
+      return
+    }
+    const target = roundTime(this.#resolver.snapshot().elapsed + Math.min(deltaSeconds, MAX_EXTERNAL_DELTA_SECONDS))
+    while (this.#pendingHitboxes.length > 0 && this.#pendingHitboxes[0].opensAt <= target + TIME_EPSILON) {
+      const opensAt = Math.max(this.#resolver.snapshot().elapsed, this.#pendingHitboxes[0].opensAt)
+      const advance = opensAt - this.#resolver.snapshot().elapsed
+      if (advance > TIME_EPSILON) stepCombatResolver(this.#resolver, advance)
+      const due: PendingEnemyHitbox[] = []
+      while (this.#pendingHitboxes.length > 0 && this.#pendingHitboxes[0].opensAt <= opensAt + TIME_EPSILON) {
+        due.push(this.#pendingHitboxes.shift() as PendingEnemyHitbox)
+      }
+      for (const pending of due) {
+        if (this.#registeredActors.has(pending.sourceId)) this.#openHitbox(pending.sourceId, pending.command)
+        this.#telegraphActivationTimes.delete(pending.authorityKey)
+      }
+    }
+    const remaining = target - this.#resolver.snapshot().elapsed
+    if (remaining > TIME_EPSILON) stepCombatResolver(this.#resolver, remaining)
   }
 
   #drainDamage(): readonly EnemyCombatDamage[] {
@@ -302,6 +392,9 @@ export class EnemyCombatResolverAdapter {
     this.#generation = resetCombatResolverGeneration(this.#resolver, generation)
     this.#registeredActors.clear()
     this.#telegraphs = []
+    this.#telegraphActivationTimes.clear()
+    this.#pendingHitboxes = []
+    this.#pendingOrder = 0
     this.#paused = false
     return this.#generation
   }

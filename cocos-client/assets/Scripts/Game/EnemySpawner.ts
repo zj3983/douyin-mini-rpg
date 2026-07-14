@@ -193,9 +193,11 @@ export class EnemySpawner extends Component {
     node.getComponent(UITransform)?.setContentSize(placement.visualSize.width, placement.visualSize.height)
     visualTransform?.setContentSize(placement.visualSize.width, placement.visualSize.height)
     enemy.position = { x: placement.position.x, y: placement.position.y }
+    node.getComponent(EnemyController)?.syncBossBattleSpace()
   }
 
   private onEnemyVisualFrameReady(node: Node) {
-    if (this.activeBoss?.node === node) this.applyBossVisualPlacement(node, this.activeBoss.enemy)
+    const activeBoss = this.activeBoss
+    if (activeBoss?.node === node) this.applyBossVisualPlacement(node, activeBoss.enemy)
   }
 }

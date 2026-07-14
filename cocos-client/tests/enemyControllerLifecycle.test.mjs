@@ -76,6 +76,15 @@ function binding(seed) {
   }
 }
 
+function bossBinding(seed, battleBounds) {
+  return {
+    kind: 'bamboo-warden',
+    seed,
+    battleBounds: () => battleBounds.current,
+    neighbors: () => [],
+  }
+}
+
 test('EnemyController detaches for pool and rebinds exactly once to the reused enemy identity', async () => {
   const { EnemyController } = await loadEnemyController()
   const node = new EventNode()
@@ -102,4 +111,36 @@ test('EnemyController detaches for pool and rebinds exactly once to the reused e
   assert.equal(node.listenerCount('enemy-defeated'), 1)
   node.emit('enemy-hit')
   assert.deepEqual(cancelled, [41, 52])
+})
+
+test('EnemyController resize sync keeps the active Boss Brain and roar origin on the visual position', async () => {
+  const { EnemyController } = await loadEnemyController()
+  const node = new EventNode()
+  const controller = new EnemyController()
+  controller.node = node
+  const battleBounds = { current: { minX: -1000, maxX: 1000, minY: -800, maxY: 800 } }
+  const telegraphs = []
+  node.on('enemy-telegraph', (_enemyId, command) => telegraphs.push(command), null)
+
+  controller.bindRuntimeEnemy(
+    { id: 99, hp: 520, alive: true, position: { x: node.position.x, y: node.position.y } },
+    bossBinding(0, battleBounds),
+  )
+  controller.setTarget({
+    x: -100,
+    y: 30,
+    z: 0,
+    clone() { return { x: this.x, y: this.y, z: this.z, clone: this.clone } },
+  })
+  node.setPosition(135, 205, 0)
+  battleBounds.current = { minX: -700, maxX: 700, minY: -500, maxY: 600 }
+  controller.syncBossBattleSpace()
+  for (let index = 0; index < 5; index += 1) controller.update(0.25)
+
+  const top = telegraphs.find((command) => command.danger?.kind === 'roar-sector' && command.danger.sector === 'top')
+  const right = telegraphs.find((command) => command.danger?.kind === 'roar-sector' && command.danger.sector === 'right')
+  assert.ok(top)
+  assert.ok(right)
+  assert.equal((top.area.minX + top.area.maxX) / 2, node.position.x)
+  assert.equal((right.area.minY + right.area.maxY) / 2, node.position.y)
 })

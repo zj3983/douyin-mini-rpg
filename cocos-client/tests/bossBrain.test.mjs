@@ -32,10 +32,11 @@ import {
 const bounds = Object.freeze({ minX: -360, maxX: 360, minY: -220, maxY: 300 })
 const spawn = Object.freeze({ x: 230, y: 40 })
 
-function context(now, player = { x: -40, y: 20 }) {
+function context(now, player = { x: -40, y: 20 }, playerMotion) {
   return {
     now,
     player: { id: 'player', position: player, alive: true },
+    ...(playerMotion ? { playerMotion } : {}),
     neighbors: [],
     battleBounds: bounds,
   }
@@ -46,9 +47,15 @@ function advanceTrace(brain, target, partition = [1 / 60], playerAt = () => ({ x
   let index = 0
   while (brain.elapsed + 1e-10 < target) {
     const delta = Math.min(partition[index % partition.length], target - brain.elapsed)
+    const fromTime = brain.elapsed
     const now = brain.elapsed + delta
-    const commands = stepBambooWarden(brain, context(now, playerAt(now)), delta)
-    for (const command of commands) trace.push({ at: brain.elapsed, command })
+    const commands = stepBambooWarden(brain, context(now, playerAt(now), {
+      fromTime,
+      fromPosition: playerAt(fromTime),
+      toTime: now,
+      toPosition: playerAt(now),
+    }), delta)
+    for (const command of commands) trace.push({ at: command.eventTime ?? brain.elapsed, command })
     index += 1
     assert.ok(index < 100000, 'boss simulation did not converge')
   }
@@ -96,6 +103,30 @@ test('bamboo sweep keeps a full 0.8 second warning, vertical escapes, active win
   assert.ok(active.at + 1e-9 >= telegraph.at + telegraph.command.duration)
   assert.ok(active.command.duration > 0)
   assert.ok(recovery?.at > active.at)
+})
+
+test('bamboo sweep active reuses the exact telegraphed area after the player escapes vertically', () => {
+  const brain = createBambooWardenBrain(70, spawn, seedForFirstAttack('bamboo-sweep', 70))
+  const telegraphTrace = advanceTrace(brain, 0.65, [0.25], () => ({ x: -40, y: -120 }))
+  const telegraph = telegraphTrace.find(({ command }) => command.type === 'show-telegraph')?.command
+  assert.ok(telegraph)
+
+  const activeTrace = advanceTrace(brain, 1.35, [0.25], () => ({ x: -40, y: 220 }))
+  const active = activeTrace.find(({ command }) => command.type === 'activate-hitbox')?.command
+  assert.ok(active)
+  assert.equal(active.attackId, telegraph.attackId)
+  assert.deepEqual(active.area, telegraph.area)
+  assert.equal(220 > telegraph.area.maxY, true, 'escaped player must remain outside the warned sweep')
+
+  const generation = 70
+  const adapter = createEnemyCombatResolverAdapter(generation)
+  upsertEnemyCombatActor(adapter, { generation, enemyId: 70, position: spawn, radius: 70, alive: true })
+  upsertPlayerCombatActor(adapter, { generation, position: { x: -40, y: -120 }, radius: 24, alive: true })
+  consumeEnemyCombatCommand(adapter, generation, 70, telegraph)
+  upsertPlayerCombatActor(adapter, { generation, position: { x: -40, y: 220 }, radius: 24, alive: true })
+  consumeEnemyCombatCommand(adapter, generation, 70, active)
+  for (let index = 0; index < 5; index += 1) stepEnemyCombatResolverAdapter(adapter, 0.25)
+  assert.deepEqual(drainEnemyCombatDamage(adapter), [])
 })
 
 test('ground spikes place three ordered foot markers before activating them in the same order', () => {
@@ -172,6 +203,64 @@ test('fixed seed and inputs emit identical complete command structures across re
   }
   for (const command of reference.commands) assertDeepFrozen(command)
   assert.ok(reference.commands.some((command) => command.type === 'activate-hitbox'))
+})
+
+test('authoritative event sampling keeps all three attacks and phase two deterministic on a moving trajectory', () => {
+  const partitions = [[1 / 60], [0.019], [0.25], [0.033, 0.011, 0.023]]
+  const playerAt = (time) => ({ x: -240 + time * 31, y: -130 + time * 43 })
+  const scenarios = [
+    { id: 71, seed: seedForFirstAttack('bamboo-sweep', 71), phaseTwo: false, target: 3.5 },
+    { id: 72, seed: seedForFirstAttack('ground-spikes', 72), phaseTwo: false, target: 3.5 },
+    { id: 73, seed: seedForFirstAttack('mountain-roar', 73), phaseTwo: false, target: 3.5 },
+    { id: 74, seed: 31, phaseTwo: true, target: 12.5 },
+  ]
+
+  for (const scenario of scenarios) {
+    const runs = partitions.map((partition) => {
+      const brain = createBambooWardenBrain(scenario.id, spawn, scenario.seed)
+      if (scenario.phaseTwo) setBossHealthRatio(brain, 0.42)
+      return advanceTrace(brain, scenario.target, partition, playerAt).map(({ command }) => command)
+    })
+    for (const commands of runs.slice(1)) assert.deepEqual(commands, runs[0])
+  }
+})
+
+test('live adapter preserves at least 0.8 seconds of visible Boss warning for coarse and uneven frames', () => {
+  for (const partition of [[1 / 60], [0.019], [0.25], [0.033, 0.011, 0.023]]) {
+    const generation = 80
+    const enemyId = 75
+    const brain = createBambooWardenBrain(enemyId, spawn, seedForFirstAttack('bamboo-sweep', enemyId))
+    const adapter = createEnemyCombatResolverAdapter(generation)
+    upsertEnemyCombatActor(adapter, { generation, enemyId, position: spawn, radius: 70, alive: true })
+    upsertPlayerCombatActor(adapter, { generation, position: { x: -40, y: 20 }, radius: 24, alive: true })
+    let telegraph = null
+    let damage = null
+    let index = 0
+
+    while (brain.elapsed < 3 && !damage) {
+      const delta = partition[index % partition.length]
+      const commands = stepBambooWarden(brain, context(brain.elapsed + delta), delta)
+      for (const command of commands) {
+        if (command.type === 'activate-hitbox') {
+          const position = {
+            x: (command.area.minX + command.area.maxX) / 2,
+            y: (command.area.minY + command.area.maxY) / 2,
+          }
+          upsertPlayerCombatActor(adapter, { generation, position, radius: 24, alive: true })
+        }
+        consumeEnemyCombatCommand(adapter, generation, enemyId, command)
+      }
+      telegraph ??= drainEnemyTelegraphs(adapter).find((event) => event.attackId.startsWith('bamboo-sweep')) ?? null
+      stepEnemyCombatResolverAdapter(adapter, delta)
+      damage = drainEnemyCombatDamage(adapter).find((event) => event.attackId.startsWith('bamboo-sweep')) ?? null
+      index += 1
+    }
+
+    assert.ok(telegraph)
+    assert.ok(damage)
+    assert.ok(telegraph.activationNotBefore + 1e-10 >= telegraph.visibleAt + 0.8)
+    assert.ok(damage.at + 1e-10 >= telegraph.activationNotBefore, JSON.stringify({ partition, telegraph, damage }))
+  }
 })
 
 test('live resolver delivers Boss damage only after a real brain active command', () => {
@@ -264,6 +353,7 @@ test('phase-two overlap cannot be interrupted while the paired attack is still t
 
   assert.equal(brain.phase, 'recovery')
   assert.deepEqual(interruptBambooWarden(brain, brain.elapsed), [])
+  assert.deepEqual(hurtBambooWarden(brain, brain.elapsed), [])
   const remaining = advanceTrace(brain, 2.3).map(({ command }) => command)
   assert.ok(remaining.some((command) => command.type === 'activate-hitbox'))
 })

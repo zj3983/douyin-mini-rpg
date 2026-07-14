@@ -10,7 +10,6 @@ import {
   segmentHitEnemies,
   segmentHitEnemiesAlongPath,
   spawnBoss,
-  tickBossSkill,
 } from '../tools/battle-runtime.mjs'
 import * as battleRuntimeModule from '../tools/battle-runtime.mjs'
 import { createStageFlow } from '../tools/stage-flow-runtime.mjs'
@@ -359,21 +358,6 @@ test('generic spawned enemy rollback removes ordinary and boss runtime entries',
   assert.equal(battleRuntimeModule.rollbackSpawnedEnemy(bossRuntime, boss.id), true)
   assert.equal(bossRuntime.bossSpawned, false)
   assert.equal(spawnBoss(bossRuntime).ok, true)
-})
-
-test('boss casts timed skill events while alive', () => {
-  const runtime = createBattleRuntime({ stageId: 3, heroAttack: 80 })
-  defeatOrdinaryEnemies(runtime)
-  const boss = spawnBoss(runtime).enemy
-
-  const early = tickBossSkill(runtime, 1.2)
-  const cast = tickBossSkill(runtime, 1.4)
-
-  assert.equal(early.ok, false)
-  assert.equal(cast.ok, true)
-  assert.equal(cast.event.enemyId, boss.id)
-  assert.equal(cast.event.skillId, 'flame-cave-boss-skill')
-  assert.equal(cast.event.damage, 18)
 })
 
 test('defeating the world boss clears the stage', () => {

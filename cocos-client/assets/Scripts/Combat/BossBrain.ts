@@ -62,6 +62,7 @@ const ATTACK_ACTIVE_END_OFFSETS: Readonly<Record<BossAttackId, number>> = Object
 let constructBoss: (id: number, spawn: Point2, seed: number) => BossBrainState
 let advanceBoss: (state: BossBrainState, context: EnemyContext, deltaSeconds: number) => readonly EnemyCommand[]
 let updateHealth: (state: BossBrainState, ratio: number) => void
+let relocateBoss: (state: BossBrainState, position: Point2) => void
 let hurtBoss: (state: BossBrainState, now: number) => readonly EnemyCommand[]
 let interruptBoss: (state: BossBrainState, now: number) => readonly EnemyCommand[]
 let defeatBoss: (state: BossBrainState, now: number) => readonly EnemyCommand[]
@@ -90,6 +91,16 @@ function validateContext(context: EnemyContext): void {
     throw new TypeError('player position must contain finite coordinates')
   }
   if (!isFiniteBounds(context.battleBounds)) throw new TypeError('battleBounds must be finite and ordered')
+  if (context.playerMotion) {
+    const motion = context.playerMotion
+    if (
+      !Number.isFinite(motion.fromTime)
+      || !Number.isFinite(motion.toTime)
+      || motion.fromTime > motion.toTime
+      || !isFinitePoint(motion.fromPosition)
+      || !isFinitePoint(motion.toPosition)
+    ) throw new TypeError('playerMotion must contain finite ordered samples')
+  }
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -98,6 +109,10 @@ function clamp(value: number, min: number, max: number): number {
 
 function roundTime(value: number): number {
   return Math.round(value * 1e12) / 1e12
+}
+
+function roundCoordinate(value: number): number {
+  return Math.round(value * 1e6) / 1e6
 }
 
 function mixUint32(value: number): number {
@@ -168,6 +183,7 @@ export class BossBrainState {
     'mountain-roar': 0,
   }
   #spikeAreas = new Map<string, Readonly<BattleRect>>()
+  #sweepAreas = new Map<string, Readonly<BattleRect>>()
 
   private constructor(token: symbol, id: number, spawn: Point2, seed: number) {
     if (token !== BOSS_TOKEN) throw new TypeError('BossBrainState must be created by createBambooWardenBrain')
@@ -181,6 +197,7 @@ export class BossBrainState {
     constructBoss = (id, spawn, seed) => new BossBrainState(BOSS_TOKEN, id, spawn, seed)
     advanceBoss = (state, context, deltaSeconds) => state.#step(context, deltaSeconds)
     updateHealth = (state, ratio) => state.#setHealthRatio(ratio)
+    relocateBoss = (state, position) => state.#relocate(position)
     hurtBoss = (state, now) => state.#interruptWith('hurt', now)
     interruptBoss = (state, now) => state.#interruptWith('interrupted', now)
     defeatBoss = (state, now) => state.#defeat(now)
@@ -337,6 +354,24 @@ export class BossBrainState {
     }
   }
 
+  #contextAt(context: EnemyContext, eventTime: number): EnemyContext {
+    const motion = context.playerMotion
+    if (!motion) return context
+    const span = motion.toTime - motion.fromTime
+    const progress = span <= TIME_EPSILON
+      ? 1
+      : clamp((eventTime - motion.fromTime) / span, 0, 1)
+    const position = {
+      x: roundCoordinate(motion.fromPosition.x + (motion.toPosition.x - motion.fromPosition.x) * progress),
+      y: roundCoordinate(motion.fromPosition.y + (motion.toPosition.y - motion.fromPosition.y) * progress),
+    }
+    return {
+      ...context,
+      now: eventTime,
+      player: { ...context.player, position },
+    }
+  }
+
   #emit(event: BossEvent, context: EnemyContext, commands: EnemyCommand[]): void {
     if (event.type === 'select') {
       this.#selectCycle(event.at)
@@ -354,6 +389,7 @@ export class BossBrainState {
     if (event.type === 'telegraph' && attack === 'bamboo-sweep') {
       this.#phase = 'telegraph'
       const area = this.#sweepArea(context)
+      this.#sweepAreas.set(baseId, freezeRect(area))
       commands.push({ type: 'face', direction: context.player.position.x < this.#position.x ? -1 : 1 })
       commands.push({ type: 'animate', action: 'boss-sweep-telegraph' })
       commands.push({
@@ -361,6 +397,9 @@ export class BossBrainState {
         attackId: baseId,
         area,
         duration: TELEGRAPH_SECONDS,
+        eventTime: event.at,
+        activatesAt: roundTime(event.at + TELEGRAPH_SECONDS),
+        telegraphId: baseId,
         danger: { kind: 'sweep', escape: 'vertical', origin: this.#position, arcDegrees: 120 },
       })
       return
@@ -378,6 +417,9 @@ export class BossBrainState {
         attackId,
         area,
         duration: TELEGRAPH_SECONDS,
+        eventTime: event.at,
+        activatesAt: roundTime(event.at + TELEGRAPH_SECONDS),
+        telegraphId: attackId,
         danger: { kind: 'spike', markerIndex, center },
       })
       return
@@ -391,6 +433,9 @@ export class BossBrainState {
           attackId: `${baseId}:sector:${sector.sector}`,
           area: sector.area,
           duration: TELEGRAPH_SECONDS,
+          eventTime: event.at,
+          activatesAt: roundTime(event.at + TELEGRAPH_SECONDS),
+          telegraphId: baseId,
           danger: this.#roarDanger(-1, 190, sector.sector),
         })
       }
@@ -398,7 +443,8 @@ export class BossBrainState {
     }
     if (event.type === 'sweep-active') {
       this.#phase = 'attack'
-      const area = this.#sweepArea(context)
+      const area = this.#sweepAreas.get(baseId)
+      if (!area) return
       commands.push({ type: 'animate', action: 'boss-sweep-active' })
       commands.push({
         type: 'activate-hitbox',
@@ -406,8 +452,12 @@ export class BossBrainState {
         area,
         damage: 8,
         duration: 0.18,
+        eventTime: event.at,
+        activationNotBefore: event.at,
+        telegraphId: baseId,
         danger: { kind: 'sweep', escape: 'vertical', origin: this.#position, arcDegrees: 120 },
       })
+      this.#sweepAreas.delete(baseId)
       return
     }
     if (event.type === 'spike-active') {
@@ -424,6 +474,9 @@ export class BossBrainState {
         area,
         damage: 7,
         duration: 0.14,
+        eventTime: event.at,
+        activationNotBefore: event.at,
+        telegraphId: attackId,
         danger: { kind: 'spike', markerIndex, center },
       })
       this.#spikeAreas.delete(attackId)
@@ -441,6 +494,9 @@ export class BossBrainState {
           area: sector.area,
           damage: 6,
           duration: 0.12,
+          eventTime: event.at,
+          activationNotBefore: event.at,
+          telegraphId: baseId,
           danger: this.#roarDanger(waveIndex, radius, sector.sector),
         })
       }
@@ -464,7 +520,7 @@ export class BossBrainState {
     while (this.#events.length > 0 && this.#events[0].at <= target + TIME_EPSILON) {
       const event = this.#events.shift() as BossEvent
       this.#elapsed = Math.max(this.#elapsed, event.at)
-      this.#emit(event, context, commands)
+      this.#emit(event, this.#contextAt(context, event.at), commands)
     }
     this.#elapsed = target
     return freezeCommands(commands)
@@ -473,6 +529,11 @@ export class BossBrainState {
   #setHealthRatio(ratio: number): void {
     if (!Number.isFinite(ratio)) throw new TypeError('health ratio must be finite')
     this.#healthRatio = clamp(ratio, 0, 1)
+  }
+
+  #relocate(position: Point2): void {
+    if (!isFinitePoint(position)) throw new TypeError('position must contain finite supported coordinates')
+    this.#position = { ...position }
   }
 
   #interruptWith(phase: 'hurt' | 'interrupted', now: number): readonly EnemyCommand[] {
@@ -484,6 +545,7 @@ export class BossBrainState {
     ) return Object.freeze([])
     this.#events = []
     this.#spikeAreas.clear()
+    this.#sweepAreas.clear()
     this.#phase = phase
     this.#schedule({ at: this.#elapsed + 0.25, type: 'resume' })
     return freezeCommands([
@@ -497,6 +559,7 @@ export class BossBrainState {
     if (this.#phase === 'death') return Object.freeze([])
     this.#events = []
     this.#spikeAreas.clear()
+    this.#sweepAreas.clear()
     this.#phase = 'death'
     return freezeCommands([
       { type: 'move', velocity: { x: 0, y: 0 } },
@@ -524,6 +587,10 @@ export function stepBambooWarden(
 
 export function setBossHealthRatio(state: BossBrainState, ratio: number): void {
   updateHealth(requireBoss(state), ratio)
+}
+
+export function setBambooWardenPosition(state: BossBrainState, position: Point2): void {
+  relocateBoss(requireBoss(state), position)
 }
 
 export function hurtBambooWarden(state: BossBrainState, now: number): readonly EnemyCommand[] {

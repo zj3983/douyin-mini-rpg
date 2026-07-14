@@ -49,6 +49,12 @@ export interface EnemyContext {
     readonly position: Readonly<Point2>
     readonly alive: boolean
   }
+  readonly playerMotion?: {
+    readonly fromTime: number
+    readonly fromPosition: Readonly<Point2>
+    readonly toTime: number
+    readonly toPosition: Readonly<Point2>
+  }
   readonly neighbors: readonly {
     readonly id: number
     readonly position: Readonly<Point2>
@@ -66,6 +72,9 @@ export type EnemyCommand =
     readonly attackId: string
     readonly area: Readonly<BattleRect>
     readonly duration: number
+    readonly eventTime?: number
+    readonly activatesAt?: number
+    readonly telegraphId?: string
     readonly danger?: Readonly<EnemyDangerDescriptor>
   }
   | {
@@ -74,6 +83,9 @@ export type EnemyCommand =
     readonly area: Readonly<BattleRect>
     readonly damage: number
     readonly duration: number
+    readonly eventTime?: number
+    readonly activationNotBefore?: number
+    readonly telegraphId?: string
     readonly danger?: Readonly<EnemyDangerDescriptor>
   }
   | {

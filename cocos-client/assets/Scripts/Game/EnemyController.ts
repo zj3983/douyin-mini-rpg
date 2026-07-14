@@ -6,6 +6,7 @@ import {
   defeatBambooWarden,
   hurtBambooWarden,
   interruptBambooWarden,
+  setBambooWardenPosition,
   setBossHealthRatio,
   stepBambooWarden,
 } from '../Combat/BossBrain'
@@ -57,6 +58,7 @@ export class EnemyController extends Component {
   private bossActionLeft = 0
   private eventsBound = false
   private combatPaused = false
+  private previousTargetSample: { time: number; position: Point2 } | null = null
 
   onEnable() {
     this.bindEvents()
@@ -96,12 +98,21 @@ export class EnemyController extends Component {
   setTarget(worldPosition: Vec3) {
     this.target = worldPosition.clone()
     this.targetNode = null
+    this.rememberCurrentTarget(this.target)
   }
 
   setTargetNode(targetNode: Node, lockY: boolean) {
     this.targetNode = targetNode
     this.lockTargetY = lockY
     this.target = targetNode.position.clone()
+    this.rememberCurrentTarget(targetNode.position)
+  }
+
+  syncBossBattleSpace() {
+    if (!this.bossBrain) return
+    const position = this.node.position
+    setBambooWardenPosition(this.bossBrain, { x: position.x, y: position.y })
+    this.syncRuntimePosition()
   }
 
   enemyNeighborSnapshot(): Readonly<EnemyNeighborSnapshot> | null {
@@ -123,13 +134,23 @@ export class EnemyController extends Component {
     }
 
     const liveTarget = this.targetNode?.position ?? this.target
+    const brainTime = this.brain?.elapsed ?? this.bossBrain?.elapsed ?? 0
+    const fromSample = this.previousTargetSample?.time === brainTime
+      ? this.previousTargetSample.position
+      : { x: liveTarget.x, y: liveTarget.y }
+    const clampedDelta = Number.isFinite(deltaTime) && deltaTime > 0 ? Math.min(deltaTime, 0.25) : 0
     const context = {
-      now: (this.brain?.elapsed ?? this.bossBrain?.elapsed ?? 0)
-        + (Number.isFinite(deltaTime) && deltaTime > 0 ? Math.min(deltaTime, 0.25) : 0),
+      now: brainTime + clampedDelta,
       player: {
         id: 'player',
         position: { x: liveTarget.x, y: liveTarget.y },
         alive: this.targetNode?.activeInHierarchy ?? true,
+      },
+      playerMotion: {
+        fromTime: brainTime,
+        fromPosition: fromSample,
+        toTime: brainTime + clampedDelta,
+        toPosition: { x: liveTarget.x, y: liveTarget.y },
       },
       neighbors: this.brainBinding.neighbors(),
       battleBounds: this.brainBinding.battleBounds(),
@@ -138,6 +159,10 @@ export class EnemyController extends Component {
       ? stepEnemyBrain(this.brain, context, deltaTime)
       : stepBambooWarden(this.bossBrain as BossBrainState, context, deltaTime)
     this.consumeCommands(commands)
+    this.previousTargetSample = {
+      time: this.brain?.elapsed ?? this.bossBrain?.elapsed ?? brainTime,
+      position: { x: liveTarget.x, y: liveTarget.y },
+    }
     this.syncRuntimePosition()
   }
 
@@ -271,6 +296,13 @@ export class EnemyController extends Component {
     this.runtimeEnemy.position = { x: local.x, y: local.y }
   }
 
+  private rememberCurrentTarget(target: Readonly<{ x: number; y: number }>) {
+    this.previousTargetSample = {
+      time: this.brain?.elapsed ?? this.bossBrain?.elapsed ?? 0,
+      position: { x: target.x, y: target.y },
+    }
+  }
+
   private resetRuntimeState() {
     this.target = null
     this.targetNode = null
@@ -283,6 +315,7 @@ export class EnemyController extends Component {
     this.moving = false
     this.facing = -1
     this.combatPaused = false
+    this.previousTargetSample = null
   }
 
   private bossPresentationAction(action: string): 'idle' | 'move' | 'attack' | 'hurt' | 'death' {

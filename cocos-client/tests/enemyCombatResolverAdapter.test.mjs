@@ -82,6 +82,8 @@ test('idle actor overlap causes zero damage while telegraphs are delivered immut
     attackId: 'wolf-pounce:1:1',
     area: { minX: -30, maxX: 30, minY: -110, maxY: -50 },
     duration: 0.45,
+    visibleAt: 0.25,
+    activationNotBefore: 0.7,
     generation: 1,
   }])
   assertDeepFrozen(telegraphs)
@@ -248,6 +250,47 @@ test('pool reuse and generation reset cancel old authority before an id can atta
   enemy(adapter, 21, 7)
   stepEnemyCombatResolverAdapter(adapter, 0.25)
   assert.deepEqual(drainEnemyCombatDamage(adapter), [])
+})
+
+test('freeze, death cancellation, pool removal, and generation reset discard delayed telegraph hitboxes', () => {
+  const setup = (generation) => {
+    const adapter = createEnemyCombatResolverAdapter(generation)
+    player(adapter, generation)
+    enemy(adapter, generation)
+    consumeEnemyCombatCommand(adapter, generation, 1, {
+      type: 'show-telegraph',
+      attackId: 'bamboo-sweep:1:pending',
+      area: { minX: -30, maxX: 30, minY: -110, maxY: -50 },
+      duration: 0.8,
+    })
+    consumeEnemyCombatCommand(adapter, generation, 1, hitboxCommand({
+      attackId: 'bamboo-sweep:1:pending',
+      duration: 0.18,
+    }))
+    assert.equal(enemyCombatAdapterSnapshot(adapter).hitboxCount, 0)
+    return adapter
+  }
+  const assertSilent = (adapter) => {
+    for (let index = 0; index < 5; index += 1) stepEnemyCombatResolverAdapter(adapter, 0.25)
+    assert.deepEqual(drainEnemyCombatDamage(adapter), [])
+    assert.equal(enemyCombatAdapterSnapshot(adapter).hitboxCount, 0)
+  }
+
+  const frozen = setup(31)
+  assert.equal(pauseEnemyCombatResolverAdapter(frozen, 31, true), true)
+  assertSilent(frozen)
+
+  const defeated = setup(32)
+  assert.equal(cancelEnemyCombatActorAttacks(defeated, 32, 1), true)
+  assertSilent(defeated)
+
+  const pooled = setup(33)
+  assert.equal(removeEnemyCombatActor(pooled, 33, 1), true)
+  assertSilent(pooled)
+
+  const rebuilt = setup(34)
+  assert.equal(resetEnemyCombatResolverAdapter(rebuilt, 35), 35)
+  assertSilent(rebuilt)
 })
 
 test('real brain commands map to the current atlas and live damage begins only at the active frame', () => {
