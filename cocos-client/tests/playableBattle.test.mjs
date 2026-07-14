@@ -245,8 +245,12 @@ test('atlas animator invalidates stale loads and exposes stop and frame-zero res
   assert.match(source, /this\.loadGeneration \+= 1/)
   assert.match(source, /stop\(\)/)
   assert.match(source, /reset\(actionName = 'move'\)/)
+  assert.match(source, /currentFrameSize\(\)/)
+  assert.match(source, /currentFrameAspect\(\)/)
   assert.match(source, /acceptAnimationLoad\(/)
   assert.match(source, /this\.frameIndex = 0/)
+  assert.match(source, /resourcePathForPng\(action\.atlas\)/)
+  assert.match(source, /this\.buildFrames\(texture, this\.actorId, action\.atlas, action\)/)
 })
 
 test('atlas animator owns and reuses cached action frames until destruction', () => {
@@ -422,6 +426,7 @@ test('runtime-created enemies contain sprite animation combat and pool component
   }
   assert.match(source, /bindAnimationManifest\(visual, animator, 'move'\)/)
   assert.match(source, /createSpriteNode\('Visual', node, 210, 336\)/)
+  assert.match(read('assets/Scripts/Game/EnemySpawner.ts'), /visual\?\.animator\?\.currentFrameSize\(\)/)
   for (const actorId of ['moss-wolf', 'green-wing-moth', 'bamboo-warden']) {
     assert.equal(manifest.includes(`\"id\": \"${actorId}\"`), true, `missing ${actorId}`)
   }

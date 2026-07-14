@@ -184,10 +184,13 @@ export class EnemySpawner extends Component {
     const sprite = visual?.animator?.targetSprite ?? null
     const visualTransform = sprite?.node.getComponent(UITransform) ?? null
     const fallback = this.defaultVisualSizes.get(node)?.visual ?? { width: 210, height: 336 }
+    const runtimeFrameSize = visual?.animator?.currentFrameSize()
     const manifest = visual?.animator?.animationManifest?.json as AnimationAtlasManifest | undefined
     const declaredFrame = manifest?.actors.find((actor) => actor.id === enemy.profile.id)?.frameSize
     const frameRect = sprite?.spriteFrame?.rect
-    const frameSize = declaredFrame && declaredFrame.w > 0 && declaredFrame.h > 0
+    const frameSize = runtimeFrameSize
+      ? runtimeFrameSize
+      : declaredFrame && declaredFrame.w > 0 && declaredFrame.h > 0
       ? { width: declaredFrame.w, height: declaredFrame.h }
       : frameRect && frameRect.width > 0 && frameRect.height > 0
         ? { width: frameRect.width, height: frameRect.height }

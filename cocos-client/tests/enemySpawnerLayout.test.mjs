@@ -54,12 +54,16 @@ async function loadEnemySpawner() {
 class SpawnNode {
   position = { x: 0, y: 0, z: 0 }
   controller
+  visual
   transform = {
     contentSize: { width: 210, height: 336 },
     setContentSize: (width, height) => { this.transform.contentSize = { width, height } },
   }
 
-  constructor(controller) { this.controller = controller }
+  constructor(controller, visual = null) {
+    this.controller = controller
+    this.visual = visual
+  }
   setPosition(x, y, z) { this.position = typeof x === 'object' ? { ...x } : { x, y, z } }
   setScale() {}
   setRotationFromEuler() {}
@@ -68,6 +72,7 @@ class SpawnNode {
   emit() {}
   getComponent(Type) {
     if (Type.name === 'EnemyController') return this.controller
+    if (Type.name === 'EnemyVisualController') return this.visual
     if (Type.name === 'UITransform') return this.transform
     return null
   }
@@ -81,7 +86,18 @@ test('EnemySpawner resize moves the visual and synchronizes the active Boss Brai
     setTarget() {},
     syncBossBattleSpace() { synced.push({ ...node.position }) },
   }
-  const node = new SpawnNode(controller)
+  const node = new SpawnNode(controller, {
+    animator: {
+      currentFrameSize: () => null,
+      animationManifest: {
+        json: {
+          actors: [{ id: 'bamboo-warden', frameSize: { w: 384, h: 480 } }],
+        },
+      },
+      targetSprite: null,
+    },
+    resetForSpawn() {},
+  })
   const spawner = new EnemySpawner()
   spawner.enemyPool = {
     spawn: () => node,
@@ -101,7 +117,7 @@ test('EnemySpawner resize moves the visual and synchronizes the active Boss Brai
   spawner.spawnEnemy(enemy)
   spawner.configureBattleLayout(resized)
 
-  const expected = computeBossVisualPlacement(resized, { width: 210, height: 336 }).position
+  const expected = computeBossVisualPlacement(resized, { width: 384, height: 480 }).position
   assert.deepEqual({ x: node.position.x, y: node.position.y }, expected)
   assert.deepEqual(synced.at(-1), { x: expected.x, y: expected.y, z: 0 })
 })
