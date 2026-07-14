@@ -1,0 +1,196 @@
+#!/usr/bin/env python3
+import argparse
+import json
+from pathlib import Path
+from typing import Any
+
+from PIL import Image
+
+
+def _as_size(value: Any, label: str) -> tuple[int, int]:
+    if not isinstance(value, list) or len(value) != 2:
+        raise ValueError(f"{label} must be [width, height]")
+    width, height = int(value[0]), int(value[1])
+    if width <= 0 or height <= 0 or width * 5 != height * 4:
+        raise ValueError(f"{label} must be a positive 4:5 size")
+    return width, height
+
+
+def _bbox_or_error(image: Image.Image) -> tuple[int, int, int, int]:
+    bbox = image.getchannel("A").getbbox()
+    if bbox is None:
+        raise ValueError("frame has no visible subject")
+    return bbox
+
+
+def normalize_frame(image: Image.Image, frame_size, padding_ratio, anchor):
+    target_width, target_height = _as_size(list(frame_size), "frame_size")
+    if not 0 <= padding_ratio < 0.4:
+        raise ValueError("padding_ratio must be in [0, 0.4)")
+    anchor_x = float(anchor.get("x", 0.5))
+    anchor_y = float(anchor.get("y", 0.85))
+    if not 0 <= anchor_x <= 1 or not 0 <= anchor_y <= 1:
+        raise ValueError("anchor must be normalized")
+
+    source = image.convert("RGBA")
+    left, top, right, bottom = _bbox_or_error(source)
+    subject = source.crop((left, top, right, bottom))
+    safe_width = target_width * (1 - padding_ratio * 2)
+    safe_height = target_height * (1 - padding_ratio * 2)
+    scale = min(safe_width / subject.width, safe_height / subject.height)
+    resized = subject.resize(
+        (max(1, round(subject.width * scale)), max(1, round(subject.height * scale))),
+        Image.Resampling.LANCZOS,
+    )
+
+    frame = Image.new("RGBA", (target_width, target_height), (0, 0, 0, 0))
+    paste_x = round(target_width * anchor_x - resized.width * anchor_x)
+    paste_y = round(target_height * anchor_y - resized.height * anchor_y)
+    paste_x = max(round(target_width * padding_ratio), min(round(target_width * (1 - padding_ratio) - resized.width), paste_x))
+    paste_y = max(round(target_height * padding_ratio), min(round(target_height * (1 - padding_ratio) - resized.height), paste_y))
+    frame.alpha_composite(resized, (paste_x, paste_y))
+    return frame
+
+
+def validate_subject(frame: Image.Image, padding_ratio):
+    image = frame.convert("RGBA")
+    left, top, right, bottom = _bbox_or_error(image)
+    width, height = image.size
+    margin = min(left / width, top / height, (width - right) / width, (height - bottom) / height)
+    if margin < padding_ratio - 0.015:
+        raise ValueError(f"subject margin {margin:.3f} below requested padding {padding_ratio:.3f}")
+    visible = sum(1 for alpha in image.getchannel("A").getdata() if alpha > 0)
+    if visible < width * height * 0.02:
+        raise ValueError("subject is too small")
+    return True
+
+
+def pack_action(frames, frame_size, max_texture_size=4096):
+    width, height = _as_size(list(frame_size), "frame_size")
+    if not frames:
+        raise ValueError("action must contain at least one frame")
+    columns = max(1, min(len(frames), max_texture_size // width))
+    rows = (len(frames) + columns - 1) // columns
+    if rows * height > max_texture_size:
+        raise ValueError("action exceeds max texture size")
+    atlas = Image.new("RGBA", (columns * width, rows * height), (0, 0, 0, 0))
+    rects = []
+    for index, frame in enumerate(frames):
+        if frame.size != (width, height):
+            raise ValueError("all packed frames must match frame_size")
+        x = (index % columns) * width
+        y = (index // columns) * height
+        atlas.alpha_composite(frame, (x, y))
+        rects.append({"x": x, "y": y, "w": width, "h": height})
+    return atlas, rects
+
+
+def _load_action_frames(action_config, source_root: Path, frame_size, anchor):
+    action_dir = source_root / action_config["source"]
+    files = sorted(action_dir.glob("*.png"))
+    expected_count = int(action_config["frames"])
+    if len(files) != expected_count:
+        raise FileNotFoundError(f"{action_dir} expected {expected_count} png frames, found {len(files)}")
+    frames = [
+        normalize_frame(Image.open(path), frame_size, 0.10, anchor)
+        for path in files
+    ]
+    for frame in frames:
+        validate_subject(frame, 0.10)
+    return frames
+
+
+def build_actor(source_config, source_root, output_root):
+    source_root = Path(source_root)
+    output_root = Path(output_root)
+    actor_id = source_config["id"]
+    folder = source_config.get("folder") or "".join(part.title() for part in actor_id.split("-"))
+    frame_size = _as_size(source_config["runtimeFrameSize"], "runtimeFrameSize")
+    anchor = source_config["anchor"]
+    actor_dir = output_root / "Assets" / "ActorAtlases" / folder
+    actor_dir.mkdir(parents=True, exist_ok=True)
+
+    actions = []
+    for action_name, action_config in source_config["actions"].items():
+        frames = _load_action_frames(action_config, source_root, frame_size, anchor)
+        atlas, rects = pack_action(frames, frame_size)
+        atlas_path = actor_dir / f"{action_name}.png"
+        atlas.save(atlas_path)
+        relative_atlas = f"Assets/ActorAtlases/{folder}/{action_name}.png"
+        actions.append({
+            "name": action_name,
+            "atlas": relative_atlas,
+            "fps": action_config.get("fps", 8),
+            "loop": bool(action_config.get("loop", False)),
+            "order": list(range(len(rects))),
+            "frames": rects,
+        })
+
+    return {
+        "id": actor_id,
+        "type": source_config.get("type", "monster"),
+        "atlas": actions[0]["atlas"],
+        "frameSize": {"w": frame_size[0], "h": frame_size[1]},
+        "anchor": source_config["anchor"],
+        "actions": actions,
+    }
+
+
+def write_manifest(actors, source_path, resource_path):
+    manifest = {
+        "version": 2,
+        "framePacking": "vertical-slice-action-atlases",
+        "actors": actors,
+    }
+    payload = json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
+    source_path = Path(source_path)
+    resource_path = Path(resource_path)
+    source_path.parent.mkdir(parents=True, exist_ok=True)
+    resource_path.parent.mkdir(parents=True, exist_ok=True)
+    source_path.write_text(payload, encoding="utf-8")
+    resource_path.write_text(payload, encoding="utf-8")
+    return manifest
+
+
+def _load_source_manifest(root: Path):
+    path = root / "assets/Data/vertical-slice-animation-sources.json"
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def check_source_manifest(root: Path):
+    data = _load_source_manifest(root)
+    if data.get("version") != 1:
+        raise ValueError("source manifest version must be 1")
+    actors = data.get("actors")
+    if not isinstance(actors, dict) or not actors:
+        raise ValueError("source manifest must define actors")
+    for actor_id, actor in actors.items():
+        _as_size(actor.get("masterFrameSize"), f"{actor_id}.masterFrameSize")
+        _as_size(actor.get("runtimeFrameSize"), f"{actor_id}.runtimeFrameSize")
+        if not isinstance(actor.get("actions"), dict) or not actor["actions"]:
+            raise ValueError(f"{actor_id} must define actions")
+        for action_name, action in actor["actions"].items():
+            if int(action.get("frames", 0)) <= 0:
+                raise ValueError(f"{actor_id}/{action_name} must define positive frames")
+    return data
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--check", action="store_true")
+    parser.add_argument("--actor", action="append", default=[])
+    args = parser.parse_args()
+    root = Path(__file__).resolve().parents[1]
+    data = check_source_manifest(root)
+    if args.check:
+        print("vertical slice atlas source manifest ok")
+        return
+    selected = args.actor or list(data["actors"].keys())
+    source_root = root / data.get("sourceRoot", "art-source/vertical-slice")
+    output_root = root / "assets/resources"
+    actors = [build_actor(data["actors"][actor_id], source_root, output_root) for actor_id in selected]
+    write_manifest(actors, root / "assets/Data/animation-atlas.json", root / "assets/resources/Data/animation-atlas.json")
+
+
+if __name__ == "__main__":
+    main()

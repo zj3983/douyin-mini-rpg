@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "sourceRoot": "art-source/vertical-slice",
+  "runtimeRoot": "Assets/ActorAtlases",
+  "actors": {
+    "qinglan-sword-cultivator": {
+      "id": "qinglan-sword-cultivator",
+      "type": "character",
+      "folder": "QinglanSwordCultivator",
+      "masterFrameSize": [512, 640],
+      "runtimeFrameSize": [256, 320],
+      "anchor": { "x": 0.5, "y": 0.88 },
+      "actions": {
+        "idle": { "frames": 8, "fps": 6, "loop": true, "source": "qinglan/idle" },
+        "sword_ride": { "frames": 10, "fps": 8, "loop": true, "source": "qinglan/sword_ride" },
+        "hand_seal": { "frames": 10, "fps": 10, "loop": false, "source": "qinglan/hand_seal" },
+        "cast": { "frames": 12, "fps": 12, "loop": false, "source": "qinglan/cast" },
+        "hurt": { "frames": 6, "fps": 10, "loop": false, "source": "qinglan/hurt" },
+        "death": { "frames": 10, "fps": 8, "loop": false, "source": "qinglan/death" }
+      }
+    },
+    "moss-wolf": {
+      "id": "moss-wolf",
+      "type": "monster",
+      "folder": "MossWolf",
+      "masterFrameSize": [384, 480],
+      "runtimeFrameSize": [256, 320],
+      "anchor": { "x": 0.5, "y": 0.82 },
+      "actions": {
+        "idle": { "frames": 6, "fps": 6, "loop": true, "source": "moss-wolf/idle" },
+        "move": { "frames": 8, "fps": 10, "loop": true, "source": "moss-wolf/move" },
+        "telegraph": { "frames": 4, "fps": 8, "loop": false, "source": "moss-wolf/telegraph" },
+        "attack": { "frames": 8, "fps": 12, "loop": false, "source": "moss-wolf/attack" },
+        "hurt": { "frames": 4, "fps": 10, "loop": false, "source": "moss-wolf/hurt" },
+        "death": { "frames": 8, "fps": 8, "loop": false, "source": "moss-wolf/death" }
+      }
+    },
+    "green-wing-moth": {
+      "id": "green-wing-moth",
+      "type": "monster",
+      "folder": "GreenWingMoth",
+      "masterFrameSize": [384, 480],
+      "runtimeFrameSize": [256, 320],
+      "anchor": { "x": 0.5, "y": 0.58 },
+      "actions": {
+        "idle": { "frames": 6, "fps": 6, "loop": true, "source": "green-wing-moth/idle" },
+        "move": { "frames": 8, "fps": 10, "loop": true, "source": "green-wing-moth/move" },
+        "dive": { "frames": 8, "fps": 12, "loop": false, "source": "green-wing-moth/dive" },
+        "cast": { "frames": 8, "fps": 10, "loop": false, "source": "green-wing-moth/cast" },
+        "hurt": { "frames": 4, "fps": 10, "loop": false, "source": "green-wing-moth/hurt" },
+        "death": { "frames": 8, "fps": 8, "loop": false, "source": "green-wing-moth/death" }
+      }
+    },
+    "bamboo-warden": {
+      "id": "bamboo-warden",
+      "type": "monster",
+      "folder": "BambooWarden",
+      "masterFrameSize": [768, 960],
+      "runtimeFrameSize": [384, 480],
+      "anchor": { "x": 0.5, "y": 0.84 },
+      "actions": {
+        "idle": { "frames": 8, "fps": 6, "loop": true, "source": "bamboo-warden/idle" },
+        "move": { "frames": 10, "fps": 8, "loop": true, "source": "bamboo-warden/move" },
+        "sweep": { "frames": 12, "fps": 12, "loop": false, "source": "bamboo-warden/sweep" },
+        "spikes": { "frames": 12, "fps": 12, "loop": false, "source": "bamboo-warden/spikes" },
+        "roar": { "frames": 12, "fps": 12, "loop": false, "source": "bamboo-warden/roar" },
+        "hurt": { "frames": 6, "fps": 10, "loop": false, "source": "bamboo-warden/hurt" },
+        "death": { "frames": 12, "fps": 8, "loop": false, "source": "bamboo-warden/death" }
+      }
+    }
+  }
+}

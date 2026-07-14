@@ -11,7 +11,7 @@ export type EnemyBrainPhase =
   | 'interrupted'
   | 'death'
 export type EnemyAttack = 'pounce' | 'dive' | 'spirit-orb'
-export type EnemyPresentationAction = 'idle' | 'move' | 'attack' | 'hurt' | 'death'
+export type EnemyPresentationAction = 'idle' | 'move' | 'telegraph' | 'attack' | 'dive' | 'cast' | 'hurt' | 'death'
 
 export type EnemyDangerDescriptor =
   | {
@@ -137,18 +137,15 @@ let hurtBrain: (state: EnemyBrainState, now: number) => readonly EnemyCommand[]
 let interruptBrain: (state: EnemyBrainState, now: number) => readonly EnemyCommand[]
 let defeatBrain: (state: EnemyBrainState, now: number) => readonly EnemyCommand[]
 
-const REQUIRED_PRESENTATION_ACTIONS: readonly EnemyPresentationAction[] = Object.freeze([
-  'idle',
-  'move',
-  'attack',
-  'hurt',
-  'death',
-])
+const REQUIRED_PRESENTATION_ACTIONS: Readonly<Record<OrdinaryEnemyKind, readonly EnemyPresentationAction[]>> = Object.freeze({
+  'moss-wolf': Object.freeze(['idle', 'move', 'telegraph', 'attack', 'hurt', 'death']),
+  'green-wing-moth': Object.freeze(['idle', 'move', 'dive', 'cast', 'hurt', 'death']),
+})
 
 const SEMANTIC_PRESENTATION_ACTIONS: Readonly<Record<OrdinaryEnemyKind, Readonly<Record<string, EnemyPresentationAction>>>> = Object.freeze({
   'moss-wolf': Object.freeze({
     'wolf-prowl': 'move',
-    'wolf-crouch': 'attack',
+    'wolf-crouch': 'telegraph',
     'wolf-pounce': 'attack',
     'wolf-brake': 'idle',
     'wolf-hurt': 'hurt',
@@ -157,8 +154,8 @@ const SEMANTIC_PRESENTATION_ACTIONS: Readonly<Record<OrdinaryEnemyKind, Readonly
   }),
   'green-wing-moth': Object.freeze({
     'moth-flight': 'move',
-    'moth-dive': 'attack',
-    'moth-spirit-orb': 'attack',
+    'moth-dive': 'dive',
+    'moth-spirit-orb': 'cast',
     'moth-recover': 'idle',
     'moth-hurt': 'hurt',
     'moth-interrupted': 'hurt',
@@ -186,12 +183,12 @@ export function enemyAnimationCatalogCompatibility(
   kind: OrdinaryEnemyKind,
   availableActions: readonly string[],
 ): Readonly<EnemyAnimationCatalogCompatibility> {
-  requireOrdinaryKind(kind)
+  const safeKind = requireOrdinaryKind(kind)
   if (!Array.isArray(availableActions) || availableActions.some((action) => typeof action !== 'string')) {
     throw new TypeError('availableActions must be an array of strings')
   }
   const available = new Set(availableActions)
-  const missing = Object.freeze(REQUIRED_PRESENTATION_ACTIONS.filter((action) => !available.has(action)))
+  const missing = Object.freeze(REQUIRED_PRESENTATION_ACTIONS[safeKind].filter((action) => !available.has(action)))
   return Object.freeze({ compatible: missing.length === 0, missing })
 }
 
