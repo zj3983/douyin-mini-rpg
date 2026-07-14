@@ -152,6 +152,31 @@ def write_manifest(actors, source_path, resource_path):
     return manifest
 
 
+def merge_actor_manifests(existing_actors, updated_actors):
+    by_id = {actor["id"]: actor for actor in existing_actors}
+    ordered_ids = []
+    for actor in existing_actors:
+        actor_id = actor["id"]
+        if actor_id not in ordered_ids:
+            ordered_ids.append(actor_id)
+    for actor in updated_actors:
+        actor_id = actor["id"]
+        by_id[actor_id] = actor
+        if actor_id not in ordered_ids:
+            ordered_ids.append(actor_id)
+    return [by_id[actor_id] for actor_id in ordered_ids]
+
+
+def _load_existing_runtime_actors(path: Path):
+    if not path.exists():
+        return []
+    data = json.loads(path.read_text(encoding="utf-8"))
+    actors = data.get("actors", [])
+    if not isinstance(actors, list):
+        raise ValueError("existing animation manifest actors must be a list")
+    return actors
+
+
 def _load_source_manifest(root: Path):
     path = root / "assets/Data/vertical-slice-animation-sources.json"
     return json.loads(path.read_text(encoding="utf-8"))
@@ -188,7 +213,9 @@ def main():
     selected = args.actor or list(data["actors"].keys())
     source_root = root / data.get("sourceRoot", "art-source/vertical-slice")
     output_root = root / "assets/resources"
-    actors = [build_actor(data["actors"][actor_id], source_root, output_root) for actor_id in selected]
+    built_actors = [build_actor(data["actors"][actor_id], source_root, output_root) for actor_id in selected]
+    existing_actors = [] if not args.actor else _load_existing_runtime_actors(root / "assets/Data/animation-atlas.json")
+    actors = merge_actor_manifests(existing_actors, built_actors)
     write_manifest(actors, root / "assets/Data/animation-atlas.json", root / "assets/resources/Data/animation-atlas.json")
 
 
