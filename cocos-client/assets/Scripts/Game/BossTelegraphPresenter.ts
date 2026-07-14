@@ -1,11 +1,19 @@
 import { _decorator, Color, Component, Graphics, Node, UITransform } from 'cc'
+import { BOSS_HAZARD_POOL_CAPACITY } from '../Combat/BossBrain.ts'
 import type { EnemyCommand } from '../Combat/EnemyBrain.ts'
 import type { EnemyTelegraphDelivery } from './EnemyCombatResolverAdapter.ts'
 import { NodePoolController } from './NodePoolController'
 
 const { ccclass, property } = _decorator
 
-export const BOSS_TELEGRAPH_POOL_CAPACITY = 12
+export { BOSS_HAZARD_POOL_CAPACITY }
+
+export class BossHazardPoolInvariantError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'BossHazardPoolInvariantError'
+  }
+}
 
 type ActiveHitboxCommand = Extract<EnemyCommand, { readonly type: 'activate-hitbox' }>
 
@@ -26,6 +34,7 @@ interface ImpactVisual {
   readonly node: Node
   readonly generation: number
   readonly enemyId: number
+  fresh: boolean
   remaining: number
 }
 
@@ -79,6 +88,10 @@ export class BossTelegraphPresenter extends Component {
     if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0) return
     for (let index = this.impacts.length - 1; index >= 0; index -= 1) {
       const impact = this.impacts[index]
+      if (impact.fresh) {
+        impact.fresh = false
+        continue
+      }
       impact.remaining -= deltaSeconds
       if (impact.remaining <= 1e-9) this.removeImpact(index)
     }
@@ -94,8 +107,7 @@ export class BossTelegraphPresenter extends Component {
   present(delivery: EnemyTelegraphDelivery): boolean {
     if (delivery.generation < this.generation) return false
     if (delivery.generation > this.generation) this.resetGeneration(delivery.generation)
-    const node = this.acquireDangerNode()
-    if (!node) return false
+    const node = this.acquireHazardNode(delivery.attackId)
     this.drawArea(node, delivery.area, false)
     this.telegraphPool?.activateNode(node)
 
@@ -182,21 +194,34 @@ export class BossTelegraphPresenter extends Component {
     for (const command of group.pending) this.showImpact(group.generation, group.enemyId, command)
   }
 
-  private acquireDangerNode(): Node | null {
-    let node = this.telegraphPool?.spawn(false) ?? null
-    while (!node && this.impacts.length > 0) {
-      this.removeImpact(0)
-      node = this.telegraphPool?.spawn(false) ?? null
+  private acquireHazardNode(attackId: string): Node {
+    const pool = this.telegraphPool
+    if (!pool) throw new BossHazardPoolInvariantError('Boss hazard pool invariant: presenter has no configured pool')
+    if (pool.capacity < BOSS_HAZARD_POOL_CAPACITY) {
+      throw new BossHazardPoolInvariantError(
+        `Boss hazard pool invariant: configured capacity ${pool.capacity} is below required ${BOSS_HAZARD_POOL_CAPACITY}`,
+      )
+    }
+    let node = pool.spawn(false)
+    if (!node) {
+      for (let index = this.impacts.length - 1; index >= 0; index -= 1) {
+        if (!this.impacts[index].fresh && this.impacts[index].remaining <= 1e-9) this.removeImpact(index)
+      }
+      node = pool.spawn(false)
+    }
+    if (!node) {
+      throw new BossHazardPoolInvariantError(
+        `Boss hazard pool invariant: exhausted ${pool.capacity} nodes for ${attackId}; telegraphs=${this.visibleTelegraphCount}, impacts=${this.visibleImpactCount}`,
+      )
     }
     return node
   }
 
   private showImpact(generation: number, enemyId: number, command: ActiveHitboxCommand): void {
-    const node = this.telegraphPool?.spawn(false) ?? null
-    if (!node) return
+    const node = this.acquireHazardNode(command.attackId)
     this.drawArea(node, command.area, true)
     this.telegraphPool?.activateNode(node)
-    this.impacts.push({ node, generation, enemyId, remaining: command.duration })
+    this.impacts.push({ node, generation, enemyId, fresh: true, remaining: command.duration })
   }
 
   private drawArea(node: Node, area: EnemyTelegraphDelivery['area'], active: boolean): void {

@@ -32,12 +32,13 @@ import {
   computeBattleLayout,
 } from '../Combat/BattleLayout.ts'
 import type { BattleLayout } from '../Combat/BattleLayout.ts'
+import { BOSS_HAZARD_POOL_CAPACITY } from '../Combat/BossBrain.ts'
 import type { PlayerActionToken } from '../Combat/PlayerMotor.ts'
 import { AtlasAnimator } from './AtlasAnimator'
 import { BattleHudController } from './BattleHudController'
 import { BattleInputController } from './BattleInputController'
 import { BattleRuntimeController } from './BattleRuntimeController'
-import { BOSS_TELEGRAPH_POOL_CAPACITY, BossTelegraphPresenter } from './BossTelegraphPresenter'
+import { BossTelegraphPresenter } from './BossTelegraphPresenter'
 import { EnemySpawner } from './EnemySpawner'
 import { EnemyController } from './EnemyController'
 import { EnemyVisualController } from './EnemyVisualController'
@@ -165,7 +166,7 @@ export class PortraitBattleBootstrap extends Component {
       effectLayer,
       'BossEffectPool',
       'boss-effect',
-      BOSS_TELEGRAPH_POOL_CAPACITY,
+      BOSS_HAZARD_POOL_CAPACITY,
       () => this.createBossEffectNode(),
     )
     const bossTelegraphPresenter = effectLayer.addComponent(BossTelegraphPresenter)

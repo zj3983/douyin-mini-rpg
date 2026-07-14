@@ -45,6 +45,11 @@ const BOSS_TOKEN = Symbol('BossBrainState')
 const ATTACKS: readonly BossAttackId[] = Object.freeze(['bamboo-sweep', 'ground-spikes', 'mountain-roar'])
 const TELEGRAPH_SECONDS = 0.8
 const MAX_EXTERNAL_DELTA_SECONDS = 0.25
+const HAZARD_SEQUENCE_INTERVAL_SECONDS = 0.18
+const SPIKE_MARKER_COUNT = 3
+const ROAR_WAVE_RADII = Object.freeze([80, 135, 190])
+const ROAR_SECTORS = Object.freeze(['top', 'bottom', 'right', 'left-upper', 'left-lower'])
+const MAX_NON_ROAR_HAZARDS = Math.max(SPIKE_MARKER_COUNT, 1)
 const TIME_EPSILON = 1e-10
 const MAX_UINT32 = 0xffffffff
 const COORDINATE_LIMIT = 10_000_000
@@ -63,6 +68,10 @@ const ATTACK_ACTIVE_END_OFFSETS: Readonly<Record<BossAttackId, number>> = Object
   'ground-spikes': 1.22,
   'mountain-roar': 1.28,
 })
+
+// Coarse frames must keep every roar wave visible through a render boundary while
+// the paired phase-two attack can retain all three spike markers.
+export const BOSS_HAZARD_POOL_CAPACITY = ROAR_WAVE_RADII.length * ROAR_SECTORS.length + MAX_NON_ROAR_HAZARDS
 
 let constructBoss: (id: number, spawn: Point2, seed: number) => BossBrainState
 let advanceBoss: (state: BossBrainState, context: EnemyContext, deltaSeconds: number) => readonly EnemyCommand[]
@@ -317,16 +326,16 @@ export class BossBrainState {
       return
     }
     if (attack === 'ground-spikes') {
-      for (let markerIndex = 0; markerIndex < 3; markerIndex += 1) {
-        this.#schedule({ at: at + markerIndex * 0.18, type: 'spike-marker', attack, sequence, markerIndex })
-        this.#schedule({ at: at + TELEGRAPH_SECONDS + markerIndex * 0.18, type: 'spike-active', attack, sequence, markerIndex })
+      for (let markerIndex = 0; markerIndex < SPIKE_MARKER_COUNT; markerIndex += 1) {
+        this.#schedule({ at: at + markerIndex * HAZARD_SEQUENCE_INTERVAL_SECONDS, type: 'spike-marker', attack, sequence, markerIndex })
+        this.#schedule({ at: at + TELEGRAPH_SECONDS + markerIndex * HAZARD_SEQUENCE_INTERVAL_SECONDS, type: 'spike-active', attack, sequence, markerIndex })
       }
       this.#schedule({ at: at + 1.24, type: 'recovery', attack, sequence })
       return
     }
     this.#schedule({ at, type: 'telegraph', attack, sequence })
-    for (let waveIndex = 0; waveIndex < 3; waveIndex += 1) {
-      this.#schedule({ at: at + TELEGRAPH_SECONDS + waveIndex * 0.18, type: 'roar-wave', attack, sequence, waveIndex })
+    for (let waveIndex = 0; waveIndex < ROAR_WAVE_RADII.length; waveIndex += 1) {
+      this.#schedule({ at: at + TELEGRAPH_SECONDS + waveIndex * HAZARD_SEQUENCE_INTERVAL_SECONDS, type: 'roar-wave', attack, sequence, waveIndex })
     }
     this.#schedule({ at: at + 1.32, type: 'recovery', attack, sequence })
   }
@@ -368,11 +377,11 @@ export class BossBrainState {
     const x = this.#position.x
     const y = this.#position.y
     const candidates = [
-      { sector: 'top', area: { minX: x - radius + half, maxX: x + radius - half, minY: y + radius - half, maxY: y + radius + half } },
-      { sector: 'bottom', area: { minX: x - radius + half, maxX: x + radius - half, minY: y - radius - half, maxY: y - radius + half } },
-      { sector: 'right', area: { minX: x + radius - half, maxX: x + radius + half, minY: y - radius, maxY: y + radius } },
-      { sector: 'left-upper', area: { minX: x - radius - half, maxX: x - radius + half, minY: y + gapHalf, maxY: y + radius } },
-      { sector: 'left-lower', area: { minX: x - radius - half, maxX: x - radius + half, minY: y - radius, maxY: y - gapHalf } },
+      { sector: ROAR_SECTORS[0], area: { minX: x - radius + half, maxX: x + radius - half, minY: y + radius - half, maxY: y + radius + half } },
+      { sector: ROAR_SECTORS[1], area: { minX: x - radius + half, maxX: x + radius - half, minY: y - radius - half, maxY: y - radius + half } },
+      { sector: ROAR_SECTORS[2], area: { minX: x + radius - half, maxX: x + radius + half, minY: y - radius, maxY: y + radius } },
+      { sector: ROAR_SECTORS[3], area: { minX: x - radius - half, maxX: x - radius + half, minY: y + gapHalf, maxY: y + radius } },
+      { sector: ROAR_SECTORS[4], area: { minX: x - radius - half, maxX: x - radius + half, minY: y - radius, maxY: y - gapHalf } },
     ]
     return Object.freeze(candidates.flatMap((candidate) => {
       const area = clippedArea(candidate.area, bounds)
@@ -463,7 +472,7 @@ export class BossBrainState {
     if (event.type === 'telegraph' && attack === 'mountain-roar') {
       this.#phase = 'telegraph'
       commands.push({ type: 'animate', action: 'boss-roar-telegraph' })
-      const lockedAreas = Object.freeze([80, 135, 190].flatMap((radius, waveIndex) =>
+      const lockedAreas = Object.freeze(ROAR_WAVE_RADII.flatMap((radius, waveIndex) =>
         this.#roarAreas(radius, context.battleBounds).map((sector) => Object.freeze({
           waveIndex,
           radius,
@@ -530,7 +539,7 @@ export class BossBrainState {
     if (event.type === 'roar-wave') {
       this.#phase = 'attack'
       const waveIndex = event.waveIndex as number
-      const radius = [80, 135, 190][waveIndex]
+      const radius = ROAR_WAVE_RADII[waveIndex]
       if (waveIndex === 0) commands.push({ type: 'animate', action: 'boss-roar-active' })
       const lockedAreas = this.#roarAreasByAttack.get(baseId) ?? []
       for (const sector of lockedAreas.filter((locked) => locked.waveIndex === waveIndex)) {
