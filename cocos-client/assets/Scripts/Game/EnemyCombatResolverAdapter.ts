@@ -12,7 +12,7 @@ import {
   updateHurtbox,
 } from '../Combat/CombatResolver.ts'
 import type { CombatResolver, CombatResolverSnapshot } from '../Combat/CombatResolver.ts'
-import type { EnemyCommand } from '../Combat/EnemyBrain.ts'
+import type { EnemyCommand, EnemyDangerDescriptor } from '../Combat/EnemyBrain.ts'
 
 export interface CombatActorUpdate {
   readonly generation: number
@@ -31,6 +31,7 @@ export interface EnemyTelegraphDelivery {
   readonly area: Readonly<BattleRect>
   readonly duration: number
   readonly generation: number
+  readonly danger?: Readonly<EnemyDangerDescriptor>
 }
 
 export interface EnemyCombatDamage {
@@ -103,6 +104,17 @@ function enemyIdFromSource(sourceId: string): number | null {
 
 function freezeArea(area: Readonly<BattleRect>): Readonly<BattleRect> {
   return Object.freeze({ minX: area.minX, maxX: area.maxX, minY: area.minY, maxY: area.maxY })
+}
+
+function freezeDanger(danger: Readonly<EnemyDangerDescriptor> | undefined): Readonly<EnemyDangerDescriptor> | undefined {
+  if (!danger) return undefined
+  if (danger.kind === 'sweep') {
+    return Object.freeze({ ...danger, origin: Object.freeze({ ...danger.origin }) })
+  }
+  if (danger.kind === 'spike') {
+    return Object.freeze({ ...danger, center: Object.freeze({ ...danger.center }) })
+  }
+  return Object.freeze({ ...danger, safeGap: Object.freeze({ ...danger.safeGap }) })
 }
 
 function requireAdapter(value: EnemyCombatResolverAdapter): EnemyCombatResolverAdapter {
@@ -217,6 +229,7 @@ export class EnemyCombatResolverAdapter {
           area: freezeArea(command.area),
           duration: command.duration,
           generation,
+          ...(command.danger ? { danger: freezeDanger(command.danger) } : {}),
         })
         return true
       case 'activate-hitbox':
@@ -274,7 +287,11 @@ export class EnemyCombatResolverAdapter {
   #drainTelegraphs(): readonly EnemyTelegraphDelivery[] {
     const queued = this.#telegraphs
     this.#telegraphs = []
-    return Object.freeze(queued.map((event) => Object.freeze({ ...event, area: freezeArea(event.area) })))
+    return Object.freeze(queued.map((event) => Object.freeze({
+      ...event,
+      area: freezeArea(event.area),
+      ...(event.danger ? { danger: freezeDanger(event.danger) } : {}),
+    })))
   }
 
   #reset(generation: number): number {

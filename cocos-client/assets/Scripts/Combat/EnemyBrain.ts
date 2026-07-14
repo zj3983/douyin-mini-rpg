@@ -13,6 +13,30 @@ export type EnemyBrainPhase =
 export type EnemyAttack = 'pounce' | 'dive' | 'spirit-orb'
 export type EnemyPresentationAction = 'idle' | 'move' | 'attack' | 'hurt' | 'death'
 
+export type EnemyDangerDescriptor =
+  | {
+    readonly kind: 'sweep'
+    readonly escape: 'vertical'
+    readonly origin: Readonly<Point2>
+    readonly arcDegrees: number
+  }
+  | {
+    readonly kind: 'spike'
+    readonly markerIndex: number
+    readonly center: Readonly<Point2>
+  }
+  | {
+    readonly kind: 'roar-sector'
+    readonly waveIndex: number
+    readonly radius: number
+    readonly sector: string
+    readonly safeGap: {
+      readonly sector: string
+      readonly centerAngle: number
+      readonly width: number
+    }
+  }
+
 export interface EnemyAnimationCatalogCompatibility {
   readonly compatible: boolean
   readonly missing: readonly EnemyPresentationAction[]
@@ -42,6 +66,7 @@ export type EnemyCommand =
     readonly attackId: string
     readonly area: Readonly<BattleRect>
     readonly duration: number
+    readonly danger?: Readonly<EnemyDangerDescriptor>
   }
   | {
     readonly type: 'activate-hitbox'
@@ -49,6 +74,7 @@ export type EnemyCommand =
     readonly area: Readonly<BattleRect>
     readonly damage: number
     readonly duration: number
+    readonly danger?: Readonly<EnemyDangerDescriptor>
   }
   | {
     readonly type: 'spawn-projectile'
@@ -165,6 +191,17 @@ function freezeRect(rect: BattleRect): Readonly<BattleRect> {
   return Object.freeze({ minX: rect.minX, maxX: rect.maxX, minY: rect.minY, maxY: rect.maxY })
 }
 
+function freezeDanger(danger: Readonly<EnemyDangerDescriptor> | undefined): Readonly<EnemyDangerDescriptor> | undefined {
+  if (!danger) return undefined
+  if (danger.kind === 'sweep') {
+    return Object.freeze({ ...danger, origin: freezePoint(danger.origin) })
+  }
+  if (danger.kind === 'spike') {
+    return Object.freeze({ ...danger, center: freezePoint(danger.center) })
+  }
+  return Object.freeze({ ...danger, safeGap: Object.freeze({ ...danger.safeGap }) })
+}
+
 function freezeCommand(command: EnemyCommand): EnemyCommand {
   switch (command.type) {
     case 'move':
@@ -173,9 +210,9 @@ function freezeCommand(command: EnemyCommand): EnemyCommand {
     case 'animate':
       return Object.freeze({ ...command })
     case 'show-telegraph':
-      return Object.freeze({ ...command, area: freezeRect(command.area) })
+      return Object.freeze({ ...command, area: freezeRect(command.area), danger: freezeDanger(command.danger) })
     case 'activate-hitbox':
-      return Object.freeze({ ...command, area: freezeRect(command.area) })
+      return Object.freeze({ ...command, area: freezeRect(command.area), danger: freezeDanger(command.danger) })
     case 'spawn-projectile':
       return Object.freeze({
         ...command,

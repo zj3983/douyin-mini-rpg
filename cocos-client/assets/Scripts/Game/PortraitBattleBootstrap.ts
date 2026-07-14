@@ -32,7 +32,6 @@ import {
   computeBattleLayout,
 } from '../Combat/BattleLayout.ts'
 import type { BattleLayout } from '../Combat/BattleLayout.ts'
-import type { Point2 } from '../Combat/CombatTypes.ts'
 import type { PlayerActionToken } from '../Combat/PlayerMotor.ts'
 import { AtlasAnimator } from './AtlasAnimator'
 import { BattleHudController } from './BattleHudController'
@@ -93,8 +92,7 @@ export class PortraitBattleBootstrap extends Component {
   private movementCoordinateSpace: UITransform | null = null
   private viewportMetricsProvider: ViewportMetricsProvider | null = null
   private viewportMetricsCleanup: (() => void) | null = null
-  private bossSpawn: Readonly<Point2> | null = null
-  private bossMaxVisualBounds: Readonly<{ width: number; height: number }> | null = null
+  private enemySpawner: EnemySpawner | null = null
   private currentStageId = 1
   private battleOperational = false
 
@@ -156,8 +154,10 @@ export class PortraitBattleBootstrap extends Component {
     const { player, controller, animator } = this.createPlayer(actorLayer, layout)
     const enemyPool = this.createRuntimePool(actorLayer, 'EnemyPool', 'enemy', 18, () => this.createEnemyNode())
     const enemySpawner = this.createNode('EnemySpawner', actorLayer).addComponent(EnemySpawner)
+    this.enemySpawner = enemySpawner
     enemySpawner.enemyPool = enemyPool
     enemySpawner.playerTarget = player
+    enemySpawner.configureBattleLayout(layout)
     const soulOrbPool = this.createRuntimePool(dropLayer, 'SoulOrbPool', 'soul-orb', 24, () => this.createSoulOrbNode())
     const damageNumberPool = this.createRuntimePool(effectLayer, 'DamageNumberPool', 'damage-number', 24, () => this.createDamageNumberNode())
     const bossEffectPool = this.createRuntimePool(effectLayer, 'BossEffectPool', 'boss-effect', 4, () => this.createBossEffectNode())
@@ -183,8 +183,7 @@ export class PortraitBattleBootstrap extends Component {
     const visibleHeight = layout.visibleHeight
     const backgroundWidth = WIDTH * (visibleHeight / HEIGHT)
 
-    this.bossSpawn = layout.bossSpawn
-    this.bossMaxVisualBounds = layout.bossMaxVisualBounds
+    this.enemySpawner?.configureBattleLayout(layout)
     for (const node of this.fullHeightNodes) this.resizeNode(node, WIDTH, visibleHeight)
     this.resizeNode(this.farBackground, backgroundWidth, visibleHeight)
     this.resizeNode(this.midBackground, backgroundWidth, visibleHeight)
@@ -368,8 +367,6 @@ export class PortraitBattleBootstrap extends Component {
     input.bindInputArea(inputArea)
     if (coordinateSpace) input.configure(layout.movement, coordinateSpace)
     this.battleInput = input
-    this.bossSpawn = layout.bossSpawn
-    this.bossMaxVisualBounds = layout.bossMaxVisualBounds
     return input
   }
 
@@ -539,6 +536,7 @@ export class PortraitBattleBootstrap extends Component {
       if (error || !asset || !animator.node.isValid) return
       if (!visual.acceptManifestLoad(token)) return
       animator.animationManifest = asset
+      visual.node.emit('enemy-visual-frame-ready', visual.node)
       animator.play(initialAction)
     })
   }

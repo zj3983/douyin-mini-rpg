@@ -26,7 +26,6 @@ import {
   scheduleBossSettlement,
   segmentHitEnemiesAlongPath,
   spawnBoss,
-  tickBossSkill as tickBossSkillRuntime,
 } from '../Core/BattleRuntime'
 import {
   createStageFlow,
@@ -102,7 +101,6 @@ export class BattleRuntimeController extends Component {
   private attemptState = createBattleAttemptState(0, 1)
   private stageFlow: StageFlowState = createStageFlow(12, 0)
   private playerHurtToken: Readonly<PlayerActionToken> | null = null
-  private bossSkillSequence = 0
 
   start() {
     this.initialize()
@@ -141,7 +139,6 @@ export class BattleRuntimeController extends Component {
     }
     const bossRetry = retryBossSpawnFlow(this.runtime, this.stageFlow, this.stageGeneration)
     if (bossRetry.bossSpawn) this.trySpawnBoss(bossRetry.bossSpawn)
-    this.tickBossSkill(deltaTime)
     this.syncCombatActors()
     stepEnemyCombatResolverAdapter(this.enemyCombatResolver, deltaTime)
     this.presentEnemyCombatFrame()
@@ -208,7 +205,6 @@ export class BattleRuntimeController extends Component {
     this.stageGeneration = this.attemptState.generation
     resetEnemyCombatResolverAdapter(this.enemyCombatResolver, this.stageGeneration)
     this.setEnemyControllersPaused(false)
-    this.bossSkillSequence = 0
     this.stageSettlement = createStageSettlementState(this.stageGeneration)
     const stage = stageProfileFromDesign(this.designData.json as CultivationDesignData, this.stageNumber)
     this.runtime = createBattleRuntime(stage, this.heroAttack)
@@ -259,36 +255,6 @@ export class BattleRuntimeController extends Component {
       return false
     }
     return true
-  }
-
-  private tickBossSkill(deltaTime: number) {
-    if (!this.runtime) return
-    const result = tickBossSkillRuntime(this.runtime, deltaTime)
-    if (!result.ok || !result.event) return
-    const bossNode = this.enemyNodes.get(result.event.enemyId)
-    bossNode?.emit('enemy-boss-skill', result.event)
-    bossNode?.emit('enemy-skill-cast', result.event)
-    if (bossNode) {
-      const playerPosition = this.getCurrentPlayerPosition()
-      const command: Extract<EnemyCommand, { type: 'activate-hitbox' }> = Object.freeze({
-        type: 'activate-hitbox',
-        attackId: `boss-skill:${result.event.enemyId}:${this.stageGeneration}:${this.bossSkillSequence++}`,
-        area: Object.freeze({
-          minX: playerPosition.x - 28,
-          minY: playerPosition.y - 28,
-          maxX: playerPosition.x + 28,
-          maxY: playerPosition.y + 28,
-        }),
-        damage: result.event.damage,
-        duration: 1 / 60,
-      })
-      this.onEnemyHitboxActive(result.event.enemyId, command)
-    }
-    const effect = this.bossSkillEffectPool?.spawn()
-    if (effect) {
-      effect.setPosition(result.event.position.x - 55, result.event.position.y + 35, 0)
-      this.scheduleOnce(() => this.bossSkillEffectPool?.despawn(effect), 0.55)
-    }
   }
 
   private presentFlyingSwordHit(result: ReturnType<typeof applyFlyingSwordPathHit>) {
@@ -380,8 +346,20 @@ export class BattleRuntimeController extends Component {
     this.node.emit('soul-orb-picked', amount)
   }
 
-  private onBossSkillVisual() {
+  private onBossSkillVisual(command: Extract<EnemyCommand, { type: 'activate-hitbox' }>) {
     this.node.emit('boss-skill-impact')
+    const effect = this.bossSkillEffectPool?.spawn()
+    if (!effect) return
+    effect.setPosition(
+      (command.area.minX + command.area.maxX) / 2,
+      (command.area.minY + command.area.maxY) / 2,
+      0,
+    )
+    const generation = this.stageGeneration
+    this.scheduleOnce(() => {
+      if (generation !== this.stageGeneration) return
+      this.bossSkillEffectPool?.despawn(effect)
+    }, Math.max(command.duration, 0.12))
   }
 
   private applyResolvedPlayerDamage(damage: number) {
@@ -457,6 +435,7 @@ export class BattleRuntimeController extends Component {
   onDestroy() {
     this.setEnemyControllersPaused(true)
     for (const node of this.enemyNodes.values()) this.detachEnemyCombatListeners(node)
+    this.bossSkillEffectPool?.despawnAll()
     resetEnemyCombatResolverAdapter(
       this.enemyCombatResolver,
       Math.max(this.stageGeneration + 1, this.enemyCombatResolver.generation + 1),

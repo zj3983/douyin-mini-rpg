@@ -58,7 +58,7 @@ test('runtime node pool supports a bounded factory-backed pool', () => {
   assert.match(source, /poolStats\(this\.state\)\.active < this\.capacity/)
 })
 
-test('enemy spawner binds ordinary kinds, live context providers, and distinct lanes without giving Boss an ordinary brain', () => {
+test('enemy spawner binds ordinary and Boss brains to shared live context providers', () => {
   const source = read('assets/Scripts/Game/EnemySpawner.ts')
 
   assert.match(source, /bindEnemy\(enemy: BattleEnemy\)/)
@@ -69,7 +69,7 @@ test('enemy spawner binds ordinary kinds, live context providers, and distinct l
   assert.match(source, /enemy\.position = \{ x: spawnX, y: spawnY \}/)
   assert.match(source, /battleBounds:\s*\(\) => this\.currentBattleBounds\(\)/)
   assert.match(source, /neighbors:\s*\(\) => this\.livingNeighbors\(\)/)
-  assert.match(source, /if \(kind\)[\s\S]*controller\.bindRuntimeEnemy\(enemy,\s*\{[\s\S]*kind,[\s\S]*\}\)[\s\S]*else controller\.bindRuntimeEnemy\(enemy\)/)
+  assert.match(source, /if \(kind \|\| isBoss\)[\s\S]*controller\.bindRuntimeEnemy\(enemy,\s*\{[\s\S]*kind: isBoss \? 'bamboo-warden'/)
   assert.doesNotMatch(source, /createEnemyBrain\([^\n]*bamboo-warden/)
 })
 
@@ -78,13 +78,15 @@ test('enemy controller builds live brain context and continuously synchronizes m
 
   assert.match(source, /private runtimeEnemy: BattleEnemy \| null/)
   assert.match(source, /private brain: EnemyBrainState \| null/)
+  assert.match(source, /private bossBrain: BossBrainState \| null/)
   assert.match(source, /bindRuntimeEnemy\(enemy: BattleEnemy, binding\?: EnemyBrainBinding\)/)
+  assert.match(source, /createBambooWardenBrain\(enemy\.id,/)
   assert.match(source, /createEnemyBrain\(binding\.kind, enemy\.id,/)
   assert.match(source, /stepEnemyBrain\(this\.brain, context, deltaTime\)/)
   assert.match(source, /player:\s*\{[\s\S]*position:\s*\{ x: liveTarget\.x, y: liveTarget\.y \}/)
   assert.match(source, /neighbors:\s*this\.brainBinding\.neighbors\(\)/)
   assert.match(source, /battleBounds:\s*this\.brainBinding\.battleBounds\(\)/)
-  assert.match(source, /case 'move':[\s\S]*this\.brain\.position/)
+  assert.match(source, /case 'move':[\s\S]*this\.brain\?\.position \?\? this\.bossBrain\?\.position/)
   assert.match(source, /this\.runtimeEnemy\.position = \{ x: local\.x, y: local\.y \}/)
   assert.match(source, /setTargetNode\(targetNode: Node, lockY:/)
   assert.match(source, /this\.targetNode\?\.position/)

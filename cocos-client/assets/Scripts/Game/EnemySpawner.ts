@@ -1,6 +1,12 @@
 import { _decorator, Color, Component, Node, Sprite, UITransform, Vec3 } from 'cc'
+import {
+  BattleLayout,
+  computeBattleLayout,
+  computeBossVisualPlacement,
+} from '../Combat/BattleLayout'
 import type { BattleRect } from '../Combat/CombatTypes'
 import type { OrdinaryEnemyKind } from '../Combat/EnemyBrain'
+import type { AnimationAtlasManifest } from '../Core/AnimationAtlas'
 import { BattleEnemy } from '../Core/BattleRuntime'
 import { EnemyController } from './EnemyController'
 import type { EnemyNeighborSnapshot } from './EnemyController'
@@ -26,18 +32,26 @@ export class EnemySpawner extends Component {
   @property
   flyingY = 70
 
-  @property
-  bossSpawnX = 610
-
-  @property
-  bossY = -38
-
-  @property
-  bossScale = 1.45
-
   private ordinaryControllers = new Set<EnemyController>()
   private neighborSnapshot: readonly EnemyNeighborSnapshot[] = Object.freeze([])
   private neighborSnapshotDirty = true
+  private battleLayout: BattleLayout = computeBattleLayout({
+    designWidth: 750,
+    cssWidth: 750,
+    cssHeight: 1334,
+    topInsetPx: 0,
+    bottomInsetPx: 0,
+  })
+  private activeBoss: { node: Node; enemy: BattleEnemy } | null = null
+  private defaultVisualSizes = new WeakMap<Node, {
+    root: { width: number; height: number }
+    visual: { width: number; height: number }
+  }>()
+
+  configureBattleLayout(layout: BattleLayout) {
+    this.battleLayout = layout
+    if (this.activeBoss) this.applyBossVisualPlacement(this.activeBoss.node, this.activeBoss.enemy)
+  }
 
   spawnEnemy(enemy: BattleEnemy) {
     if (!this.enemyPool) return null
@@ -45,27 +59,34 @@ export class EnemySpawner extends Component {
     if (!node) return null
 
     const isBoss = enemy.profile.role === 'boss'
-    const spawnX = isBoss ? this.bossSpawnX : this.spawnX
-    const spawnY = isBoss ? this.bossY : enemy.profile.role === 'flying' ? this.flyingY : this.groundY
+    const spawnX = isBoss ? this.battleLayout.bossSpawn.x : this.spawnX
+    const spawnY = isBoss ? this.battleLayout.bossSpawn.y : enemy.profile.role === 'flying' ? this.flyingY : this.groundY
     node.setPosition(Vec3.ZERO)
     node.setScale(Vec3.ONE)
     node.setRotationFromEuler(Vec3.ZERO)
     const rootSprite = node.getComponent(Sprite)
     if (rootSprite) rootSprite.color = Color.WHITE
     const visual = node.getComponent(EnemyVisualController)
+    node.off('enemy-visual-frame-ready', this.onEnemyVisualFrameReady, this)
+    node.on('enemy-visual-frame-ready', this.onEnemyVisualFrameReady, this)
+    this.captureAndRestoreVisualSize(node, visual)
     visual?.resetForSpawn(enemy.profile)
     node.setPosition(new Vec3(spawnX, spawnY, 0))
-    const scale = isBoss ? this.bossScale : 1
-    node.setScale(new Vec3(scale, scale, 1))
     enemy.position = { x: spawnX, y: spawnY }
+    if (isBoss) {
+      this.activeBoss = { node, enemy }
+      this.applyBossVisualPlacement(node, enemy)
+    }
     const controller = node.getComponent(EnemyController)
     if (controller) {
       const kind = this.ordinaryKind(enemy)
-      if (kind) {
-        this.ordinaryControllers.add(controller)
-        this.neighborSnapshotDirty = true
+      if (kind || isBoss) {
+        if (kind) {
+          this.ordinaryControllers.add(controller)
+          this.neighborSnapshotDirty = true
+        }
         controller.bindRuntimeEnemy(enemy, {
-          kind,
+          kind: isBoss ? 'bamboo-warden' : kind as OrdinaryEnemyKind,
           seed: Math.imul(enemy.id, 2654435761) >>> 0,
           battleBounds: () => this.currentBattleBounds(),
           neighbors: () => this.livingNeighbors(),
@@ -100,6 +121,8 @@ export class EnemySpawner extends Component {
       this.ordinaryControllers.delete(controller)
       this.neighborSnapshotDirty = true
     }
+    if (this.activeBoss?.node === node) this.activeBoss = null
+    node.off('enemy-visual-frame-ready', this.onEnemyVisualFrameReady, this)
     visual?.prepareForPool()
     controller?.prepareForPool()
     this.enemyPool?.despawn(node)
@@ -128,14 +151,51 @@ export class EnemySpawner extends Component {
   }
 
   private currentBattleBounds(): Readonly<BattleRect> {
-    const coordinateSpace = this.node.parent?.getComponent(UITransform)
-    const halfWidth = Math.max(375, (coordinateSpace?.contentSize.width ?? 750) / 2)
-    const halfHeight = Math.max(667, (coordinateSpace?.contentSize.height ?? 1334) / 2)
-    return Object.freeze({
-      minX: -halfWidth,
-      maxX: Math.max(halfWidth, this.spawnX),
-      minY: Math.min(-halfHeight, this.groundY),
-      maxY: Math.max(halfHeight, this.flyingY),
-    })
+    return this.battleLayout.actorSafeRect
+  }
+
+  private captureAndRestoreVisualSize(node: Node, visual: EnemyVisualController | null) {
+    const rootTransform = node.getComponent(UITransform)
+    const visualTransform = visual?.animator?.targetSprite?.node.getComponent(UITransform) ?? null
+    let defaults = this.defaultVisualSizes.get(node)
+    if (!defaults) {
+      defaults = {
+        root: {
+          width: rootTransform?.contentSize.width ?? 210,
+          height: rootTransform?.contentSize.height ?? 336,
+        },
+        visual: {
+          width: visualTransform?.contentSize.width ?? 210,
+          height: visualTransform?.contentSize.height ?? 336,
+        },
+      }
+      this.defaultVisualSizes.set(node, defaults)
+    }
+    rootTransform?.setContentSize(defaults.root.width, defaults.root.height)
+    visualTransform?.setContentSize(defaults.visual.width, defaults.visual.height)
+  }
+
+  private applyBossVisualPlacement(node: Node, enemy: BattleEnemy) {
+    const visual = node.getComponent(EnemyVisualController)
+    const sprite = visual?.animator?.targetSprite ?? null
+    const visualTransform = sprite?.node.getComponent(UITransform) ?? null
+    const fallback = this.defaultVisualSizes.get(node)?.visual ?? { width: 210, height: 336 }
+    const manifest = visual?.animator?.animationManifest?.json as AnimationAtlasManifest | undefined
+    const declaredFrame = manifest?.actors.find((actor) => actor.id === enemy.profile.id)?.frameSize
+    const frameRect = sprite?.spriteFrame?.rect
+    const frameSize = declaredFrame && declaredFrame.w > 0 && declaredFrame.h > 0
+      ? { width: declaredFrame.w, height: declaredFrame.h }
+      : frameRect && frameRect.width > 0 && frameRect.height > 0
+        ? { width: frameRect.width, height: frameRect.height }
+        : fallback
+    const placement = computeBossVisualPlacement(this.battleLayout, frameSize)
+    node.setPosition(placement.position.x, placement.position.y, 0)
+    node.getComponent(UITransform)?.setContentSize(placement.visualSize.width, placement.visualSize.height)
+    visualTransform?.setContentSize(placement.visualSize.width, placement.visualSize.height)
+    enemy.position = { x: placement.position.x, y: placement.position.y }
+  }
+
+  private onEnemyVisualFrameReady(node: Node) {
+    if (this.activeBoss?.node === node) this.applyBossVisualPlacement(node, this.activeBoss.enemy)
   }
 }

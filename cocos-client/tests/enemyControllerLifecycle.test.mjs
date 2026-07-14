@@ -57,10 +57,12 @@ async function loadEnemyController() {
   }).outputText
   const ccUrl = `data:text/javascript;base64,${Buffer.from(ccSource).toString('base64')}`
   const brainUrl = new URL('../assets/Scripts/Combat/EnemyBrain.ts', import.meta.url).href
+  const bossBrainUrl = new URL('../assets/Scripts/Combat/BossBrain.ts', import.meta.url).href
   const facingUrl = new URL('../assets/Scripts/Core/EnemyFacingRuntime.ts', import.meta.url).href
   executable = executable
     .replace("from 'cc'", `from '${ccUrl}'`)
     .replace("from '../Combat/EnemyBrain'", `from '${brainUrl}'`)
+    .replace("from '../Combat/BossBrain'", `from '${bossBrainUrl}'`)
     .replace("from '../Core/EnemyFacingRuntime'", `from '${facingUrl}'`)
   return import(`data:text/javascript;base64,${Buffer.from(executable).toString('base64')}`)
 }

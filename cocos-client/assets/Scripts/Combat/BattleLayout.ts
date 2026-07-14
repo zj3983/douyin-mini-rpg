@@ -17,6 +17,16 @@ export interface BattleLayout {
   navigationTop: number
 }
 
+export interface VisualFrameSize {
+  readonly width: number
+  readonly height: number
+}
+
+export interface BossVisualPlacement {
+  readonly position: Readonly<Point2>
+  readonly visualSize: Readonly<VisualFrameSize>
+}
+
 export const BATTLE_DESIGN_WIDTH = 750
 export const BATTLE_MIN_VISIBLE_HEIGHT = 1334
 export const BATTLE_NAVIGATION_HEIGHT = 104
@@ -92,4 +102,38 @@ export function computeBattleLayout(input: LayoutInput): BattleLayout {
     bossMaxVisualBounds,
     navigationTop,
   })
+}
+
+export function computeBossVisualPlacement(
+  layout: Pick<BattleLayout, 'actorSafeRect' | 'bossSpawn' | 'bossMaxVisualBounds'>,
+  frameSize: VisualFrameSize,
+): Readonly<BossVisualPlacement> {
+  const width = frameSize?.width
+  const height = frameSize?.height
+  if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+    throw new TypeError('frameSize width and height must be finite and positive')
+  }
+  const maxWidth = Math.min(
+    layout.bossMaxVisualBounds.width,
+    layout.actorSafeRect.maxX - layout.actorSafeRect.minX,
+  )
+  const maxHeight = Math.min(
+    layout.bossMaxVisualBounds.height,
+    layout.actorSafeRect.maxY - layout.actorSafeRect.minY,
+  )
+  const scale = Math.min(maxWidth / width, maxHeight / height)
+  const visualSize = Object.freeze({ width: width * scale, height: height * scale })
+  const halfWidth = visualSize.width / 2
+  const halfHeight = visualSize.height / 2
+  const position = Object.freeze({
+    x: Math.max(
+      layout.actorSafeRect.minX + halfWidth,
+      Math.min(layout.actorSafeRect.maxX - halfWidth, layout.bossSpawn.x),
+    ),
+    y: Math.max(
+      layout.actorSafeRect.minY + halfHeight,
+      Math.min(layout.actorSafeRect.maxY - halfHeight, layout.bossSpawn.y),
+    ),
+  })
+  return Object.freeze({ position, visualSize })
 }
