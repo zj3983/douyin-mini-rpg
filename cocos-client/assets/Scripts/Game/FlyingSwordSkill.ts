@@ -7,6 +7,7 @@ import {
   setArtifactLevel,
   stepArtifact,
 } from '../Combat/ArtifactRuntime.ts'
+import { feedbackFor } from '../Combat/FeedbackTimeline.ts'
 import { BattleRuntimeController } from './BattleRuntimeController'
 
 const { ccclass, property } = _decorator
@@ -78,6 +79,17 @@ export class FlyingSwordSkill extends Component {
             this.sword.setPosition(command.origin.x, command.origin.y, 0)
             this.sword.active = true
           }
+          const target = this.battleRuntime?.getLivingSwordTargets().find((entry) => entry.id === command.targetId)?.position
+          this.node.emit('combat-feedback-requested', {
+            quality: this.battleRuntime?.getCurrentVfxQuality() ?? 'full',
+            requests: feedbackFor({
+              type: 'artifact-cast',
+              artifactId: 'qing-shuang-yujian',
+              actorId: 'player',
+              at: performance.now(),
+              target,
+            }, this.battleRuntime?.getCurrentVfxQuality() ?? 'full'),
+          })
         }
         return
       case 'move-sword':

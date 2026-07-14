@@ -42,6 +42,10 @@ import {
 } from '../Core/HomingSwordRuntime'
 import { stageVisualFor } from '../Core/StageVisualCatalog'
 import type { EnemyCommand } from '../Combat/EnemyBrain'
+import { feedbackFor } from '../Combat/FeedbackTimeline.ts'
+import type { FeedbackRequest } from '../Combat/FeedbackTimeline.ts'
+import { createPerformanceBudget, updateVfxQuality } from '../Combat/PerformanceBudget.ts'
+import type { PerformanceBudget, VfxQuality } from '../Combat/PerformanceBudget.ts'
 import type { PlayerActionToken } from '../Combat/PlayerMotor.ts'
 import { BattleHudController } from './BattleHudController'
 import { BattleInputController } from './BattleInputController'
@@ -103,6 +107,8 @@ export class BattleRuntimeController extends Component {
   private attemptState = createBattleAttemptState(0, 1)
   private stageFlow: StageFlowState = createStageFlow(12, 0)
   private playerHurtToken: Readonly<PlayerActionToken> | null = null
+  private vfxBudget: PerformanceBudget = createPerformanceBudget()
+  private currentVfxQuality: VfxQuality = 'full'
 
   start() {
     this.initialize()
@@ -132,6 +138,7 @@ export class BattleRuntimeController extends Component {
   }
 
   update(deltaTime: number) {
+    this.currentVfxQuality = updateVfxQuality(this.vfxBudget, deltaTime * 1000)
     if (!this.runtime || this.battleFrozen) return
     if (this.stageFlow.phase === 'clearing' && this.enemySpawner?.canSpawn() !== false) {
       const spawn = nextSpawn(this.runtime, deltaTime)
@@ -218,6 +225,18 @@ export class BattleRuntimeController extends Component {
     return !canProcessBattleAction(this.battleFreeze)
   }
 
+  getCurrentVfxQuality() {
+    return this.currentVfxQuality
+  }
+
+  presentCombatFeedback(requests: readonly FeedbackRequest[]) {
+    if (requests.length === 0) return
+    this.node.emit('combat-feedback-requested', {
+      quality: this.currentVfxQuality,
+      requests,
+    })
+  }
+
   private get battleFrozen() {
     return this.isBattleFrozen()
   }
@@ -289,6 +308,13 @@ export class BattleRuntimeController extends Component {
     for (const event of result.damageEvents) {
       const enemyNode = this.enemyNodes.get(event.enemyId)
       enemyNode?.emit('enemy-hit', event)
+      this.presentCombatFeedback(feedbackFor({
+        type: 'damage-resolved',
+        sourceId: 'flying-sword',
+        targetId: String(event.enemyId),
+        amount: event.damage,
+        at: performance.now(),
+      }, this.currentVfxQuality))
       const enemy = this.enemyByNode.get(enemyNode as Node)
       if (enemy?.profile.role === 'boss') this.updateBossHud(enemy)
       const damageNode = this.damageNumberPool?.spawn()
@@ -313,6 +339,12 @@ export class BattleRuntimeController extends Component {
 
     const generation = this.stageGeneration
     if (enemy.profile.role === 'boss') {
+      this.presentCombatFeedback(feedbackFor({
+        type: 'guard-broken',
+        targetRank: 'boss',
+        targetId: String(enemyId),
+        at: performance.now(),
+      }, this.currentVfxQuality))
       const transition = advanceBossDefeatFlow(this.stageFlow, generation)
       if (!transition.settle) return
       this.freezeBattle()

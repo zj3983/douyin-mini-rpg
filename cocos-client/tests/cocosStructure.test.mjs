@@ -211,6 +211,23 @@ test('battle runtime exposes copied live snapshots and de-duplicated swept hits'
   assert.doesNotMatch(source, /createFlyingSwordPath|createPlayerSwordPath|buildArcPath|arcHeight|swordStartX|swordEndX|swordY/)
 })
 
+test('battle runtime routes combat feedback through performance quality gates', () => {
+  const runtime = readSource('assets/Scripts/Game/BattleRuntimeController.ts')
+  const skill = readSource('assets/Scripts/Game/FlyingSwordSkill.ts')
+
+  assert.match(runtime, /from '\.\.\/Combat\/FeedbackTimeline\.ts'/)
+  assert.match(runtime, /from '\.\.\/Combat\/PerformanceBudget\.ts'/)
+  assert.match(runtime, /createPerformanceBudget\(\)/)
+  assert.match(runtime, /updateVfxQuality\(this\.vfxBudget,\s*deltaTime \* 1000\)/)
+  assert.match(runtime, /private currentVfxQuality/)
+  assert.match(runtime, /presentCombatFeedback\(feedbackFor\(/)
+  assert.match(runtime, /type: 'damage-resolved'/)
+  assert.match(runtime, /type: 'guard-broken'/)
+  assert.match(runtime, /this\.node\.emit\('combat-feedback-requested'/)
+  assert.match(skill, /emit\('combat-feedback-requested'/)
+  assert.match(skill, /type: 'artifact-cast'/)
+})
+
 test('portrait bootstrap assembles the approved compact playable scene', () => {
   const source = readSource('assets/Scripts/Game/PortraitBattleBootstrap.ts')
   const stageVisualCatalog = readSource('assets/Scripts/Core/StageVisualCatalog.ts')
