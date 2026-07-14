@@ -68,6 +68,38 @@ const stageVisuals = Object.freeze({
     midPath: null,
     monsterActorIds: Object.freeze(['star-armored-beast', 'void-wing-spirit', 'meteor-guardian']),
   }),
+  5: Object.freeze({
+    stageId: 5,
+    backgroundId: 'cloud-sea-heaven-gate',
+    theme: 'cloud-gate',
+    farPath: 'Assets/World/CloudGate/far/spriteFrame',
+    midPath: 'Assets/World/CloudGate/mid/spriteFrame',
+    monsterActorIds: Object.freeze(['star-armored-beast', 'void-wing-spirit', 'meteor-guardian']),
+  }),
+  6: Object.freeze({
+    stageId: 6,
+    backgroundId: 'nether-lantern-forest',
+    theme: 'soul-valley',
+    farPath: 'Assets/World/NetherLantern/far/spriteFrame',
+    midPath: 'Assets/World/NetherLantern/mid/spriteFrame',
+    monsterActorIds: Object.freeze(['fog-spider', 'lantern-wraith', 'mist-deer-king']),
+  }),
+  7: Object.freeze({
+    stageId: 7,
+    backgroundId: 'deep-flame-ravine',
+    theme: 'flame-cave',
+    farPath: 'Assets/World/DeepFlameRavine/far/spriteFrame',
+    midPath: 'Assets/World/DeepFlameRavine/mid/spriteFrame',
+    monsterActorIds: Object.freeze(['lava-lizard', 'ember-crow', 'flame-ogre']),
+  }),
+  8: Object.freeze({
+    stageId: 8,
+    backgroundId: 'upper-fallen-star-road',
+    theme: 'starlight-ruin',
+    farPath: 'Assets/World/UpperStarRoad/far/spriteFrame',
+    midPath: 'Assets/World/UpperStarRoad/mid/spriteFrame',
+    monsterActorIds: Object.freeze(['star-armored-beast', 'void-wing-spirit', 'meteor-guardian']),
+  }),
 })
 
 export function stageVisualFor(stageId) {

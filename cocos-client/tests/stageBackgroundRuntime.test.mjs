@@ -159,7 +159,7 @@ test('stage resource controller delegates background first and owns only its res
   assert.match(source, /asset\.kind === 'spriteFrame' \? SpriteFrame : Texture2D/)
   assert.match(source, /loaded\.addRef\(\)/)
   assert.match(source, /release: \(_asset, resource\) => resource\.decRef\(\)/)
-  assert.match(source, /if \(stageId < 1 \|\| stageId >= 4\) return false/)
+  assert.match(source, /if \(stageId < 1 \|\| stageId >= 8\) return false/)
   assert.match(source, /prefetch\(stageResourcePlanFor\(stageId \+ 1\)\)/)
   assert.match(source, /destroy\(\)[\s\S]*this\.runtime\.destroy\(\)/)
   assert.doesNotMatch(source, /backgroundController\.destroy\(\)/)
