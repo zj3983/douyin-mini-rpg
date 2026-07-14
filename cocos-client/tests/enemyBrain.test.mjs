@@ -58,6 +58,19 @@ function assertDeepFrozen(value) {
   for (const nested of Object.values(value)) assertDeepFrozen(nested)
 }
 
+function normalizeFiniteNumbers(value, precision = 1e-6) {
+  if (typeof value === 'number') return Math.round(value / precision) * precision
+  if (Array.isArray(value)) return value.map((entry) => normalizeFiniteNumbers(entry, precision))
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, normalizeFiniteNumbers(entry, precision)]))
+  }
+  return value
+}
+
+function semanticCommands(commands) {
+  return normalizeFiniteNumbers(commands.filter((command) => command.type !== 'move' && command.type !== 'face'))
+}
+
 test('wolf follows the exact chain, samples its telegraph target, overshoots, and recovers after a miss', () => {
   const wolf = createEnemyBrain('moss-wolf', 1, { x: 260, y: -80 }, 123)
   let telegraphPlayer = null
@@ -231,6 +244,48 @@ test('decision and active-window boundaries are invariant between 19ms and 60Hz 
   assert.deepEqual(nineteenMs.snapshot(), sixtyHz.snapshot())
   assert.deepEqual(semantic(coarse), semantic(fine))
   assert.equal(coarse.filter((command) => command.type === 'activate-hitbox').length, 1)
+})
+
+test('all stagger buckets remain partition-invariant across species seeds and repeated state cycles', () => {
+  const partitions = [
+    [1 / 60],
+    [0.07],
+    [0.019],
+    [0.033, 0.011, 0.023],
+    [0.25],
+  ]
+  const cases = []
+  for (const kind of ['moss-wolf', 'green-wing-moth']) {
+    for (const seed of [4, 19, 0x9e3779b9]) {
+      for (const id of [5, 1, 2, 3, 4]) cases.push({ kind, seed, id })
+    }
+  }
+
+  for (const scenario of cases) {
+    const spawn = scenario.kind === 'moss-wolf' ? { x: 300, y: -80 } : { x: 300, y: 160 }
+    const runs = partitions.map((partition) => ({
+      brain: createEnemyBrain(scenario.kind, scenario.id, spawn, scenario.seed),
+      commands: [],
+      partition,
+    }))
+    for (const checkpoint of [3.77, 7.91, 12.43]) {
+      for (const run of runs) run.commands.push(...advance(run.brain, checkpoint, run.partition))
+      const reference = runs[0]
+      if (scenario.kind === 'moss-wolf' && scenario.id === 4 && scenario.seed === 4 && checkpoint === 3.77) {
+        assert.ok(Math.abs(reference.brain.position.x - (-90)) <= 1e-6)
+      }
+      for (const candidate of runs.slice(1)) {
+        const label = `${scenario.kind} id=${scenario.id} seed=${scenario.seed} partition=${candidate.partition}`
+        assert.equal(candidate.brain.phaseLabel, reference.brain.phaseLabel, label)
+        assert.deepEqual(semanticCommands(candidate.commands), semanticCommands(reference.commands), label)
+        assert.deepEqual(
+          normalizeFiniteNumbers(candidate.brain.snapshot()),
+          normalizeFiniteNumbers(reference.brain.snapshot()),
+          label,
+        )
+      }
+    }
+  }
 })
 
 test('invalid creation and context values are rejected while invalid dt is inert and capped', () => {

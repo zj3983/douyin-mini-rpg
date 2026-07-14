@@ -79,7 +79,7 @@ const BRAIN_TOKEN = Symbol('EnemyBrainState')
 const MAX_EXTERNAL_DELTA_SECONDS = 0.25
 const MAX_SUBSTEP_SECONDS = 1 / 60
 const DECISION_INTERVAL_SECONDS = 0.1
-const DECISION_EPSILON = 1e-10
+const TIME_EPSILON = 1e-10
 const WOLF_TELEGRAPH_SECONDS = 0.45
 const MOTH_TELEGRAPH_SECONDS = 0.48
 const WOLF_ATTACK_SECONDS = 0.36
@@ -223,6 +223,18 @@ function validateContext(context: EnemyContext): void {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
+}
+
+function hasReachedTime(now: number, target: number): boolean {
+  return now + TIME_EPSILON >= target
+}
+
+function hasElapsedTime(now: number, startedAt: number, duration: number): boolean {
+  return hasReachedTime(now, startedAt + duration)
+}
+
+function isStrictlyBeforeTime(now: number, target: number): boolean {
+  return now + TIME_EPSILON < target
 }
 
 function distance(a: Point2, b: Point2): number {
@@ -472,21 +484,21 @@ export class EnemyBrainState {
       return
     }
     if (this.#phase === 'select-position') {
-      if (distance(this.#position, this.#selectedPosition) <= 6 || this.#elapsed - this.#phaseStartedAt >= 0.8) {
+      if (distance(this.#position, this.#selectedPosition) <= 6 || hasElapsedTime(this.#elapsed, this.#phaseStartedAt, 0.8)) {
         this.#beginTelegraph(context, commands)
       }
       return
     }
     if (this.#phase === 'telegraph') {
       const duration = this.#kind === 'moss-wolf' ? WOLF_TELEGRAPH_SECONDS : MOTH_TELEGRAPH_SECONDS
-      if (this.#elapsed - this.#phaseStartedAt + DECISION_EPSILON >= duration) this.#beginAttack(context, commands)
+      if (hasElapsedTime(this.#elapsed, this.#phaseStartedAt, duration)) this.#beginAttack(context, commands)
       return
     }
     if (this.#phase === 'attack') {
-      if (this.#elapsed - this.#phaseStartedAt + DECISION_EPSILON >= this.attackDuration) this.#beginRecovery(commands)
+      if (hasElapsedTime(this.#elapsed, this.#phaseStartedAt, this.attackDuration)) this.#beginRecovery(commands)
       return
     }
-    if (this.#phase === 'recovery' && this.#elapsed - this.#phaseStartedAt + DECISION_EPSILON >= 0.45) {
+    if (this.#phase === 'recovery' && hasElapsedTime(this.#elapsed, this.#phaseStartedAt, 0.45)) {
       if (this.#recoveryReturnsToSelection) {
         this.#recoveryReturnsToSelection = false
         this.#setPhase('select-position')
@@ -506,8 +518,10 @@ export class EnemyBrainState {
       }
       return
     }
-    if (this.#phase === 'hurt' && this.#elapsed - this.#phaseStartedAt >= 0.2) this.#beginRecovery(commands, true)
-    if (this.#phase === 'interrupted' && this.#elapsed - this.#phaseStartedAt >= 0.25) {
+    if (this.#phase === 'hurt' && hasElapsedTime(this.#elapsed, this.#phaseStartedAt, 0.2)) {
+      this.#beginRecovery(commands, true)
+    }
+    if (this.#phase === 'interrupted' && hasElapsedTime(this.#elapsed, this.#phaseStartedAt, 0.25)) {
       this.#beginRecovery(commands, true)
     }
   }
@@ -515,7 +529,7 @@ export class EnemyBrainState {
   #emitActiveAttack(commands: EnemyCommand[]): void {
     if (this.#phase !== 'attack') return
     const attackElapsed = this.#elapsed - this.#phaseStartedAt
-    if (this.#kind === 'moss-wolf' && !this.#activeHitboxEmitted && attackElapsed + DECISION_EPSILON >= 0.08) {
+    if (this.#kind === 'moss-wolf' && !this.#activeHitboxEmitted && hasReachedTime(attackElapsed, 0.08)) {
       this.#activeHitboxEmitted = true
       commands.push({
         type: 'activate-hitbox',
@@ -530,7 +544,7 @@ export class EnemyBrainState {
       this.#kind === 'green-wing-moth'
       && this.#attack === 'dive'
       && !this.#activeHitboxEmitted
-      && attackElapsed + DECISION_EPSILON >= 0.1
+      && hasReachedTime(attackElapsed, 0.1)
     ) {
       this.#activeHitboxEmitted = true
       commands.push({
@@ -610,7 +624,7 @@ export class EnemyBrainState {
   }
 
   #advanceMotionTo(target: number, context: EnemyContext, commands: EnemyCommand[]): void {
-    while (this.#elapsed + DECISION_EPSILON < target) {
+    while (isStrictlyBeforeTime(this.#elapsed, target)) {
       const next = Math.min(target, this.#elapsed + MAX_SUBSTEP_SECONDS)
       this.#integrate(next - this.#elapsed, context.battleBounds)
       this.#elapsed = next
@@ -620,21 +634,19 @@ export class EnemyBrainState {
   }
 
   #advanceTimeline(context: EnemyContext, target: number, commands: EnemyCommand[]): void {
-    while (this.#elapsed + DECISION_EPSILON < target) {
+    while (true) {
       const activeAt = this.#nextActiveEventAt()
-      const eventAt = Math.min(
-        target,
-        Math.max(this.#elapsed, this.#nextDecisionAt),
-        activeAt === null ? Number.POSITIVE_INFINITY : Math.max(this.#elapsed, activeAt),
-      )
+      const nextEventAt = Math.min(this.#nextDecisionAt, activeAt ?? Number.POSITIVE_INFINITY)
+      if (!hasReachedTime(target, nextEventAt)) break
+      const eventAt = Math.max(this.#elapsed, nextEventAt)
       this.#advanceMotionTo(eventAt, context, commands)
-      while (this.#nextDecisionAt <= this.#elapsed + DECISION_EPSILON) {
+      while (hasReachedTime(this.#elapsed, this.#nextDecisionAt)) {
         this.#runDecision(context, commands)
         this.#nextDecisionAt = Math.round((this.#nextDecisionAt + DECISION_INTERVAL_SECONDS) * 1e12) / 1e12
       }
       this.#emitActiveAttack(commands)
     }
-    this.#elapsed = target
+    this.#advanceMotionTo(Math.max(target, this.#elapsed), context, commands)
   }
 
   #step(context: EnemyContext, deltaSeconds: number): readonly EnemyCommand[] {
@@ -653,7 +665,7 @@ export class EnemyBrainState {
 
   #interrupt(now: number): readonly EnemyCommand[] {
     if (!Number.isFinite(now)) throw new TypeError('now must be finite')
-    if (now + DECISION_EPSILON < this.#elapsed || this.#phase === 'death' || this.#phase === 'interrupted') {
+    if (isStrictlyBeforeTime(now, this.#elapsed) || this.#phase === 'death' || this.#phase === 'interrupted') {
       return Object.freeze([])
     }
     this.#setPhase('interrupted')
@@ -668,7 +680,7 @@ export class EnemyBrainState {
 
   #hurt(now: number): readonly EnemyCommand[] {
     if (!Number.isFinite(now)) throw new TypeError('now must be finite')
-    if (now + DECISION_EPSILON < this.#elapsed || this.#phase === 'death' || this.#phase === 'hurt') {
+    if (isStrictlyBeforeTime(now, this.#elapsed) || this.#phase === 'death' || this.#phase === 'hurt') {
       return Object.freeze([])
     }
     this.#setPhase('hurt')
