@@ -428,6 +428,23 @@ test('transformed coordinate adapter requests movement in the shared actor space
   assert.deepEqual(motor.target, { x: 300, y: 400 })
 })
 
+test('continuous drag targets preserve horizontal side-scrolling movement', () => {
+  const motor = createPlayerMotor({ x: -220, y: -80 }, 240)
+  setPlayerBounds(motor, { minX: -310, maxX: 300, minY: -480, maxY: 420 })
+
+  assert.equal(requestMoveInCoordinateSpace(motor, { x: 260, y: 500 }, (point) => ({ x: -170, y: point.y - 580 })), true)
+  const firstTarget = motor.target
+  assert.deepEqual(firstTarget, { x: -170, y: -80 })
+  stepPlayerMotor(motor, 1 / 60)
+
+  assert.equal(requestMoveInCoordinateSpace(motor, { x: 620, y: 440 }, (point) => ({ x: point.x - 360, y: point.y - 520 })), true)
+  assert.deepEqual(motor.target, { x: 260, y: -80 })
+  const frame = stepPlayerMotor(motor, 1 / 60)
+
+  assert.ok(frame.position.x > -220, 'dragging right should move the player horizontally')
+  assert.equal(Math.abs(frame.position.y + 80) <= EPSILON, true)
+})
+
 test('stop and reset keep movement enabled state inside motor authority', () => {
   const motor = createPlayerMotor({ x: -20, y: 10 }, 220)
   requestMove(motor, { x: 100, y: 100 })

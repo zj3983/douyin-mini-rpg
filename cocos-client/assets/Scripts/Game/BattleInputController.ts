@@ -49,17 +49,21 @@ export class BattleInputController extends Component {
     const node = this.bounds && this.player && this.coordinateSpace ? this.inputArea?.node ?? null : null
     if (!node || this.subscribedNode === node) return
     this.unsubscribeInputNode()
-    node.on(Node.EventType.TOUCH_END, this.onTouchEnd, this)
+    node.on(Node.EventType.TOUCH_START, this.onTouchTarget, this)
+    node.on(Node.EventType.TOUCH_MOVE, this.onTouchTarget, this)
+    node.on(Node.EventType.TOUCH_END, this.onTouchTarget, this)
     this.subscribedNode = node
   }
 
   private unsubscribeInputNode() {
     if (!this.subscribedNode) return
-    this.subscribedNode.off(Node.EventType.TOUCH_END, this.onTouchEnd, this)
+    this.subscribedNode.off(Node.EventType.TOUCH_START, this.onTouchTarget, this)
+    this.subscribedNode.off(Node.EventType.TOUCH_MOVE, this.onTouchTarget, this)
+    this.subscribedNode.off(Node.EventType.TOUCH_END, this.onTouchTarget, this)
     this.subscribedNode = null
   }
 
-  private onTouchEnd(event: EventTouch) {
+  private onTouchTarget(event: EventTouch) {
     if (!this.inputEnabled) return false
     const { player, inputArea, bounds, coordinateSpace } = this
     if (!player || !inputArea || !bounds || !coordinateSpace) return false

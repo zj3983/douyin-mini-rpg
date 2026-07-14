@@ -83,14 +83,20 @@ test('enemy visual controller reacts to hit and defeat events', () => {
   assert.equal(source.includes('enemy-visual-death'), true)
 })
 
-test('portrait battle input converts touch-end coordinates before requesting authoritative movement', () => {
+test('portrait battle input converts touch target coordinates before requesting authoritative movement', () => {
   const source = readSource('assets/Scripts/Game/BattleInputController.ts')
 
   assert.match(source, /import\s*{[^}]*EventTouch[^}]*UITransform[^}]*}\s*from\s*'cc'/s)
   assert.match(source, /import type\s*{[^}]*BattleRect[^}]*}\s*from\s*'\.\.\/Combat\/CombatTypes\.ts'/s)
+  assert.match(source, /Node\.EventType\.TOUCH_START/)
+  assert.match(source, /Node\.EventType\.TOUCH_MOVE/)
   assert.match(source, /Node\.EventType\.TOUCH_END/)
-  assert.match(source, /\.on\(Node\.EventType\.TOUCH_END/)
-  assert.match(source, /\.off\(Node\.EventType\.TOUCH_END/)
+  assert.match(source, /\.on\(Node\.EventType\.TOUCH_START,\s*this\.onTouchTarget/)
+  assert.match(source, /\.on\(Node\.EventType\.TOUCH_MOVE,\s*this\.onTouchTarget/)
+  assert.match(source, /\.on\(Node\.EventType\.TOUCH_END,\s*this\.onTouchTarget/)
+  assert.match(source, /\.off\(Node\.EventType\.TOUCH_START,\s*this\.onTouchTarget/)
+  assert.match(source, /\.off\(Node\.EventType\.TOUCH_MOVE,\s*this\.onTouchTarget/)
+  assert.match(source, /\.off\(Node\.EventType\.TOUCH_END,\s*this\.onTouchTarget/)
   assert.match(source, /getUILocation\(\)/)
   assert.match(source, /public configure\(bounds: BattleRect, coordinateSpace: UITransform\)/)
   assert.match(source, /private coordinateSpace: UITransform \| null = null/)
@@ -111,6 +117,8 @@ test('portrait battle input rebinds the actual subscribed node without duplicate
   assert.match(source, /if \(this\.inputEnabled\) this\.subscribeInputNode\(\)/)
   assert.match(source, /this\.bounds && this\.player && this\.coordinateSpace/)
   assert.match(source, /if \(!node \|\| this\.subscribedNode === node\) return/)
+  assert.match(source, /this\.subscribedNode\.off\(Node\.EventType\.TOUCH_START/)
+  assert.match(source, /this\.subscribedNode\.off\(Node\.EventType\.TOUCH_MOVE/)
   assert.match(source, /this\.subscribedNode\.off\(Node\.EventType\.TOUCH_END/)
   assert.match(source, /this\.subscribedNode = null/)
 })
