@@ -4,6 +4,11 @@ import type { EnemyCommand, EnemyContext, EnemyDangerDescriptor } from './EnemyB
 export type BossAttackId = 'bamboo-sweep' | 'ground-spikes' | 'mountain-roar'
 export type BossBrainPhase = 'spawn' | 'telegraph' | 'attack' | 'recovery' | 'hurt' | 'interrupted' | 'death'
 
+export const BAMBOO_WARDEN_TARGET_GRID = Object.freeze({
+  cellSize: 48,
+  tieBreak: 'positive-axis' as const,
+})
+
 export interface BossBrainSnapshot {
   readonly id: number
   readonly phase: BossBrainPhase
@@ -165,6 +170,27 @@ function clippedArea(area: BattleRect, bounds: Readonly<BattleRect>): BattleRect
   return clipped.minX <= clipped.maxX && clipped.minY <= clipped.maxY ? clipped : null
 }
 
+function quantizeAxis(value: number, min: number, max: number): number {
+  const cellSize = BAMBOO_WARDEN_TARGET_GRID.cellSize
+  const firstCell = Math.ceil(min / cellSize)
+  const lastCell = Math.floor(max / cellSize)
+  if (firstCell > lastCell) return roundCoordinate((min + max) / 2)
+  const nearestCell = Math.floor(value / cellSize + 0.5)
+  return clamp(nearestCell, firstCell, lastCell) * cellSize
+}
+
+export function quantizeBambooWardenTarget(
+  position: Readonly<Point2>,
+  centerBounds: Readonly<BattleRect>,
+): Readonly<Point2> {
+  if (!isFinitePoint(position)) throw new TypeError('position must contain finite supported coordinates')
+  if (!isFiniteBounds(centerBounds)) throw new TypeError('centerBounds must be finite and ordered')
+  return freezePoint({
+    x: quantizeAxis(position.x, centerBounds.minX, centerBounds.maxX),
+    y: quantizeAxis(position.y, centerBounds.minY, centerBounds.maxY),
+  })
+}
+
 export class BossBrainState {
   #id: number
   #phase: BossBrainPhase = 'spawn'
@@ -303,11 +329,13 @@ export class BossBrainState {
     const height = Math.max(1, context.battleBounds.maxY - context.battleBounds.minY)
     const escape = Math.min(72, height * 0.24)
     const halfBand = Math.min(54, Math.max(18, (height - escape * 2) / 2))
-    const centerY = clamp(
-      context.player.position.y,
-      context.battleBounds.minY + escape + halfBand,
-      context.battleBounds.maxY - escape - halfBand,
-    )
+    const centerBounds = {
+      minX: context.battleBounds.minX,
+      maxX: context.battleBounds.maxX,
+      minY: context.battleBounds.minY + escape + halfBand,
+      maxY: context.battleBounds.maxY - escape - halfBand,
+    }
+    const centerY = quantizeBambooWardenTarget(context.player.position, centerBounds).y
     return {
       minX: context.battleBounds.minX,
       maxX: Math.min(context.battleBounds.maxX, this.#position.x + 36),
@@ -318,10 +346,12 @@ export class BossBrainState {
 
   #spikeArea(context: EnemyContext): BattleRect {
     const half = 28
-    const center = {
-      x: clamp(context.player.position.x, context.battleBounds.minX + half, context.battleBounds.maxX - half),
-      y: clamp(context.player.position.y, context.battleBounds.minY + half, context.battleBounds.maxY - half),
-    }
+    const center = quantizeBambooWardenTarget(context.player.position, {
+      minX: context.battleBounds.minX + half,
+      maxX: context.battleBounds.maxX - half,
+      minY: context.battleBounds.minY + half,
+      maxY: context.battleBounds.maxY - half,
+    })
     return { minX: center.x - half, maxX: center.x + half, minY: center.y - half, maxY: center.y + half }
   }
 

@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
+import * as bossBrainModule from '../assets/Scripts/Combat/BossBrain.ts'
+
 import {
   BossBrainState,
   createBambooWardenBrain,
@@ -223,6 +225,57 @@ test('authoritative event sampling keeps all three attacks and phase two determi
     })
     for (const commands of runs.slice(1)) assert.deepEqual(commands, runs[0])
   }
+})
+
+test('nonlinear player motion locks every Boss attack to identical tactical cells across frame partitions', () => {
+  const partitions = [[1 / 60], [0.019], [0.25]]
+  const phases = [0, 0.31, 1.1]
+  const scenarios = [
+    { id: 81, seed: seedForFirstAttack('bamboo-sweep', 81), phaseTwo: false, target: 3.5 },
+    { id: 82, seed: seedForFirstAttack('ground-spikes', 82), phaseTwo: false, target: 3.5 },
+    { id: 83, seed: seedForFirstAttack('mountain-roar', 83), phaseTwo: false, target: 3.5 },
+    { id: 84, seed: 31, phaseTwo: true, target: 10.5 },
+    { id: 85, seed: 0x12345678, phaseTwo: true, target: 10.5 },
+  ]
+
+  for (const phase of phases) {
+    const playerAt = (time) => ({
+      x: -80 + Math.cos(time * 1.3 + phase * 0.7) * 96,
+      y: -100 + Math.sin(time * 1.7 + phase) * 120,
+    })
+    for (const scenario of scenarios) {
+      const runs = partitions.map((partition) => {
+        const brain = createBambooWardenBrain(scenario.id, spawn, scenario.seed)
+        if (scenario.phaseTwo) setBossHealthRatio(brain, 0.42)
+        return advanceTrace(brain, scenario.target, partition, playerAt).map(({ command }) => command)
+      })
+      for (const commands of runs.slice(1)) assert.deepEqual(commands, runs[0])
+
+      const cellSize = bossBrainModule.BAMBOO_WARDEN_TARGET_GRID?.cellSize
+      assert.equal(cellSize, 48)
+      for (const command of runs[0]) {
+        if (command.type === 'show-telegraph' && command.danger?.kind === 'spike') {
+          assert.equal(Number.isInteger(command.danger.center.x / cellSize), true)
+          assert.equal(Number.isInteger(command.danger.center.y / cellSize), true)
+        }
+        if (command.type === 'show-telegraph' && command.danger?.kind === 'sweep') {
+          const centerY = (command.area.minY + command.area.maxY) / 2
+          assert.equal(Number.isInteger(centerY / cellSize), true)
+        }
+      }
+    }
+  }
+})
+
+test('Boss tactical grid uses fixed in-bounds centers and breaks exact half-cell ties toward the positive axis', () => {
+  assert.equal(typeof bossBrainModule.quantizeBambooWardenTarget, 'function')
+  const gridBounds = { minX: -96, maxX: 96, minY: -96, maxY: 96 }
+  const lock = bossBrainModule.quantizeBambooWardenTarget
+
+  assert.deepEqual(lock({ x: 23.999, y: -24.001 }, gridBounds), { x: 0, y: -48 })
+  assert.deepEqual(lock({ x: 24, y: -24 }, gridBounds), { x: 48, y: 0 })
+  assert.deepEqual(lock({ x: 24.001, y: -23.999 }, gridBounds), { x: 48, y: 0 })
+  assert.deepEqual(lock({ x: 500, y: -500 }, gridBounds), { x: 96, y: -96 })
 })
 
 test('live adapter preserves at least 0.8 seconds of visible Boss warning for coarse and uneven frames', () => {
