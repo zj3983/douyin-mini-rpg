@@ -208,20 +208,34 @@ function probeCssSafeArea(): { top: number; bottom: number } {
   const document = globalObject.document
   const parent = document?.body ?? document?.documentElement
   if (!document || !parent || typeof globalObject.getComputedStyle !== 'function') return { top: 0, bottom: 0 }
-  const probe = document.createElement('div')
-  probe.style.cssText = [
-    'position:fixed',
-    'visibility:hidden',
-    'pointer-events:none',
-    'padding-top:env(safe-area-inset-top)',
-    'padding-bottom:env(safe-area-inset-bottom)',
-  ].join(';')
-  parent.appendChild(probe)
-  const style = globalObject.getComputedStyle(probe)
-  const top = Number.parseFloat(style.paddingTop ?? '0')
-  const bottom = Number.parseFloat(style.paddingBottom ?? '0')
-  probe.remove()
-  return { top: finiteNonNegative(top), bottom: finiteNonNegative(bottom) }
+  let probe: ReturnType<typeof document.createElement> | null = null
+  let failed = false
+  let result = { top: 0, bottom: 0 }
+  try {
+    probe = document.createElement('div')
+    probe.style.cssText = [
+      'position:fixed',
+      'visibility:hidden',
+      'pointer-events:none',
+      'padding-top:env(safe-area-inset-top)',
+      'padding-bottom:env(safe-area-inset-bottom)',
+    ].join(';')
+    parent.appendChild(probe)
+    const style = globalObject.getComputedStyle(probe)
+    result = {
+      top: finiteNonNegative(Number.parseFloat(style.paddingTop ?? '0')),
+      bottom: finiteNonNegative(Number.parseFloat(style.paddingBottom ?? '0')),
+    }
+  } catch {
+    failed = true
+  } finally {
+    try {
+      probe?.remove()
+    } catch {
+      failed = true
+    }
+  }
+  return failed ? { top: 0, bottom: 0 } : result
 }
 
 export function createDefaultViewportMetricsProvider(

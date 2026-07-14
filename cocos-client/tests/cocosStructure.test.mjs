@@ -153,8 +153,12 @@ test('flying sword delegates timing while homing state owns flight and lifecycle
   assert.match(source, /emit\('sword-cast-started',\s*{ phase: 'handSeal' }\)/)
   assert.match(source, /if \(this\.battleRuntime\.isBattleFrozen\(\)\)[\s\S]*this\.cancelCast\(\)/)
   assert.match(source, /onDisable\(\)[\s\S]*this\.cancelCast\(\)/)
-  assert.match(source, /nextPhase === 'finished'[\s\S]*'sword_ride'[\s\S]*resetFlyingSwordTimeline/)
+  assert.match(source, /nextPhase === 'finished'[\s\S]*finishCast\(\)[\s\S]*emit\('player-action-completed'\)[\s\S]*resetFlyingSwordTimeline/)
   assert.match(source, /private cancelCast\(\)[\s\S]*this\.homingState = resetHomingSwordCast\(this\.homingState\)[\s\S]*this\.sword\.active = false/)
+  const cancelBody = source.match(/private cancelCast\(\) \{([\s\S]*?)\n  \}/)?.[1] ?? ''
+  assert.match(cancelBody, /if \(!this\.castActive\) return/)
+  assert.match(cancelBody, /emit\('player-action-completed'/)
+  assert.doesNotMatch(cancelBody, /sword_ride/)
   assert.match(source, /setRotationFromEuler\(/)
 })
 

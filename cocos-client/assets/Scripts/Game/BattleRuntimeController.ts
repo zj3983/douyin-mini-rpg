@@ -44,6 +44,7 @@ import {
   snapshotLivingSwordTargets,
 } from '../Core/HomingSwordRuntime'
 import { stageVisualFor } from '../Core/StageVisualCatalog'
+import type { PlayerActionToken } from '../Combat/PlayerMotor.ts'
 import { BattleHudController } from './BattleHudController'
 import { BattleInputController } from './BattleInputController'
 import { DamageNumberController } from './DamageNumberController'
@@ -74,6 +75,7 @@ export class BattleRuntimeController extends Component {
   @property contactDamageCooldown = 0.65
   @property bossDeathSettleDelay = 0.55
   @property playerDefeatPanelDelay = 0.35
+  @property playerHurtDuration = 0.18
 
   private runtime: BattleRuntime | null = null
   private enemyNodes = new Map<number, Node>()
@@ -86,6 +88,7 @@ export class BattleRuntimeController extends Component {
   private stageSettlement = createStageSettlementState(0)
   private attemptState = createBattleAttemptState(0, 1)
   private stageFlow: StageFlowState = createStageFlow(12, 0)
+  private playerHurtToken: Readonly<PlayerActionToken> | null = null
 
   start() {
     this.initialize()
@@ -181,6 +184,7 @@ export class BattleRuntimeController extends Component {
   private rebuildRuntime(stageNumber: number) {
     if (!this.designData) return
     this.unscheduleAllCallbacks()
+    this.playerHurtToken = null
     this.bossSkillEffectPool?.despawnAll()
     this.soulOrbPool?.despawnAll()
     this.stageNumber = Math.max(1, Math.floor(stageNumber || 1))
@@ -349,16 +353,30 @@ export class BattleRuntimeController extends Component {
     if (!applied) return
     this.refreshHeroHealth()
     this.playerNode?.emit('player-hit', damage)
+    const playerController = this.playerNode?.getComponent(PlayerController)
     if (this.damageGate.health <= 0 && markPlayerDefeated(this.stageFlow).changed && markBattleAttemptDefeated(this.attemptState)) {
       this.freezeBattle()
-      this.playerNode?.getComponent(PlayerController)?.requestPresentationAction('death', 'battle-runtime')
+      playerController?.requestPresentationAction('death', 'battle-runtime')
       this.playerNode?.emit('player-defeated')
       const generation = this.stageGeneration
       this.scheduleOnce(() => {
         if (!isBattleAttemptCallbackCurrent(this.attemptState, generation, 'defeated')) return
         this.stageClearPanel?.showDefeat(this.stageNumber)
       }, this.playerDefeatPanelDelay)
+    } else if (this.damageGate.health > 0 && playerController) {
+      this.presentPlayerHurt(playerController)
     }
+  }
+
+  private presentPlayerHurt(playerController: PlayerController) {
+    const token = playerController.requestPresentationAction('hurt', 'battle-runtime-hurt')
+    if (!token) return
+    this.playerHurtToken = token
+    this.scheduleOnce(() => {
+      if (this.playerHurtToken !== token) return
+      this.playerHurtToken = null
+      playerController.completePresentationAction(token)
+    }, Math.max(0, this.playerHurtDuration))
   }
 
   private refreshHeroHealth() {

@@ -1,7 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { BATTLE_DESIGN_WIDTH, computeBattleLayout } from '../assets/Scripts/Combat/BattleLayout.ts'
-import { createViewportMetricsProvider } from '../assets/Scripts/Game/ViewportMetrics.ts'
+import {
+  createDefaultViewportMetricsProvider,
+  createViewportMetricsProvider,
+} from '../assets/Scripts/Game/ViewportMetrics.ts'
 
 function createEventTarget(initial = {}) {
   const handlers = new Map()
@@ -25,6 +28,22 @@ function createEventTarget(initial = {}) {
     listenerCount(type) { return handlers.get(type)?.size ?? 0 },
     addCount(type) { return addCounts.get(type) ?? 0 },
     removeCount(type) { return removeCounts.get(type) ?? 0 },
+  }
+}
+
+function withGlobals(overrides, callback) {
+  const originals = new Map()
+  for (const [key, value] of Object.entries(overrides)) {
+    originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value })
+  }
+  try {
+    return callback()
+  } finally {
+    for (const [key, descriptor] of originals) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor)
+      else delete globalThis[key]
+    }
   }
 }
 
@@ -171,4 +190,43 @@ test('resize listeners register once across window visual viewport and Douyin th
 
   provider.destroy()
   assert.equal(ttOffCount, 1)
+})
+
+test('default CSS safe-area probe returns zero and cleans up across partial DOM failures', () => {
+  for (const failure of ['append', 'computed-style', 'remove']) {
+    let removeAttempts = 0
+    const probe = {
+      style: { cssText: '' },
+      remove() {
+        removeAttempts += 1
+        if (failure === 'remove') throw new Error('remove failed')
+      },
+    }
+    const document = {
+      body: {
+        appendChild() {
+          if (failure === 'append') throw new Error('append failed after insertion')
+        },
+      },
+      createElement() { return probe },
+    }
+    const browserWindow = createEventTarget({ innerWidth: 390, innerHeight: 844, visualViewport: null })
+
+    withGlobals({
+      document,
+      window: browserWindow,
+      getComputedStyle() {
+        if (failure === 'computed-style') throw new Error('style read failed')
+        return { paddingTop: '20px', paddingBottom: '30px' }
+      },
+    }, () => {
+      const provider = createDefaultViewportMetricsProvider(() => ({ width: 360, height: 780 }))
+      const metrics = provider.read()
+      assert.equal(metrics.topInsetPx, 0, failure)
+      assert.equal(metrics.bottomInsetPx, 0, failure)
+      assert.equal(metrics.source, 'browser')
+    })
+
+    assert.equal(removeAttempts, 1, failure)
+  }
 })

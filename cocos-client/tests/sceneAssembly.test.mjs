@@ -106,6 +106,7 @@ test('portrait bootstrap routes all animation requests through the player contro
   assert.match(source, /player\.node\.on\('player-animation-requested',\s*\(action: string\) => animator\.play\(action\)/)
   assert.match(source, /createFlyingSword\(effectLayer, runtime, controller/)
   assert.match(source, /skillNode\.on\('player-action-requested',[\s\S]*controller\.requestPresentationAction\(action, 'flying-sword'\)/)
+  assert.match(source, /skillNode\.on\('player-action-completed',[\s\S]*controller\.completePresentationAction\(/)
   assert.doesNotMatch(source, /skillNode\.on\('player-action-requested',[\s\S]{0,100}animator\.play/)
   assert.match(skillSource, /this\.node\.emit\('player-action-requested', event\.action\)/)
 })

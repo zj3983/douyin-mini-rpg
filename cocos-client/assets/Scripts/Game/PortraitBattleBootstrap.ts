@@ -33,6 +33,7 @@ import {
 } from '../Combat/BattleLayout.ts'
 import type { BattleLayout } from '../Combat/BattleLayout.ts'
 import type { Point2 } from '../Combat/CombatTypes.ts'
+import type { PlayerActionToken } from '../Combat/PlayerMotor.ts'
 import { AtlasAnimator } from './AtlasAnimator'
 import { BattleHudController } from './BattleHudController'
 import { BattleInputController } from './BattleInputController'
@@ -323,8 +324,15 @@ export class PortraitBattleBootstrap extends Component {
     this.loadSprite('Assets/Skills/FlyingSword/sword-projectile-v2/spriteFrame', sword.sprite)
     const skill = skillNode.addComponent(FlyingSwordSkill)
     skill.sword = sword.node
+    let actionToken: Readonly<PlayerActionToken> | null = null
     skillNode.on('player-action-requested', (action: string) => {
-      controller.requestPresentationAction(action, 'flying-sword')
+      actionToken = controller.requestPresentationAction(action, 'flying-sword')
+    }, this)
+    skillNode.on('player-action-completed', () => {
+      if (!actionToken) return
+      const completedToken = actionToken
+      actionToken = null
+      controller.completePresentationAction(completedToken)
     }, this)
     const bindRuntime = () => {
       const state = getRuntime()

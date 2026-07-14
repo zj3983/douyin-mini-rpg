@@ -2,6 +2,7 @@ import { _decorator, Component, Node, UITransform, Vec3 } from 'cc'
 import type { BattleRect, Point2 } from '../Combat/CombatTypes.ts'
 import type { PlayerActionToken, PlayerMotor } from '../Combat/PlayerMotor.ts'
 import {
+  completePlayerAction,
   createPlayerMotor,
   requestMove,
   requestMoveInCoordinateSpace,
@@ -11,7 +12,6 @@ import {
   setPlayerFallbackAction,
   stepPlayerMotor,
   stopPlayerMotor,
-  unlockPlayerAction,
 } from '../Combat/PlayerMotor.ts'
 
 const { ccclass, property } = _decorator
@@ -79,7 +79,7 @@ export class PlayerController extends Component {
 
   public completePresentationAction(token: PlayerActionToken) {
     if (!this.motor) return false
-    const frame = unlockPlayerAction(this.motor, token)
+    const frame = completePlayerAction(this.motor, token)
     if (frame.changed) this.node.emit('player-animation-requested', frame.action)
     return frame.unlocked
   }

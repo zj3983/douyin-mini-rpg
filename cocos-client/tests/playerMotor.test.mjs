@@ -11,6 +11,7 @@ import {
 } from '../assets/Scripts/Combat/BattleLayout.ts'
 import {
   createPlayerMotor,
+  completePlayerAction,
   PLAYER_COORDINATE_LIMIT,
   requestMove,
   requestMoveInCoordinateSpace,
@@ -319,6 +320,43 @@ test('cast arrival keeps cast active and falls back to sword ride after unlock',
   assert.equal(released.unlocked, true)
   assert.equal(released.action, 'sword_ride')
   assert.equal(released.changed, true)
+})
+
+test('cast completion preserves moving fallback across later movement frames', () => {
+  const motor = createPlayerMotor({ x: 0, y: 0 }, 120)
+  setPlayerFallbackAction(motor, 'move')
+  requestMove(motor, { x: 100, y: 0 })
+  const cast = requestPlayerAction(motor, 'flying_sword_cast', 'flying-sword')
+
+  assert.equal(stepPlayerMotor(motor, 1 / 60).distanceMoved, 2)
+  const completed = completePlayerAction(motor, cast.token)
+  assert.equal(completed.action, 'move')
+  assert.equal(motor.presentationAction, 'move')
+
+  assert.equal(stepPlayerMotor(motor, 1 / 60).distanceMoved, 2)
+  assert.equal(motor.presentationAction, 'move')
+  const stale = completePlayerAction(motor, cast.token)
+  assert.equal(stale.unlocked, false)
+  assert.equal(stale.action, 'move')
+})
+
+test('hurt completion restores fallback while death and overlapping cast retain priority', () => {
+  const motor = createPlayerMotor({ x: 0, y: 0 }, 120)
+  setPlayerFallbackAction(motor, 'move')
+
+  const firstHurt = requestPlayerAction(motor, 'hurt', 'battle-runtime-hurt')
+  assert.equal(motor.presentationAction, 'hurt')
+  assert.equal(completePlayerAction(motor, firstHurt.token).action, 'move')
+
+  const cast = requestPlayerAction(motor, 'hand_seal', 'flying-sword')
+  const overlappingHurt = requestPlayerAction(motor, 'hurt', 'battle-runtime-hurt')
+  assert.equal(completePlayerAction(motor, overlappingHurt.token).action, 'hand_seal')
+  assert.equal(completePlayerAction(motor, cast.token).action, 'move')
+
+  const lethalHurt = requestPlayerAction(motor, 'hurt', 'battle-runtime-hurt')
+  requestPlayerAction(motor, 'death', 'battle-runtime')
+  assert.equal(completePlayerAction(motor, lethalHurt.token).action, 'death')
+  assert.equal(motor.presentationAction, 'death')
 })
 
 test('overlapping cast and hurt restore the next priority before fallback', () => {

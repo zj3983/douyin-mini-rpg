@@ -45,6 +45,7 @@ export class FlyingSwordSkill extends Component {
 
   private timeline: FlyingSwordTimeline | null = null
   private homingState: HomingSwordState | null = null
+  private castActive = false
 
   onLoad() {
     this.timeline = this.createTimeline()
@@ -82,6 +83,7 @@ export class FlyingSwordSkill extends Component {
 
   private handleTimelineEvent(event: FlyingSwordTimelineEvent) {
     if (event.type === 'castStarted') {
+      this.castActive = true
       this.node.emit('sword-cast-started', { phase: 'handSeal' })
       return
     }
@@ -127,14 +129,18 @@ export class FlyingSwordSkill extends Component {
   }
 
   private finishCast() {
-    this.node.emit('player-action-requested', 'sword_ride')
+    if (!this.castActive) return
+    this.castActive = false
+    this.node.emit('player-action-completed')
     if (this.timeline) resetFlyingSwordTimeline(this.timeline)
     this.homingState = resetHomingSwordCast(this.homingState)
     this.hideSword()
   }
 
   private cancelCast() {
-    this.node.emit('player-action-requested', 'sword_ride')
+    if (!this.castActive) return
+    this.castActive = false
+    this.node.emit('player-action-completed')
     if (this.timeline) resetFlyingSwordTimeline(this.timeline)
     this.homingState = resetHomingSwordCast(this.homingState)
     this.hideSword()

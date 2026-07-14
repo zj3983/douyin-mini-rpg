@@ -292,22 +292,6 @@ export class PlayerMotor {
 
   #requestPlayerAction(requestedAction: string, owner: string): PlayerActionFrame {
     const before = this.presentationAction
-    if (isFallbackAction(requestedAction)) {
-      const fallbackChanged = this.#fallbackAction !== requestedAction
-      this.#fallbackAction = requestedAction
-      const ownerToken = this.#ownerTokens.get(owner)
-      const ownerLock = ownerToken === undefined ? null : this.#actionLocks.get(ownerToken) ?? null
-      let unlocked = false
-      if (ownerLock && ownerLock.token.action !== 'death') {
-        this.#actionLocks.delete(ownerLock.token.id)
-        this.#ownerTokens.delete(owner)
-        unlocked = true
-      }
-      if (fallbackChanged || unlocked) this.#invalidateCaches()
-      const after = this.presentationAction
-      return freezeActionFrame(after, after !== before, null, unlocked)
-    }
-
     const action = actionLockFor(requestedAction)
     if (!action) throw new TypeError('unsupported player presentation action')
     const previousToken = this.#ownerTokens.get(owner)
@@ -435,5 +419,9 @@ export function lockPlayerAction(
 }
 
 export function unlockPlayerAction(state: PlayerMotor, token: PlayerActionToken): PlayerActionFrame {
+  return completePlayerAction(state, token)
+}
+
+export function completePlayerAction(state: PlayerMotor, token: PlayerActionToken): PlayerActionFrame {
   return releaseAction(requireMotor(state), token)
 }
