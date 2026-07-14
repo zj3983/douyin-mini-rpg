@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import {
   createEnemyBrain,
   defeatEnemyBrain,
+  enemyAnimationCatalogCompatibility,
   EnemyBrainState,
+  hurtEnemyBrain,
   interruptEnemyBrain,
+  mapEnemyAnimationAction,
   stepEnemyBrain,
 } from '../assets/Scripts/Combat/EnemyBrain.ts'
 
@@ -264,4 +268,68 @@ test('interrupt and defeat enter distinct terminal presentation branches without
   assert.deepEqual(stepEnemyBrain(defeated, context(1), 0.25).filter(
     (command) => command.type !== 'move' && command.type !== 'face',
   ), [])
+})
+
+test('every emitted wolf and moth semantic animation maps to the checked-in actor atlas', () => {
+  const manifest = JSON.parse(readFileSync(new URL('../assets/resources/Data/animation-atlas.json', import.meta.url), 'utf8'))
+  const cases = [
+    ['moss-wolf', { x: 260, y: -80 }],
+    ['green-wing-moth', { x: 260, y: 150 }],
+  ]
+
+  for (const [kind, spawn] of cases) {
+    const actor = manifest.actors.find((entry) => entry.id === kind)
+    const available = actor.actions.map((action) => action.name)
+    assert.deepEqual(enemyAnimationCatalogCompatibility(kind, available), {
+      compatible: true,
+      missing: [],
+    })
+
+    const brain = createEnemyBrain(kind, 21, spawn, 21)
+    const emitted = advance(brain, 5).filter((command) => command.type === 'animate').map((command) => command.action)
+    const hurtBrain = createEnemyBrain(kind, 22, spawn, 22)
+    emitted.push(...hurtEnemyBrain(hurtBrain, 0).filter((command) => command.type === 'animate').map((command) => command.action))
+    const interruptedBrain = createEnemyBrain(kind, 23, spawn, 23)
+    emitted.push(...interruptEnemyBrain(interruptedBrain, 0).filter((command) => command.type === 'animate').map((command) => command.action))
+    const deadBrain = createEnemyBrain(kind, 24, spawn, 24)
+    emitted.push(...defeatEnemyBrain(deadBrain, 0).filter((command) => command.type === 'animate').map((command) => command.action))
+
+    assert.ok(emitted.length > 4)
+    for (const semanticAction of emitted) {
+      const presentationAction = mapEnemyAnimationAction(kind, semanticAction)
+      assert.ok(available.includes(presentationAction), `${kind}.${semanticAction} -> ${presentationAction}`)
+    }
+    assert.equal(mapEnemyAnimationAction(kind, 'future-m2-action'), 'idle')
+  }
+})
+
+test('hurt is explicit, idempotent, stale-safe, and recovers through normal selection', () => {
+  for (const [kind, spawn] of [
+    ['moss-wolf', { x: 160, y: -80 }],
+    ['green-wing-moth', { x: 160, y: 140 }],
+  ]) {
+    const brain = createEnemyBrain(kind, 31, spawn, 31)
+    advance(brain, 0.2)
+    const at = brain.elapsed
+    const commands = hurtEnemyBrain(brain, at)
+    assert.equal(brain.phase, 'hurt')
+    assert.equal(commands.some((command) => command.type === 'animate' && command.action === (kind === 'moss-wolf' ? 'wolf-hurt' : 'moth-hurt')), true)
+    assert.deepEqual(hurtEnemyBrain(brain, at), [])
+    assert.deepEqual(hurtEnemyBrain(brain, at - 0.1), [])
+
+    const phases = [brain.phase]
+    let now = brain.elapsed
+    while (brain.phase !== 'select-position') {
+      now += 1 / 60
+      stepEnemyBrain(brain, context(now), 1 / 60)
+      if (phases.at(-1) !== brain.phase) phases.push(brain.phase)
+      assert.ok(now < 2)
+    }
+    assert.deepEqual(phases, ['hurt', 'recovery', 'select-position'])
+
+    defeatEnemyBrain(brain, brain.elapsed)
+    assert.equal(brain.phase, 'death')
+    assert.deepEqual(hurtEnemyBrain(brain, brain.elapsed), [])
+    assert.equal(brain.phase, 'death')
+  }
 })

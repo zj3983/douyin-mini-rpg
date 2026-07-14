@@ -1,0 +1,189 @@
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import test from 'node:test'
+
+import {
+  consumeEnemyCombatCommand,
+  createEnemyCombatResolverAdapter,
+  drainEnemyCombatDamage,
+  drainEnemyTelegraphs,
+  enemyCombatAdapterSnapshot,
+  removeEnemyCombatActor,
+  resetEnemyCombatResolverAdapter,
+  stepEnemyCombatResolverAdapter,
+  upsertEnemyCombatActor,
+  upsertPlayerCombatActor,
+} from '../assets/Scripts/Game/EnemyCombatResolverAdapter.ts'
+import {
+  createEnemyBrain,
+  mapEnemyAnimationAction,
+  stepEnemyBrain,
+} from '../assets/Scripts/Combat/EnemyBrain.ts'
+
+const bounds = Object.freeze({ minX: -360, maxX: 360, minY: -140, maxY: 240 })
+
+function player(adapter, generation, position = { x: 0, y: -80 }) {
+  return upsertPlayerCombatActor(adapter, { generation, position, radius: 22, alive: true })
+}
+
+function enemy(adapter, generation, enemyId = 1, position = { x: 0, y: -80 }, alive = true) {
+  return upsertEnemyCombatActor(adapter, { generation, enemyId, position, radius: 28, alive })
+}
+
+function hitboxCommand(overrides = {}) {
+  return Object.freeze({
+    type: 'activate-hitbox',
+    attackId: 'wolf-pounce:1:1',
+    area: Object.freeze({ minX: -30, maxX: 30, minY: -110, maxY: -50 }),
+    damage: 3,
+    duration: 0.12,
+    ...overrides,
+  })
+}
+
+function projectileCommand(overrides = {}) {
+  return Object.freeze({
+    type: 'spawn-projectile',
+    attackId: 'moth-spirit-orb:2:1',
+    origin: Object.freeze({ x: -120, y: -80 }),
+    velocity: Object.freeze({ x: 960, y: 0 }),
+    radius: 8,
+    damage: 3,
+    duration: 1,
+    ...overrides,
+  })
+}
+
+function assertDeepFrozen(value) {
+  if (value === null || typeof value !== 'object') return
+  assert.equal(Object.isFrozen(value), true)
+  for (const nested of Object.values(value)) assertDeepFrozen(nested)
+}
+
+test('idle actor overlap causes zero damage while telegraphs are delivered immutably', () => {
+  const adapter = createEnemyCombatResolverAdapter(1)
+  player(adapter, 1)
+  enemy(adapter, 1)
+  stepEnemyCombatResolverAdapter(adapter, 0.25)
+  assert.deepEqual(drainEnemyCombatDamage(adapter), [])
+
+  assert.equal(consumeEnemyCombatCommand(adapter, 1, 1, Object.freeze({
+    type: 'show-telegraph',
+    attackId: 'wolf-pounce:1:1',
+    area: Object.freeze({ minX: -30, maxX: 30, minY: -110, maxY: -50 }),
+    duration: 0.45,
+  })), true)
+  const telegraphs = drainEnemyTelegraphs(adapter)
+  assert.deepEqual(telegraphs, [{
+    enemyId: 1,
+    attackId: 'wolf-pounce:1:1',
+    area: { minX: -30, maxX: 30, minY: -110, maxY: -50 },
+    duration: 0.45,
+    generation: 1,
+  }])
+  assertDeepFrozen(telegraphs)
+  assert.deepEqual(drainEnemyCombatDamage(adapter), [])
+})
+
+test('active command opens one timed attack instance and damages the player once', () => {
+  const adapter = createEnemyCombatResolverAdapter(3)
+  player(adapter, 3)
+  enemy(adapter, 3)
+  assert.equal(consumeEnemyCombatCommand(adapter, 3, 1, hitboxCommand()), true)
+
+  stepEnemyCombatResolverAdapter(adapter, 1 / 60)
+  const first = drainEnemyCombatDamage(adapter)
+  assert.equal(first.length, 1)
+  assert.deepEqual(first[0], {
+    enemyId: 1,
+    sourceId: 'enemy:1',
+    attackId: 'wolf-pounce:1:1',
+    attackInstanceId: 1,
+    amount: 3,
+    at: 0,
+    generation: 3,
+    delivery: 'hitbox',
+  })
+  assertDeepFrozen(first)
+
+  stepEnemyCombatResolverAdapter(adapter, 0.25)
+  assert.deepEqual(drainEnemyCombatDamage(adapter), [])
+})
+
+test('projectile commands use swept resolution and source removal despawns them', () => {
+  const adapter = createEnemyCombatResolverAdapter(4)
+  player(adapter, 4)
+  enemy(adapter, 4, 2, { x: -120, y: 40 })
+  consumeEnemyCombatCommand(adapter, 4, 2, projectileCommand())
+  stepEnemyCombatResolverAdapter(adapter, 0.25)
+  const damage = drainEnemyCombatDamage(adapter)
+  assert.equal(damage.length, 1)
+  assert.equal(damage[0].delivery, 'projectile')
+
+  consumeEnemyCombatCommand(adapter, 4, 2, projectileCommand({ attackId: 'moth-spirit-orb:2:2' }))
+  assert.equal(enemyCombatAdapterSnapshot(adapter).projectileCount, 2)
+  assert.equal(removeEnemyCombatActor(adapter, 4, 2), true)
+  assert.equal(enemyCombatAdapterSnapshot(adapter).projectileCount, 0)
+  stepEnemyCombatResolverAdapter(adapter, 0.25)
+  assert.deepEqual(drainEnemyCombatDamage(adapter), [])
+})
+
+test('generation reset clears attacks and rejects stale actor updates and commands', () => {
+  const adapter = createEnemyCombatResolverAdapter(7)
+  player(adapter, 7)
+  enemy(adapter, 7)
+  consumeEnemyCombatCommand(adapter, 7, 1, hitboxCommand({ duration: 1 }))
+  assert.equal(enemyCombatAdapterSnapshot(adapter).hitboxCount, 1)
+
+  assert.equal(resetEnemyCombatResolverAdapter(adapter, 8), 8)
+  assert.equal(enemyCombatAdapterSnapshot(adapter).hitboxCount, 0)
+  assert.equal(player(adapter, 7), false)
+  assert.equal(enemy(adapter, 7), false)
+  assert.equal(consumeEnemyCombatCommand(adapter, 7, 1, hitboxCommand()), false)
+  stepEnemyCombatResolverAdapter(adapter, 0.25)
+  assert.deepEqual(drainEnemyCombatDamage(adapter), [])
+
+  player(adapter, 8)
+  enemy(adapter, 8)
+  consumeEnemyCombatCommand(adapter, 8, 1, hitboxCommand())
+  stepEnemyCombatResolverAdapter(adapter, 1 / 60)
+  assert.equal(drainEnemyCombatDamage(adapter).length, 1)
+})
+
+test('real brain commands map to the current atlas and live damage begins only at the active frame', () => {
+  const manifest = JSON.parse(readFileSync(new URL('../assets/resources/Data/animation-atlas.json', import.meta.url), 'utf8'))
+  const available = manifest.actors.find((actor) => actor.id === 'moss-wolf').actions.map((action) => action.name)
+  const adapter = createEnemyCombatResolverAdapter(9)
+  const brain = createEnemyBrain('moss-wolf', 1, { x: 260, y: -80 }, 19)
+  player(adapter, 9)
+  enemy(adapter, 9, 1, brain.position)
+  let now = 0
+  let activeSeen = false
+  let damageBeforeActive = 0
+  let damageAfterActive = 0
+
+  while (now < 4 && damageAfterActive === 0) {
+    now += 1 / 60
+    const commands = stepEnemyBrain(brain, {
+      now,
+      player: { id: 'player', position: { x: 0, y: -80 }, alive: true },
+      neighbors: [],
+      battleBounds: bounds,
+    }, 1 / 60)
+    enemy(adapter, 9, 1, brain.position)
+    for (const command of commands) {
+      if (command.type === 'animate') assert.ok(available.includes(mapEnemyAnimationAction('moss-wolf', command.action)))
+      if (command.type === 'activate-hitbox') activeSeen = true
+      consumeEnemyCombatCommand(adapter, 9, 1, command)
+    }
+    stepEnemyCombatResolverAdapter(adapter, 1 / 60)
+    const damage = drainEnemyCombatDamage(adapter).length
+    if (activeSeen) damageAfterActive += damage
+    else damageBeforeActive += damage
+  }
+
+  assert.equal(damageBeforeActive, 0)
+  assert.equal(activeSeen, true)
+  assert.equal(damageAfterActive, 1)
+  assert.equal(drainEnemyTelegraphs(adapter).length >= 1, true)
+})

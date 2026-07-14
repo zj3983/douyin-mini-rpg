@@ -227,6 +227,7 @@ export class CombatResolver {
   #hurtboxes = new Map<string, MutableHurtbox>()
   #hitboxes = new Map<number, MutableHitbox>()
   #projectiles = new Map<number, MutableProjectile>()
+  #inactiveSources = new Set<string>()
   #damageEvents: DamageEvent[] = []
   #hitRecordCount = 0
   #nextAttackInstanceId = 1
@@ -285,6 +286,8 @@ export class CombatResolver {
       alive: registration.alive ?? true,
       generation: registration.generation,
     })
+    if (registration.alive ?? true) this.#inactiveSources.delete(registration.actorId)
+    else this.#inactiveSources.add(registration.actorId)
     return true
   }
 
@@ -301,6 +304,11 @@ export class CombatResolver {
     if (update.alive !== undefined) {
       if (typeof update.alive !== 'boolean') throw new TypeError('alive must be boolean')
       hurtbox.alive = update.alive
+      if (update.alive) this.#inactiveSources.delete(actorId)
+      else {
+        this.#inactiveSources.add(actorId)
+        this.#cancelSourceAttacks(actorId)
+      }
     }
     return true
   }
@@ -309,7 +317,10 @@ export class CombatResolver {
     if (!isGeneration(generation)) throw new TypeError('generation must be a positive safe integer')
     if (!this.#isCurrent(generation)) return false
     requireIdentifier(actorId, 'actorId')
-    return this.#hurtboxes.delete(actorId)
+    const removed = this.#hurtboxes.delete(actorId)
+    this.#inactiveSources.add(actorId)
+    this.#cancelSourceAttacks(actorId)
+    return removed
   }
 
   #openHitbox(registration: HitboxRegistration): number | null {
@@ -320,6 +331,7 @@ export class CombatResolver {
     requireArea(registration.area)
     requireDamage(registration.damage)
     requireDuration(registration.duration)
+    if (this.#inactiveSources.has(registration.sourceId)) return null
     if (this.#hitboxes.size >= this.#capacities.maxHitboxes) throw new RangeError('hitbox capacity exceeded')
     const instanceId = this.#nextAttackInstanceId
     this.#nextAttackInstanceId += 1
@@ -358,6 +370,7 @@ export class CombatResolver {
     if (!Number.isFinite(registration.radius) || registration.radius < 0) throw new TypeError('radius must be finite and non-negative')
     requireDamage(registration.damage)
     requireDuration(registration.duration)
+    if (this.#inactiveSources.has(registration.sourceId)) return null
     if (this.#projectiles.size >= this.#capacities.maxProjectiles) throw new RangeError('projectile capacity exceeded')
     const instanceId = this.#nextAttackInstanceId
     this.#nextAttackInstanceId += 1
@@ -397,12 +410,29 @@ export class CombatResolver {
     })
   }
 
+  #cancelSourceAttacks(sourceId: string): void {
+    for (const [id, hitbox] of this.#hitboxes) {
+      if (hitbox.sourceId !== sourceId) continue
+      this.#hitRecordCount -= hitbox.hitTargets.size
+      this.#hitboxes.delete(id)
+    }
+    for (const [id, projectile] of this.#projectiles) {
+      if (projectile.sourceId !== sourceId) continue
+      this.#hitRecordCount -= projectile.hitTargets.size
+      this.#projectiles.delete(id)
+    }
+  }
+
   #resolveHitboxes(substepStart: number): void {
     const hurtboxes = [...this.#hurtboxes.values()]
       .filter((hurtbox) => hurtbox.alive && hurtbox.generation === this.#generation)
       .sort((a, b) => a.actorId.localeCompare(b.actorId))
     for (const hitbox of this.#hitboxes.values()) {
-      if (hitbox.generation !== this.#generation || hitbox.expiresAt <= substepStart + STEP_EPSILON) continue
+      if (
+        hitbox.generation !== this.#generation
+        || hitbox.expiresAt <= substepStart + STEP_EPSILON
+        || this.#inactiveSources.has(hitbox.sourceId)
+      ) continue
       for (const hurtbox of hurtboxes) {
         if (hurtbox.actorId === hitbox.sourceId || !overlap(hitbox.area, hurtbox.area)) continue
         this.#recordDamage(hitbox, hurtbox.actorId, Math.max(substepStart, hitbox.openedAt), 'hitbox')
@@ -414,7 +444,11 @@ export class CombatResolver {
     const hurtboxes = [...this.#hurtboxes.values()]
       .filter((hurtbox) => hurtbox.alive && hurtbox.generation === this.#generation)
     for (const projectile of this.#projectiles.values()) {
-      if (projectile.generation !== this.#generation || projectile.expiresAt <= substepStart + STEP_EPSILON) continue
+      if (
+        projectile.generation !== this.#generation
+        || projectile.expiresAt <= substepStart + STEP_EPSILON
+        || this.#inactiveSources.has(projectile.sourceId)
+      ) continue
       const from = { ...projectile.position }
       const activeDelta = Math.min(deltaSeconds, projectile.expiresAt - substepStart)
       const to = {
@@ -486,6 +520,7 @@ export class CombatResolver {
     this.#hurtboxes.clear()
     this.#hitboxes.clear()
     this.#projectiles.clear()
+    this.#inactiveSources.clear()
     this.#damageEvents = []
     this.#hitRecordCount = 0
     this.#nextAttackInstanceId = 1

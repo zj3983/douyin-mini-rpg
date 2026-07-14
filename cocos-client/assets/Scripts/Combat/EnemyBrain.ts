@@ -11,6 +11,12 @@ export type EnemyBrainPhase =
   | 'interrupted'
   | 'death'
 export type EnemyAttack = 'pounce' | 'dive' | 'spirit-orb'
+export type EnemyPresentationAction = 'idle' | 'move' | 'attack' | 'hurt' | 'death'
+
+export interface EnemyAnimationCatalogCompatibility {
+  readonly compatible: boolean
+  readonly missing: readonly EnemyPresentationAction[]
+}
 
 export interface EnemyContext {
   readonly now: number
@@ -89,8 +95,67 @@ let constructBrain: (
   seed: number,
 ) => EnemyBrainState
 let advanceBrain: (state: EnemyBrainState, context: EnemyContext, deltaSeconds: number) => readonly EnemyCommand[]
+let hurtBrain: (state: EnemyBrainState, now: number) => readonly EnemyCommand[]
 let interruptBrain: (state: EnemyBrainState, now: number) => readonly EnemyCommand[]
 let defeatBrain: (state: EnemyBrainState, now: number) => readonly EnemyCommand[]
+
+const REQUIRED_PRESENTATION_ACTIONS: readonly EnemyPresentationAction[] = Object.freeze([
+  'idle',
+  'move',
+  'attack',
+  'hurt',
+  'death',
+])
+
+const SEMANTIC_PRESENTATION_ACTIONS: Readonly<Record<OrdinaryEnemyKind, Readonly<Record<string, EnemyPresentationAction>>>> = Object.freeze({
+  'moss-wolf': Object.freeze({
+    'wolf-prowl': 'move',
+    'wolf-crouch': 'attack',
+    'wolf-pounce': 'attack',
+    'wolf-brake': 'idle',
+    'wolf-hurt': 'hurt',
+    'wolf-interrupted': 'hurt',
+    'wolf-death': 'death',
+  }),
+  'green-wing-moth': Object.freeze({
+    'moth-flight': 'move',
+    'moth-dive': 'attack',
+    'moth-spirit-orb': 'attack',
+    'moth-recover': 'idle',
+    'moth-hurt': 'hurt',
+    'moth-interrupted': 'hurt',
+    'moth-death': 'death',
+  }),
+})
+
+function requireOrdinaryKind(kind: OrdinaryEnemyKind): OrdinaryEnemyKind {
+  if (kind !== 'moss-wolf' && kind !== 'green-wing-moth') {
+    throw new TypeError('kind must be moss-wolf or green-wing-moth')
+  }
+  return kind
+}
+
+export function mapEnemyAnimationAction(
+  kind: OrdinaryEnemyKind,
+  semanticAction: string,
+): EnemyPresentationAction {
+  const mapping = SEMANTIC_PRESENTATION_ACTIONS[requireOrdinaryKind(kind)]
+  if (typeof semanticAction !== 'string') throw new TypeError('semanticAction must be a string')
+  return mapping[semanticAction] ?? 'idle'
+}
+
+export function enemyAnimationCatalogCompatibility(
+  kind: OrdinaryEnemyKind,
+  availableActions: readonly string[],
+): Readonly<EnemyAnimationCatalogCompatibility> {
+  requireOrdinaryKind(kind)
+  if (!Array.isArray(availableActions) || availableActions.some((action) => typeof action !== 'string')) {
+    throw new TypeError('availableActions must be an array of strings')
+  }
+  const available = new Set(availableActions)
+  const missing = Object.freeze(REQUIRED_PRESENTATION_ACTIONS.filter((action) => !available.has(action)))
+  return Object.freeze({ compatible: missing.length === 0, missing })
+}
 
 function freezePoint(point: Point2): Readonly<Point2> {
   return Object.freeze({ x: point.x, y: point.y })
@@ -196,6 +261,7 @@ export class EnemyBrainState {
   #attackSequence = 0
   #activeHitboxEmitted = false
   #projectilesEmitted = false
+  #recoveryReturnsToSelection = false
 
   private constructor(token: symbol, kind: OrdinaryEnemyKind, id: number, spawn: Point2, seed: number) {
     if (token !== BRAIN_TOKEN) throw new TypeError('EnemyBrainState must be created by createEnemyBrain')
@@ -212,6 +278,7 @@ export class EnemyBrainState {
   static {
     constructBrain = (kind, id, spawn, seed) => new EnemyBrainState(BRAIN_TOKEN, kind, id, spawn, seed)
     advanceBrain = (state, context, deltaSeconds) => state.#step(context, deltaSeconds)
+    hurtBrain = (state, now) => state.#hurt(now)
     interruptBrain = (state, now) => state.#interrupt(now)
     defeatBrain = (state, now) => state.#defeat(now)
   }
@@ -387,8 +454,9 @@ export class EnemyBrainState {
     commands.push({ type: 'animate', action: this.#animationName(this.#attack) })
   }
 
-  #beginRecovery(commands: EnemyCommand[]): void {
+  #beginRecovery(commands: EnemyCommand[], returnToSelection = false): void {
     this.#velocity = { x: 0, y: 0 }
+    this.#recoveryReturnsToSelection = returnToSelection
     this.#setPhase('recovery')
     commands.push({ type: 'animate', action: this.#kind === 'moss-wolf' ? 'wolf-brake' : 'moth-recover' })
   }
@@ -419,6 +487,15 @@ export class EnemyBrainState {
       return
     }
     if (this.#phase === 'recovery' && this.#elapsed - this.#phaseStartedAt + DECISION_EPSILON >= 0.45) {
+      if (this.#recoveryReturnsToSelection) {
+        this.#recoveryReturnsToSelection = false
+        this.#setPhase('select-position')
+        this.#selectedPosition = this.#kind === 'moss-wolf'
+          ? this.#selectWolfPosition(context)
+          : this.#selectMothPosition(context)
+        commands.push({ type: 'animate', action: this.#kind === 'moss-wolf' ? 'wolf-prowl' : 'moth-flight' })
+        return
+      }
       if (this.#kind === 'green-wing-moth') {
         this.#attack = this.#attack === 'dive' ? 'spirit-orb' : 'dive'
         this.#beginTelegraph(context, commands)
@@ -429,7 +506,10 @@ export class EnemyBrainState {
       }
       return
     }
-    if (this.#phase === 'interrupted' && this.#elapsed - this.#phaseStartedAt >= 0.25) this.#beginRecovery(commands)
+    if (this.#phase === 'hurt' && this.#elapsed - this.#phaseStartedAt >= 0.2) this.#beginRecovery(commands, true)
+    if (this.#phase === 'interrupted' && this.#elapsed - this.#phaseStartedAt >= 0.25) {
+      this.#beginRecovery(commands, true)
+    }
   }
 
   #emitActiveAttack(commands: EnemyCommand[]): void {
@@ -537,7 +617,9 @@ export class EnemyBrainState {
 
   #interrupt(now: number): readonly EnemyCommand[] {
     if (!Number.isFinite(now)) throw new TypeError('now must be finite')
-    if (this.#phase === 'death') return Object.freeze([])
+    if (now + DECISION_EPSILON < this.#elapsed || this.#phase === 'death' || this.#phase === 'interrupted') {
+      return Object.freeze([])
+    }
     this.#setPhase('interrupted')
     this.#velocity = { x: 0, y: 0 }
     this.#sampledTarget = null
@@ -545,6 +627,21 @@ export class EnemyBrainState {
     return freezeCommands([
       { type: 'move', velocity: { x: 0, y: 0 } },
       { type: 'animate', action: this.#animationName('interrupted') },
+    ])
+  }
+
+  #hurt(now: number): readonly EnemyCommand[] {
+    if (!Number.isFinite(now)) throw new TypeError('now must be finite')
+    if (now + DECISION_EPSILON < this.#elapsed || this.#phase === 'death' || this.#phase === 'hurt') {
+      return Object.freeze([])
+    }
+    this.#setPhase('hurt')
+    this.#velocity = { x: 0, y: 0 }
+    this.#sampledTarget = null
+    this.#attackDestination = null
+    return freezeCommands([
+      { type: 'move', velocity: { x: 0, y: 0 } },
+      { type: 'animate', action: this.#animationName('hurt') },
     ])
   }
 
@@ -587,6 +684,10 @@ export function stepEnemyBrain(
 
 export function interruptEnemyBrain(state: EnemyBrainState, now: number): readonly EnemyCommand[] {
   return interruptBrain(requireBrain(state), now)
+}
+
+export function hurtEnemyBrain(state: EnemyBrainState, now: number): readonly EnemyCommand[] {
+  return hurtBrain(requireBrain(state), now)
 }
 
 export function defeatEnemyBrain(state: EnemyBrainState, now: number): readonly EnemyCommand[] {

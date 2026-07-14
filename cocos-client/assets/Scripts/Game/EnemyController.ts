@@ -4,7 +4,8 @@ import {
   createEnemyBrain,
   defeatEnemyBrain,
   EnemyBrainState,
-  interruptEnemyBrain,
+  hurtEnemyBrain,
+  mapEnemyAnimationAction,
   stepEnemyBrain,
 } from '../Combat/EnemyBrain'
 import type { EnemyCommand, OrdinaryEnemyKind } from '../Combat/EnemyBrain'
@@ -132,9 +133,13 @@ export class EnemyController extends Component {
             this.node.emit('enemy-facing', this.facing)
           }
           break
-        case 'animate':
-          this.node.emit('enemy-motion', command.action)
+        case 'animate': {
+          if (!this.brain) break
+          const presentationAction = mapEnemyAnimationAction(this.brain.kind, command.action)
+          this.node.emit('enemy-semantic-animation', command.action, presentationAction)
+          this.node.emit('enemy-motion', presentationAction)
           break
+        }
         case 'show-telegraph':
           this.node.emit('enemy-telegraph', this.runtimeEnemy?.id, command)
           break
@@ -184,7 +189,7 @@ export class EnemyController extends Component {
 
   private onEnemyHit() {
     if (!this.brain) return
-    this.consumeCommands(interruptEnemyBrain(this.brain, this.brain.elapsed))
+    this.consumeCommands(hurtEnemyBrain(this.brain, this.brain.elapsed))
     this.syncRuntimePosition()
   }
 

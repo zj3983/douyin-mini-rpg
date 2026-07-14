@@ -153,6 +153,52 @@ test('dead targets and removed hurtboxes are excluded idempotently', () => {
   assert.equal(closeHitbox(resolver, nextAttack, resolver.generation), true)
 })
 
+test('dead sources close hitboxes and despawn source-owned ordinary projectiles', () => {
+  const resolver = createCombatResolver()
+  registerHurtbox(resolver, { actorId: 'wolf:1', area: box(-80, 0), generation: resolver.generation })
+  registerHurtbox(resolver, { actorId: 'player', area: box(0, 0), generation: resolver.generation })
+  hitbox(resolver, { area: box(0, 0), duration: 1 })
+  projectile(resolver, {
+    sourceId: 'wolf:1',
+    attackId: 'wolf-projectile-test',
+    origin: { x: -100, y: 0 },
+    duration: 1,
+  })
+  assert.deepEqual({ hitboxes: resolver.snapshot().hitboxCount, projectiles: resolver.snapshot().projectileCount }, {
+    hitboxes: 1,
+    projectiles: 1,
+  })
+
+  assert.equal(updateHurtbox(resolver, 'wolf:1', { alive: false, generation: resolver.generation }), true)
+  assert.deepEqual({ hitboxes: resolver.snapshot().hitboxCount, projectiles: resolver.snapshot().projectileCount }, {
+    hitboxes: 0,
+    projectiles: 0,
+  })
+  stepCombatResolver(resolver, 0.25)
+  assert.deepEqual(drainDamageEvents(resolver), [])
+
+  hitbox(resolver, { duration: 1 })
+  stepCombatResolver(resolver, 1 / 60)
+  assert.deepEqual(drainDamageEvents(resolver), [])
+  assert.equal(updateHurtbox(resolver, 'wolf:1', { alive: true, generation: resolver.generation }), true)
+  hitbox(resolver, { duration: 1 })
+  stepCombatResolver(resolver, 1 / 60)
+  assert.equal(drainDamageEvents(resolver).length, 1)
+})
+
+test('removing a source is idempotent and suppresses all attacks it already owns', () => {
+  const resolver = createCombatResolver()
+  registerHurtbox(resolver, { actorId: 'moth:1', area: box(-80, 0), generation: resolver.generation })
+  registerHurtbox(resolver, { actorId: 'player', area: box(0, 0), generation: resolver.generation })
+  projectile(resolver, { sourceId: 'moth:1', duration: 1 })
+
+  assert.equal(removeHurtbox(resolver, 'moth:1', resolver.generation), true)
+  assert.equal(removeHurtbox(resolver, 'moth:1', resolver.generation), false)
+  assert.equal(resolver.snapshot().projectileCount, 0)
+  stepCombatResolver(resolver, 0.25)
+  assert.deepEqual(drainDamageEvents(resolver), [])
+})
+
 test('generation reset clears authority and rejects stale registrations and attacks', () => {
   const resolver = createCombatResolver()
   const stale = resolver.generation

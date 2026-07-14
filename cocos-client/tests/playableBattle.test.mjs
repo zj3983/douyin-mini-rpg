@@ -93,19 +93,22 @@ test('enemy controller builds live brain context and continuously synchronizes m
 test('enemy controller forwards active-frame commands and never emits direct player damage', () => {
   const source = read('assets/Scripts/Game/EnemyController.ts')
 
+  assert.match(source, /mapEnemyAnimationAction\(this\.brain\.kind, command\.action\)/)
+  assert.match(source, /emit\('enemy-semantic-animation', command\.action,/)
   assert.match(source, /case 'show-telegraph':[\s\S]*emit\('enemy-telegraph',/)
   assert.match(source, /case 'activate-hitbox':[\s\S]*emit\('enemy-hitbox-active',/)
   assert.match(source, /case 'spawn-projectile':[\s\S]*emit\('enemy-projectile-spawned',/)
   assert.doesNotMatch(source, /enemy-attack-player/)
   assert.doesNotMatch(source, /attackCooldown|cooldownLeft|contactDamage|contact-damage/)
   assert.doesNotMatch(source, /new Node\([^\n]*(?:wing|limb)/i)
+  assert.match(source, /consumeCommands\(hurtEnemyBrain\(this\.brain, this\.brain\.elapsed\)\)/)
 })
 
-test('battle controller drives enemy contact damage, stage flow, drops, HUD, and manual clear', () => {
+test('battle controller drives resolved enemy damage, stage flow, drops, HUD, and manual clear', () => {
   const source = read('assets/Scripts/Game/BattleRuntimeController.ts')
 
   for (const marker of [
-    "'enemy-attack-player'",
+    "'enemy-telegraph-presented'",
     "'enemy-boss-skill'",
     "'soul-orb-picked'",
     'spawnSoulOrb',
@@ -125,6 +128,25 @@ test('battle controller drives enemy contact damage, stage flow, drops, HUD, and
   assert.match(source, /advanceOrdinaryDefeatFlow\(this\.runtime, this\.stageFlow, generation\)/)
   assert.doesNotMatch(source, /pendingEnemyRecycles/)
   assert.doesNotMatch(source, /if \(this\.enemyNodes\.get\(enemyId\) !== enemyNode\) return/)
+})
+
+test('battle controller owns one generation-scoped resolver adapter and all enemy combat listeners', () => {
+  const source = read('assets/Scripts/Game/BattleRuntimeController.ts')
+
+  assert.match(source, /createEnemyCombatResolverAdapter\(1\)/)
+  assert.match(source, /resetEnemyCombatResolverAdapter\(this\.enemyCombatResolver, this\.stageGeneration\)/)
+  assert.match(source, /upsertPlayerCombatActor\(this\.enemyCombatResolver,/)
+  assert.match(source, /upsertEnemyCombatActor\(this\.enemyCombatResolver,/)
+  assert.match(source, /stepEnemyCombatResolverAdapter\(this\.enemyCombatResolver, deltaTime\)/)
+  assert.match(source, /drainEnemyCombatDamage\(this\.enemyCombatResolver\)/)
+  assert.match(source, /drainEnemyTelegraphs\(this\.enemyCombatResolver\)/)
+  assert.match(source, /node\.on\('enemy-telegraph', this\.onEnemyTelegraph, this\)/)
+  assert.match(source, /node\.on\('enemy-hitbox-active', this\.onEnemyHitboxActive, this\)/)
+  assert.match(source, /node\.on\('enemy-projectile-spawned', this\.onEnemyProjectileSpawned, this\)/)
+  assert.match(source, /node\.off\('enemy-telegraph', this\.onEnemyTelegraph, this\)/)
+  assert.match(source, /removeEnemyCombatActor\(this\.enemyCombatResolver, this\.stageGeneration, enemyId\)/)
+  assert.match(source, /onDestroy\(\)[\s\S]*detachEnemyCombatListeners/)
+  assert.doesNotMatch(source, /enemy-attack-player|onEnemyAttack|applyContactDamage|tickContactDamageGate/)
 })
 
 test('boss spawn and settlement are commanded once with delayed generation guards', () => {
@@ -346,19 +368,21 @@ test('all failed visual spawns use the generic runtime rollback', () => {
   assert.doesNotMatch(runtime, /rollbackBossSpawn/)
 })
 
-test('battle controller uses a real contact damage gate and zero-health defeat state', () => {
+test('battle controller presents player damage only after resolver damage events', () => {
   const controller = read('assets/Scripts/Game/BattleRuntimeController.ts')
   const enemy = read('assets/Scripts/Game/EnemyController.ts')
 
   assert.match(controller, /createContactDamageGate/)
-  assert.match(controller, /tickContactDamageGate\(this\.damageGate, deltaTime\)/)
-  assert.match(controller, /applyContactDamage\(this\.damageGate, damage\)/)
+  assert.match(controller, /for \(const event of drainEnemyCombatDamage\(this\.enemyCombatResolver\)\)/)
+  assert.match(controller, /this\.applyResolvedPlayerDamage\(event\.amount\)/)
+  assert.match(controller, /private applyResolvedPlayerDamage\(damage: number\)/)
   assert.match(controller, /applyDirectDamage\(this\.damageGate, damage\)/)
   assert.match(controller, /requestPresentationAction\('hurt', 'battle-runtime-hurt'\)/)
   assert.match(controller, /completePresentationAction\(token\)/)
   assert.match(controller, /playerHurtDuration/)
   assert.match(controller, /markPlayerDefeated\(this\.stageFlow\)\.changed/)
   assert.match(controller, /markBattleAttemptDefeated\(this\.attemptState\)/)
+  assert.doesNotMatch(controller, /applyPlayerDamage\(|applyContactDamage|enemy-attack-player/)
   assert.doesNotMatch(enemy, /enemy-attack-player|role === 'boss' \? 10 : 3/)
 })
 
