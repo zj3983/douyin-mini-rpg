@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   BATTLE_DESIGN_WIDTH,
+  BATTLE_BOTTOM_NAVIGATION_MARGIN,
   BATTLE_NAVIGATION_HEIGHT,
   BATTLE_TOP_HUD_RESERVE,
   computeBattleLayout,
@@ -66,6 +67,7 @@ test('portrait layouts are finite, safe, and deeply frozen', () => {
     assert.ok(layout.actorSafeRect.maxY >= layout.movement.maxY)
     assert.ok(layout.actorSafeRect.minX >= -375 && layout.actorSafeRect.maxX <= 375)
     assert.ok(layout.actorSafeRect.minY >= visibleMinY && layout.actorSafeRect.maxY <= visibleMaxY)
+    assert.ok(layout.navigationTop - BATTLE_NAVIGATION_HEIGHT - visibleMinY >= BATTLE_BOTTOM_NAVIGATION_MARGIN - EPSILON)
     assertPointInside(layout.bossSpawn, layout.actorSafeRect)
     assert.ok(layout.bossMaxVisualBounds.width > 0)
     assert.ok(layout.bossMaxVisualBounds.height > 0)
@@ -119,6 +121,7 @@ test('displayed player frame remains fully inside actor-safe bounds on supported
 test('layout exports the shared HUD navigation and actor sizing constants', () => {
   assert.equal(BATTLE_DESIGN_WIDTH, 750)
   assert.equal(BATTLE_NAVIGATION_HEIGHT, 104)
+  assert.equal(BATTLE_BOTTOM_NAVIGATION_MARGIN, 18)
   assert.equal(BATTLE_TOP_HUD_RESERVE, 210)
   assert.equal(PLAYER_FRAME_WIDTH / PLAYER_FRAME_HEIGHT, 320 / 512)
   assert.ok(PLAYER_FRAME_WIDTH * PLAYER_DISPLAY_SCALE <= 150)
@@ -144,8 +147,9 @@ test('CSS safe insets shift top and bottom limits without stretching the viewpor
   assert.equal(inset.actorSafeRect.minX, base.actorSafeRect.minX)
   assert.equal(inset.actorSafeRect.maxX, base.actorSafeRect.maxX)
   assert.ok(Math.abs(base.movement.maxY - inset.movement.maxY - 39 * 750 / 390) <= EPSILON)
-  assert.ok(Math.abs(inset.navigationTop - base.navigationTop - 21 * 750 / 390) <= EPSILON)
-  assert.ok(Math.abs(inset.movement.minY - base.movement.minY - 21 * 750 / 390) <= EPSILON)
+  const bottomDelta = Math.max(21 * 750 / 390, BATTLE_BOTTOM_NAVIGATION_MARGIN) - BATTLE_BOTTOM_NAVIGATION_MARGIN
+  assert.ok(Math.abs(inset.navigationTop - base.navigationTop - bottomDelta) <= EPSILON)
+  assert.ok(Math.abs(inset.movement.minY - base.movement.minY - bottomDelta) <= EPSILON)
 })
 
 test('malformed dimensions and insets never produce nonfinite layout output', () => {

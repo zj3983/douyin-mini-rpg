@@ -30,6 +30,7 @@ export interface BossVisualPlacement {
 export const BATTLE_DESIGN_WIDTH = 750
 export const BATTLE_MIN_VISIBLE_HEIGHT = 1334
 export const BATTLE_NAVIGATION_HEIGHT = 104
+export const BATTLE_BOTTOM_NAVIGATION_MARGIN = 18
 export const BATTLE_TOP_HUD_RESERVE = 210
 export const PLAYER_FRAME_WIDTH = 320
 export const PLAYER_FRAME_HEIGHT = 512
@@ -71,7 +72,8 @@ export function computeBattleLayout(input: LayoutInput): BattleLayout {
   const topHudReserve = Math.min(BATTLE_TOP_HUD_RESERVE * widthScale, visibleHeight * 0.22)
   const visibleMinY = -visibleHeight / 2
   const visibleMaxY = visibleHeight / 2
-  const navigationTop = visibleMinY + bottomInset + navigationHeight
+  const bottomNavigationMargin = Math.min(BATTLE_BOTTOM_NAVIGATION_MARGIN * widthScale, visibleHeight * 0.04)
+  const navigationTop = visibleMinY + Math.max(bottomInset, bottomNavigationMargin) + navigationHeight
   const actorMinY = navigationTop
   const actorMaxY = visibleMaxY - topInset - topHudReserve
   const actorHeight = actorMaxY - actorMinY
