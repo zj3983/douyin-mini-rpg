@@ -10,6 +10,7 @@ export interface CombatResolverOptions {
 
 export interface HurtboxRegistration {
   readonly actorId: string
+  readonly teamId?: string
   readonly area: Readonly<BattleRect>
   readonly alive?: boolean
   readonly generation: number
@@ -65,6 +66,7 @@ export interface CombatResolverSnapshot {
 
 interface MutableHurtbox {
   actorId: string
+  teamId: string | null
   area: BattleRect
   alive: boolean
   generation: number
@@ -116,6 +118,7 @@ let constructResolver: (capacities: ResolverCapacities) => CombatResolver
 let addHurtbox: (resolver: CombatResolver, registration: HurtboxRegistration) => boolean
 let changeHurtbox: (resolver: CombatResolver, actorId: string, update: HurtboxUpdate) => boolean
 let deleteHurtbox: (resolver: CombatResolver, actorId: string, generation: number) => boolean
+let cancelAttacks: (resolver: CombatResolver, sourceId: string, generation: number) => boolean
 let addHitbox: (resolver: CombatResolver, registration: HitboxRegistration) => number | null
 let deleteHitbox: (resolver: CombatResolver, instanceId: number, generation: number) => boolean
 let addProjectile: (resolver: CombatResolver, registration: ProjectileRegistration) => number | null
@@ -243,6 +246,7 @@ export class CombatResolver {
     addHurtbox = (resolver, registration) => resolver.#registerHurtbox(registration)
     changeHurtbox = (resolver, actorId, update) => resolver.#updateHurtbox(actorId, update)
     deleteHurtbox = (resolver, actorId, generation) => resolver.#removeHurtbox(actorId, generation)
+    cancelAttacks = (resolver, sourceId, generation) => resolver.#cancelRegisteredSourceAttacks(sourceId, generation)
     addHitbox = (resolver, registration) => resolver.#openHitbox(registration)
     deleteHitbox = (resolver, instanceId, generation) => resolver.#closeHitbox(instanceId, generation)
     addProjectile = (resolver, registration) => resolver.#spawnProjectile(registration)
@@ -274,6 +278,7 @@ export class CombatResolver {
     if (!isGeneration(registration?.generation)) throw new TypeError('generation must be a positive safe integer')
     if (!this.#isCurrent(registration.generation)) return false
     requireIdentifier(registration.actorId, 'actorId')
+    if (registration.teamId !== undefined) requireIdentifier(registration.teamId, 'teamId')
     requireArea(registration.area)
     if (registration.alive !== undefined && typeof registration.alive !== 'boolean') {
       throw new TypeError('alive must be boolean')
@@ -282,6 +287,7 @@ export class CombatResolver {
     if (this.#hurtboxes.size >= this.#capacities.maxHurtboxes) throw new RangeError('hurtbox capacity exceeded')
     this.#hurtboxes.set(registration.actorId, {
       actorId: registration.actorId,
+      teamId: registration.teamId ?? null,
       area: cloneArea(registration.area),
       alive: registration.alive ?? true,
       generation: registration.generation,
@@ -423,6 +429,16 @@ export class CombatResolver {
     }
   }
 
+  #cancelRegisteredSourceAttacks(sourceId: string, generation: number): boolean {
+    if (!isGeneration(generation)) throw new TypeError('generation must be a positive safe integer')
+    if (!this.#isCurrent(generation)) return false
+    requireIdentifier(sourceId, 'sourceId')
+    const source = this.#hurtboxes.get(sourceId)
+    if (!source || source.generation !== this.#generation || !source.alive) return false
+    this.#cancelSourceAttacks(sourceId)
+    return true
+  }
+
   #resolveHitboxes(substepStart: number): void {
     const hurtboxes = [...this.#hurtboxes.values()]
       .filter((hurtbox) => hurtbox.alive && hurtbox.generation === this.#generation)
@@ -433,8 +449,13 @@ export class CombatResolver {
         || hitbox.expiresAt <= substepStart + STEP_EPSILON
         || this.#inactiveSources.has(hitbox.sourceId)
       ) continue
+      const sourceTeam = this.#hurtboxes.get(hitbox.sourceId)?.teamId ?? null
       for (const hurtbox of hurtboxes) {
-        if (hurtbox.actorId === hitbox.sourceId || !overlap(hitbox.area, hurtbox.area)) continue
+        if (
+          hurtbox.actorId === hitbox.sourceId
+          || (sourceTeam !== null && hurtbox.teamId === sourceTeam)
+          || !overlap(hitbox.area, hurtbox.area)
+        ) continue
         this.#recordDamage(hitbox, hurtbox.actorId, Math.max(substepStart, hitbox.openedAt), 'hitbox')
       }
     }
@@ -456,8 +477,13 @@ export class CombatResolver {
         y: from.y + projectile.velocity.y * activeDelta,
       }
       const collisions: Array<{ targetId: string; entry: number }> = []
+      const sourceTeam = this.#hurtboxes.get(projectile.sourceId)?.teamId ?? null
       for (const hurtbox of hurtboxes) {
-        if (hurtbox.actorId === projectile.sourceId || projectile.hitTargets.has(hurtbox.actorId)) continue
+        if (
+          hurtbox.actorId === projectile.sourceId
+          || (sourceTeam !== null && hurtbox.teamId === sourceTeam)
+          || projectile.hitTargets.has(hurtbox.actorId)
+        ) continue
         const entry = segmentEntryTime(from, to, hurtbox.area, projectile.radius)
         if (entry !== null) collisions.push({ targetId: hurtbox.actorId, entry })
       }
@@ -552,6 +578,14 @@ export function updateHurtbox(resolver: CombatResolver, actorId: string, update:
 
 export function removeHurtbox(resolver: CombatResolver, actorId: string, generation = resolver.generation): boolean {
   return deleteHurtbox(requireResolver(resolver), actorId, generation)
+}
+
+export function cancelCombatSourceAttacks(
+  resolver: CombatResolver,
+  sourceId: string,
+  generation = resolver.generation,
+): boolean {
+  return cancelAttacks(requireResolver(resolver), sourceId, generation)
 }
 
 export function openHitbox(resolver: CombatResolver, registration: HitboxRegistration): number | null {

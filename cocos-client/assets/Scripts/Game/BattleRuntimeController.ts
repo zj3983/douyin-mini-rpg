@@ -47,12 +47,15 @@ import type { PlayerActionToken } from '../Combat/PlayerMotor.ts'
 import { BattleHudController } from './BattleHudController'
 import { BattleInputController } from './BattleInputController'
 import { DamageNumberController } from './DamageNumberController'
+import { EnemyController } from './EnemyController'
 import { EnemySpawner } from './EnemySpawner'
 import {
+  cancelEnemyCombatActorAttacks,
   consumeEnemyCombatCommand,
   createEnemyCombatResolverAdapter,
   drainEnemyCombatDamage,
   drainEnemyTelegraphs,
+  pauseEnemyCombatResolverAdapter,
   removeEnemyCombatActor,
   resetEnemyCombatResolverAdapter,
   stepEnemyCombatResolverAdapter,
@@ -204,6 +207,7 @@ export class BattleRuntimeController extends Component {
     this.attemptState = beginBattleAttempt(this.attemptState, this.stageNumber)
     this.stageGeneration = this.attemptState.generation
     resetEnemyCombatResolverAdapter(this.enemyCombatResolver, this.stageGeneration)
+    this.setEnemyControllersPaused(false)
     this.bossSkillSequence = 0
     this.stageSettlement = createStageSettlementState(this.stageGeneration)
     const stage = stageProfileFromDesign(this.designData.json as CultivationDesignData, this.stageNumber)
@@ -240,6 +244,7 @@ export class BattleRuntimeController extends Component {
     node.off('enemy-boss-skill', this.onBossSkillVisual, this)
     node.on('enemy-boss-skill', this.onBossSkillVisual, this)
     this.upsertEnemyCombatActor(enemy, node)
+    node.getComponent(EnemyController)?.setCombatPaused(this.battleFrozen)
     if (enemy.profile.role === 'boss') this.updateBossHud(enemy)
     return node
   }
@@ -433,6 +438,8 @@ export class BattleRuntimeController extends Component {
 
   private freezeBattle() {
     freezeBattle(this.battleFreeze)
+    pauseEnemyCombatResolverAdapter(this.enemyCombatResolver, this.stageGeneration, true)
+    this.setEnemyControllersPaused(true)
     this.playerNode?.getComponent(PlayerController)?.stop()
     this.battleInput?.setInputEnabled(false)
   }
@@ -448,6 +455,7 @@ export class BattleRuntimeController extends Component {
   }
 
   onDestroy() {
+    this.setEnemyControllersPaused(true)
     for (const node of this.enemyNodes.values()) this.detachEnemyCombatListeners(node)
     resetEnemyCombatResolverAdapter(
       this.enemyCombatResolver,
@@ -460,12 +468,14 @@ export class BattleRuntimeController extends Component {
     node.on('enemy-telegraph', this.onEnemyTelegraph, this)
     node.on('enemy-hitbox-active', this.onEnemyHitboxActive, this)
     node.on('enemy-projectile-spawned', this.onEnemyProjectileSpawned, this)
+    node.on('enemy-attack-cancelled', this.onEnemyCombatCancelled, this)
   }
 
   private detachEnemyCombatListeners(node: Node) {
     node.off('enemy-telegraph', this.onEnemyTelegraph, this)
     node.off('enemy-hitbox-active', this.onEnemyHitboxActive, this)
     node.off('enemy-projectile-spawned', this.onEnemyProjectileSpawned, this)
+    node.off('enemy-attack-cancelled', this.onEnemyCombatCancelled, this)
     node.off('enemy-boss-skill', this.onBossSkillVisual, this)
   }
 
@@ -479,6 +489,16 @@ export class BattleRuntimeController extends Component {
 
   private onEnemyProjectileSpawned(enemyId: number, command: Extract<EnemyCommand, { type: 'spawn-projectile' }>) {
     consumeEnemyCombatCommand(this.enemyCombatResolver, this.stageGeneration, enemyId, command)
+  }
+
+  private onEnemyCombatCancelled(enemyId: number) {
+    cancelEnemyCombatActorAttacks(this.enemyCombatResolver, this.stageGeneration, enemyId)
+  }
+
+  private setEnemyControllersPaused(paused: boolean) {
+    for (const node of this.enemyNodes.values()) {
+      node.getComponent(EnemyController)?.setCombatPaused(paused)
+    }
   }
 
   private syncCombatActors() {

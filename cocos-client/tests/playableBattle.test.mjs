@@ -68,7 +68,7 @@ test('enemy spawner binds ordinary kinds, live context providers, and distinct l
   assert.match(source, /profile\.id === 'green-wing-moth'/)
   assert.match(source, /enemy\.position = \{ x: spawnX, y: spawnY \}/)
   assert.match(source, /battleBounds:\s*\(\) => this\.currentBattleBounds\(\)/)
-  assert.match(source, /neighbors:\s*\(\) => this\.livingNeighbors\(enemy\.id\)/)
+  assert.match(source, /neighbors:\s*\(\) => this\.livingNeighbors\(\)/)
   assert.match(source, /if \(kind\)[\s\S]*controller\.bindRuntimeEnemy\(enemy,\s*\{[\s\S]*kind,[\s\S]*\}\)[\s\S]*else controller\.bindRuntimeEnemy\(enemy\)/)
   assert.doesNotMatch(source, /createEnemyBrain\([^\n]*bamboo-warden/)
 })
@@ -102,6 +102,9 @@ test('enemy controller forwards active-frame commands and never emits direct pla
   assert.doesNotMatch(source, /attackCooldown|cooldownLeft|contactDamage|contact-damage/)
   assert.doesNotMatch(source, /new Node\([^\n]*(?:wing|limb)/i)
   assert.match(source, /consumeCommands\(hurtEnemyBrain\(this\.brain, this\.brain\.elapsed\)\)/)
+  assert.match(source, /setCombatPaused\(paused: boolean\)/)
+  assert.match(source, /if \(this\.combatPaused\) return/)
+  assert.match(source, /emit\('enemy-attack-cancelled', this\.runtimeEnemy\.id\)/)
 })
 
 test('battle controller drives resolved enemy damage, stage flow, drops, HUD, and manual clear', () => {
@@ -143,10 +146,24 @@ test('battle controller owns one generation-scoped resolver adapter and all enem
   assert.match(source, /node\.on\('enemy-telegraph', this\.onEnemyTelegraph, this\)/)
   assert.match(source, /node\.on\('enemy-hitbox-active', this\.onEnemyHitboxActive, this\)/)
   assert.match(source, /node\.on\('enemy-projectile-spawned', this\.onEnemyProjectileSpawned, this\)/)
+  assert.match(source, /node\.on\('enemy-attack-cancelled', this\.onEnemyCombatCancelled, this\)/)
+  assert.match(source, /pauseEnemyCombatResolverAdapter\(this\.enemyCombatResolver, this\.stageGeneration, true\)/)
+  assert.match(source, /getComponent\(EnemyController\)\?\.setCombatPaused\(paused\)/)
   assert.match(source, /node\.off\('enemy-telegraph', this\.onEnemyTelegraph, this\)/)
   assert.match(source, /removeEnemyCombatActor\(this\.enemyCombatResolver, this\.stageGeneration, enemyId\)/)
   assert.match(source, /onDestroy\(\)[\s\S]*detachEnemyCombatListeners/)
   assert.doesNotMatch(source, /enemy-attack-player|onEnemyAttack|applyContactDamage|tickContactDamageGate/)
+})
+
+test('enemy spawner shares one immutable neighbor snapshot across all brains per frame', () => {
+  const source = read('assets/Scripts/Game/EnemySpawner.ts')
+
+  assert.match(source, /private neighborSnapshot: readonly EnemyNeighborSnapshot\[\]/)
+  assert.match(source, /lateUpdate\(\)/)
+  assert.match(source, /this\.rebuildNeighborSnapshot\(\)/)
+  assert.match(source, /neighbors: \(\) => this\.livingNeighbors\(\)/)
+  assert.doesNotMatch(source, /livingNeighbors\(excludedId: number\)/)
+  assert.match(source, /return this\.neighborSnapshot/)
 })
 
 test('boss spawn and settlement are commanded once with delayed generation guards', () => {

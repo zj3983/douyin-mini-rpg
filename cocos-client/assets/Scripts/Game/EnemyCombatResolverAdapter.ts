@@ -1,5 +1,6 @@
 import type { BattleRect, Point2 } from '../Combat/CombatTypes.ts'
 import {
+  cancelCombatSourceAttacks,
   createCombatResolver,
   drainDamageEvents,
   openHitbox,
@@ -51,6 +52,8 @@ let constructAdapter: (generation: number) => EnemyCombatResolverAdapter
 let updatePlayer: (adapter: EnemyCombatResolverAdapter, update: CombatActorUpdate) => boolean
 let updateEnemy: (adapter: EnemyCombatResolverAdapter, update: EnemyCombatActorUpdate) => boolean
 let removeEnemy: (adapter: EnemyCombatResolverAdapter, generation: number, enemyId: number) => boolean
+let cancelEnemyAttacks: (adapter: EnemyCombatResolverAdapter, generation: number, enemyId: number) => boolean
+let pauseAdapter: (adapter: EnemyCombatResolverAdapter, generation: number, paused: boolean) => boolean
 let consumeCommand: (
   adapter: EnemyCombatResolverAdapter,
   generation: number,
@@ -114,6 +117,7 @@ export class EnemyCombatResolverAdapter {
   #generation: number
   #registeredActors = new Set<string>()
   #telegraphs: EnemyTelegraphDelivery[] = []
+  #paused = false
 
   private constructor(token: symbol, generation: number) {
     if (token !== ADAPTER_TOKEN) {
@@ -129,6 +133,8 @@ export class EnemyCombatResolverAdapter {
     updatePlayer = (adapter, update) => adapter.#upsertActor(PLAYER_ACTOR_ID, update)
     updateEnemy = (adapter, update) => adapter.#upsertActor(enemyActorId(update.enemyId), update)
     removeEnemy = (adapter, generation, enemyId) => adapter.#removeEnemy(generation, enemyId)
+    cancelEnemyAttacks = (adapter, generation, enemyId) => adapter.#cancelEnemyAttacks(generation, enemyId)
+    pauseAdapter = (adapter, generation, paused) => adapter.#setPaused(generation, paused)
     consumeCommand = (adapter, generation, enemyId, command) => adapter.#consume(generation, enemyId, command)
     advanceAdapter = (adapter, deltaSeconds) => adapter.#step(deltaSeconds)
     drainAdapterDamage = (adapter) => adapter.#drainDamage()
@@ -155,6 +161,7 @@ export class EnemyCombatResolverAdapter {
     }
     const registered = registerHurtbox(this.#resolver, {
       actorId,
+      teamId: actorId === PLAYER_ACTOR_ID ? 'player' : 'enemy',
       area,
       alive: update.alive,
       generation: update.generation,
@@ -172,11 +179,35 @@ export class EnemyCombatResolverAdapter {
     return removeHurtbox(this.#resolver, actorId, generation)
   }
 
+  #cancelEnemyAttacks(generation: number, enemyId: number): boolean {
+    if (!isGeneration(generation)) throw new TypeError('generation must be a positive safe integer')
+    if (!isEnemyId(enemyId)) throw new TypeError('enemyId must be a non-negative safe integer')
+    if (!this.#isCurrent(generation)) return false
+    const sourceId = enemyActorId(enemyId)
+    if (!this.#registeredActors.has(sourceId)) return false
+    return cancelCombatSourceAttacks(this.#resolver, sourceId, generation)
+  }
+
+  #setPaused(generation: number, paused: boolean): boolean {
+    if (!isGeneration(generation)) throw new TypeError('generation must be a positive safe integer')
+    if (typeof paused !== 'boolean') throw new TypeError('paused must be boolean')
+    if (!this.#isCurrent(generation)) return false
+    this.#paused = paused
+    if (!paused) return true
+    for (const actorId of this.#registeredActors) {
+      if (actorId !== PLAYER_ACTOR_ID) cancelCombatSourceAttacks(this.#resolver, actorId, generation)
+    }
+    drainDamageEvents(this.#resolver)
+    this.#telegraphs = []
+    return true
+  }
+
   #consume(generation: number, enemyId: number, command: EnemyCommand): boolean {
     if (!isGeneration(generation)) throw new TypeError('generation must be a positive safe integer')
     if (!isEnemyId(enemyId)) throw new TypeError('enemyId must be a non-negative safe integer')
     if (!this.#isCurrent(generation)) return false
     const sourceId = enemyActorId(enemyId)
+    if (this.#paused || !this.#registeredActors.has(sourceId)) return false
     switch (command.type) {
       case 'show-telegraph':
         if (this.#telegraphs.length >= MAX_TELEGRAPHS) throw new RangeError('telegraph capacity exceeded')
@@ -216,6 +247,7 @@ export class EnemyCombatResolverAdapter {
   }
 
   #step(deltaSeconds: number): void {
+    if (this.#paused) return
     stepCombatResolver(this.#resolver, deltaSeconds)
   }
 
@@ -253,6 +285,7 @@ export class EnemyCombatResolverAdapter {
     this.#generation = resetCombatResolverGeneration(this.#resolver, generation)
     this.#registeredActors.clear()
     this.#telegraphs = []
+    this.#paused = false
     return this.#generation
   }
 }
@@ -283,6 +316,22 @@ export function removeEnemyCombatActor(
   enemyId: number,
 ): boolean {
   return removeEnemy(requireAdapter(adapter), generation, enemyId)
+}
+
+export function cancelEnemyCombatActorAttacks(
+  adapter: EnemyCombatResolverAdapter,
+  generation: number,
+  enemyId: number,
+): boolean {
+  return cancelEnemyAttacks(requireAdapter(adapter), generation, enemyId)
+}
+
+export function pauseEnemyCombatResolverAdapter(
+  adapter: EnemyCombatResolverAdapter,
+  generation: number,
+  paused: boolean,
+): boolean {
+  return pauseAdapter(requireAdapter(adapter), generation, paused)
 }
 
 export function consumeEnemyCombatCommand(

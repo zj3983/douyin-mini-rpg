@@ -293,7 +293,7 @@ export class EnemyBrainState {
     }
     return this.#phase
   }
-  get elapsed(): number { return this.#elapsed }
+  get elapsed(): number { return Math.round(this.#elapsed * 1e9) / 1e9 }
   get position(): Readonly<Point2> { return freezePoint(this.#position) }
   get selectedPosition(): Readonly<Point2> { return freezePoint(this.#selectedPosition) }
   get sampledTarget(): Readonly<Point2> | null { return this.#sampledTarget ? freezePoint(this.#sampledTarget) : null }
@@ -314,7 +314,7 @@ export class EnemyBrainState {
       id: this.#id,
       phase: this.#phase,
       attack: this.#attack,
-      elapsed: this.#elapsed,
+      elapsed: this.elapsed,
       position: this.position,
       selectedPosition: this.selectedPosition,
       sampledTarget: this.sampledTarget,
@@ -515,7 +515,7 @@ export class EnemyBrainState {
   #emitActiveAttack(commands: EnemyCommand[]): void {
     if (this.#phase !== 'attack') return
     const attackElapsed = this.#elapsed - this.#phaseStartedAt
-    if (this.#kind === 'moss-wolf' && !this.#activeHitboxEmitted && attackElapsed >= 0.08) {
+    if (this.#kind === 'moss-wolf' && !this.#activeHitboxEmitted && attackElapsed + DECISION_EPSILON >= 0.08) {
       this.#activeHitboxEmitted = true
       commands.push({
         type: 'activate-hitbox',
@@ -526,7 +526,12 @@ export class EnemyBrainState {
       })
       return
     }
-    if (this.#kind === 'green-wing-moth' && this.#attack === 'dive' && !this.#activeHitboxEmitted && attackElapsed >= 0.1) {
+    if (
+      this.#kind === 'green-wing-moth'
+      && this.#attack === 'dive'
+      && !this.#activeHitboxEmitted
+      && attackElapsed + DECISION_EPSILON >= 0.1
+    ) {
       this.#activeHitboxEmitted = true
       commands.push({
         type: 'activate-hitbox',
@@ -586,28 +591,59 @@ export class EnemyBrainState {
       this.#velocity = { x: 0, y: 0 }
       return
     }
-    this.#position.x = clamp(nextX, bounds.minX, bounds.maxX)
-    this.#position.y = this.#kind === 'moss-wolf' ? this.#groundY : clamp(nextY, bounds.minY, bounds.maxY)
+    this.#position.x = Math.round(clamp(nextX, bounds.minX, bounds.maxX) * 1e9) / 1e9
+    this.#position.y = this.#kind === 'moss-wolf'
+      ? this.#groundY
+      : Math.round(clamp(nextY, bounds.minY, bounds.maxY) * 1e9) / 1e9
   }
 
-  #advanceSubstep(context: EnemyContext, deltaSeconds: number, commands: EnemyCommand[]): void {
-    this.#elapsed = Math.round((this.#elapsed + deltaSeconds) * 1e12) / 1e12
-    while (this.#nextDecisionAt <= this.#elapsed + DECISION_EPSILON) {
-      this.#runDecision(context, commands)
-      this.#nextDecisionAt = Math.round((this.#nextDecisionAt + DECISION_INTERVAL_SECONDS) * 1e12) / 1e12
+  #nextActiveEventAt(): number | null {
+    if (this.#phase !== 'attack') return null
+    if (this.#kind === 'moss-wolf' && !this.#activeHitboxEmitted) return this.#phaseStartedAt + 0.08
+    if (this.#kind === 'green-wing-moth' && this.#attack === 'dive' && !this.#activeHitboxEmitted) {
+      return this.#phaseStartedAt + 0.1
     }
-    this.#emitActiveAttack(commands)
-    this.#integrate(deltaSeconds, context.battleBounds)
+    if (this.#kind === 'green-wing-moth' && this.#attack === 'spirit-orb' && !this.#projectilesEmitted) {
+      return this.#phaseStartedAt
+    }
+    return null
+  }
+
+  #advanceMotionTo(target: number, context: EnemyContext, commands: EnemyCommand[]): void {
+    while (this.#elapsed + DECISION_EPSILON < target) {
+      const next = Math.min(target, this.#elapsed + MAX_SUBSTEP_SECONDS)
+      this.#integrate(next - this.#elapsed, context.battleBounds)
+      this.#elapsed = next
+      this.#emitActiveAttack(commands)
+    }
+    this.#elapsed = target
+  }
+
+  #advanceTimeline(context: EnemyContext, target: number, commands: EnemyCommand[]): void {
+    while (this.#elapsed + DECISION_EPSILON < target) {
+      const activeAt = this.#nextActiveEventAt()
+      const eventAt = Math.min(
+        target,
+        Math.max(this.#elapsed, this.#nextDecisionAt),
+        activeAt === null ? Number.POSITIVE_INFINITY : Math.max(this.#elapsed, activeAt),
+      )
+      this.#advanceMotionTo(eventAt, context, commands)
+      while (this.#nextDecisionAt <= this.#elapsed + DECISION_EPSILON) {
+        this.#runDecision(context, commands)
+        this.#nextDecisionAt = Math.round((this.#nextDecisionAt + DECISION_INTERVAL_SECONDS) * 1e12) / 1e12
+      }
+      this.#emitActiveAttack(commands)
+    }
+    this.#elapsed = target
   }
 
   #step(context: EnemyContext, deltaSeconds: number): readonly EnemyCommand[] {
     if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0) return Object.freeze([])
     validateContext(context)
     const clampedDelta = Math.min(deltaSeconds, MAX_EXTERNAL_DELTA_SECONDS)
-    const substeps = Math.max(1, Math.ceil(clampedDelta / MAX_SUBSTEP_SECONDS - DECISION_EPSILON))
-    const substepDelta = clampedDelta / substeps
+    const target = this.#elapsed + clampedDelta
     const commands: EnemyCommand[] = []
-    for (let index = 0; index < substeps; index += 1) this.#advanceSubstep(context, substepDelta, commands)
+    this.#advanceTimeline(context, target, commands)
     this.#updateVelocity()
     commands.push({ type: 'move', velocity: this.#velocity })
     const targetX = this.#sampledTarget?.x ?? context.player.position.x

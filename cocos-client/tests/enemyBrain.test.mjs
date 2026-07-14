@@ -216,6 +216,23 @@ test('partitioned simulation is deterministic and movement commands update every
   assert.equal(advance(coarse, 2.1, [0.05]).filter((command) => command.type === 'move').length, 2)
 })
 
+test('decision and active-window boundaries are invariant between 19ms and 60Hz partitions', () => {
+  const nineteenMs = createEnemyBrain('moss-wolf', 13, { x: 300, y: -80 }, 0x13579bdf)
+  const sixtyHz = createEnemyBrain('moss-wolf', 13, { x: 300, y: -80 }, 0x13579bdf)
+  const coarse = advance(nineteenMs, 0.81, [0.019])
+  const fine = advance(sixtyHz, 0.81, [1 / 60])
+  const semantic = (commands) => commands.filter((command) => command.type !== 'move' && command.type !== 'face')
+
+  assert.deepEqual(nineteenMs.snapshot(), sixtyHz.snapshot())
+  assert.deepEqual(semantic(coarse), semantic(fine))
+
+  coarse.push(...advance(nineteenMs, 2, [0.019]))
+  fine.push(...advance(sixtyHz, 2, [1 / 60]))
+  assert.deepEqual(nineteenMs.snapshot(), sixtyHz.snapshot())
+  assert.deepEqual(semantic(coarse), semantic(fine))
+  assert.equal(coarse.filter((command) => command.type === 'activate-hitbox').length, 1)
+})
+
 test('invalid creation and context values are rejected while invalid dt is inert and capped', () => {
   for (const seed of [-1, 0.5, Number.NaN, Infinity, 0x100000000]) {
     assert.throws(() => createEnemyBrain('moss-wolf', 1, { x: 0, y: 0 }, seed), /uint32/)

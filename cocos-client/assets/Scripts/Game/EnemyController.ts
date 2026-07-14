@@ -44,6 +44,7 @@ export class EnemyController extends Component {
   private facing: EnemyFacing = -1
   private bossActionLeft = 0
   private eventsBound = false
+  private combatPaused = false
 
   onEnable() {
     this.bindEvents()
@@ -71,6 +72,10 @@ export class EnemyController extends Component {
     this.runtimeEnemy = null
   }
 
+  setCombatPaused(paused: boolean) {
+    this.combatPaused = paused
+  }
+
   setTarget(worldPosition: Vec3) {
     this.target = worldPosition.clone()
     this.targetNode = null
@@ -93,6 +98,7 @@ export class EnemyController extends Component {
   }
 
   update(deltaTime: number) {
+    if (this.combatPaused) return
     if (!this.target || !this.runtimeEnemy?.alive) return
     if (!this.brain || !this.brainBinding) {
       this.updateBossPresentation(deltaTime)
@@ -188,7 +194,8 @@ export class EnemyController extends Component {
   }
 
   private onEnemyHit() {
-    if (!this.brain) return
+    if (!this.brain || !this.runtimeEnemy) return
+    this.node.emit('enemy-attack-cancelled', this.runtimeEnemy.id)
     this.consumeCommands(hurtEnemyBrain(this.brain, this.brain.elapsed))
     this.syncRuntimePosition()
   }
@@ -228,5 +235,6 @@ export class EnemyController extends Component {
     this.bossActionLeft = 0
     this.moving = false
     this.facing = -1
+    this.combatPaused = false
   }
 }

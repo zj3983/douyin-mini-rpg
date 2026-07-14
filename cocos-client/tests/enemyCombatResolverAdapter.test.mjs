@@ -3,11 +3,13 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import {
+  cancelEnemyCombatActorAttacks,
   consumeEnemyCombatCommand,
   createEnemyCombatResolverAdapter,
   drainEnemyCombatDamage,
   drainEnemyTelegraphs,
   enemyCombatAdapterSnapshot,
+  pauseEnemyCombatResolverAdapter,
   removeEnemyCombatActor,
   resetEnemyCombatResolverAdapter,
   stepEnemyCombatResolverAdapter,
@@ -16,6 +18,7 @@ import {
 } from '../assets/Scripts/Game/EnemyCombatResolverAdapter.ts'
 import {
   createEnemyBrain,
+  hurtEnemyBrain,
   mapEnemyAnimationAction,
   stepEnemyBrain,
 } from '../assets/Scripts/Combat/EnemyBrain.ts'
@@ -148,6 +151,103 @@ test('generation reset clears attacks and rejects stale actor updates and comman
   consumeEnemyCombatCommand(adapter, 8, 1, hitboxCommand())
   stepEnemyCombatResolverAdapter(adapter, 1 / 60)
   assert.equal(drainEnemyCombatDamage(adapter).length, 1)
+})
+
+test('unregistered enemy ids cannot create telegraphs hitboxes or projectiles', () => {
+  const adapter = createEnemyCombatResolverAdapter(10)
+  player(adapter, 10)
+
+  assert.equal(consumeEnemyCombatCommand(adapter, 10, 999, hitboxCommand()), false)
+  assert.equal(consumeEnemyCombatCommand(adapter, 10, 999, projectileCommand()), false)
+  assert.equal(consumeEnemyCombatCommand(adapter, 10, 999, Object.freeze({
+    type: 'show-telegraph',
+    attackId: 'unknown:999:1',
+    area: Object.freeze({ minX: -10, maxX: 10, minY: -10, maxY: 10 }),
+    duration: 0.4,
+  })), false)
+  stepEnemyCombatResolverAdapter(adapter, 0.25)
+
+  assert.deepEqual(drainEnemyCombatDamage(adapter), [])
+  assert.deepEqual(drainEnemyTelegraphs(adapter), [])
+  assert.equal(enemyCombatAdapterSnapshot(adapter).hitboxCount, 0)
+  assert.equal(enemyCombatAdapterSnapshot(adapter).projectileCount, 0)
+})
+
+test('hurt cancels old source attacks before the player enters their former area', () => {
+  const adapter = createEnemyCombatResolverAdapter(11)
+  const brain = createEnemyBrain('moss-wolf', 4, { x: 0, y: -80 }, 4)
+  player(adapter, 11, { x: 180, y: -80 })
+  enemy(adapter, 11, 4, brain.position)
+  assert.equal(consumeEnemyCombatCommand(adapter, 11, 4, hitboxCommand({
+    attackId: 'wolf-pounce:4:1',
+    duration: 2,
+  })), true)
+  assert.equal(consumeEnemyCombatCommand(adapter, 11, 4, projectileCommand({
+    attackId: 'moth-orb:4:1',
+    origin: { x: -100, y: -80 },
+    velocity: { x: 100, y: 0 },
+    duration: 2,
+  })), true)
+
+  assert.equal(cancelEnemyCombatActorAttacks(adapter, 11, 4), true)
+  assert.equal(hurtEnemyBrain(brain, brain.elapsed).some((command) => command.type === 'animate'), true)
+  assert.equal(brain.phase, 'hurt')
+  player(adapter, 11, { x: 0, y: -80 })
+  stepEnemyCombatResolverAdapter(adapter, 0.25)
+
+  assert.deepEqual(drainEnemyCombatDamage(adapter), [])
+  assert.equal(enemyCombatAdapterSnapshot(adapter).hitboxCount, 0)
+  assert.equal(enemyCombatAdapterSnapshot(adapter).projectileCount, 0)
+})
+
+test('18 enemies remain bounded during a long freeze and resume without queued attacks', () => {
+  const adapter = createEnemyCombatResolverAdapter(12)
+  player(adapter, 12)
+  for (let enemyId = 1; enemyId <= 18; enemyId += 1) enemy(adapter, 12, enemyId)
+
+  assert.equal(pauseEnemyCombatResolverAdapter(adapter, 12, true), true)
+  for (let tick = 0; tick < 1000; tick += 1) {
+    for (let enemyId = 1; enemyId <= 18; enemyId += 1) {
+      assert.equal(consumeEnemyCombatCommand(adapter, 12, enemyId, hitboxCommand({
+        attackId: `frozen:${enemyId}:${tick}`,
+        duration: 1,
+      })), false)
+    }
+    stepEnemyCombatResolverAdapter(adapter, 0.25)
+  }
+  assert.equal(enemyCombatAdapterSnapshot(adapter).hitboxCount, 0)
+  assert.deepEqual(drainEnemyCombatDamage(adapter), [])
+
+  assert.equal(pauseEnemyCombatResolverAdapter(adapter, 12, false), true)
+  for (let enemyId = 1; enemyId <= 18; enemyId += 1) {
+    enemy(adapter, 12, enemyId)
+    assert.equal(consumeEnemyCombatCommand(adapter, 12, enemyId, hitboxCommand({
+      attackId: `resumed:${enemyId}`,
+    })), true)
+  }
+  stepEnemyCombatResolverAdapter(adapter, 1 / 60)
+  assert.equal(drainEnemyCombatDamage(adapter).length, 18)
+})
+
+test('pool reuse and generation reset cancel old authority before an id can attack again', () => {
+  const adapter = createEnemyCombatResolverAdapter(20)
+  player(adapter, 20)
+  enemy(adapter, 20, 7)
+  consumeEnemyCombatCommand(adapter, 20, 7, hitboxCommand({ attackId: 'old-pool', duration: 3 }))
+  consumeEnemyCombatCommand(adapter, 20, 7, projectileCommand({ attackId: 'old-orb', duration: 3 }))
+  assert.equal(removeEnemyCombatActor(adapter, 20, 7), true)
+  assert.equal(consumeEnemyCombatCommand(adapter, 20, 7, hitboxCommand({ attackId: 'removed' })), false)
+  assert.equal(enemyCombatAdapterSnapshot(adapter).hitboxCount, 0)
+  assert.equal(enemyCombatAdapterSnapshot(adapter).projectileCount, 0)
+
+  enemy(adapter, 20, 7)
+  assert.equal(consumeEnemyCombatCommand(adapter, 20, 7, hitboxCommand({ attackId: 'reused' })), true)
+  assert.equal(resetEnemyCombatResolverAdapter(adapter, 21), 21)
+  assert.equal(consumeEnemyCombatCommand(adapter, 20, 7, hitboxCommand({ attackId: 'stale-generation' })), false)
+  player(adapter, 21)
+  enemy(adapter, 21, 7)
+  stepEnemyCombatResolverAdapter(adapter, 0.25)
+  assert.deepEqual(drainEnemyCombatDamage(adapter), [])
 })
 
 test('real brain commands map to the current atlas and live damage begins only at the active frame', () => {

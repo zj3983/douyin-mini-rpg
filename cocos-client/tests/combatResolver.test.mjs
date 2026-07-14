@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  cancelCombatSourceAttacks,
   closeHitbox,
   CombatResolver,
   createCombatResolver,
@@ -197,6 +198,20 @@ test('removing a source is idempotent and suppresses all attacks it already owns
   assert.equal(resolver.snapshot().projectileCount, 0)
   stepCombatResolver(resolver, 0.25)
   assert.deepEqual(drainDamageEvents(resolver), [])
+})
+
+test('cancelling a live source clears attacks without unregistering its hurtbox', () => {
+  const resolver = createCombatResolver()
+  registerHurtbox(resolver, { actorId: 'player', area: box(100, 0), generation: resolver.generation })
+  registerHurtbox(resolver, { actorId: 'wolf:1', area: box(0, 0), generation: resolver.generation })
+  hitbox(resolver, { duration: 2 })
+  projectile(resolver, { sourceId: 'wolf:1', duration: 2 })
+
+  assert.equal(cancelCombatSourceAttacks(resolver, 'wolf:1', resolver.generation), true)
+  assert.equal(resolver.snapshot().hurtboxCount, 2)
+  assert.equal(resolver.snapshot().hitboxCount, 0)
+  assert.equal(resolver.snapshot().projectileCount, 0)
+  assert.equal(hitbox(resolver), 3)
 })
 
 test('generation reset clears authority and rejects stale registrations and attacks', () => {

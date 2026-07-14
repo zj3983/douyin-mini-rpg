@@ -36,6 +36,8 @@ export class EnemySpawner extends Component {
   bossScale = 1.45
 
   private ordinaryControllers = new Set<EnemyController>()
+  private neighborSnapshot: readonly EnemyNeighborSnapshot[] = Object.freeze([])
+  private neighborSnapshotDirty = true
 
   spawnEnemy(enemy: BattleEnemy) {
     if (!this.enemyPool) return null
@@ -61,11 +63,12 @@ export class EnemySpawner extends Component {
       const kind = this.ordinaryKind(enemy)
       if (kind) {
         this.ordinaryControllers.add(controller)
+        this.neighborSnapshotDirty = true
         controller.bindRuntimeEnemy(enemy, {
           kind,
           seed: Math.imul(enemy.id, 2654435761) >>> 0,
           battleBounds: () => this.currentBattleBounds(),
-          neighbors: () => this.livingNeighbors(enemy.id),
+          neighbors: () => this.livingNeighbors(),
         })
       } else controller.bindRuntimeEnemy(enemy)
       if (this.playerTarget) controller.setTargetNode(this.playerTarget, enemy.profile.role === 'ground')
@@ -85,10 +88,18 @@ export class EnemySpawner extends Component {
     return this.enemyPool?.hasAvailableSlot() ?? false
   }
 
+  lateUpdate() {
+    this.neighborSnapshotDirty = true
+    this.rebuildNeighborSnapshot()
+  }
+
   despawnEnemy(node: Node) {
     const visual = node.getComponent(EnemyVisualController)
     const controller = node.getComponent(EnemyController)
-    if (controller) this.ordinaryControllers.delete(controller)
+    if (controller) {
+      this.ordinaryControllers.delete(controller)
+      this.neighborSnapshotDirty = true
+    }
     visual?.prepareForPool()
     controller?.prepareForPool()
     this.enemyPool?.despawn(node)
@@ -100,14 +111,20 @@ export class EnemySpawner extends Component {
     return null
   }
 
-  private livingNeighbors(excludedId: number): readonly EnemyNeighborSnapshot[] {
+  private livingNeighbors(): readonly EnemyNeighborSnapshot[] {
+    if (this.neighborSnapshotDirty) this.rebuildNeighborSnapshot()
+    return this.neighborSnapshot
+  }
+
+  private rebuildNeighborSnapshot() {
     const neighbors: EnemyNeighborSnapshot[] = []
     for (const controller of this.ordinaryControllers) {
       const snapshot = controller.enemyNeighborSnapshot()
-      if (snapshot && snapshot.id !== excludedId && snapshot.alive) neighbors.push(snapshot)
+      if (snapshot?.alive) neighbors.push(snapshot)
     }
     neighbors.sort((left, right) => left.id - right.id)
-    return Object.freeze(neighbors)
+    this.neighborSnapshot = Object.freeze(neighbors)
+    this.neighborSnapshotDirty = false
   }
 
   private currentBattleBounds(): Readonly<BattleRect> {
