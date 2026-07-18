@@ -6,6 +6,7 @@ import { resolve } from 'node:path'
 import { findCharacter, findArtifact, monstersForTheme, skillsForCharacter } from '../tools/asset-catalog-runtime.mjs'
 
 const catalog = JSON.parse(readFileSync(resolve('assets/Data/asset-catalog.json'), 'utf8'))
+const animationAtlas = JSON.parse(readFileSync(resolve('assets/Data/animation-atlas.json'), 'utf8'))
 const resourceRoot = 'assets/resources'
 
 function pngSize(assetPath) {
@@ -29,16 +30,32 @@ test('character catalog defines portraits, motion sets, artifacts, and innate sk
   }
 })
 
-test('monster catalog is grouped by scene theme and includes animation slots', () => {
+test('monster catalog is grouped by scene theme and resolves canonical actor atlases', () => {
   assert.equal(catalog.monsters.length >= 12, true)
+  const monsterActors = new Map(
+    animationAtlas.actors
+      .filter((actor) => actor.type === 'monster')
+      .map((actor) => [actor.id, actor]),
+  )
 
   for (const monster of catalog.monsters) {
     assert.equal(Boolean(monster.theme), true)
-    assert.equal(Boolean(monster.sprite), true)
-    assert.deepEqual(Object.keys(monster.motions), ['idle', 'move', 'attack', 'hurt', 'death'])
-    assert.deepEqual(Object.keys(monster.motionFrames), ['idle', 'move', 'attack', 'hurt', 'death'])
+    assert.equal(monster.animationActorId, monster.id)
+    assert.equal('sprite' in monster, false)
+    assert.equal('motions' in monster, false)
+    assert.equal('motionFrames' in monster, false)
     assert.equal(Boolean(monster.skillCue), true)
+
+    const actor = monsterActors.get(monster.animationActorId)
+    assert.ok(actor, `${monster.animationActorId} should exist in animation-atlas.json`)
+    assert.ok(actor.actions.length >= 5)
+    for (const action of actor.actions) {
+      assert.equal(action.atlas.startsWith('Assets/ActorAtlases/'), true)
+      assert.equal(existsSync(resolve(resourceRoot, action.atlas)), true, `${action.atlas} should exist`)
+    }
   }
+
+  assert.equal(existsSync(resolve(resourceRoot, 'Assets/Monsters')), false)
 })
 
 test('skill catalog separates icon, projectile, impact, and full-screen effect assets', () => {
@@ -81,8 +98,6 @@ test('catalog image paths exist under Cocos assets', () => {
   const imagePaths = [
     ...catalog.characters.flatMap((character) => [character.portrait, character.combatSprite]),
     ...catalog.characters.flatMap((character) => Object.values(character.motionFrames)),
-    ...catalog.monsters.map((monster) => monster.sprite),
-    ...catalog.monsters.flatMap((monster) => Object.values(monster.motionFrames)),
     ...catalog.skills.flatMap((skill) => [skill.icon, skill.projectile, skill.impact, skill.fullScreen]),
     ...catalog.artifacts.map((artifact) => artifact.icon),
   ]
@@ -96,7 +111,6 @@ test('catalog image paths exist under Cocos assets', () => {
 test('motion frame images are four-frame horizontal strips', () => {
   const framePaths = [
     ...catalog.characters.flatMap((character) => Object.values(character.motionFrames)),
-    ...catalog.monsters.flatMap((monster) => Object.values(monster.motionFrames)),
   ]
 
   for (const assetPath of framePaths) {

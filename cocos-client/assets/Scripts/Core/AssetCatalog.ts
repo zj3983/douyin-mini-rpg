@@ -13,9 +13,7 @@ export interface MonsterAsset {
   id: string
   name: string
   theme: string
-  sprite: string
-  motions: Record<'idle' | 'move' | 'attack' | 'hurt' | 'death', string>
-  motionFrames: Record<'idle' | 'move' | 'attack' | 'hurt' | 'death', string>
+  animationActorId: string
   skillCue: string
 }
 

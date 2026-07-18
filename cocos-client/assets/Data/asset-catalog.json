@@ -92,253 +92,85 @@
       "id": "moss-wolf",
       "name": "苔纹狼妖",
       "theme": "mist-bamboo",
-      "sprite": "Assets/Monsters/MistBamboo/MossWolf/body.png",
-      "motions": {
-        "idle": "Assets/Monsters/MistBamboo/MossWolf/idle.anim",
-        "move": "Assets/Monsters/MistBamboo/MossWolf/run.anim",
-        "attack": "Assets/Monsters/MistBamboo/MossWolf/bite.anim",
-        "hurt": "Assets/Monsters/MistBamboo/MossWolf/hurt.anim",
-        "death": "Assets/Monsters/MistBamboo/MossWolf/death.anim"
-      },
-      "skillCue": "ground-pounce",
-      "motionFrames": {
-        "idle": "Assets/Monsters/MistBamboo/MossWolf/Frames/idle.png",
-        "move": "Assets/Monsters/MistBamboo/MossWolf/Frames/move.png",
-        "attack": "Assets/Monsters/MistBamboo/MossWolf/Frames/attack.png",
-        "hurt": "Assets/Monsters/MistBamboo/MossWolf/Frames/hurt.png",
-        "death": "Assets/Monsters/MistBamboo/MossWolf/Frames/death.png"
-      }
+      "animationActorId": "moss-wolf",
+      "skillCue": "ground-pounce"
     },
     {
       "id": "green-wing-moth",
       "name": "青翼蛾妖",
       "theme": "mist-bamboo",
-      "sprite": "Assets/Monsters/MistBamboo/GreenWingMoth/body.png",
-      "motions": {
-        "idle": "Assets/Monsters/MistBamboo/GreenWingMoth/wing_idle.anim",
-        "move": "Assets/Monsters/MistBamboo/GreenWingMoth/wing_fly.anim",
-        "attack": "Assets/Monsters/MistBamboo/GreenWingMoth/spore_cast.anim",
-        "hurt": "Assets/Monsters/MistBamboo/GreenWingMoth/hurt.anim",
-        "death": "Assets/Monsters/MistBamboo/GreenWingMoth/death.anim"
-      },
-      "skillCue": "poison-spore",
-      "motionFrames": {
-        "idle": "Assets/Monsters/MistBamboo/GreenWingMoth/Frames/idle.png",
-        "move": "Assets/Monsters/MistBamboo/GreenWingMoth/Frames/move.png",
-        "attack": "Assets/Monsters/MistBamboo/GreenWingMoth/Frames/attack.png",
-        "hurt": "Assets/Monsters/MistBamboo/GreenWingMoth/Frames/hurt.png",
-        "death": "Assets/Monsters/MistBamboo/GreenWingMoth/Frames/death.png"
-      }
+      "animationActorId": "green-wing-moth",
+      "skillCue": "poison-spore"
     },
     {
       "id": "bamboo-warden",
       "name": "竹林守山兽",
       "theme": "mist-bamboo",
-      "sprite": "Assets/Monsters/MistBamboo/BambooWarden/body.png",
-      "motions": {
-        "idle": "Assets/Monsters/MistBamboo/BambooWarden/idle.anim",
-        "move": "Assets/Monsters/MistBamboo/BambooWarden/walk.anim",
-        "attack": "Assets/Monsters/MistBamboo/BambooWarden/vine_slam.anim",
-        "hurt": "Assets/Monsters/MistBamboo/BambooWarden/hurt.anim",
-        "death": "Assets/Monsters/MistBamboo/BambooWarden/death.anim"
-      },
-      "skillCue": "vine-root",
-      "motionFrames": {
-        "idle": "Assets/Monsters/MistBamboo/BambooWarden/Frames/idle.png",
-        "move": "Assets/Monsters/MistBamboo/BambooWarden/Frames/move.png",
-        "attack": "Assets/Monsters/MistBamboo/BambooWarden/Frames/attack.png",
-        "hurt": "Assets/Monsters/MistBamboo/BambooWarden/Frames/hurt.png",
-        "death": "Assets/Monsters/MistBamboo/BambooWarden/Frames/death.png"
-      }
+      "animationActorId": "bamboo-warden",
+      "skillCue": "vine-root"
     },
     {
       "id": "fog-spider",
       "name": "雾蛛",
       "theme": "mist-bamboo",
-      "sprite": "Assets/Monsters/MistBamboo/FogSpider/body.png",
-      "motions": {
-        "idle": "Assets/Monsters/MistBamboo/FogSpider/idle.anim",
-        "move": "Assets/Monsters/MistBamboo/FogSpider/crawl.anim",
-        "attack": "Assets/Monsters/MistBamboo/FogSpider/web_cast.anim",
-        "hurt": "Assets/Monsters/MistBamboo/FogSpider/hurt.anim",
-        "death": "Assets/Monsters/MistBamboo/FogSpider/death.anim"
-      },
-      "skillCue": "web-snare",
-      "motionFrames": {
-        "idle": "Assets/Monsters/MistBamboo/FogSpider/Frames/idle.png",
-        "move": "Assets/Monsters/MistBamboo/FogSpider/Frames/move.png",
-        "attack": "Assets/Monsters/MistBamboo/FogSpider/Frames/attack.png",
-        "hurt": "Assets/Monsters/MistBamboo/FogSpider/Frames/hurt.png",
-        "death": "Assets/Monsters/MistBamboo/FogSpider/Frames/death.png"
-      }
+      "animationActorId": "fog-spider",
+      "skillCue": "web-snare"
     },
     {
       "id": "lantern-wraith",
       "name": "灯影魅",
       "theme": "mist-bamboo",
-      "sprite": "Assets/Monsters/MistBamboo/LanternWraith/body.png",
-      "motions": {
-        "idle": "Assets/Monsters/MistBamboo/LanternWraith/float_idle.anim",
-        "move": "Assets/Monsters/MistBamboo/LanternWraith/float_move.anim",
-        "attack": "Assets/Monsters/MistBamboo/LanternWraith/soul_lantern.anim",
-        "hurt": "Assets/Monsters/MistBamboo/LanternWraith/hurt.anim",
-        "death": "Assets/Monsters/MistBamboo/LanternWraith/death.anim"
-      },
-      "skillCue": "soul-flame",
-      "motionFrames": {
-        "idle": "Assets/Monsters/MistBamboo/LanternWraith/Frames/idle.png",
-        "move": "Assets/Monsters/MistBamboo/LanternWraith/Frames/move.png",
-        "attack": "Assets/Monsters/MistBamboo/LanternWraith/Frames/attack.png",
-        "hurt": "Assets/Monsters/MistBamboo/LanternWraith/Frames/hurt.png",
-        "death": "Assets/Monsters/MistBamboo/LanternWraith/Frames/death.png"
-      }
+      "animationActorId": "lantern-wraith",
+      "skillCue": "soul-flame"
     },
     {
       "id": "mist-deer-king",
       "name": "雾鹿妖王",
       "theme": "mist-bamboo",
-      "sprite": "Assets/Monsters/MistBamboo/MistDeerKing/body.png",
-      "motions": {
-        "idle": "Assets/Monsters/MistBamboo/MistDeerKing/idle.anim",
-        "move": "Assets/Monsters/MistBamboo/MistDeerKing/step.anim",
-        "attack": "Assets/Monsters/MistBamboo/MistDeerKing/fog_domain.anim",
-        "hurt": "Assets/Monsters/MistBamboo/MistDeerKing/hurt.anim",
-        "death": "Assets/Monsters/MistBamboo/MistDeerKing/death.anim"
-      },
-      "skillCue": "mist-domain",
-      "motionFrames": {
-        "idle": "Assets/Monsters/MistBamboo/MistDeerKing/Frames/idle.png",
-        "move": "Assets/Monsters/MistBamboo/MistDeerKing/Frames/move.png",
-        "attack": "Assets/Monsters/MistBamboo/MistDeerKing/Frames/attack.png",
-        "hurt": "Assets/Monsters/MistBamboo/MistDeerKing/Frames/hurt.png",
-        "death": "Assets/Monsters/MistBamboo/MistDeerKing/Frames/death.png"
-      }
+      "animationActorId": "mist-deer-king",
+      "skillCue": "mist-domain"
     },
     {
       "id": "lava-lizard",
       "name": "熔甲蜥",
       "theme": "flame-cave",
-      "sprite": "Assets/Monsters/FlameCave/LavaLizard/body.png",
-      "motions": {
-        "idle": "Assets/Monsters/FlameCave/LavaLizard/idle.anim",
-        "move": "Assets/Monsters/FlameCave/LavaLizard/run.anim",
-        "attack": "Assets/Monsters/FlameCave/LavaLizard/lava_bite.anim",
-        "hurt": "Assets/Monsters/FlameCave/LavaLizard/hurt.anim",
-        "death": "Assets/Monsters/FlameCave/LavaLizard/death.anim"
-      },
-      "skillCue": "lava-bite",
-      "motionFrames": {
-        "idle": "Assets/Monsters/FlameCave/LavaLizard/Frames/idle.png",
-        "move": "Assets/Monsters/FlameCave/LavaLizard/Frames/move.png",
-        "attack": "Assets/Monsters/FlameCave/LavaLizard/Frames/attack.png",
-        "hurt": "Assets/Monsters/FlameCave/LavaLizard/Frames/hurt.png",
-        "death": "Assets/Monsters/FlameCave/LavaLizard/Frames/death.png"
-      }
+      "animationActorId": "lava-lizard",
+      "skillCue": "lava-bite"
     },
     {
       "id": "ember-crow",
       "name": "赤羽火鸦",
       "theme": "flame-cave",
-      "sprite": "Assets/Monsters/FlameCave/EmberCrow/body.png",
-      "motions": {
-        "idle": "Assets/Monsters/FlameCave/EmberCrow/wing_idle.anim",
-        "move": "Assets/Monsters/FlameCave/EmberCrow/wing_fly.anim",
-        "attack": "Assets/Monsters/FlameCave/EmberCrow/fire_feather.anim",
-        "hurt": "Assets/Monsters/FlameCave/EmberCrow/hurt.anim",
-        "death": "Assets/Monsters/FlameCave/EmberCrow/death.anim"
-      },
-      "skillCue": "fire-feather",
-      "motionFrames": {
-        "idle": "Assets/Monsters/FlameCave/EmberCrow/Frames/idle.png",
-        "move": "Assets/Monsters/FlameCave/EmberCrow/Frames/move.png",
-        "attack": "Assets/Monsters/FlameCave/EmberCrow/Frames/attack.png",
-        "hurt": "Assets/Monsters/FlameCave/EmberCrow/Frames/hurt.png",
-        "death": "Assets/Monsters/FlameCave/EmberCrow/Frames/death.png"
-      }
+      "animationActorId": "ember-crow",
+      "skillCue": "fire-feather"
     },
     {
       "id": "flame-ogre",
       "name": "地火巨妖",
       "theme": "flame-cave",
-      "sprite": "Assets/Monsters/FlameCave/FlameOgre/body.png",
-      "motions": {
-        "idle": "Assets/Monsters/FlameCave/FlameOgre/idle.anim",
-        "move": "Assets/Monsters/FlameCave/FlameOgre/stomp.anim",
-        "attack": "Assets/Monsters/FlameCave/FlameOgre/fire_slam.anim",
-        "hurt": "Assets/Monsters/FlameCave/FlameOgre/hurt.anim",
-        "death": "Assets/Monsters/FlameCave/FlameOgre/death.anim"
-      },
-      "skillCue": "fire-slam",
-      "motionFrames": {
-        "idle": "Assets/Monsters/FlameCave/FlameOgre/Frames/idle.png",
-        "move": "Assets/Monsters/FlameCave/FlameOgre/Frames/move.png",
-        "attack": "Assets/Monsters/FlameCave/FlameOgre/Frames/attack.png",
-        "hurt": "Assets/Monsters/FlameCave/FlameOgre/Frames/hurt.png",
-        "death": "Assets/Monsters/FlameCave/FlameOgre/Frames/death.png"
-      }
+      "animationActorId": "flame-ogre",
+      "skillCue": "fire-slam"
     },
     {
       "id": "star-armored-beast",
       "name": "星甲兽",
       "theme": "starlight-ruin",
-      "sprite": "Assets/Monsters/StarlightRuin/StarArmoredBeast/body.png",
-      "motions": {
-        "idle": "Assets/Monsters/StarlightRuin/StarArmoredBeast/idle.anim",
-        "move": "Assets/Monsters/StarlightRuin/StarArmoredBeast/charge.anim",
-        "attack": "Assets/Monsters/StarlightRuin/StarArmoredBeast/star_charge.anim",
-        "hurt": "Assets/Monsters/StarlightRuin/StarArmoredBeast/hurt.anim",
-        "death": "Assets/Monsters/StarlightRuin/StarArmoredBeast/death.anim"
-      },
-      "skillCue": "star-charge",
-      "motionFrames": {
-        "idle": "Assets/Monsters/StarlightRuin/StarArmoredBeast/Frames/idle.png",
-        "move": "Assets/Monsters/StarlightRuin/StarArmoredBeast/Frames/move.png",
-        "attack": "Assets/Monsters/StarlightRuin/StarArmoredBeast/Frames/attack.png",
-        "hurt": "Assets/Monsters/StarlightRuin/StarArmoredBeast/Frames/hurt.png",
-        "death": "Assets/Monsters/StarlightRuin/StarArmoredBeast/Frames/death.png"
-      }
+      "animationActorId": "star-armored-beast",
+      "skillCue": "star-charge"
     },
     {
       "id": "void-wing-spirit",
       "name": "虚翼灵",
       "theme": "starlight-ruin",
-      "sprite": "Assets/Monsters/StarlightRuin/VoidWingSpirit/body.png",
-      "motions": {
-        "idle": "Assets/Monsters/StarlightRuin/VoidWingSpirit/wing_idle.anim",
-        "move": "Assets/Monsters/StarlightRuin/VoidWingSpirit/wing_phase.anim",
-        "attack": "Assets/Monsters/StarlightRuin/VoidWingSpirit/void_ray.anim",
-        "hurt": "Assets/Monsters/StarlightRuin/VoidWingSpirit/hurt.anim",
-        "death": "Assets/Monsters/StarlightRuin/VoidWingSpirit/death.anim"
-      },
-      "skillCue": "void-ray",
-      "motionFrames": {
-        "idle": "Assets/Monsters/StarlightRuin/VoidWingSpirit/Frames/idle.png",
-        "move": "Assets/Monsters/StarlightRuin/VoidWingSpirit/Frames/move.png",
-        "attack": "Assets/Monsters/StarlightRuin/VoidWingSpirit/Frames/attack.png",
-        "hurt": "Assets/Monsters/StarlightRuin/VoidWingSpirit/Frames/hurt.png",
-        "death": "Assets/Monsters/StarlightRuin/VoidWingSpirit/Frames/death.png"
-      }
+      "animationActorId": "void-wing-spirit",
+      "skillCue": "void-ray"
     },
     {
       "id": "meteor-guardian",
       "name": "陨星镇守",
       "theme": "starlight-ruin",
-      "sprite": "Assets/Monsters/StarlightRuin/MeteorGuardian/body.png",
-      "motions": {
-        "idle": "Assets/Monsters/StarlightRuin/MeteorGuardian/idle.anim",
-        "move": "Assets/Monsters/StarlightRuin/MeteorGuardian/hover.anim",
-        "attack": "Assets/Monsters/StarlightRuin/MeteorGuardian/meteor_fall.anim",
-        "hurt": "Assets/Monsters/StarlightRuin/MeteorGuardian/hurt.anim",
-        "death": "Assets/Monsters/StarlightRuin/MeteorGuardian/death.anim"
-      },
-      "skillCue": "meteor-fall",
-      "motionFrames": {
-        "idle": "Assets/Monsters/StarlightRuin/MeteorGuardian/Frames/idle.png",
-        "move": "Assets/Monsters/StarlightRuin/MeteorGuardian/Frames/move.png",
-        "attack": "Assets/Monsters/StarlightRuin/MeteorGuardian/Frames/attack.png",
-        "hurt": "Assets/Monsters/StarlightRuin/MeteorGuardian/Frames/hurt.png",
-        "death": "Assets/Monsters/StarlightRuin/MeteorGuardian/Frames/death.png"
-      }
+      "animationActorId": "meteor-guardian",
+      "skillCue": "meteor-fall"
     }
   ],
   "skills": [

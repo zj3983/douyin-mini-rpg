@@ -35,10 +35,11 @@ node --test tests/animationAtlas.test.mjs tests/verticalSliceAtlasBuilder.test.m
 
 - `assets/resources/Assets/Generated/Atlases`
 - `assets/resources/Assets/Combat`
+- `assets/resources/Assets/Monsters`
 
 它们分别是早期 AI 素材板和旧动作条，已被正式 `ActorAtlases` 替代。`tests/legacyResourceCleanup.test.mjs` 会阻止生产清单重新引用这些路径。
 
-`assets/resources/Assets/Monsters` 仍属于下一批迁移范围。目前旧 `asset-catalog.json` 仍引用该目录，完成清单迁移前不能删除。
+怪物清单只保存 `animationActorId`，具体动作、帧序、图集路径和锚点全部由 `animation-atlas.json` 提供。旧四帧横条播放器和旧怪物图集打包脚本已停用。
 
 ## 运行时规则
 

@@ -23,7 +23,6 @@ const DEFERRED_PREFIXES = [
 const REVIEW_PREFIXES = [
   'Assets/Generated/Atlases/',
   'Assets/Combat/',
-  'Assets/Monsters/',
 ]
 
 export function classifyDouyinResource(rawPath) {

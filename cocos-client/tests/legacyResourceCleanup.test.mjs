@@ -6,6 +6,7 @@ import { extname, join, resolve } from 'node:path'
 const retiredPrefixes = [
   'Assets/Generated/Atlases/',
   'Assets/Combat/',
+  'Assets/Monsters/',
 ]
 
 test('production catalogs and scripts do not reference retired atlas pipelines', () => {
