@@ -26,9 +26,15 @@ Current status: the project is a Cocos Creator game prototype, but it is not yet
 Run these from `cocos-client`:
 
 ```powershell
+$env:COCOS_CREATOR_PATH='D:\CocosCreator\3.8.8\CocosCreator.exe'
+$env:DOUYIN_APPID='tt-your-real-appid'
+$env:DOUYIN_REMOTE_SERVER='https://your-cdn.example.com/void-trial/'
+npm.cmd run build:douyin
 npm.cmd run report:resources
 npm.cmd run check:douyin
 ```
+
+`build:douyin` writes `temp/douyin-build-config.json` and calls Cocos Creator with `configPath=...`, so the generated upload package should land in `build/bytedance-mini-game`.
 
 Expected result before Douyin build: `check:douyin` fails and lists missing build files plus missing AppID.
 
