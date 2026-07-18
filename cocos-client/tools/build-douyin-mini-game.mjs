@@ -17,6 +17,7 @@ export function createDouyinBuildConfig(options = {}) {
     outputName: DEFAULT_OUTPUT_NAME,
     debug: options.debug ?? false,
     md5Cache: true,
+    mainBundleIsRemote: Boolean(remoteServerAddress),
     packages: {
       'bytedance-mini-game': {
         appid,
@@ -40,6 +41,7 @@ export function validateDouyinBuildEnv(options = {}) {
   const projectRoot = options.projectRoot ? resolve(options.projectRoot) : process.cwd()
   const creatorCommand = options.creatorCommand ?? process.env.COCOS_CREATOR_PATH ?? findCreatorCommand()
   const appid = String(options.appid ?? process.env.DOUYIN_APPID ?? '').trim()
+  const remoteServerAddress = String(options.remoteServerAddress ?? process.env.DOUYIN_REMOTE_SERVER ?? '').trim()
   const blockers = []
 
   if (!creatorCommand || !existsSync(creatorCommand)) {
@@ -50,6 +52,12 @@ export function validateDouyinBuildEnv(options = {}) {
     blockers.push('DOUYIN_APPID is missing or still a tourist AppID; set the real Douyin mini-game AppID before building.')
   }
 
+  if (!remoteServerAddress) {
+    blockers.push('DOUYIN_REMOTE_SERVER is missing; the current art package requires an HTTPS remote resource server.')
+  } else if (!/^https:\/\//i.test(remoteServerAddress)) {
+    blockers.push('DOUYIN_REMOTE_SERVER must use HTTPS for Douyin device builds.')
+  }
+
   if (!existsSync(projectRoot)) {
     blockers.push(`Project root does not exist: ${projectRoot}`)
   }
@@ -58,6 +66,7 @@ export function validateDouyinBuildEnv(options = {}) {
     ok: blockers.length === 0,
     creatorCommand,
     appid,
+    remoteServerAddress,
     projectRoot,
     blockers,
   }
@@ -79,7 +88,7 @@ function runCli() {
 
   const config = createDouyinBuildConfig({
     appid: envReport.appid,
-    remoteServerAddress: process.env.DOUYIN_REMOTE_SERVER ?? '',
+    remoteServerAddress: envReport.remoteServerAddress,
     debug: process.env.DOUYIN_DEBUG === '1',
     orientation: process.env.DOUYIN_ORIENTATION ?? 'portrait',
   })

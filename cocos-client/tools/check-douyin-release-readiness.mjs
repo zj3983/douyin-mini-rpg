@@ -42,6 +42,9 @@ export function checkDouyinReleaseReadiness(options = {}) {
   } else if (sizes.remoteAssetHintBytes > 0) {
     warnings.push(`${formatMb(sizes.remoteAssetHintBytes)} of resource-like assets are still inside the mini-game package; prefer remote resources for late-stage art/audio.`)
   }
+  if (sizes.remoteBytes > 0) {
+    warnings.push(`${formatMb(sizes.remoteBytes)} across ${sizes.remoteFileCount} generated remote files must be uploaded to the configured HTTPS CDN before device preview.`)
+  }
 
   return {
     platform: 'douyin-mini-game',
@@ -97,12 +100,21 @@ function computePackageSizes(files, fileSizes) {
   let mainPackageBytes = 0
   let totalPackageBytes = 0
   let remoteAssetHintBytes = 0
+  let remoteBytes = 0
+  let remoteFileCount = 0
   const subpackages = {}
 
   for (const rawPath of files) {
     const path = normalizePath(rawPath)
     if (!path.startsWith(`${BUILD_ROOT}/`)) continue
     const bytes = fileSizes.get(path) ?? 0
+
+    if (path.startsWith(`${BUILD_ROOT}/remote/`)) {
+      remoteBytes += bytes
+      remoteFileCount += 1
+      continue
+    }
+
     totalPackageBytes += bytes
 
     const subpackage = subpackageName(path)
@@ -120,6 +132,8 @@ function computePackageSizes(files, fileSizes) {
     totalPackageBytes,
     subpackages,
     remoteAssetHintBytes,
+    remoteBytes,
+    remoteFileCount,
   }
 }
 

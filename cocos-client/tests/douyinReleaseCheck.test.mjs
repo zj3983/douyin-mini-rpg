@@ -70,6 +70,35 @@ test('Douyin readiness passes for a valid split mini-game package', () => {
   assert.equal(report.warnings.length, 0)
 })
 
+test('Douyin readiness excludes generated remote assets from the upload package budget', () => {
+  const report = checkDouyinReleaseReadiness({
+    projectRoot: process.cwd(),
+    files: new Set([
+      'build/bytedance-mini-game/game.js',
+      'build/bytedance-mini-game/game.json',
+      'build/bytedance-mini-game/project.config.json',
+      'build/bytedance-mini-game/src/main.js',
+      'build/bytedance-mini-game/remote/resources/config.json',
+      'build/bytedance-mini-game/remote/resources/native/large.png',
+    ]),
+    fileSizes: new Map([
+      ['build/bytedance-mini-game/game.js', 128 * 1024],
+      ['build/bytedance-mini-game/game.json', 300],
+      ['build/bytedance-mini-game/project.config.json', 300],
+      ['build/bytedance-mini-game/src/main.js', 2 * 1024 * 1024],
+      ['build/bytedance-mini-game/remote/resources/config.json', 64 * 1024],
+      ['build/bytedance-mini-game/remote/resources/native/large.png', 30 * 1024 * 1024],
+    ]),
+    projectConfig: { appid: 'tt1234567890' },
+  })
+
+  assert.equal(report.ready, true)
+  assert.equal(report.sizes.totalPackageBytes < report.limits.mainPackageBytes, true)
+  assert.equal(report.sizes.remoteBytes > report.limits.totalPackageBytes, true)
+  assert.equal(report.sizes.remoteFileCount, 2)
+  assert.equal(report.warnings.some((warning) => warning.includes('CDN')), true)
+})
+
 test('package exposes Douyin release check command', async () => {
   const pkg = await import('../package.json', { with: { type: 'json' } })
   assert.equal(pkg.default.scripts['check:douyin'], 'node tools/check-douyin-release-readiness.mjs')
