@@ -1,90 +1,59 @@
-# Cocos 资源管线记录
+# Cocos 角色动画资产管线
 
-## 当前资产批次
+## 权威资产
 
-第一批 PNG 资源来自三张 AI 生成素材板：
+- 原始序列帧：`art-source/vertical-slice/<actor>/<action>/*.png`
+- 动作规格：`assets/Data/vertical-slice-animation-sources.json`
+- 运行时图集：`assets/resources/Assets/ActorAtlases/<Actor>/*.png`
+- 播放清单：`assets/Data/animation-atlas.json`
+- 运行时清单镜像：`assets/resources/Data/animation-atlas.json`
 
-- `assets/resources/Assets/Generated/Atlases/characters-atlas.png`
-- `assets/resources/Assets/Generated/Atlases/monsters-atlas.png`
-- `assets/resources/Assets/Generated/Atlases/artifacts-skills-atlas.png`
+同一角色的动作、帧率、循环规则、帧顺序和锚点必须由播放清单统一描述。Cocos 运行时只加载 `ActorAtlases`，不再从早期的整张素材板或 `Assets/Combat` 动作条加载。
 
-素材板已经切到 `asset-catalog.json` 引用的目录里，当前可被 Cocos 直接导入。
+## 生成流程
 
-## 当前动作帧批次
+1. 将通过验收的透明序列帧放入 `art-source/vertical-slice`。
+2. 在 `vertical-slice-animation-sources.json` 中登记角色、动作、帧数、尺寸和锚点。
+3. 运行生成器：
 
-角色和怪物已经生成第一版 4 帧 PNG strip：
-
-- 角色：`idle`、`move`、`cast`、`hurt`
-- 怪物：`idle`、`move`、`attack`、`hurt`、`death`
-
-这批帧表用于 Cocos 预览和节点挂载，不是最终美术。它们从现有 PNG 派生，能先解决“完全不会动”的问题；后续需要替换成透明全身横版动作帧。
-
-## 统一动画图集
-
-运行时优先使用统一图集，而不是逐动作加载独立 strip：
-
-- 每个角色或怪物对应一张 `atlas.png`。
-- `assets/Data/animation-atlas.json` 记录动作名、帧 rect、播放顺序、FPS 和循环规则。
-- `AtlasAnimator` 只需要加载一张贴图，然后按配置切换不同动作。
-
-这能减少资源数量和加载次数，后续多动作角色不会因为移动、攻击、受击、死亡分散成多张图而增加运行时开销。
-
-## 目录约定
-
-- `assets/resources/Assets/Characters/*`：角色立绘和战斗图。
-- `assets/resources/Assets/Monsters/*`：怪物身体图，按场景主题拆分。
-- `assets/resources/Assets/Artifacts/*`：法宝图标。
-- `assets/resources/Assets/Skills/*`：技能图标、飞行物、命中特效、满屏特效。
-
-## 后续替换顺序
-
-1. 先替换角色战斗图为横版半身或全身透明 PNG。
-2. 再补角色动作帧：待机、踩剑移动、掐诀施法、受击。
-3. 再补怪物动作帧：待机、移动、攻击、受击、死亡。
-4. 最后把技能图标和技能特效拆开，不再复用同一张切片。
-
-## AI 序列帧处理
-
-AI 生成的连续 PNG 帧先放到临时目录，再用脚本统一处理：
-
-```bash
-python tools/build-frame-strip.py --input-dir tmp/source-frames --output assets/resources/Assets/Characters/QinglanSwordCultivator/Frames/idle.png --frame-width 256 --frame-height 256 --limit 4
+```powershell
+python tools/build-vertical-slice-atlases.py --check
 ```
 
-脚本会做三件事：
+4. 检查 `ActorAtlases` 中每帧主体完整、脚底对齐、方向一致、透明边界正常。
+5. 运行资产和动画测试：
 
-- 按 alpha 边界裁掉空白。
-- 居中到固定画布。
-- 横向打包成 Cocos 播放用 strip。
-
-如果要生成统一图集，执行：
-
-```bash
-python tools/build-actor-atlases.py
+```powershell
+node --test tests/animationAtlas.test.mjs tests/verticalSliceAtlasBuilder.test.mjs
 ```
 
-这个脚本会读取 `asset-catalog.json` 里的动作帧路径，生成每个角色/怪物自己的 atlas 和 `animation-atlas.json`。
+`tools/build-frame-strip.py` 仅用于离线整理新的独立序列帧，不得把输出写回已经停用的旧目录。
 
-## 运行时性能约束
+## 已停用目录
 
-- 多动作角色使用 `AtlasAnimator`，一个 actor 只加载一张 atlas。
-- 怪物、魂球、飞剑、伤害数字和技能特效使用 `NodePoolController` 复用节点。
-- 拾取魂球时只触发回收，不直接 `destroy()`。
-- 离屏或距离过远的动画通过 `StripAnimationRuntime` 降低更新频率。
+以下目录已从远程资源 Bundle 删除，不得重新创建：
 
-## 战斗运行时接入
+- `assets/resources/Assets/Generated/Atlases`
+- `assets/resources/Assets/Combat`
 
-- `BattleRuntime` 负责纯规则：刷怪、Boss 出场、Boss 技能事件、飞剑命中、伤害事件、死亡、魂球掉落、关卡通关、结算领奖。
-- `EnemySpawner` 负责把规则里的怪物生成事件映射成 Cocos 节点。
-- `BattleRuntimeController` 负责把 Boss 技能、御剑命中、伤害飘字、魂球对象池和破关结算串起来。
-- 小怪刷怪由 `BattleRuntimeController.update()` 统一推进，再交给 `EnemySpawner.spawnEnemy()` 映射到对象池节点。
-- Boss 出场也复用 `EnemySpawner.spawnEnemy()`，但使用单独坐标和缩放，避免画面上和普通怪混淆。
-- `BattleRuntimeController` 会登记 `enemyId -> Node`，御剑命中时派发 `enemy-hit`，死亡时派发 `enemy-defeated` 并回收节点。
-- `EnemyVisualController` 负责把 `enemy-hit` / `enemy-defeated` 转成 `AtlasAnimator` 的 `hurt` / `death` 动作。
-- `StageClearPanelController` 负责把破关结算结果渲染到 Cocos 面板，并把下一关目标交给 `BattleRuntimeController` 重建运行时。
-- 御剑命中按飞剑线段轨迹、怪物坐标和碰撞半径计算，不再简单取前几个活怪。
-- 当前仍是第一版闭环，后续需要继续接 Boss 技能 prefab 表现、结算面板美术 prefab 和更强命中特效。
+它们分别是早期 AI 素材板和旧动作条，已被正式 `ActorAtlases` 替代。`tests/legacyResourceCleanup.test.mjs` 会阻止生产清单重新引用这些路径。
 
-## 验证
+`assets/resources/Assets/Monsters` 仍属于下一批迁移范围。目前旧 `asset-catalog.json` 仍引用该目录，完成清单迁移前不能删除。
 
-`tests/assetCatalog.test.mjs` 会检查清单中所有图片路径真实存在。
+## 运行时规则
+
+- `AtlasAnimator` 根据 `animation-atlas.json` 播放角色动作。
+- 角色移动、攻击、受击和死亡只切换动作，不直接改写角色世界坐标。
+- 远离镜头或不可见的普通怪物允许降低动画更新频率。
+- 敌人、飞剑、伤害数字、灵魂球和 Boss 特效全部使用有上限的对象池。
+- 关卡切换通过资源代次拒绝过期回调，并释放上一关资源。
+
+## 发布检查
+
+```powershell
+npm.cmd run plan:douyin-resources
+npm.cmd run report:resources
+npm.cmd run check:douyin
+```
+
+抖音构建中 `main` 和 `resources` Bundle 均为远程资源。生成的 `build/bytedance-mini-game/remote` 目录必须按原路径上传到 HTTPS CDN。
