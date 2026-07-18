@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const manifestPath = resolve('assets/Data/animation-atlas.json')
@@ -89,6 +89,20 @@ test('animation atlas manifest resolves legacy and vertical-slice textures', () 
     } else {
       assert.equal(actor.actions.every((action) => action.atlas === actor.atlas), true)
     }
+  }
+})
+
+test('vertical-slice actor folders contain no undeclared PNG atlases', () => {
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+
+  for (const actor of manifest.actors.filter(({ id }) => verticalSliceActorIds.has(id))) {
+    const folder = actorFolder(actor.id)
+    const declared = [...new Set(actor.actions.map(({ atlas }) => atlas.split('/').at(-1)))].sort()
+    const actual = readdirSync(resolve('assets/resources/Assets/ActorAtlases', folder))
+      .filter((name) => name.endsWith('.png'))
+      .sort()
+
+    assert.deepEqual(actual, declared, `${actor.id} should not ship undeclared PNG atlases`)
   }
 })
 
