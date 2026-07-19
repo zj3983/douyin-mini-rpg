@@ -179,3 +179,13 @@ Boss 技能 prefab：
 - `FlyingSwordSkill` 自动调用 `BattleRuntimeController.castFlyingSword()`，不要在技能脚本里单独计算伤害。
 - 飞剑视觉路径读取 `swordStartX`、`swordEndX`、`swordY`，和运行时命中路径保持一致。
 - 每次施法会发出 `sword-cast-started` 事件，后续音效、拖尾、屏幕震动都从这个事件接入。
+
+## 灰盒战斗（M1）
+
+M1 阶段用 `GrayboxBattleController` 跑新战斗核心，画面全部是 Graphics 占位图形，不需要预制体和图集。
+
+1. 在 `Canvas` 下新建空节点 `GrayboxBattle`。
+2. 挂 `GrayboxBattleController` 组件，`seed` 默认 `7`。
+3. 运行时组件自建背景、角色、怪物、Boss、预警、飞剑、HUD、结算与失败面板，无需拖字段。
+4. 灰盒验证期间把旧的 `BattleRoot` 节点设为 inactive，避免旧战斗线同时驱动。
+5. 触屏/点击战斗区域即移动；击败 Boss 出结算，3 秒倒计时与「继续」按钮只触发一次；失败面板「重新开始」以新 seed 重建会话。
