@@ -239,7 +239,7 @@ function summonBoss(session: BattleSession, stage: StageOneProfile) {
 function applySwordHits(session: BattleSession, stage: StageOneProfile, hits: Array<{ targetId: number; position: Vec2 }>) {
   for (const hit of hits) {
     if (session.boss && hit.targetId === session.boss.id) {
-      const result = applyBossDamage(session.boss, stage.sword.damage)
+      const result = applyBossDamage(session.boss, stage.sword.damage, stage.boss.phaseTwoHpFraction)
       session.events.push({ type: 'boss-damage', amount: stage.sword.damage, remainingHp: session.boss.hp })
       if (result.enteredPhaseTwo) session.events.push({ type: 'boss-event', event: { type: 'boss-phase-two' } })
       if (result.killed) {

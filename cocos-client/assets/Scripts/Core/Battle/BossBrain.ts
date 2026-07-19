@@ -1,4 +1,4 @@
-import { angleDiff, pointInFan, vecAdd, vecAngle, vecDistance, vecNormalize, vecScale, vecSub } from './Geometry.ts'
+import { angleDiff, clampVecToBounds, pointInFan, pointInRingBand, vecAdd, vecAngle, vecDistance, vecNormalize, vecScale, vecSub } from './Geometry.ts'
 import type { FanSpec, Vec2 } from './Geometry.ts'
 import type { SeededRandom } from './Random.ts'
 
@@ -125,6 +125,7 @@ function startSkill(boss: BossEntity, config: BossConfig, skill: BossSkillId, ct
   boss.didHit = false
   boss.spikeSpawned = 0
   boss.spikeTimer = 0
+  boss.sweepFan = null
   if (skill === 'bamboo-sweep') {
     boss.sweepFan = {
       origin: { ...boss.position },
@@ -207,7 +208,10 @@ export function tickBoss(boss: BossEntity, config: BossConfig, ctx: BossTickCont
     }
     case 'idle': {
       if (ctx.playerAlive) {
-        const hold = vecAdd(ctx.playerPosition, vecScale(vecNormalize(vecSub(boss.position, ctx.playerPosition)), 220))
+        const hold = clampVecToBounds(
+          vecAdd(ctx.playerPosition, vecScale(vecNormalize(vecSub(boss.position, ctx.playerPosition)), 220)),
+          { minX: -300, maxX: 300, minY: -390, maxY: 430 },
+        )
         boss.position = moveToward(boss.position, hold, config.moveSpeed, ctx.deltaTime)
       }
       if (boss.stateElapsed >= config.idleSeconds && ctx.playerAlive) {
@@ -275,10 +279,10 @@ export function tickBoss(boss: BossEntity, config: BossConfig, ctx: BossTickCont
   return events
 }
 
-export function applyBossDamage(boss: BossEntity, amount: number): { killed: boolean; enteredPhaseTwo: boolean } {
+export function applyBossDamage(boss: BossEntity, amount: number, phaseTwoFraction = 0.5): { killed: boolean; enteredPhaseTwo: boolean } {
   if (!boss.alive) return { killed: false, enteredPhaseTwo: false }
   boss.hp = Math.max(0, boss.hp - Math.max(0, Math.round(amount)))
-  const enteredPhaseTwo = boss.phase === 1 && boss.hp > 0 && boss.hp <= boss.maxHp * 0.5
+  const enteredPhaseTwo = boss.phase === 1 && boss.hp > 0 && boss.hp <= boss.maxHp * Math.min(1, Math.max(0, phaseTwoFraction))
   if (enteredPhaseTwo) boss.phase = 2
   if (boss.hp === 0) {
     boss.alive = false
@@ -297,8 +301,12 @@ export function sweepHitsPlayer(boss: BossEntity, playerPosition: Vec2, playerRa
 export function roarHitsPlayer(boss: BossEntity, playerPosition: Vec2, playerRadius: number): boolean {
   const wave = boss.roarWave
   if (!boss.alive || boss.state !== 'attack' || boss.currentSkill !== 'mountain-roar' || !wave || wave.didHit) return false
-  const distance = vecDistance(wave.center, playerPosition)
-  if (Math.abs(distance - wave.radius) > wave.bandWidth * 0.5 + playerRadius * 0.5) return false
-  const angle = vecAngle(vecSub(playerPosition, wave.center))
-  return Math.abs(angleDiff(angle, wave.gapCenterRadians)) > wave.gapHalfAngleRadians
+  const half = wave.bandWidth * 0.5 + playerRadius * 0.5
+  return pointInRingBand(playerPosition, {
+    center: wave.center,
+    innerRadius: wave.radius - half,
+    outerRadius: wave.radius + half,
+    gapCenterRadians: wave.gapCenterRadians,
+    gapHalfAngleRadians: wave.gapHalfAngleRadians,
+  })
 }

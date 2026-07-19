@@ -349,7 +349,7 @@ export class GrayboxBattleController extends Component {
     const boss = this.session.boss
     if (!boss || !boss.alive) return
 
-    if (boss.sweepFan && (boss.state === 'telegraph' || boss.state === 'attack')) {
+    if (boss.sweepFan && boss.currentSkill === 'bamboo-sweep' && (boss.state === 'telegraph' || boss.state === 'attack')) {
       this.strokeFan(graphics, boss.sweepFan)
     }
     for (const marker of boss.spikes) {
