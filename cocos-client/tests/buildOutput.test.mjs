@@ -13,12 +13,75 @@ import {
 const projectRoot = process.cwd()
 const meta = JSON.parse(readFileSync(resolve('assets/Scripts/Game/PortraitBattleBootstrap.ts.meta'), 'utf8'))
 const classId = compressScriptUuid(meta.uuid)
-const validMainIndex = `PortraitBattleBootstrap ${classId} StageResourceRuntime Array.from(this.pending.values()) Array.from(this.retained.keys())`
+const uuidBase64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+
+function compressAssetUuidFixture(uuid) {
+  const hex = uuid.replaceAll('-', '')
+  let compressed = hex.slice(0, 2)
+  for (let index = 2; index < hex.length; index += 3) {
+    const value = Number.parseInt(hex.slice(index, index + 3), 16)
+    compressed += uuidBase64[value >> 6] + uuidBase64[value & 63]
+  }
+  return compressed
+}
+
+const legacyMainIndex = `PortraitBattleBootstrap ${classId} StageResourceRuntime Array.from(this.pending.values()) Array.from(this.retained.keys())`
+const bossTalismanMarkers = 'BossTelegraphVisualProfile BossTelegraphPresenter BossHazardVisualController'
+const validMainIndex = `${legacyMainIndex} ${bossTalismanMarkers}`
+const talismans = ['sweep', 'spike', 'roar'].map((name) => {
+  const assetUuid = JSON.parse(
+    readFileSync(resolve(`assets/resources/Assets/Skills/BossDomain/talisman_${name}.png.meta`), 'utf8'),
+  ).uuid
+  return {
+    name,
+    assetUuid,
+    spriteFrameUuid: `${compressAssetUuidFixture(assetUuid)}@f9941`,
+    resourcePath: `Assets/Skills/BossDomain/talisman_${name}/spriteFrame`,
+  }
+})
 
 function writeFixture(root, path, source) {
   const target = join(root, path)
   mkdirSync(dirname(target), { recursive: true })
   writeFileSync(target, source)
+}
+
+function writeBossTalismanFixture(root, {
+  omitPath = null,
+  wrongUuid = null,
+  omitImport = null,
+  omitNative = null,
+} = {}) {
+  const uuids = []
+  const paths = {}
+
+  for (const talisman of talismans) {
+    const index = uuids.length
+    uuids.push(talisman.name === wrongUuid ? 'wrong-resource-uuid@f9941' : talisman.spriteFrameUuid)
+    if (talisman.name !== omitPath) paths[index] = [talisman.resourcePath, 3, 1]
+    if (talisman.name !== omitImport) {
+      writeFixture(
+        root,
+        `assets/resources/import/${talisman.assetUuid.slice(0, 2)}/${talisman.assetUuid}@f9941.json`,
+        `{"name":"talisman_${talisman.name}"}`,
+      )
+    }
+    if (talisman.name !== omitNative) {
+      writeFixture(
+        root,
+        `assets/resources/native/${talisman.assetUuid.slice(0, 2)}/${talisman.assetUuid}.png`,
+        'png-fixture',
+      )
+    }
+  }
+
+  writeFixture(root, 'assets/resources/config.json', JSON.stringify({ uuids, paths }))
+}
+
+function writeCompleteFixture(root, mainIndex = validMainIndex) {
+  writeFixture(root, 'assets/main/index.js', mainIndex)
+  writeFixture(root, 'assets/main/import/main-battle.json', `["MainBattle","${classId}"]`)
+  writeBossTalismanFixture(root)
 }
 
 test('build-output check fails when the compiled bootstrap is missing', () => {
@@ -35,14 +98,60 @@ test('build-output check fails when the compiled bootstrap is missing', () => {
 
 test('build-output check accepts a compiled script and serialized MainBattle component', () => {
   const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-complete-'))
-  writeFixture(buildRoot, 'assets/main/index.js', validMainIndex)
-  writeFixture(buildRoot, 'assets/main/import/main-battle.json', `["MainBattle","${classId}"]`)
+  writeCompleteFixture(buildRoot)
 
   const report = checkCocosBuildOutput({ buildRoot, projectRoot })
 
   assert.equal(report.ok, true, report.errors.join('\n'))
   assert.equal(report.classId, classId)
   assert.equal(Boolean(report.sceneFile), true)
+})
+
+test('build-output check rejects output without compiled boss talisman feature markers', () => {
+  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-missing-talisman-code-'))
+  writeCompleteFixture(buildRoot, legacyMainIndex)
+
+  const report = checkCocosBuildOutput({ buildRoot, projectRoot })
+
+  assert.equal(report.ok, false)
+  assert.equal(report.errors.some((error) => error.includes('boss talisman compiled feature')), true)
+})
+
+test('build-output check rejects a missing boss talisman spriteFrame resource path', () => {
+  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-missing-talisman-path-'))
+  writeFixture(buildRoot, 'assets/main/index.js', validMainIndex)
+  writeFixture(buildRoot, 'assets/main/import/main-battle.json', `["MainBattle","${classId}"]`)
+  writeBossTalismanFixture(buildRoot, { omitPath: 'spike' })
+
+  const report = checkCocosBuildOutput({ buildRoot, projectRoot })
+
+  assert.equal(report.ok, false)
+  assert.equal(report.errors.some((error) => error.includes(talismans[1].resourcePath)), true)
+})
+
+test('build-output check rejects a boss talisman resource path mapped to the wrong UUID', () => {
+  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-wrong-talisman-uuid-'))
+  writeFixture(buildRoot, 'assets/main/index.js', validMainIndex)
+  writeFixture(buildRoot, 'assets/main/import/main-battle.json', `["MainBattle","${classId}"]`)
+  writeBossTalismanFixture(buildRoot, { wrongUuid: 'roar' })
+
+  const report = checkCocosBuildOutput({ buildRoot, projectRoot })
+
+  assert.equal(report.ok, false)
+  assert.equal(report.errors.some((error) => error.includes('talisman_roar') && error.includes('UUID')), true)
+})
+
+test('build-output check rejects missing boss talisman import and native artifacts', () => {
+  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-missing-talisman-artifacts-'))
+  writeFixture(buildRoot, 'assets/main/index.js', validMainIndex)
+  writeFixture(buildRoot, 'assets/main/import/main-battle.json', `["MainBattle","${classId}"]`)
+  writeBossTalismanFixture(buildRoot, { omitImport: 'sweep', omitNative: 'spike' })
+
+  const report = checkCocosBuildOutput({ buildRoot, projectRoot })
+
+  assert.equal(report.ok, false)
+  assert.equal(report.errors.some((error) => error.includes('talisman_sweep') && error.includes('import')), true)
+  assert.equal(report.errors.some((error) => error.includes('talisman_spike') && error.includes('native')), true)
 })
 
 test('build-output check rejects the Cocos Map iterator spread regression', () => {
@@ -62,8 +171,7 @@ test('build-output check rejects the Cocos Map iterator spread regression', () =
 
 test('formal build verifier combines readiness and bootstrap output checks', () => {
   const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-verified-'))
-  writeFixture(buildRoot, 'assets/main/index.js', validMainIndex)
-  writeFixture(buildRoot, 'assets/main/import/main-battle.json', `["MainBattle","${classId}"]`)
+  writeCompleteFixture(buildRoot)
 
   const missingIndex = verifyCocosBuildOutput({
     buildRoot,
@@ -97,8 +205,7 @@ test('verify:build-output is mandatory and accepts an explicit build root', () =
 
   const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-command-'))
   writeFixture(buildRoot, 'index.html', '<!doctype html>')
-  writeFixture(buildRoot, 'assets/main/index.js', validMainIndex)
-  writeFixture(buildRoot, 'assets/main/import/main-battle.json', `["MainBattle","${classId}"]`)
+  writeCompleteFixture(buildRoot)
   const verified = spawnSync(process.execPath, ['tools/check-cocos-build-output.mjs'], {
     cwd: projectRoot,
     env: {

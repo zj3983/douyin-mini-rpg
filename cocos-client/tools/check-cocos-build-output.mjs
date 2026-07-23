@@ -4,15 +4,29 @@ import { fileURLToPath } from 'node:url'
 import { checkCocosBuildReadiness } from './check-cocos-build-readiness.mjs'
 
 const base64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+const bossTalismanNames = ['sweep', 'spike', 'roar']
+const bossTalismanCompiledMarkers = [
+  'BossTelegraphVisualProfile',
+  'BossTelegraphPresenter',
+  'BossHazardVisualController',
+]
 
-export function compressScriptUuid(uuid) {
+function compressUuid(uuid, prefixLength) {
   const hex = uuid.replaceAll('-', '')
-  let compressed = hex.slice(0, 5)
-  for (let index = 5; index < hex.length; index += 3) {
+  let compressed = hex.slice(0, prefixLength)
+  for (let index = prefixLength; index < hex.length; index += 3) {
     const value = Number.parseInt(hex.slice(index, index + 3), 16)
     compressed += base64[value >> 6] + base64[value & 63]
   }
   return compressed
+}
+
+export function compressScriptUuid(uuid) {
+  return compressUuid(uuid, 5)
+}
+
+export function compressAssetUuid(uuid) {
+  return compressUuid(uuid, 2)
 }
 
 function collectFiles(root) {
@@ -40,11 +54,61 @@ export function checkCocosBuildOutput({ buildRoot, projectRoot = process.cwd() }
     if (!mainIndex.includes('PortraitBattleBootstrap')) errors.push('built main index omits PortraitBattleBootstrap')
     if (!mainIndex.includes(classId)) errors.push(`built main index omits class ID ${classId}`)
     if (!mainIndex.includes('StageResourceRuntime')) errors.push('built main index omits StageResourceRuntime')
+    const missingBossTalismanMarkers = bossTalismanCompiledMarkers.filter((marker) => !mainIndex.includes(marker))
+    if (missingBossTalismanMarkers.length > 0) {
+      errors.push(`built main index omits boss talisman compiled feature markers: ${missingBossTalismanMarkers.join(', ')}`)
+    }
     const unsafeIteratorSpread = /\.concat\(\s*this\.(?:pending\.values|retained\.keys)\(\)\s*\)/
     const materializesPending = /Array\.from\(\s*this\.pending\.values\(\)\s*\)/.test(mainIndex)
     const materializesRetained = /Array\.from\(\s*this\.retained\.keys\(\)\s*\)/.test(mainIndex)
     if (unsafeIteratorSpread.test(mainIndex) || !materializesPending || !materializesRetained) {
       errors.push('built StageResourceRuntime has unsafe Map iterator materialization')
+    }
+  }
+
+  const resourcesRoot = join(resolvedBuildRoot, 'assets/resources')
+  const resourcesConfigPath = join(resourcesRoot, 'config.json')
+  let resourcesConfig = null
+  if (!existsSync(resourcesConfigPath)) {
+    errors.push(`missing built resources config: ${resourcesConfigPath}`)
+  } else {
+    try {
+      resourcesConfig = JSON.parse(readFileSync(resourcesConfigPath, 'utf8'))
+    } catch (error) {
+      errors.push(`invalid built resources config: ${resourcesConfigPath}: ${error.message}`)
+    }
+  }
+
+  if (resourcesConfig) {
+    for (const name of bossTalismanNames) {
+      const assetName = `talisman_${name}`
+      const resourcePath = `Assets/Skills/BossDomain/${assetName}/spriteFrame`
+      const talismanMetaPath = resolve(
+        projectRoot,
+        `assets/resources/Assets/Skills/BossDomain/${assetName}.png.meta`,
+      )
+      if (!existsSync(talismanMetaPath)) {
+        errors.push(`missing boss talisman image meta: ${talismanMetaPath}`)
+        continue
+      }
+
+      const assetUuid = JSON.parse(readFileSync(talismanMetaPath, 'utf8')).uuid
+      const expectedSpriteFrameUuid = `${compressAssetUuid(assetUuid)}@f9941`
+      const pathEntry = Object.entries(resourcesConfig.paths ?? {})
+        .find(([, value]) => Array.isArray(value) && value[0] === resourcePath)
+      if (!pathEntry) {
+        errors.push(`built resources omit boss talisman spriteFrame path ${resourcePath}`)
+      } else {
+        const actualUuid = resourcesConfig.uuids?.[Number(pathEntry[0])]
+        if (actualUuid !== expectedSpriteFrameUuid) {
+          errors.push(`built ${assetName} resource UUID ${actualUuid ?? '<missing>'} does not match ${expectedSpriteFrameUuid}`)
+        }
+      }
+
+      const importPath = join(resourcesRoot, 'import', assetUuid.slice(0, 2), `${assetUuid}@f9941.json`)
+      if (!existsSync(importPath)) errors.push(`built ${assetName} import artifact is missing: ${importPath}`)
+      const nativePath = join(resourcesRoot, 'native', assetUuid.slice(0, 2), `${assetUuid}.png`)
+      if (!existsSync(nativePath)) errors.push(`built ${assetName} native artifact is missing: ${nativePath}`)
     }
   }
 
