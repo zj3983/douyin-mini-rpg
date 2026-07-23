@@ -14,12 +14,16 @@ export const _decorator = {
   ccclass: () => (target) => target,
   property: (...args) => args.length >= 2 ? undefined : () => undefined,
 }
-export class Component { constructor() { this.node = { isValid: true } } }
+export class Component { constructor() { this.node = { isValid: true }; this.isValid = true } }
 export class Node {}
 export class UITransform {}
 export class Graphics {}
+export class Sprite {}
 export class Color {
-  constructor(r = 0, g = 0, b = 0, a = 0) { this.set(r, g, b, a) }
+  constructor(r = 0, g = 0, b = 0, a = 0) {
+    globalThis.__bossColorAllocations = (globalThis.__bossColorAllocations ?? 0) + 1
+    this.set(r, g, b, a)
+  }
   set(r, g, b, a) { Object.assign(this, { r, g, b, a }); return this }
 }
 export class SpriteFrame { constructor(id = '') { this.id = id } }
@@ -45,13 +49,17 @@ export class BossHazardVisualController {
 }
 `
 
-async function loadPresenter({ failedPaths = [] } = {}) {
+async function loadPresenter({ failedPaths = [], deferred = false } = {}) {
   const loadedPaths = []
+  const pendingLoads = []
   const failed = new Set(failedPaths)
+  globalThis.__bossColorAllocations = 0
   globalThis.__bossTelegraphResources = {
     load(path, Type, callback) {
       loadedPaths.push(path)
-      callback(failed.has(path) ? new Error(`missing ${path}`) : null, failed.has(path) ? null : new Type(path))
+      const pending = { path, Type, callback }
+      if (deferred) pendingLoads.push(pending)
+      else callback(failed.has(path) ? new Error(`missing ${path}`) : null, failed.has(path) ? null : new Type(path))
     },
   }
   const source = await readFile(new URL('../assets/Scripts/Game/BossTelegraphPresenter.ts', import.meta.url), 'utf8')
@@ -65,7 +73,37 @@ async function loadPresenter({ failedPaths = [] } = {}) {
     .replace("from '../Core/BossTelegraphVisualProfile.ts'", `from '${new URL('../assets/Scripts/Core/BossTelegraphVisualProfile.ts', import.meta.url).href}'`)
     .replace("from './BossHazardVisualController'", `from '${moduleUrl(controllerSource)}'`)
     .replace("from './NodePoolController'", `from '${moduleUrl('export class NodePoolController {}')}'`)
-  return { ...await import(moduleUrl(executable)), loadedPaths }
+  return {
+    ...await import(moduleUrl(executable)),
+    loadedPaths,
+    completeLoad(path, error = null) {
+      const index = pendingLoads.findIndex((pending) => pending.path === path)
+      assert.notEqual(index, -1, `pending resource ${path}`)
+      const [pending] = pendingLoads.splice(index, 1)
+      pending.callback(error, error ? null : new pending.Type(path))
+    },
+  }
+}
+
+function createSpriteMock() {
+  let visibleColor = { r: 255, g: 255, b: 255, a: 0 }
+  return {
+    colorAssignments: 0,
+    lastAssignedInput: null,
+    previousAssignedInput: null,
+    get color() {
+      return {
+        ...visibleColor,
+        set(r, g, b, a) { Object.assign(this, { r, g, b, a }); return this },
+      }
+    },
+    set color(value) {
+      this.colorAssignments += 1
+      this.previousAssignedInput = this.lastAssignedInput
+      this.lastAssignedInput = value
+      visibleColor = { r: value.r, g: value.g, b: value.b, a: value.a }
+    },
+  }
 }
 
 class TelegraphNode {
@@ -83,26 +121,26 @@ class TelegraphNode {
     ellipse(x, y, radiusX, radiusY) { this.calls.push({ type: 'ellipse', x, y, radiusX, radiusY }) },
     stroke() { this.calls.push({ type: 'stroke' }) },
   }
+  sprite = createSpriteMock()
+  componentLookups = 0
   controller = {
     resetVisual: () => {
       this.controller.talismanFrame = null
-      this.controller.talismanColor = null
       this.controller.talismanSize = null
-      this.controller.talisman = null
+      this.sprite.color = { r: 255, g: 255, b: 255, a: 0 }
     },
     setTalisman: (frame, color, width, height) => {
       this.controller.talismanFrame = frame
-      this.controller.talismanColor = color
-      this.controller.talisman = { color }
+      this.sprite.color = color
       this.controller.talismanSize = { width: Math.min(width, 112), height: Math.min(height, 112) }
     },
     talismanFrame: null,
-    talismanColor: null,
     talismanSize: null,
-    talisman: null,
+    talisman: this.sprite,
   }
   setPosition(x, y, z) { this.position = { x, y, z } }
   getComponent(Type) {
+    this.componentLookups += 1
     if (Type.name === 'UITransform') return this.transform
     if (Type.name === 'Graphics') return this.graphics
     if (Type.name === 'BossHazardVisualController') return this.controller
@@ -295,18 +333,63 @@ test('preloaded profiles render three distinct glyphless line arrays in authorit
 
   const pulsing = nodes[0]
   const before = {
-    alpha: pulsing.controller.talismanColor.a,
+    alpha: pulsing.sprite.color.a,
+    assignments: pulsing.sprite.colorAssignments,
+    lookups: pulsing.componentLookups,
+    colorAllocations: globalThis.__bossColorAllocations,
     stroke: { ...pulsing.graphics.strokeColor },
     position: { ...pulsing.position },
     size: { ...pulsing.transform.size },
     calls: structuredClone(pulsing.graphics.calls),
   }
   presenter.update(0.2)
-  assert.notEqual(pulsing.controller.talismanColor.a, before.alpha)
-  assert.notDeepEqual(pulsing.graphics.strokeColor, before.stroke)
+  const reusableColor = pulsing.sprite.lastAssignedInput
+  assert.equal(pulsing.sprite.colorAssignments, before.assignments + 1)
+  assert.notEqual(pulsing.sprite.color.a, before.alpha)
+  presenter.update(0.2)
+  assert.equal(pulsing.sprite.colorAssignments, before.assignments + 2)
+  assert.strictEqual(pulsing.sprite.lastAssignedInput, reusableColor)
+  assert.deepEqual({ ...pulsing.graphics.strokeColor }, before.stroke)
+  assert.equal(pulsing.componentLookups, before.lookups)
+  assert.equal(globalThis.__bossColorAllocations, before.colorAllocations)
   assert.deepEqual(pulsing.position, before.position)
   assert.deepEqual(pulsing.transform.size, before.size)
   assert.deepEqual(pulsing.graphics.calls, before.calls)
+})
+
+test('deferred preload affects subsequent warnings only and never rewrites an active null-symbol warning', async () => {
+  const sweepPath = 'Assets/Skills/BossDomain/talisman_sweep/spriteFrame'
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY, completeLoad } = await loadPresenter({ deferred: true })
+  const presenter = new BossTelegraphPresenter()
+  const pool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
+  presenter.telegraphPool = pool
+  presenter.onLoad()
+  const danger = { kind: 'sweep', escape: 'vertical', origin: { x: 0, y: 0 }, arcDegrees: 120 }
+
+  presenter.present(telegraph('bamboo-sweep:7:deferred:before', { minX: -80, maxX: 80, minY: -30, maxY: 30 }, danger))
+  const first = [...pool.active][0]
+  assert.equal(first.controller.talismanFrame, null)
+  assert.ok(first.graphics.calls.some((call) => call.type === 'stroke'))
+
+  completeLoad(sweepPath)
+  assert.equal(first.controller.talismanFrame, null, 'completed preload does not retrofit an active warning')
+  presenter.present(telegraph('bamboo-sweep:7:deferred:after', { minX: -70, maxX: 70, minY: 40, maxY: 100 }, danger))
+  const second = [...pool.active][1]
+  assert.equal(second.controller.talismanFrame.id, sweepPath)
+})
+
+test('deferred preload success after destruction is ignored and the destroyed presenter stays inert', async () => {
+  const sweepPath = 'Assets/Skills/BossDomain/talisman_sweep/spriteFrame'
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY, completeLoad } = await loadPresenter({ deferred: true })
+  const presenter = new BossTelegraphPresenter()
+  presenter.telegraphPool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
+  presenter.onLoad()
+
+  presenter.onDestroy()
+  completeLoad(sweepPath)
+
+  assert.equal(presenter.talismanFrames.size, 0)
+  assert.equal(presenter.present(telegraph('bamboo-sweep:7:destroyed', { minX: -20, maxX: 20, minY: -20, maxY: 20 }, { kind: 'sweep' })), false)
 })
 
 test('missing talisman preload keeps a glyphless warning and its normal activation and impact lifecycle', async () => {
@@ -334,6 +417,32 @@ test('missing talisman preload keeps a glyphless warning and its normal activati
   presenter.update(0.18)
   presenter.update(0.18)
   assert.equal(presenter.visibleImpactCount, 0)
+})
+
+test('impact danger selects the visual profile ahead of a disagreeing attack id prefix', async () => {
+  const spikePath = 'Assets/Skills/BossDomain/talisman_spike/spriteFrame'
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
+  const presenter = new BossTelegraphPresenter()
+  const pool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
+  presenter.telegraphPool = pool
+  presenter.onLoad()
+  const area = { minX: -32, maxX: 32, minY: -32, maxY: 32 }
+  const warning = telegraph('bamboo-sweep:7:danger-authority', area, { kind: 'sweep' })
+
+  presenter.present(warning)
+  presenter.activate(3, 7, {
+    type: 'activate-hitbox',
+    attackId: warning.attackId,
+    telegraphId: warning.telegraphId,
+    area,
+    damage: 8,
+    duration: 0.18,
+    danger: { kind: 'spike', markerIndex: 0, center: { x: 0, y: 0 } },
+  })
+  presenter.update(0.8)
+
+  const impact = [...pool.active][0]
+  assert.equal(impact.controller.talismanFrame.id, spikePath)
 })
 
 test('Cocos presenter executes show-visible-active-hidden and cancel/reset lifecycle using authoritative areas', async () => {

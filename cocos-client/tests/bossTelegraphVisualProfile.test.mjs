@@ -43,6 +43,15 @@ test('talisman pulse progresses, heats, and clamps invalid values safely', () =>
   }
 })
 
+test('talisman pulse reuses an optional output object without changing two-argument behavior', () => {
+  const output = { progress: -1, alpha: -1, hot: false }
+  const reused = talismanPulse(0.8, 0.4, output)
+
+  assert.strictEqual(reused, output)
+  assert.deepEqual(output, { progress: 0.5, alpha: 0.66, hot: false })
+  assert.notStrictEqual(talismanPulse(0.8, 0.4), talismanPulse(0.8, 0.4))
+})
+
 test('resolved profiles and RGBA tuples resist runtime mutation', () => {
   for (const kind of ['sweep', 'spike', 'roar-sector']) {
     const profile = resolveBossTelegraphVisual({ kind })
@@ -91,4 +100,9 @@ test('TypeScript source stays behaviorally consistent with the ESM mirror', asyn
     canonicalPulseCases.map(pulseCase => tsRuntime.talismanPulse(...pulseCase.args)),
     canonicalPulseCases.map(pulseCase => talismanPulse(...pulseCase.args)),
   )
+  const esmOutput = { progress: -1, alpha: -1, hot: false }
+  const tsOutput = { progress: -1, alpha: -1, hot: false }
+  assert.strictEqual(talismanPulse(0.8, 0.1, esmOutput), esmOutput)
+  assert.strictEqual(tsRuntime.talismanPulse(0.8, 0.1, tsOutput), tsOutput)
+  assert.deepEqual(tsOutput, esmOutput)
 })

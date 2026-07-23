@@ -11,6 +11,12 @@ export interface BossTelegraphVisualProfile {
   readonly impact: Rgba
 }
 
+export interface TalismanPulseOutput {
+  progress: number
+  alpha: number
+  hot: boolean
+}
+
 const spirit = rgba(141, 232, 218, 190)
 const impact = rgba(255, 240, 189, 245)
 
@@ -48,11 +54,11 @@ export function resolveBossTelegraphVisual(danger: { readonly kind: string }): B
   return PROFILES.sweep
 }
 
-export function talismanPulse(duration: number, remaining: number): {
-  readonly progress: number
-  readonly alpha: number
-  readonly hot: boolean
-} {
+export function talismanPulse(
+  duration: number,
+  remaining: number,
+  out?: TalismanPulseOutput,
+): TalismanPulseOutput {
   const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 1
   const finiteRemaining = Number.isFinite(remaining) ? remaining : safeDuration
   const safeRemaining = Math.min(safeDuration, Math.max(0, finiteRemaining))
@@ -61,7 +67,11 @@ export function talismanPulse(duration: number, remaining: number): {
   const alpha = hot
     ? 0.72 + 0.2 * Math.sin(progress * Math.PI * 18)
     : 0.54 + progress * 0.24
-  return { progress, alpha: round3(alpha), hot }
+  const result = out ?? { progress: 0, alpha: 0, hot: false }
+  result.progress = progress
+  result.alpha = round3(alpha)
+  result.hot = hot
+  return result
 }
 
 function round3(value: number): number {

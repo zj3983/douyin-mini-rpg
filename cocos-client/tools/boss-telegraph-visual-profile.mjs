@@ -35,7 +35,7 @@ export function resolveBossTelegraphVisual(danger) {
   return PROFILES.sweep
 }
 
-export function talismanPulse(duration, remaining) {
+export function talismanPulse(duration, remaining, out) {
   const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 1
   const finiteRemaining = Number.isFinite(remaining) ? remaining : safeDuration
   const safeRemaining = Math.min(safeDuration, Math.max(0, finiteRemaining))
@@ -44,7 +44,11 @@ export function talismanPulse(duration, remaining) {
   const alpha = hot
     ? 0.72 + 0.2 * Math.sin(progress * Math.PI * 18)
     : 0.54 + progress * 0.24
-  return { progress, alpha: round3(alpha), hot }
+  const result = out ?? { progress: 0, alpha: 0, hot: false }
+  result.progress = progress
+  result.alpha = round3(alpha)
+  result.hot = hot
+  return result
 }
 
 function round3(value) {

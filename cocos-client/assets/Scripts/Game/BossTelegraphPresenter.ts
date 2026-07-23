@@ -1,10 +1,11 @@
-import { _decorator, Color, Component, Graphics, Node, resources, SpriteFrame, UITransform } from 'cc'
+import { _decorator, Color, Component, Graphics, Node, resources, Sprite, SpriteFrame, UITransform } from 'cc'
 import { BOSS_HAZARD_POOL_CAPACITY } from '../Combat/BossBrain.ts'
 import type { EnemyCommand } from '../Combat/EnemyBrain.ts'
 import {
   resolveBossTelegraphVisual,
   talismanPulse,
   type BossTelegraphVisualProfile,
+  type TalismanPulseOutput,
 } from '../Core/BossTelegraphVisualProfile.ts'
 import { BossHazardVisualController } from './BossHazardVisualController'
 import type { EnemyTelegraphDelivery } from './EnemyCombatResolverAdapter.ts'
@@ -27,6 +28,10 @@ interface TelegraphVisual {
   readonly node: Node
   readonly duration: number
   readonly profile: BossTelegraphVisualProfile
+  readonly controller: BossHazardVisualController | null
+  readonly talisman: Sprite | null
+  readonly pulse: TalismanPulseOutput
+  readonly pulseColor: Color
   remaining: number
 }
 
@@ -88,12 +93,23 @@ export class BossTelegraphPresenter extends Component {
   private readonly earlyActivations = new Map<string, ActiveHitboxCommand[]>()
   private readonly activatedAuthorities = new Set<string>()
   private readonly talismanFrames = new Map<string, SpriteFrame>()
+  private destroyed = false
+  private loadGeneration = 0
 
   onLoad(): void {
+    if (this.destroyed || !this.isValid || !this.node?.isValid) return
+    const loadGeneration = ++this.loadGeneration
     for (const kind of ['sweep', 'spike', 'roar-sector'] as const) {
       const path = resolveBossTelegraphVisual({ kind }).talismanPath
       resources.load(path, SpriteFrame, (error, frame) => {
-        if (error || !(frame instanceof SpriteFrame) || !this.node.isValid) return
+        if (
+          error
+          || !(frame instanceof SpriteFrame)
+          || this.destroyed
+          || loadGeneration !== this.loadGeneration
+          || !this.isValid
+          || !this.node?.isValid
+        ) return
         this.talismanFrames.set(path, frame)
       })
     }
@@ -114,6 +130,9 @@ export class BossTelegraphPresenter extends Component {
   }
 
   onDestroy(): void {
+    this.destroyed = true
+    this.loadGeneration += 1
+    this.talismanFrames.clear()
     this.hideAll()
   }
 
@@ -129,23 +148,32 @@ export class BossTelegraphPresenter extends Component {
       if (impact.remaining <= 1e-9) this.removeImpact(index)
     }
 
-    const ready: TelegraphGroup[] = []
     for (const group of this.groups.values()) {
+      let ready = group.pending.length > 0
       for (const visual of group.visuals) {
         visual.remaining -= deltaSeconds
         this.updateTelegraphPulse(visual)
+        if (visual.remaining > 1e-9) ready = false
       }
-      if (group.pending.length > 0 && group.visuals.every((visual) => visual.remaining <= 1e-9)) ready.push(group)
+      if (ready) this.activateGroup(group)
     }
-    for (const group of ready) this.activateGroup(group)
   }
 
   present(delivery: EnemyTelegraphDelivery): boolean {
+    if (this.destroyed || !this.isValid || !this.node?.isValid) return false
     if (delivery.generation < this.generation) return false
     if (delivery.generation > this.generation) this.resetGeneration(delivery.generation)
     const node = this.acquireHazardNode(delivery.attackId)
     const profile = resolveBossTelegraphVisual(delivery.danger)
-    this.drawTelegraph(node, delivery.area, profile)
+    const pulse: TalismanPulseOutput = { progress: 0, alpha: 0, hot: false }
+    talismanPulse(delivery.duration, delivery.duration, pulse)
+    const pulseColor = new Color(
+      profile.spirit[0],
+      profile.spirit[1],
+      profile.spirit[2],
+      Math.round(profile.spirit[3] * pulse.alpha),
+    )
+    const controller = this.drawTelegraph(node, delivery.area, profile, pulseColor)
     this.telegraphPool?.activateNode(node)
 
     const key = authorityKey(delivery.generation, delivery.enemyId, delivery.telegraphId)
@@ -161,7 +189,16 @@ export class BossTelegraphPresenter extends Component {
       this.earlyActivations.delete(key)
       this.groups.set(key, group)
     }
-    group.visuals.push({ node, duration: delivery.duration, profile, remaining: delivery.duration })
+    group.visuals.push({
+      node,
+      duration: delivery.duration,
+      profile,
+      controller,
+      talisman: controller?.talisman ?? null,
+      pulse,
+      pulseColor,
+      remaining: delivery.duration,
+    })
     return true
   }
 
@@ -256,7 +293,8 @@ export class BossTelegraphPresenter extends Component {
 
   private showImpact(generation: number, enemyId: number, command: ActiveHitboxCommand): void {
     const node = this.acquireHazardNode(command.attackId)
-    this.drawImpact(node, command.area, resolveBossTelegraphVisual({ kind: dangerKindForAttack(command.attackId) }))
+    const danger = command.danger ?? { kind: dangerKindForAttack(command.attackId) }
+    this.drawImpact(node, command.area, resolveBossTelegraphVisual(danger))
     this.telegraphPool?.activateNode(node)
     this.impacts.push({ node, generation, enemyId, fresh: true, remaining: command.duration })
   }
@@ -265,11 +303,12 @@ export class BossTelegraphPresenter extends Component {
     node: Node,
     area: EnemyTelegraphDelivery['area'],
     profile: BossTelegraphVisualProfile,
-  ): void {
+    pulseColor: Color,
+  ): BossHazardVisualController | null {
     const geometry = centerAndSize(area)
-    this.prepareVisualNode(node, geometry, profile, false)
+    const controller = this.prepareVisualNode(node, geometry, profile, false, pulseColor)
     const graphics = node.getComponent(Graphics)
-    if (!graphics) return
+    if (!graphics) return controller
 
     const halfWidth = geometry.width * 0.5
     const halfHeight = geometry.height * 0.5
@@ -307,6 +346,7 @@ export class BossTelegraphPresenter extends Component {
       graphics.lineTo(halfWidth * 0.62, -halfHeight * 0.64)
     }
     graphics.stroke()
+    return controller
   }
 
   private drawImpact(
@@ -315,7 +355,8 @@ export class BossTelegraphPresenter extends Component {
     profile: BossTelegraphVisualProfile,
   ): void {
     const geometry = centerAndSize(area)
-    this.prepareVisualNode(node, geometry, profile, true)
+    const impactColor = new Color(...profile.impact)
+    this.prepareVisualNode(node, geometry, profile, true, impactColor)
     const graphics = node.getComponent(Graphics)
     if (!graphics) return
 
@@ -351,7 +392,8 @@ export class BossTelegraphPresenter extends Component {
     geometry: ReturnType<typeof centerAndSize>,
     profile: BossTelegraphVisualProfile,
     impact: boolean,
-  ): void {
+    talismanColor: Color,
+  ): BossHazardVisualController | null {
     node.setPosition(geometry.x, geometry.y, 0)
     node.getComponent(UITransform)?.setContentSize(geometry.width, geometry.height)
     const controller = node.getComponent(BossHazardVisualController)
@@ -363,38 +405,25 @@ export class BossTelegraphPresenter extends Component {
       graphics.strokeColor = new Color(...color)
       graphics.lineWidth = impact ? 4 : 3
     }
-    const symbolColor = impact ? profile.impact : profile.spirit
-    const alpha = impact ? symbolColor[3] : Math.round(symbolColor[3] * talismanPulse(1, 1).alpha)
     controller?.setTalisman(
       this.talismanFrames.get(profile.talismanPath) ?? null,
-      new Color(symbolColor[0], symbolColor[1], symbolColor[2], alpha),
+      talismanColor,
       geometry.width,
       geometry.height,
     )
+    return controller
   }
 
   private updateTelegraphPulse(visual: TelegraphVisual): void {
-    const pulse = talismanPulse(visual.duration, visual.remaining)
-    const talismanColor = visual.node.getComponent(BossHazardVisualController)?.talisman?.color
-    if (talismanColor) {
-      talismanColor.set(
-        talismanColor.r,
-        talismanColor.g,
-        talismanColor.b,
-        Math.round(visual.profile.spirit[3] * pulse.alpha),
-      )
-    }
-
-    const strokeColor = visual.node.getComponent(Graphics)?.strokeColor
-    if (!strokeColor) return
-    const accent = visual.profile.spirit
-    const intensity = pulse.hot ? 0.5 : 0.18 + pulse.progress * 0.22
-    strokeColor.set(
-      Math.round(visual.profile.warning[0] + (accent[0] - visual.profile.warning[0]) * intensity),
-      Math.round(visual.profile.warning[1] + (accent[1] - visual.profile.warning[1]) * intensity),
-      Math.round(visual.profile.warning[2] + (accent[2] - visual.profile.warning[2]) * intensity),
-      Math.round(visual.profile.warning[3] * (0.78 + pulse.alpha * 0.22)),
+    talismanPulse(visual.duration, visual.remaining, visual.pulse)
+    if (!visual.talisman) return
+    visual.pulseColor.set(
+      visual.profile.spirit[0],
+      visual.profile.spirit[1],
+      visual.profile.spirit[2],
+      Math.round(visual.profile.spirit[3] * visual.pulse.alpha),
     )
+    visual.talisman.color = visual.pulseColor
   }
 
   private removeGroup(key: string, group: TelegraphGroup): void {
