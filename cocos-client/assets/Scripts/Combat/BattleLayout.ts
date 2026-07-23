@@ -96,7 +96,9 @@ export function selectBattleResolution(input: BattleResolutionInput): Readonly<B
     && Number.isFinite(input?.cssHeight)
     && input.cssHeight > 0
   const mode = validViewport
-    ? input.cssWidth > input.cssHeight ? 'show-all' : 'fixed-width'
+    ? input.cssWidth / input.cssHeight > BATTLE_DESIGN_WIDTH / BATTLE_MIN_VISIBLE_HEIGHT
+      ? 'show-all'
+      : 'fixed-width'
     : input?.previousMode === 'show-all' ? 'show-all' : 'fixed-width'
   return mode === 'show-all' ? SHOW_ALL_RESOLUTION : FIXED_WIDTH_RESOLUTION
 }

@@ -33,6 +33,16 @@ test('landscape viewports show the complete portrait battle canvas', () => {
   assert.equal(Object.isFrozen(resolution), true)
 })
 
+test('portrait viewports wider than the battle canvas aspect show the complete canvas', () => {
+  const resolution = selectBattleResolution({ cssWidth: 768, cssHeight: 1024 })
+
+  assert.deepEqual(resolution, {
+    designWidth: 750,
+    designHeight: 1334,
+    mode: 'show-all',
+  })
+})
+
 test('transient invalid resize dimensions retain the previous valid mode', () => {
   assert.equal(typeof selectBattleResolution, 'function')
 

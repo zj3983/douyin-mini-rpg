@@ -167,13 +167,23 @@ test('twenty sweep spike roar despawn cycles restore the pooled visual state', a
   }
 })
 
-test('setTalisman assigns its frame and color and clamps dimensions to 112', async () => {
+test('setTalisman assigns its frame and color and keeps sweep spike roar talismans square', async () => {
   const { BossHazardVisualController, PoolableActor, cc } = await loadRuntime()
   const harness = createHarness(cc, BossHazardVisualController, PoolableActor)
   const frame = { id: 'sweep-frame' }
   const color = new cc.Color(141, 232, 218, 190)
 
-  harness.controller.setTalisman(frame, color, 180, 96)
+  const cases = [
+    { hazard: 'sweep', width: 180, height: 96, side: 96 },
+    { hazard: 'spike', width: 64, height: 64, side: 64 },
+    { hazard: 'roar-horizontal', width: 112, height: 42, side: 42 },
+    { hazard: 'roar-vertical', width: 42, height: 112, side: 42 },
+  ]
+
+  for (const { hazard, width, height, side } of cases) {
+    harness.controller.setTalisman(frame, color, width, height)
+    assert.deepEqual(harness.transform.contentSize, { width: side, height: side }, hazard)
+  }
 
   assert.strictEqual(harness.sprite.spriteFrame, frame)
   assert.notStrictEqual(harness.sprite.color, color)
@@ -189,16 +199,6 @@ test('setTalisman assigns its frame and color and clamps dimensions to 112', asy
     [harness.sprite.color.r, harness.sprite.color.g, harness.sprite.color.b, harness.sprite.color.a],
     [141, 232, 218, 190],
   )
-  assert.deepEqual(harness.transform.contentSize, { width: 112, height: 96 })
-})
-
-test('setTalisman clamps height independently when width is below 112', async () => {
-  const { BossHazardVisualController, PoolableActor, cc } = await loadRuntime()
-  const harness = createHarness(cc, BossHazardVisualController, PoolableActor)
-
-  harness.controller.setTalisman(new cc.SpriteFrame(), new cc.Color(255, 255, 255, 255), 96, 180)
-
-  assert.deepEqual(harness.transform.contentSize, { width: 96, height: 112 })
 })
 
 test('controller methods are null-safe when optional visual bindings are absent', async () => {

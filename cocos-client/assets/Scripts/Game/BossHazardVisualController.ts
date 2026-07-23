@@ -25,9 +25,7 @@ export class BossHazardVisualController extends Component {
 
     this.talisman.spriteFrame = frame
     this.talisman.color = color
-    this.talisman.node.getComponent(UITransform)?.setContentSize(
-      Math.min(width, 112),
-      Math.min(height, 112),
-    )
+    const side = Math.min(width, height, 112)
+    this.talisman.node.getComponent(UITransform)?.setContentSize(side, side)
   }
 }

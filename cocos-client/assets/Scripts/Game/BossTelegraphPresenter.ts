@@ -102,14 +102,17 @@ export class BossTelegraphPresenter extends Component {
     for (const kind of ['sweep', 'spike', 'roar-sector'] as const) {
       const path = resolveBossTelegraphVisual({ kind }).talismanPath
       resources.load(path, SpriteFrame, (error, frame) => {
+        if (error || !(frame instanceof SpriteFrame)) return
         if (
-          error
-          || !(frame instanceof SpriteFrame)
-          || this.destroyed
+          this.destroyed
           || loadGeneration !== this.loadGeneration
           || !this.isValid
           || !this.node?.isValid
-        ) return
+        ) {
+          resources.release(path, SpriteFrame)
+          return
+        }
+        if (this.talismanFrames.has(path)) resources.release(path, SpriteFrame)
         this.talismanFrames.set(path, frame)
       })
     }
@@ -132,6 +135,7 @@ export class BossTelegraphPresenter extends Component {
   onDestroy(): void {
     this.destroyed = true
     this.loadGeneration += 1
+    for (const path of this.talismanFrames.keys()) resources.release(path, SpriteFrame)
     this.talismanFrames.clear()
     this.hideAll()
   }
