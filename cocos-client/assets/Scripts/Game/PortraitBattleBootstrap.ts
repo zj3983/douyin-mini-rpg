@@ -29,8 +29,7 @@ import {
   PLAYER_DISPLAY_SCALE,
   PLAYER_FRAME_HEIGHT,
   PLAYER_FRAME_WIDTH,
-  computeBattleLayout,
-  selectBattleResolution,
+  computeBattleViewportState,
 } from '../Combat/BattleLayout.ts'
 import type { BattleLayout, BattleResolutionMode } from '../Combat/BattleLayout.ts'
 import { BOSS_HAZARD_POOL_CAPACITY } from '../Combat/BossBrain.ts'
@@ -55,7 +54,7 @@ import { DamageNumberController } from './DamageNumberController'
 import { StageBackgroundController } from './StageBackgroundController'
 import { StageResourceController } from './StageResourceController'
 import { createDefaultViewportMetricsProvider } from './ViewportMetrics.ts'
-import type { ViewportMetricsProvider } from './ViewportMetrics.ts'
+import type { ViewportMetrics, ViewportMetricsProvider } from './ViewportMetrics.ts'
 
 const { ccclass } = _decorator
 const WIDTH = BATTLE_DESIGN_WIDTH
@@ -106,10 +105,11 @@ export class PortraitBattleBootstrap extends Component {
 
   onLoad() {
     this.viewportMetricsProvider = createDefaultViewportMetricsProvider(() => view.getFrameSize())
-    this.applyResolutionPolicy()
-    this.viewportMetricsCleanup = this.viewportMetricsProvider.subscribe(() => this.relayoutVisibleArea())
-    this.assembleScene()
-    view.on('canvas-resize', this.relayoutVisibleArea, this)
+    const initialMetrics = this.viewportMetricsProvider.read()
+    const initialLayout = this.applyViewportMetrics(initialMetrics)
+    this.assembleScene(initialLayout)
+    this.viewportMetricsCleanup = this.viewportMetricsProvider.subscribe((metrics) => this.relayoutVisibleArea(metrics))
+    view.on('canvas-resize', this.onCanvasResize, this)
   }
 
   onDestroy() {
@@ -122,18 +122,17 @@ export class PortraitBattleBootstrap extends Component {
     this.viewportMetricsCleanup = null
     this.viewportMetricsProvider?.destroy()
     this.viewportMetricsProvider = null
-    view.off('canvas-resize', this.relayoutVisibleArea, this)
+    view.off('canvas-resize', this.onCanvasResize, this)
   }
 
   update(deltaTime: number) {
     this.stageBackgroundController?.update(deltaTime)
   }
 
-  private assembleScene() {
+  private assembleScene(layout: BattleLayout) {
     if (this.assembled) return
     this.assembled = true
 
-    const layout = this.computeCurrentLayout()
     const visibleHeight = layout.visibleHeight
     const backgroundScale = visibleHeight / HEIGHT
     const backgroundWidth = WIDTH * backgroundScale
@@ -197,9 +196,8 @@ export class PortraitBattleBootstrap extends Component {
     player.setSiblingIndex(0)
   }
 
-  private relayoutVisibleArea() {
-    this.applyResolutionPolicy()
-    const layout = this.computeCurrentLayout()
+  private relayoutVisibleArea(metrics: Readonly<ViewportMetrics>) {
+    const layout = this.applyViewportMetrics(metrics)
     const visibleHeight = layout.visibleHeight
     const backgroundWidth = WIDTH * (visibleHeight / HEIGHT)
 
@@ -215,37 +213,32 @@ export class PortraitBattleBootstrap extends Component {
     if (this.movementCoordinateSpace) this.battleInput?.configure(layout.movement, this.movementCoordinateSpace)
   }
 
-  private applyResolutionPolicy() {
-    const frameSize = view.getFrameSize()
+  private onCanvasResize() {
     const metrics = this.viewportMetricsProvider?.read()
-    const resolution = selectBattleResolution({
-      cssWidth: metrics?.cssWidth ?? frameSize.width,
-      cssHeight: metrics?.cssHeight ?? frameSize.height,
-      viewportSizeValid: metrics?.viewportSizeValid,
-      previousMode: this.resolutionMode ?? undefined,
-    })
-    if (resolution.mode === this.resolutionMode) return
-    this.resolutionMode = resolution.mode
-    const policy = resolution.mode === 'show-all'
-      ? ResolutionPolicy.SHOW_ALL
-      : ResolutionPolicy.FIXED_WIDTH
-    view.setDesignResolutionSize(resolution.designWidth, resolution.designHeight, policy)
+    if (metrics) this.relayoutVisibleArea(metrics)
   }
 
-  private computeCurrentLayout(): BattleLayout {
-    const frameSize = view.getFrameSize()
-    const metrics = this.viewportMetricsProvider?.read()
-    const layout = computeBattleLayout({
+  private applyViewportMetrics(metrics: Readonly<ViewportMetrics>): BattleLayout {
+    const state = computeBattleViewportState({
       designWidth: WIDTH,
-      cssWidth: metrics?.cssWidth ?? frameSize.width,
-      cssHeight: metrics?.cssHeight ?? frameSize.height,
-      topInsetPx: metrics?.topInsetPx ?? 0,
-      bottomInsetPx: metrics?.bottomInsetPx ?? 0,
-      viewportSizeValid: metrics?.viewportSizeValid,
+      cssWidth: metrics.cssWidth,
+      cssHeight: metrics.cssHeight,
+      topInsetPx: metrics.topInsetPx,
+      bottomInsetPx: metrics.bottomInsetPx,
+      viewportSizeValid: metrics.viewportSizeValid,
+      previousMode: this.resolutionMode ?? undefined,
       previousLayout: this.appliedLayout,
     })
-    this.appliedLayout = layout
-    return layout
+    const resolutionChanged = state.resolution.mode !== this.resolutionMode
+    this.resolutionMode = state.resolution.mode
+    this.appliedLayout = state.layout
+    if (resolutionChanged) {
+      const policy = state.resolution.mode === 'show-all'
+        ? ResolutionPolicy.SHOW_ALL
+        : ResolutionPolicy.FIXED_WIDTH
+      view.setDesignResolutionSize(state.resolution.designWidth, state.resolution.designHeight, policy)
+    }
+    return state.layout
   }
 
   private configureInputLayer(node: Node | null, layout: BattleLayout) {

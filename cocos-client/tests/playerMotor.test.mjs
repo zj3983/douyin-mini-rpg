@@ -137,6 +137,7 @@ test('CSS safe insets shift top and bottom limits without stretching the viewpor
     cssHeight: 844,
     topInsetPx: 0,
     bottomInsetPx: 0,
+    resolutionMode: 'fixed-width',
   })
   const inset = computeBattleLayout({
     designWidth: 750,
@@ -144,6 +145,7 @@ test('CSS safe insets shift top and bottom limits without stretching the viewpor
     cssHeight: 844,
     topInsetPx: 39,
     bottomInsetPx: 21,
+    resolutionMode: 'fixed-width',
   })
 
   assert.equal(inset.visibleHeight, base.visibleHeight)
@@ -153,6 +155,30 @@ test('CSS safe insets shift top and bottom limits without stretching the viewpor
   const bottomDelta = Math.max(21 * 750 / 390, BATTLE_BOTTOM_NAVIGATION_MARGIN) - BATTLE_BOTTOM_NAVIGATION_MARGIN
   assert.ok(Math.abs(inset.navigationTop - base.navigationTop - bottomDelta) <= EPSILON)
   assert.ok(Math.abs(inset.movement.minY - base.movement.minY - bottomDelta) <= EPSILON)
+})
+
+test('SHOW_ALL landscape converts safe insets with the effective fit scale', () => {
+  const base = computeBattleLayout({
+    designWidth: 750,
+    cssWidth: 844,
+    cssHeight: 390,
+    topInsetPx: 0,
+    bottomInsetPx: 0,
+    resolutionMode: 'show-all',
+  })
+  const inset = computeBattleLayout({
+    designWidth: 750,
+    cssWidth: 844,
+    cssHeight: 390,
+    topInsetPx: 20,
+    bottomInsetPx: 0,
+    resolutionMode: 'show-all',
+  })
+
+  const expectedDesignInset = 20 * 1334 / 390
+  assert.equal(base.visibleHeight, 1334)
+  assert.ok(Math.abs(base.actorSafeRect.maxY - inset.actorSafeRect.maxY - expectedDesignInset) <= EPSILON)
+  assert.ok(Math.abs(base.movement.maxY - inset.movement.maxY - expectedDesignInset) <= EPSILON)
 })
 
 test('malformed dimensions and insets never produce nonfinite layout output', () => {

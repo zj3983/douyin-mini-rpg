@@ -4,6 +4,7 @@ import * as battleLayout from '../assets/Scripts/Combat/BattleLayout.ts'
 import { createViewportMetricsProvider } from '../assets/Scripts/Game/ViewportMetrics.ts'
 
 const selectBattleResolution = battleLayout.selectBattleResolution
+const computeBattleViewportState = battleLayout.computeBattleViewportState
 
 test('portrait viewports keep the fixed-width dynamic-height policy', () => {
   assert.equal(typeof selectBattleResolution, 'function')
@@ -148,4 +149,49 @@ test('an initially invalid viewport still produces a safe bootstrap layout', () 
   assert.equal(Number.isFinite(layout.navigationTop), true)
   assert.equal(Number.isFinite(layout.bossSpawn.x), true)
   assert.equal(Number.isFinite(layout.bossSpawn.y), true)
+})
+
+test('changing metrics snapshots produce matching resolution and applied layout state', () => {
+  assert.equal(typeof computeBattleViewportState, 'function')
+  const snapshots = [
+    {
+      cssWidth: 390,
+      cssHeight: 844,
+      topInsetPx: 20,
+      bottomInsetPx: 0,
+      viewportSizeValid: true,
+    },
+    {
+      cssWidth: 844,
+      cssHeight: 390,
+      topInsetPx: 20,
+      bottomInsetPx: 0,
+      viewportSizeValid: true,
+    },
+  ]
+  let readCount = 0
+  const provider = { read: () => snapshots[readCount++] }
+  let currentState
+  const relayout = () => {
+    const metrics = provider.read()
+    currentState = computeBattleViewportState({
+      designWidth: 750,
+      ...metrics,
+      previousMode: currentState?.resolution.mode,
+      previousLayout: currentState?.layout,
+    })
+    return currentState
+  }
+
+  const portrait = relayout()
+  const landscape = relayout()
+  const expectedLandscapeInset = 20 * 1334 / 390
+
+  assert.equal(readCount, 2)
+  assert.equal(portrait.resolution.mode, 'fixed-width')
+  assert.equal(portrait.layout.visibleHeight, 750 * 844 / 390)
+  assert.equal(landscape.resolution.mode, 'show-all')
+  assert.equal(landscape.layout.visibleHeight, 1334)
+  assert.ok(Math.abs(landscape.layout.actorSafeRect.maxY - (667 - 210 - expectedLandscapeInset)) < 1e-9)
+  assert.equal(Object.isFrozen(landscape), true)
 })

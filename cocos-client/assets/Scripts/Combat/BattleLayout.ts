@@ -8,6 +8,7 @@ export interface LayoutInput {
   bottomInsetPx: number
   viewportSizeValid?: boolean
   previousLayout?: BattleLayout | null
+  resolutionMode?: BattleResolutionMode
 }
 
 export interface BattleLayout {
@@ -32,6 +33,15 @@ export interface BattleResolution {
   readonly designWidth: number
   readonly designHeight: number
   readonly mode: BattleResolutionMode
+}
+
+export interface BattleViewportStateInput extends LayoutInput {
+  previousMode?: BattleResolutionMode
+}
+
+export interface BattleViewportState {
+  readonly resolution: Readonly<BattleResolution>
+  readonly layout: BattleLayout
 }
 
 export interface VisualFrameSize {
@@ -104,7 +114,10 @@ export function computeBattleLayout(input: LayoutInput): BattleLayout {
     minimumVisibleHeight,
     Number.isFinite(projectedHeight) && projectedHeight > 0 ? projectedHeight : BATTLE_MIN_VISIBLE_HEIGHT,
   )
-  const designPerCssPixel = designWidth / cssWidth
+  const cssPixelsPerDesignUnit = input?.resolutionMode === 'show-all'
+    ? Math.min(cssWidth / designWidth, cssHeight / BATTLE_MIN_VISIBLE_HEIGHT)
+    : cssWidth / designWidth
+  const designPerCssPixel = 1 / cssPixelsPerDesignUnit
   const maxInset = visibleHeight * 0.15
   const topInset = Math.min(finiteInset(input?.topInsetPx) * designPerCssPixel, maxInset)
   const bottomInset = Math.min(finiteInset(input?.bottomInsetPx) * designPerCssPixel, maxInset)
@@ -145,6 +158,20 @@ export function computeBattleLayout(input: LayoutInput): BattleLayout {
     bossMaxVisualBounds,
     navigationTop,
   })
+}
+
+export function computeBattleViewportState(input: BattleViewportStateInput): Readonly<BattleViewportState> {
+  const resolution = selectBattleResolution({
+    cssWidth: input?.cssWidth,
+    cssHeight: input?.cssHeight,
+    viewportSizeValid: input?.viewportSizeValid,
+    previousMode: input?.previousMode,
+  })
+  const layout = computeBattleLayout({
+    ...input,
+    resolutionMode: resolution.mode,
+  })
+  return Object.freeze({ resolution, layout })
 }
 
 export function computeBossVisualPlacement(
