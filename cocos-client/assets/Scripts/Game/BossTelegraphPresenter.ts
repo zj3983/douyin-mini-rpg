@@ -1,6 +1,12 @@
-import { _decorator, Color, Component, Graphics, Node, UITransform } from 'cc'
+import { _decorator, Color, Component, Graphics, Node, resources, SpriteFrame, UITransform } from 'cc'
 import { BOSS_HAZARD_POOL_CAPACITY } from '../Combat/BossBrain.ts'
 import type { EnemyCommand } from '../Combat/EnemyBrain.ts'
+import {
+  resolveBossTelegraphVisual,
+  talismanPulse,
+  type BossTelegraphVisualProfile,
+} from '../Core/BossTelegraphVisualProfile.ts'
+import { BossHazardVisualController } from './BossHazardVisualController'
 import type { EnemyTelegraphDelivery } from './EnemyCombatResolverAdapter.ts'
 import { NodePoolController } from './NodePoolController'
 
@@ -19,6 +25,8 @@ type ActiveHitboxCommand = Extract<EnemyCommand, { readonly type: 'activate-hitb
 
 interface TelegraphVisual {
   readonly node: Node
+  readonly duration: number
+  readonly profile: BossTelegraphVisualProfile
   remaining: number
 }
 
@@ -55,6 +63,20 @@ function centerAndSize(area: EnemyTelegraphDelivery['area'] | ActiveHitboxComman
   }
 }
 
+function dangerKindForAttack(attackId: string): string {
+  if (attackId.startsWith('ground-spikes:')) return 'spike'
+  if (attackId.startsWith('mountain-roar:')) return 'roar-sector'
+  return 'sweep'
+}
+
+function drawBrokenRail(graphics: Graphics, minX: number, maxX: number, y: number): void {
+  const width = maxX - minX
+  graphics.moveTo(minX, y)
+  graphics.lineTo(minX + width * 0.38, y)
+  graphics.moveTo(minX + width * 0.55, y)
+  graphics.lineTo(maxX, y)
+}
+
 @ccclass('BossTelegraphPresenter')
 export class BossTelegraphPresenter extends Component {
   @property(NodePoolController)
@@ -65,6 +87,17 @@ export class BossTelegraphPresenter extends Component {
   private readonly impacts: ImpactVisual[] = []
   private readonly earlyActivations = new Map<string, ActiveHitboxCommand[]>()
   private readonly activatedAuthorities = new Set<string>()
+  private readonly talismanFrames = new Map<string, SpriteFrame>()
+
+  onLoad(): void {
+    for (const kind of ['sweep', 'spike', 'roar-sector'] as const) {
+      const path = resolveBossTelegraphVisual({ kind }).talismanPath
+      resources.load(path, SpriteFrame, (error, frame) => {
+        if (error || !(frame instanceof SpriteFrame) || !this.node.isValid) return
+        this.talismanFrames.set(path, frame)
+      })
+    }
+  }
 
   get visibleTelegraphCount(): number {
     let count = 0
@@ -98,7 +131,10 @@ export class BossTelegraphPresenter extends Component {
 
     const ready: TelegraphGroup[] = []
     for (const group of this.groups.values()) {
-      for (const visual of group.visuals) visual.remaining -= deltaSeconds
+      for (const visual of group.visuals) {
+        visual.remaining -= deltaSeconds
+        this.updateTelegraphPulse(visual)
+      }
       if (group.pending.length > 0 && group.visuals.every((visual) => visual.remaining <= 1e-9)) ready.push(group)
     }
     for (const group of ready) this.activateGroup(group)
@@ -108,7 +144,8 @@ export class BossTelegraphPresenter extends Component {
     if (delivery.generation < this.generation) return false
     if (delivery.generation > this.generation) this.resetGeneration(delivery.generation)
     const node = this.acquireHazardNode(delivery.attackId)
-    this.drawArea(node, delivery.area, false)
+    const profile = resolveBossTelegraphVisual(delivery.danger)
+    this.drawTelegraph(node, delivery.area, profile)
     this.telegraphPool?.activateNode(node)
 
     const key = authorityKey(delivery.generation, delivery.enemyId, delivery.telegraphId)
@@ -124,7 +161,7 @@ export class BossTelegraphPresenter extends Component {
       this.earlyActivations.delete(key)
       this.groups.set(key, group)
     }
-    group.visuals.push({ node, remaining: delivery.duration })
+    group.visuals.push({ node, duration: delivery.duration, profile, remaining: delivery.duration })
     return true
   }
 
@@ -219,24 +256,145 @@ export class BossTelegraphPresenter extends Component {
 
   private showImpact(generation: number, enemyId: number, command: ActiveHitboxCommand): void {
     const node = this.acquireHazardNode(command.attackId)
-    this.drawArea(node, command.area, true)
+    this.drawImpact(node, command.area, resolveBossTelegraphVisual({ kind: dangerKindForAttack(command.attackId) }))
     this.telegraphPool?.activateNode(node)
     this.impacts.push({ node, generation, enemyId, fresh: true, remaining: command.duration })
   }
 
-  private drawArea(node: Node, area: EnemyTelegraphDelivery['area'], active: boolean): void {
+  private drawTelegraph(
+    node: Node,
+    area: EnemyTelegraphDelivery['area'],
+    profile: BossTelegraphVisualProfile,
+  ): void {
     const geometry = centerAndSize(area)
-    node.setPosition(geometry.x, geometry.y, 0)
-    node.getComponent(UITransform)?.setContentSize(geometry.width, geometry.height)
+    this.prepareVisualNode(node, geometry, profile, false)
     const graphics = node.getComponent(Graphics)
     if (!graphics) return
-    graphics.clear()
-    graphics.fillColor = active ? new Color(238, 74, 54, 120) : new Color(244, 181, 53, 92)
-    graphics.strokeColor = active ? new Color(255, 228, 198, 235) : new Color(255, 224, 134, 235)
-    graphics.lineWidth = active ? 4 : 3
-    graphics.rect(-geometry.width * 0.5, -geometry.height * 0.5, geometry.width, geometry.height)
-    graphics.fill()
+
+    const halfWidth = geometry.width * 0.5
+    const halfHeight = geometry.height * 0.5
+    if (profile.id === 'sweep-seal') {
+      drawBrokenRail(graphics, -halfWidth * 0.9, halfWidth * 0.9, -halfHeight * 0.3)
+      drawBrokenRail(graphics, -halfWidth * 0.9, halfWidth * 0.9, halfHeight * 0.3)
+      for (const offset of [-0.42, 0, 0.42]) {
+        graphics.moveTo(halfWidth * offset - halfHeight * 0.22, halfHeight * 0.62)
+        graphics.lineTo(halfWidth * offset + halfHeight * 0.22, -halfHeight * 0.62)
+      }
+    } else if (profile.id === 'spike-seal') {
+      const radius = Math.min(halfWidth, halfHeight) * 0.68
+      graphics.moveTo(0, radius)
+      graphics.lineTo(radius * 0.72, 0)
+      graphics.lineTo(0, -radius)
+      graphics.lineTo(-radius * 0.72, 0)
+      graphics.lineTo(0, radius)
+      graphics.moveTo(-radius, 0)
+      graphics.lineTo(radius, 0)
+      graphics.moveTo(0, radius * 0.72)
+      graphics.lineTo(0, -radius)
+      graphics.circle(0, -radius * 0.42, Math.max(2, radius * 0.1))
+    } else {
+      drawBrokenRail(graphics, -halfWidth * 0.86, halfWidth * 0.86, halfHeight * 0.58)
+      graphics.moveTo(-halfWidth * 0.78, -halfHeight * 0.5)
+      graphics.lineTo(-halfWidth * 0.42, halfHeight * 0.12)
+      graphics.lineTo(-halfWidth * 0.15, -halfHeight * 0.18)
+      graphics.lineTo(0, halfHeight * 0.42)
+      graphics.lineTo(halfWidth * 0.18, -halfHeight * 0.12)
+      graphics.lineTo(halfWidth * 0.48, halfHeight * 0.18)
+      graphics.lineTo(halfWidth * 0.8, -halfHeight * 0.5)
+      graphics.moveTo(-halfWidth * 0.62, -halfHeight * 0.64)
+      graphics.lineTo(-halfWidth * 0.18, -halfHeight * 0.64)
+      graphics.moveTo(halfWidth * 0.16, -halfHeight * 0.64)
+      graphics.lineTo(halfWidth * 0.62, -halfHeight * 0.64)
+    }
     graphics.stroke()
+  }
+
+  private drawImpact(
+    node: Node,
+    area: EnemyTelegraphDelivery['area'],
+    profile: BossTelegraphVisualProfile,
+  ): void {
+    const geometry = centerAndSize(area)
+    this.prepareVisualNode(node, geometry, profile, true)
+    const graphics = node.getComponent(Graphics)
+    if (!graphics) return
+
+    const halfWidth = geometry.width * 0.5
+    const halfHeight = geometry.height * 0.5
+    if (profile.id === 'sweep-seal') {
+      for (const offset of [-0.5, 0, 0.5]) {
+        graphics.moveTo(-halfWidth * 0.82, halfHeight * offset)
+        graphics.lineTo(halfWidth * 0.82, halfHeight * (offset - 0.32))
+      }
+    } else if (profile.id === 'spike-seal') {
+      graphics.moveTo(0, halfHeight * 0.9)
+      graphics.lineTo(0, -halfHeight * 0.9)
+      graphics.moveTo(-halfWidth * 0.7, 0)
+      graphics.lineTo(halfWidth * 0.7, 0)
+      graphics.moveTo(-halfWidth * 0.46, halfHeight * 0.46)
+      graphics.lineTo(halfWidth * 0.46, -halfHeight * 0.46)
+      graphics.moveTo(halfWidth * 0.46, halfHeight * 0.46)
+      graphics.lineTo(-halfWidth * 0.46, -halfHeight * 0.46)
+    } else {
+      graphics.moveTo(-halfWidth * 0.88, -halfHeight * 0.54)
+      graphics.lineTo(-halfWidth * 0.45, halfHeight * 0.42)
+      graphics.lineTo(-halfWidth * 0.12, -halfHeight * 0.2)
+      graphics.lineTo(halfWidth * 0.18, halfHeight * 0.5)
+      graphics.lineTo(halfWidth * 0.46, -halfHeight * 0.1)
+      graphics.lineTo(halfWidth * 0.88, halfHeight * 0.54)
+    }
+    graphics.stroke()
+  }
+
+  private prepareVisualNode(
+    node: Node,
+    geometry: ReturnType<typeof centerAndSize>,
+    profile: BossTelegraphVisualProfile,
+    impact: boolean,
+  ): void {
+    node.setPosition(geometry.x, geometry.y, 0)
+    node.getComponent(UITransform)?.setContentSize(geometry.width, geometry.height)
+    const controller = node.getComponent(BossHazardVisualController)
+    controller?.resetVisual()
+    const graphics = node.getComponent(Graphics)
+    graphics?.clear()
+    if (graphics) {
+      const color = impact ? profile.impact : profile.warning
+      graphics.strokeColor = new Color(...color)
+      graphics.lineWidth = impact ? 4 : 3
+    }
+    const symbolColor = impact ? profile.impact : profile.spirit
+    const alpha = impact ? symbolColor[3] : Math.round(symbolColor[3] * talismanPulse(1, 1).alpha)
+    controller?.setTalisman(
+      this.talismanFrames.get(profile.talismanPath) ?? null,
+      new Color(symbolColor[0], symbolColor[1], symbolColor[2], alpha),
+      geometry.width,
+      geometry.height,
+    )
+  }
+
+  private updateTelegraphPulse(visual: TelegraphVisual): void {
+    const pulse = talismanPulse(visual.duration, visual.remaining)
+    const talismanColor = visual.node.getComponent(BossHazardVisualController)?.talisman?.color
+    if (talismanColor) {
+      talismanColor.set(
+        talismanColor.r,
+        talismanColor.g,
+        talismanColor.b,
+        Math.round(visual.profile.spirit[3] * pulse.alpha),
+      )
+    }
+
+    const strokeColor = visual.node.getComponent(Graphics)?.strokeColor
+    if (!strokeColor) return
+    const accent = visual.profile.spirit
+    const intensity = pulse.hot ? 0.5 : 0.18 + pulse.progress * 0.22
+    strokeColor.set(
+      Math.round(visual.profile.warning[0] + (accent[0] - visual.profile.warning[0]) * intensity),
+      Math.round(visual.profile.warning[1] + (accent[1] - visual.profile.warning[1]) * intensity),
+      Math.round(visual.profile.warning[2] + (accent[2] - visual.profile.warning[2]) * intensity),
+      Math.round(visual.profile.warning[3] * (0.78 + pulse.alpha * 0.22)),
+    )
   }
 
   private removeGroup(key: string, group: TelegraphGroup): void {

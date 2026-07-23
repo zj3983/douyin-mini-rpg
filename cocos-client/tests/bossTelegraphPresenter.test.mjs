@@ -14,14 +14,46 @@ export const _decorator = {
   ccclass: () => (target) => target,
   property: (...args) => args.length >= 2 ? undefined : () => undefined,
 }
-export class Component {}
+export class Component { constructor() { this.node = { isValid: true } } }
 export class Node {}
 export class UITransform {}
 export class Graphics {}
-export class Color { constructor(r = 0, g = 0, b = 0, a = 0) { Object.assign(this, { r, g, b, a }) } }
+export class Color {
+  constructor(r = 0, g = 0, b = 0, a = 0) { this.set(r, g, b, a) }
+  set(r, g, b, a) { Object.assign(this, { r, g, b, a }); return this }
+}
+export class SpriteFrame { constructor(id = '') { this.id = id } }
+export const resources = {
+  load(path, Type, callback) { globalThis.__bossTelegraphResources.load(path, Type, callback) },
+}
 `
 
-async function loadPresenter() {
+const controllerSource = `
+export class BossHazardVisualController {
+  resetVisual() {
+    this.talismanFrame = null
+    this.talismanColor = null
+    this.talismanSize = null
+    this.talisman = null
+  }
+  setTalisman(frame, color, width, height) {
+    this.talismanFrame = frame
+    this.talismanColor = color
+    this.talisman = { color }
+    this.talismanSize = { width: Math.min(width, 112), height: Math.min(height, 112) }
+  }
+}
+`
+
+async function loadPresenter({ failedPaths = [] } = {}) {
+  const loadedPaths = []
+  const failed = new Set(failedPaths)
+  globalThis.__bossTelegraphResources = {
+    load(path, Type, callback) {
+      loadedPaths.push(path)
+      callback(failed.has(path) ? new Error(`missing ${path}`) : null, failed.has(path) ? null : new Type(path))
+    },
+  }
   const source = await readFile(new URL('../assets/Scripts/Game/BossTelegraphPresenter.ts', import.meta.url), 'utf8')
   let executable = ts.transpileModule(source, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, experimentalDecorators: true },
@@ -30,8 +62,10 @@ async function loadPresenter() {
   executable = executable
     .replace("from 'cc'", `from '${moduleUrl(ccSource)}'`)
     .replace("from '../Combat/BossBrain.ts'", `from '${new URL('../assets/Scripts/Combat/BossBrain.ts', import.meta.url).href}'`)
+    .replace("from '../Core/BossTelegraphVisualProfile.ts'", `from '${new URL('../assets/Scripts/Core/BossTelegraphVisualProfile.ts', import.meta.url).href}'`)
+    .replace("from './BossHazardVisualController'", `from '${moduleUrl(controllerSource)}'`)
     .replace("from './NodePoolController'", `from '${moduleUrl('export class NodePoolController {}')}'`)
-  return import(moduleUrl(executable))
+  return { ...await import(moduleUrl(executable)), loadedPaths }
 }
 
 class TelegraphNode {
@@ -43,12 +77,35 @@ class TelegraphNode {
     clear() { this.calls = [] },
     rect(x, y, width, height) { this.calls.push({ type: 'rect', x, y, width, height }) },
     fill() { this.calls.push({ type: 'fill' }) },
+    moveTo(x, y) { this.calls.push({ type: 'moveTo', x, y }) },
+    lineTo(x, y) { this.calls.push({ type: 'lineTo', x, y }) },
+    circle(x, y, radius) { this.calls.push({ type: 'circle', x, y, radius }) },
+    ellipse(x, y, radiusX, radiusY) { this.calls.push({ type: 'ellipse', x, y, radiusX, radiusY }) },
     stroke() { this.calls.push({ type: 'stroke' }) },
+  }
+  controller = {
+    resetVisual: () => {
+      this.controller.talismanFrame = null
+      this.controller.talismanColor = null
+      this.controller.talismanSize = null
+      this.controller.talisman = null
+    },
+    setTalisman: (frame, color, width, height) => {
+      this.controller.talismanFrame = frame
+      this.controller.talismanColor = color
+      this.controller.talisman = { color }
+      this.controller.talismanSize = { width: Math.min(width, 112), height: Math.min(height, 112) }
+    },
+    talismanFrame: null,
+    talismanColor: null,
+    talismanSize: null,
+    talisman: null,
   }
   setPosition(x, y, z) { this.position = { x, y, z } }
   getComponent(Type) {
     if (Type.name === 'UITransform') return this.transform
     if (Type.name === 'Graphics') return this.graphics
+    if (Type.name === 'BossHazardVisualController') return this.controller
     return null
   }
 }
@@ -73,11 +130,12 @@ class TelegraphPool {
     this.maxActive = Math.max(this.maxActive, this.active.size)
     const { x, y } = node.position
     const { width, height } = node.transform.size
+    const phase = node.graphics.lineWidth === 4 ? 'impact' : 'telegraph'
     this.activationLog.push({
-      kind: node.graphics.fillColor.r === 238 ? 'impact' : 'telegraph',
+      kind: phase,
       area: { minX: x - width / 2, maxX: x + width / 2, minY: y - height / 2, maxY: y + height / 2 },
     })
-    node.hazardKind = node.graphics.fillColor.r === 238 ? 'impact' : 'telegraph'
+    node.hazardKind = phase
     node.activatedFrame = this.frame
   }
   despawn(node) {
@@ -90,6 +148,13 @@ class TelegraphPool {
 
 function areaKey(area) {
   return [area.minX, area.maxX, area.minY, area.maxY].map((value) => Math.round(value * 1e9) / 1e9).join(':')
+}
+
+function visualIdForFrame(frame) {
+  if (frame?.id.includes('talisman_spike')) return 'spike-seal'
+  if (frame?.id.includes('talisman_roar')) return 'roar-seal'
+  if (frame?.id.includes('talisman_sweep')) return 'sweep-seal'
+  return null
 }
 
 function commandAttack(command) {
@@ -175,6 +240,102 @@ function telegraph(attackId, area, danger, telegraphId = attackId) {
   return { enemyId: 7, attackId, telegraphId, area, duration: 0.8, visibleAt: 0, activationNotBefore: 0.8, generation: 3, danger }
 }
 
+test('preloaded profiles render three distinct glyphless line arrays in authoritative areas and pulse without geometry drift', async () => {
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY, loadedPaths } = await loadPresenter()
+  const presenter = new BossTelegraphPresenter()
+  const pool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
+  presenter.telegraphPool = pool
+  presenter.onLoad()
+
+  const cases = [
+    {
+      id: 'sweep-seal',
+      path: 'Assets/Skills/BossDomain/talisman_sweep/spriteFrame',
+      attackId: 'bamboo-sweep:7:visual',
+      area: { minX: -180, maxX: 140, minY: -60, maxY: 52 },
+      danger: { kind: 'sweep', escape: 'vertical', origin: { x: 210, y: 24 }, arcDegrees: 120 },
+    },
+    {
+      id: 'spike-seal',
+      path: 'Assets/Skills/BossDomain/talisman_spike/spriteFrame',
+      attackId: 'ground-spikes:7:visual:marker:0',
+      area: { minX: 20, maxX: 84, minY: -140, maxY: -76 },
+      danger: { kind: 'spike', markerIndex: 0, center: { x: 52, y: -108 } },
+    },
+    {
+      id: 'roar-seal',
+      path: 'Assets/Skills/BossDomain/talisman_roar/spriteFrame',
+      attackId: 'mountain-roar:7:visual:sector:top',
+      area: { minX: -90, maxX: 90, minY: 120, maxY: 190 },
+      danger: { kind: 'roar-sector', waveIndex: -1, radius: 190, sector: 'top', safeGap: { sector: 'left', centerAngle: Math.PI, width: Math.PI / 3 } },
+    },
+  ]
+
+  assert.deepEqual(loadedPaths, cases.map(({ path }) => path), 'onLoad preloads exactly the three profile paths')
+  for (const entry of cases) assert.equal(presenter.present(telegraph(entry.attackId, entry.area, entry.danger)), true, entry.id)
+
+  const nodes = [...pool.active]
+  assert.equal(nodes.length, 3)
+  assert.deepEqual(nodes.map((node) => visualIdForFrame(node.controller.talismanFrame)), cases.map(({ id }) => id))
+  assert.deepEqual(nodes.map((node) => node.controller.talismanFrame?.id), cases.map(({ path }) => path))
+  assert.equal(new Set(nodes.map((node) => node.controller.talismanFrame)).size, 3)
+  for (const [index, node] of nodes.entries()) {
+    const area = cases[index].area
+    assert.equal(areaKey({
+      minX: node.position.x - node.transform.size.width / 2,
+      maxX: node.position.x + node.transform.size.width / 2,
+      minY: node.position.y - node.transform.size.height / 2,
+      maxY: node.position.y + node.transform.size.height / 2,
+    }), areaKey(area), `${cases[index].id} authority geometry`)
+    assert.ok(node.graphics.calls.length > 0, `${cases[index].id} has linework`)
+    assert.equal(node.graphics.calls.some((call) => call.type === 'rect' || call.type === 'fill'), false)
+  }
+  const signatures = nodes.map((node) => JSON.stringify(node.graphics.calls))
+  assert.equal(new Set(signatures).size, 3, 'sweep, spike, and roar command sequences differ')
+
+  const pulsing = nodes[0]
+  const before = {
+    alpha: pulsing.controller.talismanColor.a,
+    stroke: { ...pulsing.graphics.strokeColor },
+    position: { ...pulsing.position },
+    size: { ...pulsing.transform.size },
+    calls: structuredClone(pulsing.graphics.calls),
+  }
+  presenter.update(0.2)
+  assert.notEqual(pulsing.controller.talismanColor.a, before.alpha)
+  assert.notDeepEqual(pulsing.graphics.strokeColor, before.stroke)
+  assert.deepEqual(pulsing.position, before.position)
+  assert.deepEqual(pulsing.transform.size, before.size)
+  assert.deepEqual(pulsing.graphics.calls, before.calls)
+})
+
+test('missing talisman preload keeps a glyphless warning and its normal activation and impact lifecycle', async () => {
+  const missingPath = 'Assets/Skills/BossDomain/talisman_spike/spriteFrame'
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter({ failedPaths: [missingPath] })
+  const presenter = new BossTelegraphPresenter()
+  const pool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
+  presenter.telegraphPool = pool
+  presenter.onLoad()
+  const area = { minX: -28, maxX: 28, minY: -90, maxY: -34 }
+  const warning = telegraph('ground-spikes:7:missing:marker:0', area, { kind: 'spike', markerIndex: 0, center: { x: 0, y: -62 } })
+
+  presenter.present(warning)
+  const warningNode = [...pool.active][0]
+  assert.equal(warningNode.controller.talismanFrame, null)
+  assert.ok(warningNode.graphics.calls.some((call) => call.type === 'stroke'))
+  presenter.activate(3, 7, { type: 'activate-hitbox', attackId: warning.attackId, telegraphId: warning.telegraphId, area, damage: 8, duration: 0.18 })
+  presenter.update(0.8)
+  assert.equal(presenter.visibleTelegraphCount, 0)
+  assert.equal(presenter.visibleImpactCount, 1)
+  const impactNode = [...pool.active][0]
+  assert.equal(impactNode.controller.talismanFrame, null)
+  assert.ok(impactNode.graphics.calls.some((call) => call.type === 'stroke'))
+  assert.equal(impactNode.graphics.calls.some((call) => call.type === 'rect' || call.type === 'fill'), false)
+  presenter.update(0.18)
+  presenter.update(0.18)
+  assert.equal(presenter.visibleImpactCount, 0)
+})
+
 test('Cocos presenter executes show-visible-active-hidden and cancel/reset lifecycle using authoritative areas', async () => {
   const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
   assert.equal(BOSS_HAZARD_POOL_CAPACITY, 18)
@@ -189,8 +350,8 @@ test('Cocos presenter executes show-visible-active-hidden and cancel/reset lifec
   const warningNode = [...pool.active][0]
   assert.deepEqual(warningNode.position, { x: 30, y: 14, z: 0 })
   assert.deepEqual(warningNode.transform.size, { width: 300, height: 108 })
-  assert.deepEqual(warningNode.graphics.calls[0], { type: 'rect', x: -150, y: -54, width: 300, height: 108 })
-  assert.equal(warningNode.graphics.calls.some((call) => call.type === 'circle'), false)
+  assert.equal(warningNode.graphics.calls.some((call) => call.type === 'rect' || call.type === 'fill'), false)
+  assert.ok(warningNode.graphics.calls.some((call) => call.type === 'lineTo'))
 
   presenter.update(0.4)
   presenter.activate(3, 7, { type: 'activate-hitbox', attackId: warning.attackId, telegraphId: warning.telegraphId, area, damage: 8, duration: 0.18 })
