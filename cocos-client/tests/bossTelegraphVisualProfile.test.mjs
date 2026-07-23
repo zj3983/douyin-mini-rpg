@@ -13,15 +13,15 @@ test('boss danger kinds resolve to distinct talisman profiles', () => {
   const roar = resolveBossTelegraphVisual({ kind: 'roar-sector' })
 
   assert.deepEqual([sweep.id, sweep.glyph], ['sweep-seal', '斩'])
-  assert.equal(sweep.talismanPath.endsWith('talisman_sweep/spriteFrame'), true)
+  assert.equal(sweep.talismanPath, 'Assets/Skills/BossDomain/talisman_sweep/spriteFrame')
   assert.deepEqual([sweep.warning, sweep.spirit, sweep.impact], [[232, 190, 88, 220], expectedSpirit, expectedImpact])
 
   assert.deepEqual([spike.id, spike.glyph], ['spike-seal', '突'])
-  assert.equal(spike.talismanPath.endsWith('talisman_spike/spriteFrame'), true)
+  assert.equal(spike.talismanPath, 'Assets/Skills/BossDomain/talisman_spike/spriteFrame')
   assert.deepEqual([spike.warning, spike.spirit, spike.impact], [[164, 58, 44, 220], expectedSpirit, expectedImpact])
 
   assert.deepEqual([roar.id, roar.glyph], ['roar-seal', '镇'])
-  assert.equal(roar.talismanPath.endsWith('talisman_roar/spriteFrame'), true)
+  assert.equal(roar.talismanPath, 'Assets/Skills/BossDomain/talisman_roar/spriteFrame')
   assert.deepEqual([roar.warning, roar.spirit, roar.impact], [[232, 190, 88, 220], expectedSpirit, expectedImpact])
   assert.strictEqual(resolveBossTelegraphVisual({ kind: 'unknown' }), sweep)
 })

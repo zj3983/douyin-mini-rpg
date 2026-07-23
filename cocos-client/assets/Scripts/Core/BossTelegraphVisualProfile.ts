@@ -18,7 +18,7 @@ const profiles = {
   sweep: {
     id: 'sweep-seal',
     glyph: '斩',
-    talismanPath: 'talisman_sweep/spriteFrame',
+    talismanPath: 'Assets/Skills/BossDomain/talisman_sweep/spriteFrame',
     warning: [232, 190, 88, 220],
     spirit,
     impact,
@@ -26,7 +26,7 @@ const profiles = {
   spike: {
     id: 'spike-seal',
     glyph: '突',
-    talismanPath: 'talisman_spike/spriteFrame',
+    talismanPath: 'Assets/Skills/BossDomain/talisman_spike/spriteFrame',
     warning: [164, 58, 44, 220],
     spirit,
     impact,
@@ -34,7 +34,7 @@ const profiles = {
   'roar-sector': {
     id: 'roar-seal',
     glyph: '镇',
-    talismanPath: 'talisman_roar/spriteFrame',
+    talismanPath: 'Assets/Skills/BossDomain/talisman_roar/spriteFrame',
     warning: [232, 190, 88, 220],
     spirit,
     impact,
