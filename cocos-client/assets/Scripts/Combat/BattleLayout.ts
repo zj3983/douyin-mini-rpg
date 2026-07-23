@@ -6,6 +6,8 @@ export interface LayoutInput {
   cssHeight: number
   topInsetPx: number
   bottomInsetPx: number
+  viewportSizeValid?: boolean
+  previousLayout?: BattleLayout | null
 }
 
 export interface BattleLayout {
@@ -90,6 +92,7 @@ export function selectBattleResolution(input: BattleResolutionInput): Readonly<B
 }
 
 export function computeBattleLayout(input: LayoutInput): BattleLayout {
+  if (input?.viewportSizeValid === false && input.previousLayout) return input.previousLayout
   const designWidth = finiteDimension(input?.designWidth, BATTLE_DESIGN_WIDTH)
   const cssWidth = finiteDimension(input?.cssWidth, designWidth)
   const fallbackCssHeight = BATTLE_MIN_VISIBLE_HEIGHT * cssWidth / designWidth

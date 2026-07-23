@@ -102,6 +102,7 @@ export class PortraitBattleBootstrap extends Component {
   private currentStageId = 1
   private battleOperational = false
   private resolutionMode: BattleResolutionMode | null = null
+  private appliedLayout: BattleLayout | null = null
 
   onLoad() {
     this.viewportMetricsProvider = createDefaultViewportMetricsProvider(() => view.getFrameSize())
@@ -234,13 +235,17 @@ export class PortraitBattleBootstrap extends Component {
   private computeCurrentLayout(): BattleLayout {
     const frameSize = view.getFrameSize()
     const metrics = this.viewportMetricsProvider?.read()
-    return computeBattleLayout({
+    const layout = computeBattleLayout({
       designWidth: WIDTH,
       cssWidth: metrics?.cssWidth ?? frameSize.width,
       cssHeight: metrics?.cssHeight ?? frameSize.height,
       topInsetPx: metrics?.topInsetPx ?? 0,
       bottomInsetPx: metrics?.bottomInsetPx ?? 0,
+      viewportSizeValid: metrics?.viewportSizeValid,
+      previousLayout: this.appliedLayout,
     })
+    this.appliedLayout = layout
+    return layout
   }
 
   private configureInputLayer(node: Node | null, layout: BattleLayout) {

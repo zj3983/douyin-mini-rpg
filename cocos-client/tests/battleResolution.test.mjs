@@ -81,3 +81,71 @@ test('provider fallback dimensions do not erase the last valid landscape orienta
 
   assert.deepEqual(modes, ['show-all', 'show-all', 'show-all'])
 })
+
+test('provider fallback dimensions preserve the last applied portrait layout', () => {
+  const frame = { width: 390, height: 844 }
+  const provider = createViewportMetricsProvider({
+    tt: null,
+    browserWindow: null,
+    getFrameSize: () => frame,
+  })
+  let previousLayout
+  const computeFromProvider = () => {
+    const metrics = provider.read()
+    const layout = battleLayout.computeBattleLayout({
+      designWidth: 750,
+      cssWidth: metrics.cssWidth,
+      cssHeight: metrics.cssHeight,
+      topInsetPx: metrics.topInsetPx,
+      bottomInsetPx: metrics.bottomInsetPx,
+      viewportSizeValid: metrics.viewportSizeValid,
+      previousLayout,
+    })
+    previousLayout = layout
+    return layout
+  }
+  const keyLayout = (layout) => ({
+    visibleHeight: layout.visibleHeight,
+    navigationTop: layout.navigationTop,
+    actorSafeRect: layout.actorSafeRect,
+    movement: layout.movement,
+    bossSpawn: layout.bossSpawn,
+  })
+
+  const portrait = computeFromProvider()
+  frame.width = 0
+  frame.height = 0
+  const invalid = computeFromProvider()
+  frame.width = 390
+  frame.height = 844
+  const restored = computeFromProvider()
+
+  assert.strictEqual(invalid, portrait)
+  assert.deepEqual(keyLayout(invalid), keyLayout(portrait))
+  assert.deepEqual(keyLayout(restored), keyLayout(portrait))
+})
+
+test('an initially invalid viewport still produces a safe bootstrap layout', () => {
+  const provider = createViewportMetricsProvider({
+    tt: null,
+    browserWindow: null,
+    getFrameSize: () => ({ width: 0, height: 0 }),
+  })
+  const metrics = provider.read()
+  const layout = battleLayout.computeBattleLayout({
+    designWidth: 750,
+    cssWidth: metrics.cssWidth,
+    cssHeight: metrics.cssHeight,
+    topInsetPx: metrics.topInsetPx,
+    bottomInsetPx: metrics.bottomInsetPx,
+    viewportSizeValid: metrics.viewportSizeValid,
+    previousLayout: null,
+  })
+
+  assert.equal(layout.visibleHeight, 1334)
+  assert.ok(layout.movement.minX < layout.movement.maxX)
+  assert.ok(layout.movement.minY < layout.movement.maxY)
+  assert.equal(Number.isFinite(layout.navigationTop), true)
+  assert.equal(Number.isFinite(layout.bossSpawn.x), true)
+  assert.equal(Number.isFinite(layout.bossSpawn.y), true)
+})
