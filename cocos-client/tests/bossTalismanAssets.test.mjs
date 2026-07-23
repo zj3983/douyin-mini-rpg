@@ -25,7 +25,7 @@ test('boss talisman core assets are distinct square RGBA sprites with transparen
     let maxX = -1
     let maxY = -1
     for (let index = 3; index < image.data.length; index += 4) {
-      if (image.data[index] > 180) {
+      if (image.data[index] > 8) {
         const pixelIndex = (index - 3) / 4
         const x = pixelIndex % image.width
         const y = Math.floor(pixelIndex / image.width)
@@ -36,18 +36,23 @@ test('boss talisman core assets are distinct square RGBA sprites with transparen
       }
     }
 
-    assert.equal(image.width, image.height, `${relativePath} must be square`)
-    assert.ok(image.width >= 512 && image.width <= 2048, `${relativePath} must be 512-2048px wide`)
+    assert.equal(image.width, 512, `${relativePath} must be 512px wide`)
+    assert.equal(image.height, 512, `${relativePath} must be 512px high`)
     assert.ok(alpha.includes(0), `${relativePath} must contain transparent pixels`)
     assert.ok(alpha.some((value) => value > 180), `${relativePath} must contain a clearly opaque subject`)
 
-    const inset = Math.floor(image.width * 0.08)
+    const inset = Math.ceil(image.width * 0.08)
     assert.ok(minX >= inset, `${relativePath} must have generous left padding`)
     assert.ok(minY >= inset, `${relativePath} must have generous top padding`)
-    assert.ok(maxX < image.width - inset, `${relativePath} must have generous right padding`)
-    assert.ok(maxY < image.height - inset, `${relativePath} must have generous bottom padding`)
+    assert.ok(image.width - 1 - maxX >= inset, `${relativePath} must have generous right padding`)
+    assert.ok(image.height - 1 - maxY >= inset, `${relativePath} must have generous bottom padding`)
 
-    hashes.push(createHash('sha256').update(bytes).digest('hex'))
+    hashes.push(
+      createHash('sha256')
+        .update(`${image.width}x${image.height}\0`)
+        .update(image.data)
+        .digest('hex'),
+    )
   }
 
   assert.equal(new Set(hashes).size, talismanPaths.length, 'boss talisman artwork must be distinct')
