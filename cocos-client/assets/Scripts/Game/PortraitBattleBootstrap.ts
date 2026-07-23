@@ -38,6 +38,7 @@ import { AtlasAnimator } from './AtlasAnimator'
 import { BattleHudController } from './BattleHudController'
 import { BattleInputController } from './BattleInputController'
 import { BattleRuntimeController } from './BattleRuntimeController'
+import { BossHazardVisualController } from './BossHazardVisualController'
 import { BossTelegraphPresenter } from './BossTelegraphPresenter'
 import { CombatAudioController } from './CombatAudioController'
 import { EnemySpawner } from './EnemySpawner'
@@ -537,8 +538,18 @@ export class PortraitBattleBootstrap extends Component {
     const node = new Node('BossSkillEffect')
     node.layer = UI_LAYER
     node.addComponent(UITransform).setContentSize(1, 1)
-    node.addComponent(Graphics)
+    const graphics = node.addComponent(Graphics)
+    const talismanNode = new Node('Talisman')
+    talismanNode.layer = UI_LAYER
+    talismanNode.addComponent(UITransform).setContentSize(112, 112)
+    const talisman = talismanNode.addComponent(Sprite)
+    node.addChild(talismanNode)
+    const visual = node.addComponent(BossHazardVisualController)
+    visual.graphics = graphics
+    visual.talisman = talisman
     node.addComponent(PoolableActor)
+    node.on('pool-despawned', visual.resetVisual, visual)
+    visual.resetVisual()
     return node
   }
 
