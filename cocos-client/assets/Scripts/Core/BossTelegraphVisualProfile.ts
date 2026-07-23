@@ -4,48 +4,48 @@ type Rgba = readonly [number, number, number, number]
 
 export interface BossTelegraphVisualProfile {
   readonly id: BossTelegraphVisualId
-  readonly glyph: string
+  readonly glyph: '斩' | '突' | '镇'
   readonly talismanPath: string
   readonly warning: Rgba
   readonly spirit: Rgba
   readonly impact: Rgba
 }
 
-const spirit = [141, 232, 218, 190] as const
-const impact = [255, 240, 189, 245] as const
+const spirit = rgba(141, 232, 218, 190)
+const impact = rgba(255, 240, 189, 245)
 
-const profiles = {
-  sweep: {
+const PROFILES = Object.freeze({
+  sweep: Object.freeze({
     id: 'sweep-seal',
     glyph: '斩',
     talismanPath: 'Assets/Skills/BossDomain/talisman_sweep/spriteFrame',
-    warning: [232, 190, 88, 220],
+    warning: rgba(232, 190, 88, 220),
     spirit,
     impact,
-  },
-  spike: {
+  }),
+  spike: Object.freeze({
     id: 'spike-seal',
     glyph: '突',
     talismanPath: 'Assets/Skills/BossDomain/talisman_spike/spriteFrame',
-    warning: [164, 58, 44, 220],
+    warning: rgba(164, 58, 44, 220),
     spirit,
     impact,
-  },
-  'roar-sector': {
+  }),
+  'roar-sector': Object.freeze({
     id: 'roar-seal',
     glyph: '镇',
     talismanPath: 'Assets/Skills/BossDomain/talisman_roar/spriteFrame',
-    warning: [232, 190, 88, 220],
+    warning: rgba(232, 190, 88, 220),
     spirit,
     impact,
-  },
-} as const satisfies Record<string, BossTelegraphVisualProfile>
+  }),
+} as const satisfies Record<string, BossTelegraphVisualProfile>)
 
 export function resolveBossTelegraphVisual(danger: { readonly kind: string }): BossTelegraphVisualProfile {
   if (danger.kind === 'spike' || danger.kind === 'roar-sector') {
-    return profiles[danger.kind]
+    return PROFILES[danger.kind]
   }
-  return profiles.sweep
+  return PROFILES.sweep
 }
 
 export function talismanPulse(duration: number, remaining: number): {
@@ -66,4 +66,8 @@ export function talismanPulse(duration: number, remaining: number): {
 
 function round3(value: number): number {
   return Math.round(value * 1000) / 1000
+}
+
+function rgba(red: number, green: number, blue: number, alpha: number): Rgba {
+  return Object.freeze([red, green, blue, alpha] as const)
 }

@@ -1,38 +1,38 @@
-const spirit = [141, 232, 218, 190]
-const impact = [255, 240, 189, 245]
+const spirit = rgba(141, 232, 218, 190)
+const impact = rgba(255, 240, 189, 245)
 
-const profiles = {
-  sweep: {
+const PROFILES = Object.freeze({
+  sweep: Object.freeze({
     id: 'sweep-seal',
     glyph: '斩',
     talismanPath: 'Assets/Skills/BossDomain/talisman_sweep/spriteFrame',
-    warning: [232, 190, 88, 220],
+    warning: rgba(232, 190, 88, 220),
     spirit,
     impact,
-  },
-  spike: {
+  }),
+  spike: Object.freeze({
     id: 'spike-seal',
     glyph: '突',
     talismanPath: 'Assets/Skills/BossDomain/talisman_spike/spriteFrame',
-    warning: [164, 58, 44, 220],
+    warning: rgba(164, 58, 44, 220),
     spirit,
     impact,
-  },
-  'roar-sector': {
+  }),
+  'roar-sector': Object.freeze({
     id: 'roar-seal',
     glyph: '镇',
     talismanPath: 'Assets/Skills/BossDomain/talisman_roar/spriteFrame',
-    warning: [232, 190, 88, 220],
+    warning: rgba(232, 190, 88, 220),
     spirit,
     impact,
-  },
-}
+  }),
+})
 
 export function resolveBossTelegraphVisual(danger) {
   if (danger.kind === 'spike' || danger.kind === 'roar-sector') {
-    return profiles[danger.kind]
+    return PROFILES[danger.kind]
   }
-  return profiles.sweep
+  return PROFILES.sweep
 }
 
 export function talismanPulse(duration, remaining) {
@@ -49,4 +49,8 @@ export function talismanPulse(duration, remaining) {
 
 function round3(value) {
   return Math.round(value * 1000) / 1000
+}
+
+function rgba(red, green, blue, alpha) {
+  return Object.freeze([red, green, blue, alpha])
 }
