@@ -8,7 +8,14 @@
       "height": 1334
     },
     "resolutionPolicy": "FIXED_WIDTH",
-    "runtimeHeight": "view.getVisibleSize().height",
+    "runtimeHeight": "computeBattleLayout(...).visibleHeight",
+    "layout": {
+      "authority": "BattleLayout.computeBattleLayout",
+      "horizontalMovement": "movement.minX <= -300 and movement.maxX >= 300 at 390x844",
+      "safeInsets": "CSS pixels converted by designWidth / cssWidth",
+      "navigation": "navigationTop < movement.minY",
+      "resize": "Recompute from browser/Cocos CSS size and visualViewport insets on every canvas-resize"
+    },
     "notes": "Scene/BattleRoot is the serialized bootstrap host. It creates the runtime Canvas and its own Canvas/BattleRoot tree."
   },
   "nodes": [
@@ -64,7 +71,8 @@
       "components": ["UITransform", "Sprite", "AtlasAnimator", "PlayerController"],
       "bindings": {
         "animationManifest": "resources/Data/animation-atlas.json",
-        "actorId": "qinglan-sword-cultivator"
+        "actorId": "qinglan-sword-cultivator",
+        "movementBounds": "layout.movement"
       },
       "position": { "x": -210, "y": -80 },
       "scale": 0.8,
@@ -80,7 +88,11 @@
     {
       "path": "Canvas/BattleRoot/ActorLayer/EnemySpawner",
       "components": ["UITransform", "EnemySpawner"],
-      "bindings": { "enemyPool": "Canvas/BattleRoot/ActorLayer/EnemyPool" }
+      "bindings": { "enemyPool": "Canvas/BattleRoot/ActorLayer/EnemyPool" },
+      "futureBossLayout": {
+        "spawn": "layout.bossSpawn",
+        "maxVisualBounds": "layout.bossMaxVisualBounds"
+      }
     },
     {
       "path": "Canvas/BattleRoot/EffectLayer",
@@ -121,8 +133,11 @@
         "player": "Canvas/BattleRoot/ActorLayer/Player",
         "inputArea": "Canvas/BattleRoot/InputLayer"
       },
-      "size": { "width": 750, "height": "visibleHeight - 104" },
-      "positionY": 52
+      "bounds": "layout.movement",
+      "size": { "width": 750, "height": "visibleHeight / 2 - layout.navigationTop" },
+      "positionY": 0,
+      "anchorY": "-layout.navigationTop / height",
+      "excludes": "BottomNavigation and bottom safe inset"
     },
     {
       "path": "Canvas/BattleRoot/HudLayer",
@@ -133,20 +148,20 @@
       "path": "Canvas/BattleRoot/HudLayer/TopHud",
       "components": ["UITransform", "Graphics"],
       "children": ["RealmLabel", "StageLabel", "HealthBar", "ManaBar", "SoulBar"],
-      "positionY": "visibleHeight / 2 - 83"
+      "positionY": "layout-safe top HUD position"
     },
     {
       "path": "Canvas/BattleRoot/HudLayer/BossHud",
       "components": ["UITransform", "Graphics"],
       "children": ["BossNameLabel", "BossHealthBar"],
       "active": false,
-      "positionY": "visibleHeight / 2 - 179"
+      "positionY": "layout-safe boss HUD position"
     },
     {
       "path": "Canvas/BattleRoot/HudLayer/BottomNavigation",
       "components": ["UITransform", "Graphics"],
       "height": 104,
-      "positionY": "-visibleHeight / 2 + 52",
+      "positionY": "layout.navigationTop - 52",
       "labels": ["战斗", "副本", "抽卡", "装备", "背包", "法宝"]
     },
     {

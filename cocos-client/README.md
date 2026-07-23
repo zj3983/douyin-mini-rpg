@@ -53,8 +53,8 @@
 
 ## 资源目录约定
 
-- `assets/resources/Assets/Characters/*`：角色立绘、战斗图、待机、移动、掐诀、受击动画。
-- `assets/resources/Assets/Monsters/*`：按场景主题拆分怪物身体图和动作动画。
+- `assets/resources/Assets/Characters/*`：角色立绘；战斗动作统一存放在 `ActorAtlases`。
+- `assets/resources/Assets/ActorAtlases/*`：角色与怪物共用的正式动作图集，由动画清单统一驱动。
 - `assets/resources/Assets/Skills/*`：技能图标、飞行物、命中特效、满屏质变特效。
 - `assets/resources/Assets/Artifacts/*`：法宝图标和品质展示。
 

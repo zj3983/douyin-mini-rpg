@@ -15,10 +15,12 @@ import { resourcePathForPng } from '../tools/strip-animation-runtime.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 
-test('stages 1-4 resolve distinct Cocos background resources', () => {
-  const visuals = [1, 2, 3, 4].map(stageVisualFor)
+const stageIds = [1, 2, 3, 4, 5, 6, 7, 8]
 
-  assert.equal(new Set(visuals.map((visual) => visual.farPath)).size, 4)
+test('stages 1-8 resolve distinct Cocos background resources', () => {
+  const visuals = stageIds.map(stageVisualFor)
+
+  assert.equal(new Set(visuals.map((visual) => visual.farPath)).size, visuals.length)
   assert.deepEqual(
     visuals.map((visual) => visual.farPath),
     [
@@ -26,15 +28,20 @@ test('stages 1-4 resolve distinct Cocos background resources', () => {
       'Assets/World/MistLantern/far/spriteFrame',
       'Assets/World/FlameRavine/far/spriteFrame',
       'Assets/World/StarRoad/far/spriteFrame',
+      'Assets/World/CloudGate/far/spriteFrame',
+      'Assets/World/NetherLantern/far/spriteFrame',
+      'Assets/World/DeepFlameRavine/far/spriteFrame',
+      'Assets/World/UpperStarRoad/far/spriteFrame',
     ],
   )
   assert.equal(visuals[0].midPath, 'Assets/World/MistBamboo/mid/spriteFrame')
-  assert.equal(visuals.slice(1).every((visual) => visual.midPath === null), true)
+  assert.equal(visuals.slice(1, 4).every((visual) => visual.midPath === null), true)
+  assert.equal(visuals.slice(4).every((visual) => visual.midPath?.endsWith('/mid/spriteFrame')), true)
 })
 
 test('stage visual catalog exposes background and theme metadata', () => {
   assert.deepEqual(
-    [1, 2, 3, 4].map((stageId) => {
+    stageIds.map((stageId) => {
       const { backgroundId, theme } = stageVisualFor(stageId)
       return { backgroundId, theme }
     }),
@@ -43,10 +50,14 @@ test('stage visual catalog exposes background and theme metadata', () => {
       { backgroundId: 'mist-lantern-forest', theme: 'mist-bamboo' },
       { backgroundId: 'red-flame-ravine', theme: 'flame-cave' },
       { backgroundId: 'fallen-star-ancient-road', theme: 'starlight-ruin' },
+      { backgroundId: 'cloud-sea-heaven-gate', theme: 'cloud-gate' },
+      { backgroundId: 'nether-lantern-forest', theme: 'soul-valley' },
+      { backgroundId: 'deep-flame-ravine', theme: 'flame-cave' },
+      { backgroundId: 'upper-fallen-star-road', theme: 'starlight-ruin' },
     ],
   )
   assert.throws(() => stageVisualFor(0), /Unknown stage visual: 0/)
-  assert.throws(() => stageVisualFor(5), /Unknown stage visual: 5/)
+  assert.throws(() => stageVisualFor(9), /Unknown stage visual: 9/)
   assert.equal(Object.isFrozen(stageVisualFor(1)), true)
   assert.throws(() => {
     stageVisualFor(1).farPath = 'mutated'
@@ -56,35 +67,42 @@ test('stage visual catalog exposes background and theme metadata', () => {
 
 test('stage resource plans map catalog backgrounds and manifest monster atlases only', () => {
   const manifest = JSON.parse(readFileSync(join(root, 'assets', 'resources', 'Data', 'animation-atlas.json'), 'utf8'))
-  const atlasByActor = new Map(manifest.actors.map((actor) => [actor.id, resourcePathForPng(actor.atlas)]))
+  const atlasPathsByActor = new Map(manifest.actors.map((actor) => [
+    actor.id,
+    [...new Set(actor.actions.map((action) => resourcePathForPng(action.atlas ?? actor.atlas)))],
+  ]))
   const expectedActors = [
     ['moss-wolf', 'green-wing-moth', 'bamboo-warden'],
     ['fog-spider', 'lantern-wraith', 'mist-deer-king'],
     ['lava-lizard', 'ember-crow', 'flame-ogre'],
     ['star-armored-beast', 'void-wing-spirit', 'meteor-guardian'],
+    ['star-armored-beast', 'void-wing-spirit', 'meteor-guardian'],
+    ['fog-spider', 'lantern-wraith', 'mist-deer-king'],
+    ['lava-lizard', 'ember-crow', 'flame-ogre'],
+    ['star-armored-beast', 'void-wing-spirit', 'meteor-guardian'],
   ]
 
-  for (const stageId of [1, 2, 3, 4]) {
+  for (const stageId of stageIds) {
     const visual = stageVisualFor(stageId)
     const resourcePlan = stageResourcePlanFor(stageId)
     assert.deepEqual(visual.monsterActorIds, expectedActors[stageId - 1])
     assert.equal(Object.isFrozen(visual.monsterActorIds), true)
     assert.deepEqual(
       resourcePlan.assets.filter(({ kind }) => kind === 'texture').map(({ path }) => path),
-      expectedActors[stageId - 1].map((actorId) => atlasByActor.get(actorId)),
+      expectedActors[stageId - 1].flatMap((actorId) => atlasPathsByActor.get(actorId)),
     )
     assert.deepEqual(resourcePlan, {
       stageId,
       assets: [
         { path: visual.farPath, kind: 'spriteFrame' },
         ...(visual.midPath ? [{ path: visual.midPath, kind: 'spriteFrame' }] : []),
-        ...expectedActors[stageId - 1].map((actorId) => ({ path: atlasByActor.get(actorId), kind: 'texture' })),
+        ...expectedActors[stageId - 1].flatMap((actorId) => atlasPathsByActor.get(actorId).map((path) => ({ path, kind: 'texture' }))),
       ],
     })
     assert.equal(resourcePlan.assets.some(({ path }) => /character|skill|artifact|Generated/i.test(path)), false)
   }
 
-  assert.throws(() => stageResourcePlanFor(5), /Unknown stage visual: 5/)
+  assert.throws(() => stageResourcePlanFor(9), /Unknown stage visual: 9/)
 })
 
 test('TypeScript and ESM stage resource plans stay behaviorally identical', async () => {
@@ -95,8 +113,8 @@ test('TypeScript and ESM stage resource plans stay behaviorally identical', asyn
   const typescriptCatalog = await import(`data:text/javascript;base64,${Buffer.from(javascript).toString('base64')}`)
 
   assert.deepEqual(
-    [1, 2, 3, 4].map(typescriptCatalog.stageResourcePlanFor),
-    [1, 2, 3, 4].map(stageResourcePlanFor),
+    stageIds.map(typescriptCatalog.stageResourcePlanFor),
+    stageIds.map(stageResourcePlanFor),
   )
 })
 
@@ -111,6 +129,13 @@ test('release plan frees every previous stage asset after a successful swap', ()
   assert.deepEqual(
     planBackgroundRelease(stageVisualFor(2), stageVisualFor(3)),
     ['Assets/World/MistLantern/far/spriteFrame'],
+  )
+  assert.deepEqual(
+    planBackgroundRelease(stageVisualFor(5), stageVisualFor(6)),
+    [
+      'Assets/World/CloudGate/far/spriteFrame',
+      'Assets/World/CloudGate/mid/spriteFrame',
+    ],
   )
 })
 
@@ -145,13 +170,13 @@ test('request plan avoids duplicate loads and cancels a stale outgoing request',
 })
 
 test('stage backgrounds are copied into Cocos resources', () => {
-  for (const folder of ['MistLantern', 'FlameRavine', 'StarRoad']) {
+  for (const folder of ['MistLantern', 'FlameRavine', 'StarRoad', 'CloudGate', 'NetherLantern', 'DeepFlameRavine', 'UpperStarRoad']) {
     assert.equal(existsSync(join(root, 'assets', 'resources', 'Assets', 'World', folder, 'far.webp')), true)
   }
 })
 
 test('stage backgrounds contain distinct artwork instead of duplicate files', () => {
-  const folders = ['MistBamboo', 'MistLantern', 'FlameRavine', 'StarRoad']
+  const folders = ['MistBamboo', 'MistLantern', 'FlameRavine', 'StarRoad', 'CloudGate', 'NetherLantern', 'DeepFlameRavine', 'UpperStarRoad']
   const hashes = folders.map((folder) => {
     const bytes = readFileSync(join(root, 'assets', 'resources', 'Assets', 'World', folder, 'far.webp'))
     return createHash('sha256').update(bytes).digest('hex')

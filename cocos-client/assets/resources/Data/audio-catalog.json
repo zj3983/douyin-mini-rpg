@@ -1,0 +1,49 @@
+{
+  "bgm": {
+    "mist-bamboo": {
+      "title": "雾竹清修",
+      "description": "修仙世界地图背景音，风声、箫音和古琴拨弦铺底。",
+      "resource": "Assets/Audio/Bgm/mist-bamboo",
+      "minDurationSeconds": 8,
+      "loop": true,
+      "volume": 0.42
+    }
+  },
+  "cues": {
+    "hand-seal": {
+      "title": "掐诀灵息",
+      "description": "法诀起手的短促灵气聚拢声。",
+      "resource": "Assets/Audio/Cues/hand-seal",
+      "minDurationSeconds": 0.32,
+      "volume": 0.78
+    },
+    "sword-launch": {
+      "title": "飞剑破空",
+      "description": "飞剑出鞘后穿空的清亮剑鸣。",
+      "resource": "Assets/Audio/Cues/sword-launch",
+      "minDurationSeconds": 0.4,
+      "volume": 0.88
+    },
+    "sword-return": {
+      "title": "飞剑回旋",
+      "description": "飞剑回身绕行的轻微剑风。",
+      "resource": "Assets/Audio/Cues/sword-return",
+      "minDurationSeconds": 0.34,
+      "volume": 0.7
+    },
+    "light-hit": {
+      "title": "剑气命中",
+      "description": "飞剑命中怪物时的短促灵气爆点。",
+      "resource": "Assets/Audio/Cues/light-hit",
+      "minDurationSeconds": 0.22,
+      "volume": 0.72
+    },
+    "boss-break": {
+      "title": "Boss 护体破碎",
+      "description": "修仙 Boss 护体灵光破碎时的厚重冲击声。",
+      "resource": "Assets/Audio/Cues/boss-break",
+      "minDurationSeconds": 0.75,
+      "volume": 0.92
+    }
+  }
+}

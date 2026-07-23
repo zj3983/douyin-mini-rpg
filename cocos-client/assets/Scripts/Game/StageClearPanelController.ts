@@ -22,6 +22,9 @@ export class StageClearPanelController extends Component {
   @property(Button)
   nextStageButton: Button | null = null
 
+  @property
+  autoContinueSeconds = 3
+
   nextStageTarget = 1
 
   private result: StageClearResult | null = null
@@ -36,6 +39,7 @@ export class StageClearPanelController extends Component {
 
   onDestroy() {
     this.nextStageButton?.node.off(Button.EventType.CLICK, this.handleContinue, this)
+    this.unschedule(this.handleAutoContinue)
   }
 
   bindContinueButton(button: Button) {
@@ -61,9 +65,11 @@ export class StageClearPanelController extends Component {
     }
     if (this.nextStageLabel) this.nextStageLabel.string = `前往第${result.nextStageId}关`
     if (this.nextStageButton) this.nextStageButton.interactable = true
+    this.scheduleAutoContinue()
   }
 
   showDefeat(stageNumber: number) {
+    this.unschedule(this.handleAutoContinue)
     this.result = null
     this.mode = 'defeat'
     this.nextStageTarget = stageNumber
@@ -76,6 +82,7 @@ export class StageClearPanelController extends Component {
   }
 
   hide() {
+    this.unschedule(this.handleAutoContinue)
     this.result = null
     this.mode = 'hidden'
     const root = this.panelRoot ?? this.node
@@ -87,6 +94,7 @@ export class StageClearPanelController extends Component {
   }
 
   private handleContinue() {
+    this.unschedule(this.handleAutoContinue)
     if (this.mode === 'defeat') {
       if (this.nextStageButton) this.nextStageButton.interactable = false
       this.onRetry?.()
@@ -95,5 +103,15 @@ export class StageClearPanelController extends Component {
     if (this.mode !== 'clear' || !this.result) return
     if (this.nextStageButton) this.nextStageButton.interactable = false
     this.onContinue?.(this.result.nextStageId)
+  }
+
+  private scheduleAutoContinue() {
+    this.unschedule(this.handleAutoContinue)
+    if (!Number.isFinite(this.autoContinueSeconds) || this.autoContinueSeconds <= 0) return
+    this.scheduleOnce(this.handleAutoContinue, this.autoContinueSeconds)
+  }
+
+  private handleAutoContinue() {
+    this.handleContinue()
   }
 }

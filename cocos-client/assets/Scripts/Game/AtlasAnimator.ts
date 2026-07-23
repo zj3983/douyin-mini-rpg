@@ -84,6 +84,21 @@ export class AtlasAnimator extends Component {
     this.play(actionName)
   }
 
+  currentFrameSize() {
+    const rect = this.action?.frames[this.action.order[this.frameIndex]]
+    if (rect && rect.w > 0 && rect.h > 0) return { width: rect.w, height: rect.h }
+    const spriteRect = this.targetSprite?.spriteFrame?.rect
+    if (spriteRect && spriteRect.width > 0 && spriteRect.height > 0) {
+      return { width: spriteRect.width, height: spriteRect.height }
+    }
+    return null
+  }
+
+  currentFrameAspect() {
+    const size = this.currentFrameSize()
+    return size ? size.width / size.height : null
+  }
+
   play(actionName: string) {
     if (this.destroyed) return
     const manifest = this.animationManifest?.json as AnimationAtlasManifest | undefined
@@ -100,7 +115,7 @@ export class AtlasAnimator extends Component {
     this.frameIndex = 0
     this.playing = false
 
-    resources.load(resourcePathForPng(actor.atlas), Texture2D, (error, texture) => {
+    resources.load(resourcePathForPng(action.atlas), Texture2D, (error, texture) => {
       if (
         error
         || !texture
@@ -111,7 +126,7 @@ export class AtlasAnimator extends Component {
         || !acceptAnimationLoad(this.resetState, request.token)
       ) return
       this.texture = texture
-      this.frames = this.buildFrames(texture, this.actorId, actor.atlas, action)
+      this.frames = this.buildFrames(texture, this.actorId, action.atlas, action)
       this.playing = this.frames.length > 0
       this.applyFrame()
     })

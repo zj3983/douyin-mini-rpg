@@ -11,10 +11,17 @@ import {
   bindVisualListeners,
   createVisualResetState,
   prepareVisualForPool,
+  resolveActorVisualAction,
   resetVisualForSpawn,
   setVisualActionState,
   visualResetCommands,
 } from '../tools/visual-reset-runtime.mjs'
+
+test('generic Boss attack resolves to an action present in its atlas', () => {
+  assert.equal(resolveActorVisualAction('bamboo-warden', 'attack'), 'sweep')
+  assert.equal(resolveActorVisualAction('bamboo-warden', 'hurt'), 'hurt')
+  assert.equal(resolveActorVisualAction('moss-wolf', 'attack'), 'attack')
+})
 
 test('twenty pooled spawn cycles restore the canonical monster visual state', () => {
   let state = createVisualResetState()

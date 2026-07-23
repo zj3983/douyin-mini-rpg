@@ -35,7 +35,7 @@ export class StageResourceController {
   }
 
   prefetchNext(stageId: number) {
-    if (stageId < 1 || stageId >= 4) return false
+    if (stageId < 1 || stageId >= 8) return false
     return this.runtime.prefetch(stageResourcePlanFor(stageId + 1))
   }
 

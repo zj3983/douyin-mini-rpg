@@ -139,7 +139,7 @@ Boss 技能 prefab：
 
 - 根节点挂 `PoolableActor`。
 - 建议子节点分为 `Warning`、`Impact`、`Afterglow`，后续按主题替换表现。
-- 当前由 `BattleRuntimeController.tickBossSkill()` 从 `bossSkillEffectPool` 取出并定位。
+- Boss 技能由 `BossBrain` 生成命令，经敌人战斗适配器交给统一 `CombatResolver` 结算。
 
 怪物 prefab：
 

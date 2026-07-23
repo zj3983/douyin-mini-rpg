@@ -6,15 +6,27 @@
     "defaultSkill": "御剑术"
   },
   "levelUp": {
-    "allowedStats": ["attack", "health", "mana"],
+    "allowedStats": [
+      "attack",
+      "health",
+      "mana"
+    ],
     "cardsCanGrantBaseStats": false,
     "notes": "角色境界提升只增加基础攻击、生命、法力。卡牌只改变技能形态、法宝机制或战斗节奏。"
   },
   "artifacts": {
     "maxLevel": 18,
-    "mutationLevels": [6, 12, 18],
+    "mutationLevels": [
+      6,
+      12,
+      18
+    ],
     "unlockSource": "dungeon-boss",
-    "upgradeCurrencies": ["法宝精华", "灵石", "炼器材料"]
+    "upgradeCurrencies": [
+      "法宝精华",
+      "灵石",
+      "炼器材料"
+    ]
   },
   "dungeons": {
     "dailyEntries": 3,
@@ -34,13 +46,42 @@
         "entryTicket": "星门残券",
         "bossArtifact": "九霄引雷印",
         "floors": [
-          { "floor": 1, "scene": "残碑外廊", "material": "陨星砂", "boss": false },
-          { "floor": 2, "scene": "星桥断层", "material": "星纹石", "boss": false },
-          { "floor": 3, "scene": "坠月祭坛", "material": "月魄尘", "boss": false },
-          { "floor": 4, "scene": "虚空裂隙", "material": "虚晶", "boss": false },
-          { "floor": 5, "scene": "星门核心", "material": "雷纹玉", "boss": true }
+          {
+            "floor": 1,
+            "scene": "残碑外廊",
+            "material": "陨星砂",
+            "boss": false
+          },
+          {
+            "floor": 2,
+            "scene": "星桥断层",
+            "material": "星纹石",
+            "boss": false
+          },
+          {
+            "floor": 3,
+            "scene": "坠月祭坛",
+            "material": "月魄尘",
+            "boss": false
+          },
+          {
+            "floor": 4,
+            "scene": "虚空裂隙",
+            "material": "虚晶",
+            "boss": false
+          },
+          {
+            "floor": 5,
+            "scene": "星门核心",
+            "material": "雷纹玉",
+            "boss": true
+          }
         ],
-        "rewards": { "gachaTickets": true, "artifactEssence": true, "artifact": true }
+        "rewards": {
+          "gachaTickets": true,
+          "artifactEssence": true,
+          "artifact": true
+        }
       },
       {
         "id": "flame-cave",
@@ -49,13 +90,42 @@
         "entryTicket": "赤焰符券",
         "bossArtifact": "焰分噬浪尺",
         "floors": [
-          { "floor": 1, "scene": "熔岩石径", "material": "火灵草", "boss": false },
-          { "floor": 2, "scene": "赤晶矿脉", "material": "赤晶", "boss": false },
-          { "floor": 3, "scene": "地火丹房", "material": "火魄丹砂", "boss": false },
-          { "floor": 4, "scene": "焚风裂谷", "material": "焚风羽", "boss": false },
-          { "floor": 5, "scene": "炎君炉心", "material": "炎髓", "boss": true }
+          {
+            "floor": 1,
+            "scene": "熔岩石径",
+            "material": "火灵草",
+            "boss": false
+          },
+          {
+            "floor": 2,
+            "scene": "赤晶矿脉",
+            "material": "赤晶",
+            "boss": false
+          },
+          {
+            "floor": 3,
+            "scene": "地火丹房",
+            "material": "火魄丹砂",
+            "boss": false
+          },
+          {
+            "floor": 4,
+            "scene": "焚风裂谷",
+            "material": "焚风羽",
+            "boss": false
+          },
+          {
+            "floor": 5,
+            "scene": "炎君炉心",
+            "material": "炎髓",
+            "boss": true
+          }
         ],
-        "rewards": { "gachaTickets": true, "artifactEssence": true, "artifact": true }
+        "rewards": {
+          "gachaTickets": true,
+          "artifactEssence": true,
+          "artifact": true
+        }
       },
       {
         "id": "mist-bamboo-secret",
@@ -64,13 +134,42 @@
         "entryTicket": "青竹令",
         "bossArtifact": "青霜御剑匣",
         "floors": [
-          { "floor": 1, "scene": "雾竹外径", "material": "凝露草", "boss": false },
-          { "floor": 2, "scene": "青灯竹桥", "material": "青竹髓", "boss": false },
-          { "floor": 3, "scene": "寒潭石台", "material": "寒潭莲", "boss": false },
-          { "floor": 4, "scene": "迷雾剑阵", "material": "剑纹竹叶", "boss": false },
-          { "floor": 5, "scene": "竹皇洞天", "material": "青霜玉", "boss": true }
+          {
+            "floor": 1,
+            "scene": "雾竹外径",
+            "material": "凝露草",
+            "boss": false
+          },
+          {
+            "floor": 2,
+            "scene": "青灯竹桥",
+            "material": "青竹髓",
+            "boss": false
+          },
+          {
+            "floor": 3,
+            "scene": "寒潭石台",
+            "material": "寒潭莲",
+            "boss": false
+          },
+          {
+            "floor": 4,
+            "scene": "迷雾剑阵",
+            "material": "剑纹竹叶",
+            "boss": false
+          },
+          {
+            "floor": 5,
+            "scene": "竹皇洞天",
+            "material": "青霜玉",
+            "boss": true
+          }
         ],
-        "rewards": { "gachaTickets": true, "artifactEssence": true, "artifact": true }
+        "rewards": {
+          "gachaTickets": true,
+          "artifactEssence": true,
+          "artifact": true
+        }
       },
       {
         "id": "soul-bell-valley",
@@ -79,13 +178,42 @@
         "entryTicket": "摄魂残铃",
         "bossArtifact": "镇魂古铃",
         "floors": [
-          { "floor": 1, "scene": "幽铃山口", "material": "幽冥花", "boss": false },
-          { "floor": 2, "scene": "魂雾栈道", "material": "魂雾露", "boss": false },
-          { "floor": 3, "scene": "白骨灵泉", "material": "骨灵粉", "boss": false },
-          { "floor": 4, "scene": "镇魂碑林", "material": "镇魂石", "boss": false },
-          { "floor": 5, "scene": "古铃祭台", "material": "铃心玉", "boss": true }
+          {
+            "floor": 1,
+            "scene": "幽铃山口",
+            "material": "幽冥花",
+            "boss": false
+          },
+          {
+            "floor": 2,
+            "scene": "魂雾栈道",
+            "material": "魂雾露",
+            "boss": false
+          },
+          {
+            "floor": 3,
+            "scene": "白骨灵泉",
+            "material": "骨灵粉",
+            "boss": false
+          },
+          {
+            "floor": 4,
+            "scene": "镇魂碑林",
+            "material": "镇魂石",
+            "boss": false
+          },
+          {
+            "floor": 5,
+            "scene": "古铃祭台",
+            "material": "铃心玉",
+            "boss": true
+          }
         ],
-        "rewards": { "gachaTickets": true, "artifactEssence": true, "artifact": true }
+        "rewards": {
+          "gachaTickets": true,
+          "artifactEssence": true,
+          "artifact": true
+        }
       }
     ]
   },
@@ -100,9 +228,24 @@
       "theme": "mist-bamboo",
       "background": "green-hill-bamboo-rain",
       "enemies": [
-        { "id": "moss-wolf", "name": "苔纹狼妖", "role": "ground", "theme": "mist-bamboo" },
-        { "id": "green-wing-moth", "name": "青翼蛾妖", "role": "flying", "theme": "mist-bamboo" },
-        { "id": "bamboo-warden", "name": "竹林守山兽", "role": "boss", "theme": "mist-bamboo" }
+        {
+          "id": "moss-wolf",
+          "name": "苔纹狼妖",
+          "role": "ground",
+          "theme": "mist-bamboo"
+        },
+        {
+          "id": "green-wing-moth",
+          "name": "青翼蛾妖",
+          "role": "flying",
+          "theme": "mist-bamboo"
+        },
+        {
+          "id": "bamboo-warden",
+          "name": "竹林守山兽",
+          "role": "boss",
+          "theme": "mist-bamboo"
+        }
       ]
     },
     {
@@ -111,9 +254,24 @@
       "theme": "mist-bamboo",
       "background": "mist-lantern-forest",
       "enemies": [
-        { "id": "fog-spider", "name": "雾蛛", "role": "ground", "theme": "mist-bamboo" },
-        { "id": "lantern-wraith", "name": "灯影魅", "role": "flying", "theme": "mist-bamboo" },
-        { "id": "mist-deer-king", "name": "雾鹿妖王", "role": "boss", "theme": "mist-bamboo" }
+        {
+          "id": "fog-spider",
+          "name": "雾蛛",
+          "role": "ground",
+          "theme": "mist-bamboo"
+        },
+        {
+          "id": "lantern-wraith",
+          "name": "灯影魅",
+          "role": "flying",
+          "theme": "mist-bamboo"
+        },
+        {
+          "id": "mist-deer-king",
+          "name": "雾鹿妖王",
+          "role": "boss",
+          "theme": "mist-bamboo"
+        }
       ]
     },
     {
@@ -122,9 +280,24 @@
       "theme": "flame-cave",
       "background": "red-flame-ravine",
       "enemies": [
-        { "id": "lava-lizard", "name": "熔甲蜥", "role": "ground", "theme": "flame-cave" },
-        { "id": "ember-crow", "name": "赤羽火鸦", "role": "flying", "theme": "flame-cave" },
-        { "id": "flame-ogre", "name": "地火巨妖", "role": "boss", "theme": "flame-cave" }
+        {
+          "id": "lava-lizard",
+          "name": "熔甲蜥",
+          "role": "ground",
+          "theme": "flame-cave"
+        },
+        {
+          "id": "ember-crow",
+          "name": "赤羽火鸦",
+          "role": "flying",
+          "theme": "flame-cave"
+        },
+        {
+          "id": "flame-ogre",
+          "name": "地火巨妖",
+          "role": "boss",
+          "theme": "flame-cave"
+        }
       ]
     },
     {
@@ -133,9 +306,128 @@
       "theme": "starlight-ruin",
       "background": "fallen-star-ancient-road",
       "enemies": [
-        { "id": "star-armored-beast", "name": "星甲兽", "role": "ground", "theme": "starlight-ruin" },
-        { "id": "void-wing-spirit", "name": "虚翼灵", "role": "flying", "theme": "starlight-ruin" },
-        { "id": "meteor-guardian", "name": "陨星镇守", "role": "boss", "theme": "starlight-ruin" }
+        {
+          "id": "star-armored-beast",
+          "name": "星甲兽",
+          "role": "ground",
+          "theme": "starlight-ruin"
+        },
+        {
+          "id": "void-wing-spirit",
+          "name": "虚翼灵",
+          "role": "flying",
+          "theme": "starlight-ruin"
+        },
+        {
+          "id": "meteor-guardian",
+          "name": "陨星镇守",
+          "role": "boss",
+          "theme": "starlight-ruin"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "云海天门",
+      "theme": "cloud-gate",
+      "background": "cloud-sea-heaven-gate",
+      "enemies": [
+        {
+          "id": "star-armored-beast",
+          "name": "星铠天驹",
+          "role": "ground",
+          "theme": "cloud-gate"
+        },
+        {
+          "id": "void-wing-spirit",
+          "name": "云翼灵魄",
+          "role": "flying",
+          "theme": "cloud-gate"
+        },
+        {
+          "id": "meteor-guardian",
+          "name": "天门镇守",
+          "role": "boss",
+          "theme": "cloud-gate"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "幽灯冥林",
+      "theme": "soul-valley",
+      "background": "nether-lantern-forest",
+      "enemies": [
+        {
+          "id": "fog-spider",
+          "name": "冥雾蜘",
+          "role": "ground",
+          "theme": "soul-valley"
+        },
+        {
+          "id": "lantern-wraith",
+          "name": "青灯魂影",
+          "role": "flying",
+          "theme": "soul-valley"
+        },
+        {
+          "id": "mist-deer-king",
+          "name": "冥林鹿王",
+          "role": "boss",
+          "theme": "soul-valley"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "赤炎深渊",
+      "theme": "flame-cave",
+      "background": "deep-flame-ravine",
+      "enemies": [
+        {
+          "id": "lava-lizard",
+          "name": "熔岩蜥",
+          "role": "ground",
+          "theme": "flame-cave"
+        },
+        {
+          "id": "ember-crow",
+          "name": "焚羽火鸦",
+          "role": "flying",
+          "theme": "flame-cave"
+        },
+        {
+          "id": "flame-ogre",
+          "name": "赤炎巨妖",
+          "role": "boss",
+          "theme": "flame-cave"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "name": "星陨上道",
+      "theme": "starlight-ruin",
+      "background": "upper-fallen-star-road",
+      "enemies": [
+        {
+          "id": "star-armored-beast",
+          "name": "星甲裂兽",
+          "role": "ground",
+          "theme": "starlight-ruin"
+        },
+        {
+          "id": "void-wing-spirit",
+          "name": "虚翼星灵",
+          "role": "flying",
+          "theme": "starlight-ruin"
+        },
+        {
+          "id": "meteor-guardian",
+          "name": "星陨道将",
+          "role": "boss",
+          "theme": "starlight-ruin"
+        }
       ]
     }
   ]

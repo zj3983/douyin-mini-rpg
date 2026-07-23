@@ -1,5 +1,5 @@
 import { _decorator, Component, EventTouch, Node, UITransform, Vec3 } from 'cc'
-import { clampBattleTarget } from '../Core/MovementRuntime'
+import type { BattleRect } from '../Combat/CombatTypes.ts'
 import { PlayerController } from './PlayerController'
 
 const { ccclass, property } = _decorator
@@ -12,18 +12,8 @@ export class BattleInputController extends Component {
   @property(UITransform)
   public inputArea: UITransform | null = null
 
-  @property
-  public minX = -300
-
-  @property
-  public maxX = 50
-
-  @property
-  public minY = -430
-
-  @property
-  public maxY = 410
-
+  private bounds: Readonly<BattleRect> | null = null
+  private coordinateSpace: UITransform | null = null
   private subscribedNode: Node | null = null
   private inputEnabled = false
 
@@ -35,6 +25,12 @@ export class BattleInputController extends Component {
   onDisable() {
     this.inputEnabled = false
     this.unsubscribeInputNode()
+  }
+
+  public configure(bounds: BattleRect, coordinateSpace: UITransform) {
+    this.bounds = Object.freeze({ ...bounds })
+    this.coordinateSpace = coordinateSpace
+    if (this.inputEnabled) this.subscribeInputNode()
   }
 
   public bindInputArea(inputArea: UITransform | null) {
@@ -50,33 +46,32 @@ export class BattleInputController extends Component {
   }
 
   private subscribeInputNode() {
-    const node = this.inputArea?.node ?? null
+    const node = this.bounds && this.player && this.coordinateSpace ? this.inputArea?.node ?? null : null
     if (!node || this.subscribedNode === node) return
     this.unsubscribeInputNode()
-    node.on(Node.EventType.TOUCH_END, this.onTouchEnd, this)
+    node.on(Node.EventType.TOUCH_START, this.onTouchTarget, this)
+    node.on(Node.EventType.TOUCH_MOVE, this.onTouchTarget, this)
+    node.on(Node.EventType.TOUCH_END, this.onTouchTarget, this)
     this.subscribedNode = node
   }
 
   private unsubscribeInputNode() {
     if (!this.subscribedNode) return
-    this.subscribedNode.off(Node.EventType.TOUCH_END, this.onTouchEnd, this)
+    this.subscribedNode.off(Node.EventType.TOUCH_START, this.onTouchTarget, this)
+    this.subscribedNode.off(Node.EventType.TOUCH_MOVE, this.onTouchTarget, this)
+    this.subscribedNode.off(Node.EventType.TOUCH_END, this.onTouchTarget, this)
     this.subscribedNode = null
   }
 
-  private onTouchEnd(event: EventTouch) {
+  private onTouchTarget(event: EventTouch) {
     if (!this.inputEnabled) return false
-    const { player, inputArea } = this
-    if (!player || !inputArea) return false
+    const { player, inputArea, bounds, coordinateSpace } = this
+    if (!player || !inputArea || !bounds || !coordinateSpace) return false
 
     const location = event.getUILocation()
-    const local = inputArea.convertToNodeSpaceAR(new Vec3(location.x, location.y, 0))
-    const clamped = clampBattleTarget(local, {
-      minX: this.minX,
-      maxX: this.maxX,
-      minY: this.minY,
-      maxY: this.maxY,
+    return player.requestMovementInCoordinateSpace(location, (point) => {
+      const converted = coordinateSpace.convertToNodeSpaceAR(new Vec3(point.x, point.y, 0))
+      return { x: converted.x, y: converted.y }
     })
-    const worldTarget = inputArea.convertToWorldSpaceAR(new Vec3(clamped.x, clamped.y, 0))
-    return player.moveTo(worldTarget)
   }
 }

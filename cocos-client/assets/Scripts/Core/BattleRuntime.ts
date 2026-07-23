@@ -27,8 +27,6 @@ export interface BattleRuntime {
   enemies: BattleEnemy[]
   soulDrops: Array<{ enemyId: number; amount: number }>
   bossSpawned: boolean
-  bossSkillTimer: number
-  bossSkillInterval: number
   stageCleared: boolean
   stageClearClaimed: boolean
 }
@@ -37,14 +35,6 @@ export interface DamageEvent {
   enemyId: number
   damage: number
   remainingHp: number
-  position: { x: number; y: number }
-}
-
-export interface BossSkillEvent {
-  enemyId: number
-  skillId: string
-  name: string
-  damage: number
   position: { x: number; y: number }
 }
 
@@ -73,8 +63,6 @@ export function createBattleRuntime(stage: StageProfile, heroAttack: number): Ba
     enemies: [],
     soulDrops: [],
     bossSpawned: false,
-    bossSkillTimer: 0,
-    bossSkillInterval: 2.6,
     stageCleared: false,
     stageClearClaimed: false,
   }
@@ -339,26 +327,6 @@ export function spawnBoss(runtime: BattleRuntime) {
   return { ok: true, enemy }
 }
 
-export function tickBossSkill(runtime: BattleRuntime, deltaTime: number): { ok: boolean; event: BossSkillEvent | null } {
-  const boss = runtime.enemies.find((enemy) => enemy.profile.role === 'boss' && enemy.alive)
-  if (!boss || runtime.stageCleared) return { ok: false, event: null }
-
-  runtime.bossSkillTimer += deltaTime
-  if (runtime.bossSkillTimer + 0.000001 < runtime.bossSkillInterval) return { ok: false, event: null }
-
-  runtime.bossSkillTimer = 0
-  return {
-    ok: true,
-    event: {
-      enemyId: boss.id,
-      skillId: `${boss.profile.theme}-boss-skill`,
-      name: boss.profile.theme === 'flame-cave' ? '地火裂涌' : boss.profile.theme === 'starlight-ruin' ? '星陨压境' : '妖气冲袭',
-      damage: boss.profile.theme === 'flame-cave' ? 18 : boss.profile.theme === 'starlight-ruin' ? 16 : 14,
-      position: { ...boss.position },
-    },
-  }
-}
-
 export function claimStageClear(
   runtime: BattleRuntime,
 ): { ok: boolean; reason: 'not-cleared' | 'already-claimed' | null; result: StageClearResult | null } {
@@ -439,7 +407,6 @@ export function rollbackSpawnedEnemy(runtime: BattleRuntime, enemyId: number) {
   const [enemy] = runtime.enemies.splice(index, 1)
   if (enemy.profile.role !== 'boss') return true
   runtime.bossSpawned = false
-  runtime.bossSkillTimer = 0
   return true
 }
 

@@ -69,6 +69,11 @@ export function setVisualActionState(state, action) {
   }
 }
 
+export function resolveActorVisualAction(actorId, action) {
+  if (actorId === 'bamboo-warden' && action === 'attack') return 'sweep'
+  return action
+}
+
 export function setVisualFacing(state, facing) {
   return { ...state, facing }
 }

@@ -37,7 +37,7 @@ test('frame strip processor script documents trim, center, and pack workflow', (
 test('frame strip processor rejects padding that leaves no drawable area', () => {
   const result = spawnSync('python', [
     resolve('tools/build-frame-strip.py'),
-    '--input-dir', resolve('assets/resources/Assets/Combat/QinglanSwordCultivator'),
+    '--input-dir', resolve('assets/resources/Assets/ActorAtlases/QinglanSwordCultivator'),
     '--output', resolve('temp-invalid-strip.png'),
     '--frame-width', '512',
     '--frame-height', '512',
@@ -131,7 +131,7 @@ test('sheet-only options reject directory mode and limit is rejected in sheet mo
   const workDir = mkdtempSync(resolve(tmpdir(), 'frame-mode-'))
   const source = resolve(workDir, 'source.png')
   createSheet(source)
-  const directory = resolve('assets/resources/Assets/Combat/QinglanSwordCultivator')
+  const directory = resolve('assets/resources/Assets/ActorAtlases/QinglanSwordCultivator')
   const misuse = [
     ['--input-dir', directory, '--sheet-columns', '6'],
     ['--input-sheet', source, '--sheet-columns', '6', '--limit', '3'],

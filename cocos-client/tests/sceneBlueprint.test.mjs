@@ -38,7 +38,11 @@ test('scene blueprint defines the approved portrait runtime hierarchy', () => {
 
   assert.equal(blueprint.scene.orientation, 'portrait')
   assert.deepEqual(blueprint.scene.designResolution, { width: 750, height: 1334 })
-  assert.equal(blueprint.scene.runtimeHeight, 'view.getVisibleSize().height')
+  assert.equal(blueprint.scene.runtimeHeight, 'computeBattleLayout(...).visibleHeight')
+  assert.equal(blueprint.scene.layout.authority, 'BattleLayout.computeBattleLayout')
+  assert.equal(blueprint.scene.layout.horizontalMovement, 'movement.minX <= -300 and movement.maxX >= 300 at 390x844')
+  assert.equal(blueprint.scene.layout.safeInsets, 'CSS pixels converted by designWidth / cssWidth')
+  assert.equal(blueprint.scene.layout.navigation, 'navigationTop < movement.minY')
 
   for (const path of [
     'Canvas',
@@ -59,6 +63,16 @@ test('scene blueprint defines the approved portrait runtime hierarchy', () => {
   ]) {
     assert.equal(nodes.has(path), true, `missing portrait node: ${path}`)
   }
+
+  const inputLayer = nodes.get('Canvas/BattleRoot/InputLayer')
+  assert.equal(inputLayer.bounds, 'layout.movement')
+  assert.equal(inputLayer.excludes, 'BottomNavigation and bottom safe inset')
+  assert.equal(nodes.get('Canvas/BattleRoot/HudLayer/TopHud').positionY, 'layout-safe top HUD position')
+  assert.equal(nodes.get('Canvas/BattleRoot/HudLayer/BottomNavigation').positionY, 'layout.navigationTop - 52')
+  assert.deepEqual(nodes.get('Canvas/BattleRoot/ActorLayer/EnemySpawner').futureBossLayout, {
+    spawn: 'layout.bossSpawn',
+    maxVisualBounds: 'layout.bossMaxVisualBounds',
+  })
 })
 
 test('scene blueprint declares portrait bootstrap component bindings', () => {

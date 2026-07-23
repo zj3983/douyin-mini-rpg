@@ -9,8 +9,6 @@ const requiredComponents = [
   ['assets/Scripts/Game/DungeonRunController.ts', 'class DungeonRunController'],
   ['assets/Scripts/Game/SoulOrbController.ts', 'class SoulOrbController'],
   ['assets/Scripts/Game/AssetBindingController.ts', 'class AssetBindingController'],
-  ['assets/Scripts/Game/StripAnimator.ts', 'class StripAnimator'],
-  ['assets/Scripts/Game/ActorAnimationBinder.ts', 'class ActorAnimationBinder'],
   ['assets/Scripts/Game/AtlasAnimator.ts', 'class AtlasAnimator'],
   ['assets/Scripts/Game/NodePoolController.ts', 'class NodePoolController'],
   ['assets/Scripts/Game/PoolableActor.ts', 'class PoolableActor'],
@@ -18,6 +16,7 @@ const requiredComponents = [
   ['assets/Scripts/Game/EnemyVisualController.ts', 'class EnemyVisualController'],
   ['assets/Scripts/Core/VisualResetRuntime.ts', 'interface VisualResetState'],
   ['assets/Scripts/Game/BattleRuntimeController.ts', 'class BattleRuntimeController'],
+  ['assets/Scripts/Game/CombatAudioController.ts', 'class CombatAudioController'],
   ['assets/Scripts/Game/DamageNumberController.ts', 'class DamageNumberController'],
   ['assets/Scripts/Game/StageClearPanelController.ts', 'class StageClearPanelController'],
   ['assets/Scripts/Game/BattleHudController.ts', 'class BattleHudController'],
@@ -48,7 +47,8 @@ test('battle runtime controller exposes boss stage hooks', () => {
   assert.equal(source.includes('this.enemySpawner?.spawnEnemy(enemy)'), true)
   assert.equal(source.includes('update(deltaTime'), true)
   assert.equal(source.includes('trySpawnBoss'), true)
-  assert.equal(source.includes('tickBossSkill'), true)
+  assert.equal(source.includes('tickBossSkill'), false)
+  assert.equal(source.includes('consumeEnemyCombatCommand'), true)
   assert.equal(source.includes('claimStageClearRuntime'), true)
   assert.equal(source.includes('bossSkillEffectPool'), true)
   assert.equal(source.includes('stageClearPanel'), true)
@@ -62,9 +62,11 @@ test('enemy spawner only maps runtime spawns to pooled nodes', () => {
 
   assert.equal(source.includes('spawnEnemy'), true)
   assert.equal(source.includes('despawnEnemy'), true)
-  assert.equal(source.includes('bossSpawnX'), true)
-  assert.equal(source.includes('bossY'), true)
-  assert.equal(source.includes('bossScale'), true)
+  assert.equal(source.includes('configureBattleLayout'), true)
+  assert.equal(source.includes('bossSpawnX'), false)
+  assert.equal(source.includes('bossY'), false)
+  assert.equal(source.includes('bossScale'), false)
+  assert.equal(source.includes('computeBossVisualPlacement'), true)
   assert.equal(source.includes('nextSpawn'), false)
   assert.equal(source.includes('createBattleRuntime'), false)
 })
@@ -80,25 +82,29 @@ test('enemy visual controller reacts to hit and defeat events', () => {
   assert.equal(source.includes('enemy-visual-death'), true)
 })
 
-test('portrait battle input clamps touch-end coordinates before moving the player', () => {
+test('portrait battle input converts touch target coordinates before requesting authoritative movement', () => {
   const source = readSource('assets/Scripts/Game/BattleInputController.ts')
 
   assert.match(source, /import\s*{[^}]*EventTouch[^}]*UITransform[^}]*}\s*from\s*'cc'/s)
-  assert.match(source, /import\s*{[^}]*clampBattleTarget[^}]*}\s*from\s*'\.\.\/Core\/MovementRuntime'/s)
+  assert.match(source, /import type\s*{[^}]*BattleRect[^}]*}\s*from\s*'\.\.\/Combat\/CombatTypes\.ts'/s)
+  assert.match(source, /Node\.EventType\.TOUCH_START/)
+  assert.match(source, /Node\.EventType\.TOUCH_MOVE/)
   assert.match(source, /Node\.EventType\.TOUCH_END/)
-  assert.match(source, /\.on\(Node\.EventType\.TOUCH_END/)
-  assert.match(source, /\.off\(Node\.EventType\.TOUCH_END/)
+  assert.match(source, /\.on\(Node\.EventType\.TOUCH_START,\s*this\.onTouchTarget/)
+  assert.match(source, /\.on\(Node\.EventType\.TOUCH_MOVE,\s*this\.onTouchTarget/)
+  assert.match(source, /\.on\(Node\.EventType\.TOUCH_END,\s*this\.onTouchTarget/)
+  assert.match(source, /\.off\(Node\.EventType\.TOUCH_START,\s*this\.onTouchTarget/)
+  assert.match(source, /\.off\(Node\.EventType\.TOUCH_MOVE,\s*this\.onTouchTarget/)
+  assert.match(source, /\.off\(Node\.EventType\.TOUCH_END,\s*this\.onTouchTarget/)
   assert.match(source, /getUILocation\(\)/)
-  assert.match(source, /convertToNodeSpaceAR\(new Vec3\(/)
-  assert.match(source, /clampBattleTarget\(/)
-  assert.match(source, /convertToWorldSpaceAR\(new Vec3\(clamped\.x, clamped\.y, 0\)\)/)
-  assert.match(source, /player\.moveTo\(worldTarget\)/)
+  assert.match(source, /public configure\(bounds: BattleRect, coordinateSpace: UITransform\)/)
+  assert.match(source, /private coordinateSpace: UITransform \| null = null/)
+  assert.match(source, /coordinateSpace\.convertToNodeSpaceAR\(new Vec3\(/)
+  assert.match(source, /player\.requestMovementInCoordinateSpace\(/)
+  assert.doesNotMatch(source, /public (?:minX|maxX|minY|maxY)/)
+  assert.doesNotMatch(source, /clampBattleTarget|convertToWorldSpaceAR/)
 
-  const localIndex = source.indexOf('convertToNodeSpaceAR')
-  const clampIndex = source.indexOf('clampBattleTarget(local')
-  const worldIndex = source.indexOf('convertToWorldSpaceAR')
-  const moveIndex = source.indexOf('player.moveTo(worldTarget)')
-  assert.ok(localIndex < clampIndex && clampIndex < worldIndex && worldIndex < moveIndex)
+  assert.match(source, /player\.requestMovementInCoordinateSpace\(location, \(point\) => \{[\s\S]*coordinateSpace\.convertToNodeSpaceAR/)
 })
 
 test('portrait battle input rebinds the actual subscribed node without duplicates', () => {
@@ -108,44 +114,65 @@ test('portrait battle input rebinds the actual subscribed node without duplicate
   assert.match(source, /public bindInputArea\(inputArea:\s*UITransform\s*\|\s*null\)/)
   assert.match(source, /this\.unsubscribeInputNode\(\)[\s\S]*this\.inputArea = inputArea/)
   assert.match(source, /if \(this\.inputEnabled\) this\.subscribeInputNode\(\)/)
+  assert.match(source, /this\.bounds && this\.player && this\.coordinateSpace/)
   assert.match(source, /if \(!node \|\| this\.subscribedNode === node\) return/)
+  assert.match(source, /this\.subscribedNode\.off\(Node\.EventType\.TOUCH_START/)
+  assert.match(source, /this\.subscribedNode\.off\(Node\.EventType\.TOUCH_MOVE/)
   assert.match(source, /this\.subscribedNode\.off\(Node\.EventType\.TOUCH_END/)
   assert.match(source, /this\.subscribedNode = null/)
 })
 
-test('player movement uses fixed-speed runtime steps and emits motion transitions', () => {
+test('player movement uses the encapsulated motor and emits motion transitions', () => {
   const source = readSource('assets/Scripts/Game/PlayerController.ts')
 
-  assert.match(source, /import\s*{[^}]*stepTowardTarget[^}]*}\s*from\s*'\.\.\/Core\/MovementRuntime'/s)
-  assert.match(source, /stepTowardTarget\(/)
+  assert.match(source, /from '\.\.\/Combat\/PlayerMotor\.ts'/)
+  assert.match(source, /public configureMovement\(spawn: Point2, speed: number, bounds: BattleRect\)/)
+  assert.match(source, /public requestMovement\(target: Point2\)/)
+  assert.match(source, /public configureBounds\(bounds: BattleRect\)/)
+  assert.match(source, /requestMoveInCoordinateSpace/)
+  assert.match(source, /requestPlayerAction/)
+  assert.match(source, /stopPlayerMotor/)
+  assert.match(source, /resetPlayerMotor/)
+  assert.match(source, /stepPlayerMotor\(/)
+  assert.match(source, /if \(frame\.distanceMoved > 0\)[\s\S]*this\.syncNodePosition\(frame\.position\)/)
+  assert.match(source, /configureBounds\(bounds: BattleRect\)[\s\S]*this\.syncNodePosition\(after\)/)
+  assert.match(source, /emit\('player-animation-requested'/)
+  assert.doesNotMatch(source, /private movementEnabled|private movementSpawn/)
   assert.doesNotMatch(source, /Date\.now/)
   assert.doesNotMatch(source, /Vec3\.lerp/)
-  assert.match(source, /hoverElapsed\s*\+=\s*deltaTime/)
   assert.match(source, /emit\('player-motion-changed', moving\)/)
-  assert.match(source, /emit\('player-action-requested', 'sword_ride'\)/)
+  assert.match(source, /setPlayerMotionPresentation\(this\.motor, moving\)/)
+  assert.doesNotMatch(source, /setPlayerFallbackAction/)
 })
 
-test('flying sword delegates timing while homing state owns flight and lifecycle', () => {
+test('flying sword delegates timing and flight to artifact runtime commands', () => {
   const source = readSource('assets/Scripts/Game/FlyingSwordSkill.ts')
+  const artifact = readSource('assets/Scripts/Combat/ArtifactRuntime.ts')
 
-  assert.match(source, /from '\.\.\/Core\/FlyingSwordRuntime'/)
-  assert.match(source, /from '\.\.\/Core\/HomingSwordRuntime'/)
-  assert.match(source, /createFlyingSwordTimeline\(/)
-  assert.match(source, /advanceFlyingSwordTimeline\(/)
-  assert.match(source, /resetFlyingSwordTimeline\(/)
-  assert.match(source, /handSealDuration/)
-  assert.match(source, /createHomingSwordCast\(/)
-  assert.match(source, /stepHomingSwordCast\(/)
+  assert.match(source, /from '\.\.\/Combat\/ArtifactRuntime\.ts'/)
+  assert.match(source, /createArtifactRuntime\(/)
+  assert.match(source, /stepArtifact\(this\.artifact,/)
+  assert.match(source, /resetArtifact\(this\.artifact, generation\)/)
+  assert.match(artifact, /createHomingSword\(/)
+  assert.match(artifact, /stepHomingSwordCast\(/)
+  assert.match(artifact, /state\.activePaths\.forEach\(\(path\) => activePaths\.push\(path\)\)/)
+  assert.doesNotMatch(artifact, /Array\.from\(state\.activePaths\.values\(\)\)/)
+  assert.doesNotMatch(artifact, /\[\.\.\.state\.activePaths\.values\(\)\]/)
   assert.match(source, /getLivingSwordTargets\(\)/)
   assert.match(source, /getCurrentPlayerPosition\(\)/)
-  assert.match(source, /resolveHomingSwordSegment\(/)
-  assert.doesNotMatch(source, /activePath|createFlyingSwordPath|castFlyingSwordPass|getPath\(|Math\.sin/)
-  assert.match(source, /if \(!this\.battleRuntime\) return/)
+  assert.match(source, /getBattleBounds\(\)/)
+  assert.match(source, /resolveArtifactSwordHit\(command\.targetId\)/)
+  assert.doesNotMatch(source, /createFlyingSwordPath|castFlyingSwordPass|getPath\(|timeline\.progress/)
+  assert.match(source, /if \(!this\.battleRuntime \|\| !this\.artifact\) return/)
   assert.match(source, /emit\('sword-cast-started',\s*{ phase: 'handSeal' }\)/)
-  assert.match(source, /if \(this\.battleRuntime\.isBattleFrozen\(\)\)[\s\S]*this\.cancelCast\(\)/)
-  assert.match(source, /onDisable\(\)[\s\S]*this\.cancelCast\(\)/)
-  assert.match(source, /nextPhase === 'finished'[\s\S]*'sword_ride'[\s\S]*resetFlyingSwordTimeline/)
-  assert.match(source, /private cancelCast\(\)[\s\S]*this\.homingState = resetHomingSwordCast\(this\.homingState\)[\s\S]*this\.sword\.active = false/)
+  assert.match(source, /if \(this\.battleRuntime\.isBattleFrozen\(\)\)[\s\S]*this\.cancelCast\(false\)/)
+  assert.match(source, /onDisable\(\)[\s\S]*this\.cancelCast\(true\)/)
+  assert.match(source, /case 'despawn-sword':[\s\S]*finishCast\(\)[\s\S]*emit\('player-action-completed'\)/)
+  assert.match(source, /private cancelCast\(forceComplete: boolean\)[\s\S]*this\.visiblePathId = null[\s\S]*this\.hideSword\(\)/)
+  const cancelBody = source.match(/private cancelCast\(forceComplete: boolean\) \{([\s\S]*?)\n  \}/)?.[1] ?? ''
+  assert.match(cancelBody, /if \(this\.casting \|\| forceComplete\)/)
+  assert.match(cancelBody, /emit\('player-action-completed'/)
+  assert.doesNotMatch(cancelBody, /sword_ride/)
   assert.match(source, /setRotationFromEuler\(/)
 })
 
@@ -172,25 +199,68 @@ test('flying sword has a definition for every private method it calls', () => {
 
 test('battle runtime exposes copied live snapshots and de-duplicated swept hits', () => {
   const source = readSource('assets/Scripts/Game/BattleRuntimeController.ts')
+  const artifact = readSource('assets/Scripts/Combat/ArtifactRuntime.ts')
 
   assert.match(source, /getLivingSwordTargets\(\)/)
   assert.match(source, /return snapshotLivingSwordTargets\(this\.runtime\?\.enemies \?\? \[\]\)/)
   assert.match(source, /getCurrentPlayerPosition\(\)/)
   assert.match(source, /return \{ x: position\.x, y: position\.y \}/)
+  assert.match(source, /resolveArtifactSwordHit\(targetId: string\)/)
   assert.match(source, /resolveHomingSwordSegment\(state:\s*HomingSwordState,\s*segment:\s*HomingSwordSegment,\s*phase:\s*HomingSwordPhase\)/)
   assert.match(source, /segmentHitEnemiesAlongPath\(/)
-  const recordIndex = source.indexOf('recordGeometricSwordHits(state, geometricHits.map((enemy) => String(enemy.id)), phase)')
-  const damageIndex = source.indexOf('applyFlyingSwordPathHit(')
-  assert.ok(recordIndex >= 0 && damageIndex > recordIndex, 'hit must be recorded before damage is applied')
+  assert.match(artifact, /recordGeometricSwordHits\(path\.state, ids, phase\)/)
+  assert.match(source, /resolveArtifactSwordHit\(targetId: string\)[\s\S]*applyFlyingSwordPathHit\(/)
   assert.doesNotMatch(source, /castFlyingSword(?:Pass)?\(/)
   assert.doesNotMatch(source, /createFlyingSwordPath|createPlayerSwordPath|buildArcPath|arcHeight|swordStartX|swordEndX|swordY/)
+})
+
+test('battle runtime routes combat feedback through performance quality gates', () => {
+  const runtime = readSource('assets/Scripts/Game/BattleRuntimeController.ts')
+  const skill = readSource('assets/Scripts/Game/FlyingSwordSkill.ts')
+
+  assert.match(runtime, /from '\.\.\/Combat\/FeedbackTimeline\.ts'/)
+  assert.match(runtime, /from '\.\.\/Combat\/PerformanceBudget\.ts'/)
+  assert.match(runtime, /createPerformanceBudget\(\)/)
+  assert.match(runtime, /updateVfxQuality\(this\.vfxBudget,\s*deltaTime \* 1000\)/)
+  assert.match(runtime, /private currentVfxQuality/)
+  assert.match(runtime, /presentCombatFeedback\(feedbackFor\(/)
+  assert.match(runtime, /type: 'damage-resolved'/)
+  assert.match(runtime, /type: 'guard-broken'/)
+  assert.match(runtime, /this\.node\.emit\('combat-feedback-requested'/)
+  assert.match(skill, /emit\('combat-feedback-requested'/)
+  assert.match(skill, /type: 'artifact-cast'/)
+})
+
+test('combat audio controller plays catalog bgm and scheduled feedback cues', () => {
+  const source = readSource('assets/Scripts/Game/CombatAudioController.ts')
+  const bootstrap = readSource('assets/Scripts/Game/PortraitBattleBootstrap.ts')
+
+  assert.match(source, /AudioClip/)
+  assert.match(source, /AudioSource/)
+  assert.match(source, /resources\.load\('Data\/audio-catalog'/)
+  assert.match(source, /resources\.load\(entry\.resource,\s*AudioClip/)
+  assert.match(source, /playOneShot\(clip,\s*volume\)/)
+  assert.match(source, /scheduleOnce\(/)
+  assert.match(source, /request\.atMs \/ 1000/)
+  assert.match(source, /combat-feedback-requested/)
+  assert.match(source, /startBgm\('mist-bamboo'\)/)
+  assert.match(source, /musicSource\.loop = true/)
+  assert.match(bootstrap, /CombatAudioController/)
+  assert.match(bootstrap, /combatAudioController\?\.bindFeedbackSource\(runtimeNode\)/)
+  assert.match(bootstrap, /combatAudioController\?\.bindFeedbackSource\(skillNode\)/)
 })
 
 test('portrait bootstrap assembles the approved compact playable scene', () => {
   const source = readSource('assets/Scripts/Game/PortraitBattleBootstrap.ts')
   const stageVisualCatalog = readSource('assets/Scripts/Core/StageVisualCatalog.ts')
 
-  assert.match(source, /setDesignResolutionSize\(750,\s*1334,\s*ResolutionPolicy\.FIXED_WIDTH\)/)
+  assert.match(source, /const WIDTH = BATTLE_DESIGN_WIDTH/)
+  assert.match(source, /const HEIGHT = BATTLE_MIN_VISIBLE_HEIGHT/)
+  assert.match(source, /computeBattleViewportState/)
+  assert.match(source, /ResolutionPolicy\.FIXED_WIDTH/)
+  assert.match(source, /ResolutionPolicy\.SHOW_ALL/)
+  assert.match(source, /onLoad\(\)[\s\S]*this\.applyViewportMetrics\(initialMetrics\)/)
+  assert.match(source, /private relayoutVisibleArea\(metrics: Readonly<ViewportMetrics>\)[\s\S]*this\.applyViewportMetrics\(metrics\)/)
   assert.match(source, /addComponent\(Camera\)/)
   assert.match(source, /camera\.projection = Camera\.ProjectionType\.ORTHO/)
   assert.match(source, /camera\.visibility = UI_LAYER/)
@@ -215,7 +285,7 @@ test('portrait bootstrap assembles the approved compact playable scene', () => {
   assert.match(source, /animator\.animationManifest = asset/)
   assert.match(source, /createNode\('BarVisual',\s*fill\.node/)
   assert.match(source, /setPosition\(-210,\s*-80/)
-  assert.match(source, /play\('sword_ride'\)/)
+  assert.match(source, /controller\.replayPresentationAction\(\)/)
   assert.match(source, /bindInputArea\(/)
   assert.match(source, /schedule\(bindRuntime\)/)
   assert.match(source, /unschedule\(bindRuntime\)/)
