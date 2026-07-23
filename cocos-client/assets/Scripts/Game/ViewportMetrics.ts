@@ -3,6 +3,7 @@ export interface ViewportMetrics {
   readonly cssHeight: number
   readonly topInsetPx: number
   readonly bottomInsetPx: number
+  readonly viewportSizeValid: boolean
   readonly source: 'douyin' | 'browser' | 'cocos'
 }
 
@@ -70,11 +71,12 @@ function freezeMetrics(
   cssHeight: number,
   topInsetPx: number,
   bottomInsetPx: number,
+  viewportSizeValid: boolean,
   source: ViewportMetrics['source'],
 ): Readonly<ViewportMetrics> {
   const top = clamp(finiteNonNegative(topInsetPx), 0, cssHeight)
   const bottom = clamp(finiteNonNegative(bottomInsetPx), 0, cssHeight - top)
-  return Object.freeze({ cssWidth, cssHeight, topInsetPx: top, bottomInsetPx: bottom, source })
+  return Object.freeze({ cssWidth, cssHeight, topInsetPx: top, bottomInsetPx: bottom, viewportSizeValid, source })
 }
 
 function readDouyinMetrics(tt: DouyinApiLike | null | undefined): Readonly<ViewportMetrics> | null {
@@ -91,7 +93,7 @@ function readDouyinMetrics(tt: DouyinApiLike | null | undefined): Readonly<Viewp
   const bottom = typeof safeBottom === 'number' && Number.isFinite(safeBottom)
     ? info.windowHeight - safeBottom
     : 0
-  return freezeMetrics(info.windowWidth, info.windowHeight, top, bottom, 'douyin')
+  return freezeMetrics(info.windowWidth, info.windowHeight, top, bottom, true, 'douyin')
 }
 
 function readBrowserMetrics(environment: ViewportMetricsEnvironment): Readonly<ViewportMetrics> | null {
@@ -111,15 +113,17 @@ function readBrowserMetrics(environment: ViewportMetricsEnvironment): Readonly<V
     cssHeight,
     finiteNonNegative(probe.top) + offsetTop,
     finiteNonNegative(probe.bottom) + occludedBottom,
+    true,
     'browser',
   )
 }
 
 function readCocosMetrics(getFrameSize: ViewportMetricsEnvironment['getFrameSize']): Readonly<ViewportMetrics> {
   const frame = getFrameSize()
-  const width = isDimension(frame?.width) ? frame.width : 750
-  const height = isDimension(frame?.height) ? frame.height : 1334
-  return freezeMetrics(width, height, 0, 0, 'cocos')
+  const viewportSizeValid = isDimension(frame?.width) && isDimension(frame?.height)
+  const width = viewportSizeValid ? frame.width : 750
+  const height = viewportSizeValid ? frame.height : 1334
+  return freezeMetrics(width, height, 0, 0, viewportSizeValid, 'cocos')
 }
 
 class RuntimeViewportMetricsProvider implements ViewportMetricsProvider {

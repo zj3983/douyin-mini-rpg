@@ -407,6 +407,11 @@ export function setPlayerFallbackAction(state: PlayerMotor, action: PlayerFallba
   return updateFallback(motor, action)
 }
 
+export function setPlayerMotionPresentation(state: PlayerMotor, moving: boolean): PlayerActionFrame {
+  if (typeof moving !== 'boolean') throw new TypeError('moving must be boolean')
+  return setPlayerFallbackAction(state, 'sword_ride')
+}
+
 export function lockPlayerAction(
   state: PlayerMotor,
   action: PlayerActionLock,

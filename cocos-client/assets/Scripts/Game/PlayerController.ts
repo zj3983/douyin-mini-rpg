@@ -9,7 +9,7 @@ import {
   requestPlayerAction,
   resetPlayerMotor,
   setPlayerBounds,
-  setPlayerFallbackAction,
+  setPlayerMotionPresentation,
   stepPlayerMotor,
   stopPlayerMotor,
 } from '../Combat/PlayerMotor.ts'
@@ -137,7 +137,7 @@ export class PlayerController extends Component {
     if (this.moving === moving) return
     this.moving = moving
     if (this.motor) {
-      const frame = setPlayerFallbackAction(this.motor, 'sword_ride')
+      const frame = setPlayerMotionPresentation(this.motor, moving)
       if (frame.changed) this.node.emit('player-animation-requested', frame.action)
     }
     this.node.emit('player-motion-changed', moving)

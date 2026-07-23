@@ -24,6 +24,9 @@ import {
   stopPlayerMotor,
   unlockPlayerAction,
 } from '../assets/Scripts/Combat/PlayerMotor.ts'
+import * as playerMotorApi from '../assets/Scripts/Combat/PlayerMotor.ts'
+
+const setPlayerMotionPresentation = playerMotorApi.setPlayerMotionPresentation
 
 const EPSILON = 1e-9
 const PORTRAIT_VIEWPORTS = [
@@ -307,6 +310,52 @@ test('action tokens preserve movement authority while priorities arbitrate', () 
   assert.deepEqual(after.target, before.target)
   assert.deepEqual(after.bounds, before.bounds)
   assert.equal(after.speed, before.speed)
+})
+
+test('motion presentation stays on sword ride through movement arrival and stop', () => {
+  assert.equal(typeof setPlayerMotionPresentation, 'function')
+  const motor = createPlayerMotor({ x: 0, y: 0 }, 120)
+  setPlayerBounds(motor, { minX: -100, maxX: 100, minY: -100, maxY: 100 })
+  setPlayerFallbackAction(motor, 'move')
+  requestMove(motor, { x: 3, y: 0 })
+
+  const moving = stepPlayerMotor(motor, 1 / 60)
+  const movingPresentation = setPlayerMotionPresentation(motor, moving.distanceMoved > 0)
+  const arrival = stepPlayerMotor(motor, 1 / 60)
+  const arrivalPresentation = setPlayerMotionPresentation(motor, !arrival.arrived)
+  stopPlayerMotor(motor)
+  const stoppedPresentation = setPlayerMotionPresentation(motor, false)
+
+  assert.ok(moving.distanceMoved > 0)
+  assert.equal(arrival.arrived, true)
+  assert.deepEqual(
+    [movingPresentation.action, arrivalPresentation.action, stoppedPresentation.action],
+    ['sword_ride', 'sword_ride', 'sword_ride'],
+  )
+  assert.notEqual(motor.presentationAction, 'move')
+})
+
+test('motion presentation preserves action locks before restoring sword ride', () => {
+  assert.equal(typeof setPlayerMotionPresentation, 'function')
+  const motor = createPlayerMotor({ x: 0, y: 0 }, 120)
+  requestMove(motor, { x: 30, y: 0 })
+  const cast = requestPlayerAction(motor, 'hand_seal', 'flying-sword')
+  const hurt = requestPlayerAction(motor, 'hurt', 'battle-runtime-hurt')
+
+  const moving = stepPlayerMotor(motor, 1 / 60)
+  const whileMoving = setPlayerMotionPresentation(motor, moving.distanceMoved > 0)
+  stopPlayerMotor(motor)
+  const whileStopped = setPlayerMotionPresentation(motor, false)
+  const afterHurt = completePlayerAction(motor, hurt.token)
+  const whileCastLocked = setPlayerMotionPresentation(motor, false)
+  const afterCast = completePlayerAction(motor, cast.token)
+
+  assert.equal(whileMoving.action, 'hurt')
+  assert.equal(whileStopped.action, 'hurt')
+  assert.equal(afterHurt.action, 'hand_seal')
+  assert.equal(whileCastLocked.action, 'hand_seal')
+  assert.equal(afterCast.action, 'sword_ride')
+  assert.notEqual(motor.presentationAction, 'move')
 })
 
 test('cast arrival keeps cast active and falls back to sword ride after unlock', () => {

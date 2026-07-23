@@ -70,6 +70,7 @@ test('Douyin system info has priority and converts safe area edges to insets', (
     cssHeight: 844,
     topInsetPx: 47,
     bottomInsetPx: 34,
+    viewportSizeValid: true,
     source: 'douyin',
   })
   assert.equal(browserProbeCalls, 0)
@@ -93,6 +94,7 @@ test('Douyin safe area values are finite-clamped without rejecting valid dimensi
     cssHeight: 932,
     topInsetPx: 0,
     bottomInsetPx: 0,
+    viewportSizeValid: true,
     source: 'douyin',
   })
 })
@@ -113,6 +115,7 @@ test('browser metrics reserve visual viewport occlusion once against layout view
     cssHeight: 844,
     topInsetPx: 30,
     bottomInsetPx: 136,
+    viewportSizeValid: true,
     source: 'browser',
   })
   assert.equal(Object.isFrozen(metrics), true)
@@ -134,6 +137,7 @@ test('invalid platform and browser dimensions fall back to Cocos frame with zero
     cssHeight: 780,
     topInsetPx: 0,
     bottomInsetPx: 0,
+    viewportSizeValid: true,
     source: 'cocos',
   })
 })

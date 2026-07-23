@@ -141,8 +141,8 @@ test('player movement uses the encapsulated motor and emits motion transitions',
   assert.doesNotMatch(source, /Date\.now/)
   assert.doesNotMatch(source, /Vec3\.lerp/)
   assert.match(source, /emit\('player-motion-changed', moving\)/)
-  assert.match(source, /setPlayerFallbackAction\(this\.motor, 'sword_ride'\)/)
-  assert.doesNotMatch(source, /setPlayerFallbackAction\(this\.motor, moving \? 'move'/)
+  assert.match(source, /setPlayerMotionPresentation\(this\.motor, moving\)/)
+  assert.doesNotMatch(source, /setPlayerFallbackAction/)
 })
 
 test('flying sword delegates timing and flight to artifact runtime commands', () => {

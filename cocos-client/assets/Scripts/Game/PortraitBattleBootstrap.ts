@@ -220,6 +220,7 @@ export class PortraitBattleBootstrap extends Component {
     const resolution = selectBattleResolution({
       cssWidth: metrics?.cssWidth ?? frameSize.width,
       cssHeight: metrics?.cssHeight ?? frameSize.height,
+      viewportSizeValid: metrics?.viewportSizeValid,
       previousMode: this.resolutionMode ?? undefined,
     })
     if (resolution.mode === this.resolutionMode) return

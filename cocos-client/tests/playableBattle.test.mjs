@@ -467,8 +467,8 @@ test('player controller keeps sword ride presentation while movement emits motio
   assert.match(player, /this\.syncNodePosition\(frame\.position\)/)
   assert.match(player, /if \(frame\.distanceMoved > 0\) \{[\s\S]*this\.setMoving\(true\)/)
   assert.match(player, /if \(frame\.arrived\) this\.setMoving\(false\)/)
-  assert.match(player, /setPlayerFallbackAction\(this\.motor, 'sword_ride'\)/)
-  assert.doesNotMatch(player, /setPlayerFallbackAction\(this\.motor, moving \? 'move'/)
+  assert.match(player, /setPlayerMotionPresentation\(this\.motor, moving\)/)
+  assert.doesNotMatch(player, /setPlayerFallbackAction/)
   assert.doesNotMatch(player, /private target: Vec3/)
 })
 

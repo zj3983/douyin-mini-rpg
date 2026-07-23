@@ -22,6 +22,7 @@ export type BattleResolutionMode = 'fixed-width' | 'show-all'
 export interface BattleResolutionInput {
   cssWidth: number
   cssHeight: number
+  viewportSizeValid?: boolean
   previousMode?: BattleResolutionMode
 }
 
@@ -77,7 +78,8 @@ function frozenRect(minX: number, maxX: number, minY: number, maxY: number): Bat
 }
 
 export function selectBattleResolution(input: BattleResolutionInput): Readonly<BattleResolution> {
-  const validViewport = Number.isFinite(input?.cssWidth)
+  const validViewport = input?.viewportSizeValid !== false
+    && Number.isFinite(input?.cssWidth)
     && input.cssWidth > 0
     && Number.isFinite(input?.cssHeight)
     && input.cssHeight > 0

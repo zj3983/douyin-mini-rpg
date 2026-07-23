@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import * as battleLayout from '../assets/Scripts/Combat/BattleLayout.ts'
+import { createViewportMetricsProvider } from '../assets/Scripts/Game/ViewportMetrics.ts'
 
 const selectBattleResolution = battleLayout.selectBattleResolution
 
@@ -47,4 +48,36 @@ test('transient invalid resize dimensions retain the previous valid mode', () =>
   })
   assert.ok(resolution.designWidth > 0)
   assert.ok(resolution.designHeight > 0)
+})
+
+test('provider fallback dimensions do not erase the last valid landscape orientation', () => {
+  assert.equal(typeof selectBattleResolution, 'function')
+  const frame = { width: 844, height: 390 }
+  const provider = createViewportMetricsProvider({
+    tt: null,
+    browserWindow: null,
+    getFrameSize: () => frame,
+  })
+  let previousMode
+  const selectFromProvider = () => {
+    const metrics = provider.read()
+    const resolution = selectBattleResolution({
+      cssWidth: metrics.cssWidth,
+      cssHeight: metrics.cssHeight,
+      viewportSizeValid: metrics.viewportSizeValid,
+      previousMode,
+    })
+    previousMode = resolution.mode
+    return resolution.mode
+  }
+
+  const modes = [selectFromProvider()]
+  frame.width = 0
+  frame.height = 0
+  modes.push(selectFromProvider())
+  frame.width = 844
+  frame.height = 390
+  modes.push(selectFromProvider())
+
+  assert.deepEqual(modes, ['show-all', 'show-all', 'show-all'])
 })
