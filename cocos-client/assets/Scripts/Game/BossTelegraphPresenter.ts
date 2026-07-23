@@ -109,11 +109,14 @@ export class BossTelegraphPresenter extends Component {
           || !this.isValid
           || !this.node?.isValid
         ) {
-          resources.release(path, SpriteFrame)
+          frame.addRef()
+          frame.decRef(true)
           return
         }
-        if (this.talismanFrames.has(path)) resources.release(path, SpriteFrame)
+        const previousFrame = this.talismanFrames.get(path)
+        frame.addRef()
         this.talismanFrames.set(path, frame)
+        previousFrame?.decRef(true)
       })
     }
   }
@@ -135,7 +138,7 @@ export class BossTelegraphPresenter extends Component {
   onDestroy(): void {
     this.destroyed = true
     this.loadGeneration += 1
-    for (const path of this.talismanFrames.keys()) resources.release(path, SpriteFrame)
+    for (const frame of this.talismanFrames.values()) frame.decRef(true)
     this.talismanFrames.clear()
     this.hideAll()
   }

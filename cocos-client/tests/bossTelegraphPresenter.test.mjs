@@ -26,7 +26,28 @@ export class Color {
   }
   set(r, g, b, a) { Object.assign(this, { r, g, b, a }); return this }
 }
-export class SpriteFrame { constructor(id = '') { this.id = id } }
+export class SpriteFrame {
+  constructor(id = '') {
+    this.id = id
+    this.refCount = 0
+    this.destroyed = false
+    this.addRefCalls = 0
+    this.decRefCalls = 0
+  }
+  addRef() {
+    if (this.destroyed) throw new Error('cannot acquire a destroyed SpriteFrame')
+    this.addRefCalls += 1
+    this.refCount += 1
+    return this
+  }
+  decRef(autoRelease = false) {
+    if (this.refCount <= 0) throw new Error('SpriteFrame reference underflow')
+    this.decRefCalls += 1
+    this.refCount -= 1
+    if (autoRelease && this.refCount === 0) this.destroyed = true
+    return this
+  }
+}
 export const resources = {
   load(path, Type, callback) { globalThis.__bossTelegraphResources.load(path, Type, callback) },
   release(path, Type) { globalThis.__bossTelegraphResources.release(path, Type) },
@@ -54,16 +75,31 @@ async function loadPresenter({ failedPaths = [], deferred = false } = {}) {
   const loadedPaths = []
   const releaseCalls = []
   const pendingLoads = []
+  const frames = new Map()
   const failed = new Set(failedPaths)
+  const frameFor = (path, Type) => {
+    const cached = frames.get(path)
+    if (cached && !cached.destroyed) return cached
+    const frame = new Type(path)
+    frames.set(path, frame)
+    return frame
+  }
   globalThis.__bossColorAllocations = 0
   globalThis.__bossTelegraphResources = {
     load(path, Type, callback) {
       loadedPaths.push(path)
       const pending = { path, Type, callback }
       if (deferred) pendingLoads.push(pending)
-      else callback(failed.has(path) ? new Error(`missing ${path}`) : null, failed.has(path) ? null : new Type(path))
+      else callback(failed.has(path) ? new Error(`missing ${path}`) : null, failed.has(path) ? null : frameFor(path, Type))
     },
-    release(path, Type) { releaseCalls.push({ path, Type }) },
+    release(path, Type) {
+      releaseCalls.push({ path, Type })
+      const frame = frames.get(path)
+      if (frame) {
+        frame.refCount = 0
+        frame.destroyed = true
+      }
+    },
   }
   const source = await readFile(new URL('../assets/Scripts/Game/BossTelegraphPresenter.ts', import.meta.url), 'utf8')
   let executable = ts.transpileModule(source, {
@@ -80,11 +116,20 @@ async function loadPresenter({ failedPaths = [], deferred = false } = {}) {
     ...await import(moduleUrl(executable)),
     loadedPaths,
     releaseCalls,
-    completeLoad(path, error = null) {
-      const index = pendingLoads.findIndex((pending) => pending.path === path)
+    frames,
+    completeLoad(path, error = null, pathIndex = 0) {
+      let remaining = pathIndex
+      const index = pendingLoads.findIndex((pending) => {
+        if (pending.path !== path) return false
+        if (remaining > 0) {
+          remaining -= 1
+          return false
+        }
+        return true
+      })
       assert.notEqual(index, -1, `pending resource ${path}`)
       const [pending] = pendingLoads.splice(index, 1)
-      pending.callback(error, error ? null : new pending.Type(path))
+      pending.callback(error, error ? null : frameFor(path, pending.Type))
     },
   }
 }
@@ -384,59 +429,98 @@ test('deferred preload affects subsequent warnings only and never rewrites an ac
 
 test('deferred preload success after destruction is ignored and the destroyed presenter stays inert', async () => {
   const sweepPath = 'Assets/Skills/BossDomain/talisman_sweep/spriteFrame'
-  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY, completeLoad, releaseCalls } = await loadPresenter({ deferred: true })
-  const presenter = new BossTelegraphPresenter()
-  presenter.telegraphPool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
-  presenter.onLoad()
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY, completeLoad, frames, releaseCalls } = await loadPresenter({ deferred: true })
+  const oldPresenter = new BossTelegraphPresenter()
+  const newPresenter = new BossTelegraphPresenter()
+  oldPresenter.telegraphPool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
+  newPresenter.telegraphPool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
+  oldPresenter.onLoad()
+  newPresenter.onLoad()
 
+  oldPresenter.onDestroy()
+  completeLoad(sweepPath, null, 1)
+  const sharedFrame = frames.get(sweepPath)
+  assert.equal(sharedFrame.refCount, 1, 'new presenter owns the shared frame')
+  completeLoad(sweepPath)
+
+  assert.equal(oldPresenter.talismanFrames.size, 0)
+  assert.equal(sharedFrame.refCount, 1)
+  assert.equal(sharedFrame.destroyed, false, 'old late callback cannot destroy the new presenter resource')
+  assert.deepEqual(releaseCalls, [])
+  assert.equal(oldPresenter.present(telegraph('bamboo-sweep:7:destroyed', { minX: -20, maxX: 20, minY: -20, maxY: 20 }, { kind: 'sweep' })), false)
+
+  newPresenter.onDestroy()
+  assert.equal(sharedFrame.refCount, 0)
+  assert.equal(sharedFrame.destroyed, true)
+})
+
+test('late preload success with no owner is acquired and released for cache cleanup', async () => {
+  const sweepPath = 'Assets/Skills/BossDomain/talisman_sweep/spriteFrame'
+  const { BossTelegraphPresenter, completeLoad, frames, releaseCalls } = await loadPresenter({ deferred: true })
+  const presenter = new BossTelegraphPresenter()
+
+  presenter.onLoad()
   presenter.onDestroy()
   completeLoad(sweepPath)
 
-  assert.equal(presenter.talismanFrames.size, 0)
-  assert.deepEqual(releaseCalls.map(({ path }) => path), [sweepPath])
-  assert.equal(presenter.present(telegraph('bamboo-sweep:7:destroyed', { minX: -20, maxX: 20, minY: -20, maxY: 20 }, { kind: 'sweep' })), false)
-})
-
-test('successful talisman preloads are held until destroy and released exactly once by path and type', async () => {
-  const { BossTelegraphPresenter, loadedPaths, releaseCalls } = await loadPresenter()
-  const presenter = new BossTelegraphPresenter()
-
-  presenter.onLoad()
-  assert.equal(presenter.talismanFrames.size, 3)
+  const frame = frames.get(sweepPath)
+  assert.equal(frame.refCount, 0)
+  assert.equal(frame.destroyed, true)
+  assert.equal(frame.addRefCalls, 1)
+  assert.equal(frame.decRefCalls, 1)
   assert.deepEqual(releaseCalls, [])
-
-  presenter.onDestroy()
-  presenter.onDestroy()
-
-  assert.deepEqual(releaseCalls.map(({ path }) => path), loadedPaths)
-  assert.ok(releaseCalls.every(({ Type }) => Type.name === 'SpriteFrame'))
 })
 
-test('failed talisman preloads are never released', async () => {
+test('two presenters acquire independent ownership of shared frames', async () => {
+  const sweepPath = 'Assets/Skills/BossDomain/talisman_sweep/spriteFrame'
+  const { BossTelegraphPresenter, frames, releaseCalls } = await loadPresenter()
+  const first = new BossTelegraphPresenter()
+  const second = new BossTelegraphPresenter()
+
+  first.onLoad()
+  second.onLoad()
+  const sharedFrame = frames.get(sweepPath)
+  assert.strictEqual(first.talismanFrames.get(sweepPath), sharedFrame)
+  assert.strictEqual(second.talismanFrames.get(sweepPath), sharedFrame)
+  assert.equal(sharedFrame.refCount, 2)
+
+  first.onDestroy()
+  assert.equal(sharedFrame.refCount, 1)
+  assert.equal(sharedFrame.destroyed, false)
+
+  second.onDestroy()
+  assert.equal(sharedFrame.refCount, 0)
+  assert.equal(sharedFrame.destroyed, true)
+  assert.deepEqual(releaseCalls, [])
+})
+
+test('failed talisman preloads acquire no reference and trigger no cleanup', async () => {
   const missingPath = 'Assets/Skills/BossDomain/talisman_spike/spriteFrame'
-  const { BossTelegraphPresenter, releaseCalls } = await loadPresenter({ failedPaths: [missingPath] })
+  const { BossTelegraphPresenter, frames, releaseCalls } = await loadPresenter({ failedPaths: [missingPath] })
   const presenter = new BossTelegraphPresenter()
 
   presenter.onLoad()
   presenter.onDestroy()
 
-  assert.equal(releaseCalls.some(({ path }) => path === missingPath), false)
-  assert.equal(releaseCalls.length, 2)
+  assert.equal(frames.has(missingPath), false)
+  assert.deepEqual(releaseCalls, [])
 })
 
-test('repeated presenter lifecycles release each successful preload without double release', async () => {
-  const { BossTelegraphPresenter, loadedPaths, releaseCalls } = await loadPresenter()
+test('repeated destroy decrements each successfully held frame exactly once', async () => {
+  const { BossTelegraphPresenter, frames, releaseCalls } = await loadPresenter()
+  const presenter = new BossTelegraphPresenter()
 
-  for (let cycle = 0; cycle < 2; cycle += 1) {
-    const presenter = new BossTelegraphPresenter()
-    presenter.onLoad()
-    presenter.onDestroy()
-  }
+  presenter.onLoad()
+  const heldFrames = [...frames.values()]
+  assert.equal(heldFrames.length, 3)
+  assert.ok(heldFrames.every((frame) => frame.refCount === 1))
 
-  assert.equal(releaseCalls.length, 6)
-  for (const path of new Set(loadedPaths)) {
-    assert.equal(releaseCalls.filter((call) => call.path === path).length, 2)
-  }
+  presenter.onDestroy()
+  presenter.onDestroy()
+
+  assert.ok(heldFrames.every((frame) => frame.refCount === 0 && frame.destroyed))
+  assert.ok(heldFrames.every((frame) => frame.addRefCalls === 1 && frame.decRefCalls === 1))
+  assert.deepEqual(releaseCalls, [])
 })
 
 test('missing talisman preload keeps a glyphless warning and its normal activation and impact lifecycle', async () => {
