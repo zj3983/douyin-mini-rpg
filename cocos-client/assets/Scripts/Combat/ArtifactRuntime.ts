@@ -285,7 +285,9 @@ export function stepArtifact(
   const commands: ArtifactCommand[] = []
   state.cooldownLeft = Math.max(0, state.cooldownLeft - deltaSeconds)
   if (state.activePaths.size === 0 && state.cooldownLeft <= 0) commands.push(...spawnPaths(state, context))
-  for (const path of [...state.activePaths.values()]) {
+  const activePaths: FlyingSwordPath[] = []
+  state.activePaths.forEach((path) => activePaths.push(path))
+  for (const path of activePaths) {
     commands.push(...stepPath(state, path, context, Math.min(deltaSeconds, 0.1)))
   }
   if (commands.some((command) => command.type === 'spawn-sword')) {

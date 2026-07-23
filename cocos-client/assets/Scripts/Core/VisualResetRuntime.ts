@@ -102,6 +102,11 @@ export function setVisualActionState(state: VisualResetState, action: string): V
   }
 }
 
+export function resolveActorVisualAction(actorId: string | null, action: string): string {
+  if (actorId === 'bamboo-warden' && action === 'attack') return 'sweep'
+  return action
+}
+
 export function setVisualFacing(state: VisualResetState, facing: -1 | 1): VisualResetState {
   return { ...state, facing }
 }

@@ -8,6 +8,7 @@ import {
   ManifestLoadToken,
   prepareVisualForPool,
   resetVisualForSpawn,
+  resolveActorVisualAction,
   setVisualActionState,
   setVisualFacing,
   visualResetCommands,
@@ -137,7 +138,7 @@ export class EnemyVisualController extends Component {
   private applyActionState(action: string) {
     this.visualState = setVisualActionState(this.visualState, action)
     this.applyCombatFlags(visualResetCommands(this.visualState))
-    this.animator?.play(action)
+    this.animator?.play(resolveActorVisualAction(this.visualState.actorId, action))
   }
 
   private applyCombatFlags(commands: { defeated: boolean; hit: boolean; attacking: boolean }) {
