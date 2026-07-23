@@ -17,6 +17,20 @@ export interface BattleLayout {
   navigationTop: number
 }
 
+export type BattleResolutionMode = 'fixed-width' | 'show-all'
+
+export interface BattleResolutionInput {
+  cssWidth: number
+  cssHeight: number
+  previousMode?: BattleResolutionMode
+}
+
+export interface BattleResolution {
+  readonly designWidth: number
+  readonly designHeight: number
+  readonly mode: BattleResolutionMode
+}
+
 export interface VisualFrameSize {
   readonly width: number
   readonly height: number
@@ -36,6 +50,17 @@ export const PLAYER_FRAME_WIDTH = 320
 export const PLAYER_FRAME_HEIGHT = 512
 export const PLAYER_DISPLAY_SCALE = 0.45
 
+const FIXED_WIDTH_RESOLUTION: Readonly<BattleResolution> = Object.freeze({
+  designWidth: BATTLE_DESIGN_WIDTH,
+  designHeight: BATTLE_MIN_VISIBLE_HEIGHT,
+  mode: 'fixed-width',
+})
+const SHOW_ALL_RESOLUTION: Readonly<BattleResolution> = Object.freeze({
+  designWidth: BATTLE_DESIGN_WIDTH,
+  designHeight: BATTLE_MIN_VISIBLE_HEIGHT,
+  mode: 'show-all',
+})
+
 const MAX_DIMENSION = 1_000_000
 
 function finiteDimension(value: number, fallback: number): number {
@@ -49,6 +74,17 @@ function finiteInset(value: number): number {
 
 function frozenRect(minX: number, maxX: number, minY: number, maxY: number): BattleRect {
   return Object.freeze({ minX, maxX, minY, maxY })
+}
+
+export function selectBattleResolution(input: BattleResolutionInput): Readonly<BattleResolution> {
+  const validViewport = Number.isFinite(input?.cssWidth)
+    && input.cssWidth > 0
+    && Number.isFinite(input?.cssHeight)
+    && input.cssHeight > 0
+  const mode = validViewport
+    ? input.cssWidth > input.cssHeight ? 'show-all' : 'fixed-width'
+    : input?.previousMode === 'show-all' ? 'show-all' : 'fixed-width'
+  return mode === 'show-all' ? SHOW_ALL_RESOLUTION : FIXED_WIDTH_RESOLUTION
 }
 
 export function computeBattleLayout(input: LayoutInput): BattleLayout {

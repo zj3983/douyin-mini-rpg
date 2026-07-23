@@ -141,7 +141,8 @@ test('player movement uses the encapsulated motor and emits motion transitions',
   assert.doesNotMatch(source, /Date\.now/)
   assert.doesNotMatch(source, /Vec3\.lerp/)
   assert.match(source, /emit\('player-motion-changed', moving\)/)
-  assert.match(source, /setPlayerFallbackAction\(this\.motor, moving \? 'move' : 'sword_ride'\)/)
+  assert.match(source, /setPlayerFallbackAction\(this\.motor, 'sword_ride'\)/)
+  assert.doesNotMatch(source, /setPlayerFallbackAction\(this\.motor, moving \? 'move'/)
 })
 
 test('flying sword delegates timing and flight to artifact runtime commands', () => {
@@ -255,7 +256,11 @@ test('portrait bootstrap assembles the approved compact playable scene', () => {
 
   assert.match(source, /const WIDTH = BATTLE_DESIGN_WIDTH/)
   assert.match(source, /const HEIGHT = BATTLE_MIN_VISIBLE_HEIGHT/)
-  assert.match(source, /setDesignResolutionSize\(WIDTH,\s*HEIGHT,\s*ResolutionPolicy\.FIXED_WIDTH\)/)
+  assert.match(source, /selectBattleResolution/)
+  assert.match(source, /ResolutionPolicy\.FIXED_WIDTH/)
+  assert.match(source, /ResolutionPolicy\.SHOW_ALL/)
+  assert.match(source, /onLoad\(\)[\s\S]*this\.applyResolutionPolicy\(\)/)
+  assert.match(source, /private relayoutVisibleArea\(\)[\s\S]*this\.applyResolutionPolicy\(\)/)
   assert.match(source, /addComponent\(Camera\)/)
   assert.match(source, /camera\.projection = Camera\.ProjectionType\.ORTHO/)
   assert.match(source, /camera\.visibility = UI_LAYER/)

@@ -460,14 +460,15 @@ test('flying sword visual and damage consume artifact runtime commands from one 
   assert.doesNotMatch(skill, /timeline\.progress|Math\.sin|Math\.cos/)
 })
 
-test('player controller consumes substep movement and emits motion only for displacement', () => {
+test('player controller keeps sword ride presentation while movement emits motion transitions', () => {
   const player = read('assets/Scripts/Game/PlayerController.ts')
   assert.match(player, /stepPlayerMotor\(this\.motor, deltaTime\)/)
   assert.match(player, /if \(frame\.distanceMoved > 0\)/)
   assert.match(player, /this\.syncNodePosition\(frame\.position\)/)
   assert.match(player, /if \(frame\.distanceMoved > 0\) \{[\s\S]*this\.setMoving\(true\)/)
   assert.match(player, /if \(frame\.arrived\) this\.setMoving\(false\)/)
-  assert.match(player, /setPlayerFallbackAction/)
+  assert.match(player, /setPlayerFallbackAction\(this\.motor, 'sword_ride'\)/)
+  assert.doesNotMatch(player, /setPlayerFallbackAction\(this\.motor, moving \? 'move'/)
   assert.doesNotMatch(player, /private target: Vec3/)
 })
 

@@ -30,8 +30,9 @@ import {
   PLAYER_FRAME_HEIGHT,
   PLAYER_FRAME_WIDTH,
   computeBattleLayout,
+  selectBattleResolution,
 } from '../Combat/BattleLayout.ts'
-import type { BattleLayout } from '../Combat/BattleLayout.ts'
+import type { BattleLayout, BattleResolutionMode } from '../Combat/BattleLayout.ts'
 import { BOSS_HAZARD_POOL_CAPACITY } from '../Combat/BossBrain.ts'
 import type { PlayerActionToken } from '../Combat/PlayerMotor.ts'
 import { AtlasAnimator } from './AtlasAnimator'
@@ -100,10 +101,11 @@ export class PortraitBattleBootstrap extends Component {
   private enemySpawner: EnemySpawner | null = null
   private currentStageId = 1
   private battleOperational = false
+  private resolutionMode: BattleResolutionMode | null = null
 
   onLoad() {
-    view.setDesignResolutionSize(WIDTH, HEIGHT, ResolutionPolicy.FIXED_WIDTH)
     this.viewportMetricsProvider = createDefaultViewportMetricsProvider(() => view.getFrameSize())
+    this.applyResolutionPolicy()
     this.viewportMetricsCleanup = this.viewportMetricsProvider.subscribe(() => this.relayoutVisibleArea())
     this.assembleScene()
     view.on('canvas-resize', this.relayoutVisibleArea, this)
@@ -195,6 +197,7 @@ export class PortraitBattleBootstrap extends Component {
   }
 
   private relayoutVisibleArea() {
+    this.applyResolutionPolicy()
     const layout = this.computeCurrentLayout()
     const visibleHeight = layout.visibleHeight
     const backgroundWidth = WIDTH * (visibleHeight / HEIGHT)
@@ -209,6 +212,22 @@ export class PortraitBattleBootstrap extends Component {
     this.bottomNavigation?.setPosition(0, layout.navigationTop - NAV_HEIGHT / 2, 0)
     this.playerController?.configureBounds(layout.movement)
     if (this.movementCoordinateSpace) this.battleInput?.configure(layout.movement, this.movementCoordinateSpace)
+  }
+
+  private applyResolutionPolicy() {
+    const frameSize = view.getFrameSize()
+    const metrics = this.viewportMetricsProvider?.read()
+    const resolution = selectBattleResolution({
+      cssWidth: metrics?.cssWidth ?? frameSize.width,
+      cssHeight: metrics?.cssHeight ?? frameSize.height,
+      previousMode: this.resolutionMode ?? undefined,
+    })
+    if (resolution.mode === this.resolutionMode) return
+    this.resolutionMode = resolution.mode
+    const policy = resolution.mode === 'show-all'
+      ? ResolutionPolicy.SHOW_ALL
+      : ResolutionPolicy.FIXED_WIDTH
+    view.setDesignResolutionSize(resolution.designWidth, resolution.designHeight, policy)
   }
 
   private computeCurrentLayout(): BattleLayout {
