@@ -2,9 +2,7 @@ export interface CharacterAsset {
   id: string
   name: string
   portrait: string
-  combatSprite: string
-  motions: Record<'idle' | 'move' | 'cast' | 'hurt', string>
-  motionFrames: Record<'idle' | 'move' | 'cast' | 'hurt', string>
+  animationActorId: string
   innateSkill: string
   startingArtifact: string
 }

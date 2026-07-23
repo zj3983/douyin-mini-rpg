@@ -41,6 +41,8 @@ node --test tests/animationAtlas.test.mjs tests/verticalSliceAtlasBuilder.test.m
 
 怪物清单只保存 `animationActorId`，具体动作、帧序、图集路径和锚点全部由 `animation-atlas.json` 提供。旧四帧横条播放器和旧怪物图集打包脚本已停用。
 
+角色清单同样只保存立绘和 `animationActorId`。`Assets/Characters` 不再存放旧 `combat.png` 或四帧横条，战斗表现全部由 `ActorAtlases` 提供。
+
 正式角色目录只允许保留 `animation-atlas.json` 声明的 PNG。`tests/animationAtlas.test.mjs` 会阻止未引用的合并图集重新进入远程资源包。
 
 ## 运行时规则

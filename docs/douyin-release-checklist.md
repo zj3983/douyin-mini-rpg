@@ -19,10 +19,10 @@ Current status: the project is a Cocos Creator game prototype, but it is not yet
 
 - No `build/bytedance-mini-game` output is committed or generated in this worktree.
 - No AppID is configured.
-- Source resources are about 35.48MB under `assets/resources` after retiring 30.46MB of superseded atlases, combat strips, legacy monster frames, and undeclared vertical-slice atlases.
-- Images dominate the budget at about 34.29MB, so the next package optimization pass should focus on stage-specific art and the remaining legacy character strips.
+- Source resources are about 29.98MB under `assets/resources` after retiring 35.96MB of superseded atlases, combat strips, legacy monster frames, and undeclared vertical-slice atlases.
+- Images dominate the budget at about 28.79MB, so the next package optimization pass should focus on stage-specific art compression and first-playable atlas sizing.
 - Audio is about 1.10MB and is not the primary loading bottleneck.
-- The current planning report assigns about 13.72MB to stage 1 and 21.67MB to deferred content. The legacy review queue is empty.
+- The current planning report assigns about 13.72MB to stage 1 and 16.16MB to deferred content. The legacy review queue is empty.
 
 ## Local Commands
 

@@ -10,81 +10,33 @@
       "id": "qinglan-sword-cultivator",
       "name": "青岚剑修",
       "portrait": "Assets/Characters/QinglanSwordCultivator/portrait.png",
-      "combatSprite": "Assets/Characters/QinglanSwordCultivator/combat.png",
-      "motions": {
-        "idle": "Assets/Characters/QinglanSwordCultivator/idle.anim",
-        "move": "Assets/Characters/QinglanSwordCultivator/sword_ride.anim",
-        "cast": "Assets/Characters/QinglanSwordCultivator/hand_seal.anim",
-        "hurt": "Assets/Characters/QinglanSwordCultivator/hurt.anim"
-      },
+      "animationActorId": "qinglan-sword-cultivator",
       "innateSkill": "flying-sword-art",
-      "startingArtifact": "qing-shuang-sword-case",
-      "motionFrames": {
-        "idle": "Assets/Characters/QinglanSwordCultivator/Frames/idle.png",
-        "move": "Assets/Characters/QinglanSwordCultivator/Frames/sword_ride.png",
-        "cast": "Assets/Characters/QinglanSwordCultivator/Frames/hand_seal.png",
-        "hurt": "Assets/Characters/QinglanSwordCultivator/Frames/hurt.png"
-      }
+      "startingArtifact": "qing-shuang-sword-case"
     },
     {
       "id": "xuanyan-fire-cultivator",
       "name": "玄焰尺修",
       "portrait": "Assets/Characters/XuanyanFireCultivator/portrait.png",
-      "combatSprite": "Assets/Characters/XuanyanFireCultivator/combat.png",
-      "motions": {
-        "idle": "Assets/Characters/XuanyanFireCultivator/idle.anim",
-        "move": "Assets/Characters/XuanyanFireCultivator/sword_ride.anim",
-        "cast": "Assets/Characters/XuanyanFireCultivator/hand_seal.anim",
-        "hurt": "Assets/Characters/XuanyanFireCultivator/hurt.anim"
-      },
+      "animationActorId": "xuanyan-fire-cultivator",
       "innateSkill": "flame-ruler-wave",
-      "startingArtifact": "flame-devouring-ruler",
-      "motionFrames": {
-        "idle": "Assets/Characters/XuanyanFireCultivator/Frames/idle.png",
-        "move": "Assets/Characters/XuanyanFireCultivator/Frames/sword_ride.png",
-        "cast": "Assets/Characters/XuanyanFireCultivator/Frames/hand_seal.png",
-        "hurt": "Assets/Characters/XuanyanFireCultivator/Frames/hurt.png"
-      }
+      "startingArtifact": "flame-devouring-ruler"
     },
     {
       "id": "jiuxiao-thunder-cultivator",
       "name": "九霄雷修",
       "portrait": "Assets/Characters/JiuxiaoThunderCultivator/portrait.png",
-      "combatSprite": "Assets/Characters/JiuxiaoThunderCultivator/combat.png",
-      "motions": {
-        "idle": "Assets/Characters/JiuxiaoThunderCultivator/idle.anim",
-        "move": "Assets/Characters/JiuxiaoThunderCultivator/sword_ride.anim",
-        "cast": "Assets/Characters/JiuxiaoThunderCultivator/hand_seal.anim",
-        "hurt": "Assets/Characters/JiuxiaoThunderCultivator/hurt.anim"
-      },
+      "animationActorId": "jiuxiao-thunder-cultivator",
       "innateSkill": "nine-heaven-thunder-seal",
-      "startingArtifact": "jiuxiao-thunder-seal",
-      "motionFrames": {
-        "idle": "Assets/Characters/JiuxiaoThunderCultivator/Frames/idle.png",
-        "move": "Assets/Characters/JiuxiaoThunderCultivator/Frames/sword_ride.png",
-        "cast": "Assets/Characters/JiuxiaoThunderCultivator/Frames/hand_seal.png",
-        "hurt": "Assets/Characters/JiuxiaoThunderCultivator/Frames/hurt.png"
-      }
+      "startingArtifact": "jiuxiao-thunder-seal"
     },
     {
       "id": "soul-bell-cultivator",
       "name": "镇魂铃修",
       "portrait": "Assets/Characters/SoulBellCultivator/portrait.png",
-      "combatSprite": "Assets/Characters/SoulBellCultivator/combat.png",
-      "motions": {
-        "idle": "Assets/Characters/SoulBellCultivator/idle.anim",
-        "move": "Assets/Characters/SoulBellCultivator/sword_ride.anim",
-        "cast": "Assets/Characters/SoulBellCultivator/hand_seal.anim",
-        "hurt": "Assets/Characters/SoulBellCultivator/hurt.anim"
-      },
+      "animationActorId": "soul-bell-cultivator",
       "innateSkill": "soul-bell-field",
-      "startingArtifact": "ancient-soul-bell",
-      "motionFrames": {
-        "idle": "Assets/Characters/SoulBellCultivator/Frames/idle.png",
-        "move": "Assets/Characters/SoulBellCultivator/Frames/sword_ride.png",
-        "cast": "Assets/Characters/SoulBellCultivator/Frames/hand_seal.png",
-        "hurt": "Assets/Characters/SoulBellCultivator/Frames/hurt.png"
-      }
+      "startingArtifact": "ancient-soul-bell"
     }
   ],
   "monsters": [
