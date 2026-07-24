@@ -10,8 +10,9 @@ export interface AnimationTimeRange {
   loop: boolean
 }
 
-export interface MarkerCrossingOptions extends AnimationTimeRange {
+export interface AnimationEventCrossingInput extends AnimationTimeRange {
   markers: readonly AnimationEventMarker[]
+  maxCatchUpCycles?: number
 }
 
 export function actionDuration(frameCount: number, fps: number): number {
@@ -27,7 +28,8 @@ export function markersCrossed({
   elapsed,
   duration,
   loop,
-}: MarkerCrossingOptions): AnimationEventMarker[] {
+  maxCatchUpCycles,
+}: AnimationEventCrossingInput): AnimationEventMarker[] {
   if (
     !Number.isFinite(previousElapsed)
     || !Number.isFinite(elapsed)
@@ -39,8 +41,12 @@ export function markersCrossed({
   }
 
   const crossed: AnimationEventMarker[] = []
-  const firstCycle = loop ? Math.max(0, Math.floor(previousElapsed / duration)) : 0
+  let firstCycle = loop ? Math.max(0, Math.floor(previousElapsed / duration)) : 0
   const lastCycle = loop ? Math.max(0, Math.floor(elapsed / duration)) : 0
+  if (loop && typeof maxCatchUpCycles === 'number' && Number.isFinite(maxCatchUpCycles) && maxCatchUpCycles > 0) {
+    const catchUpCycles = Math.max(1, Math.floor(maxCatchUpCycles))
+    firstCycle = Math.max(firstCycle, lastCycle - catchUpCycles + 1)
+  }
 
   for (let cycle = firstCycle; cycle <= lastCycle; cycle += 1) {
     for (const marker of markers) {

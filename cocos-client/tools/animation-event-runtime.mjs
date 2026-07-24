@@ -5,7 +5,7 @@ export function actionDuration(frameCount, fps) {
   return frameCount / fps
 }
 
-export function markersCrossed({ markers, previousElapsed, elapsed, duration, loop }) {
+export function markersCrossed({ markers, previousElapsed, elapsed, duration, loop, maxCatchUpCycles }) {
   if (
     !Number.isFinite(previousElapsed)
     || !Number.isFinite(elapsed)
@@ -17,8 +17,12 @@ export function markersCrossed({ markers, previousElapsed, elapsed, duration, lo
   }
 
   const crossed = []
-  const firstCycle = loop ? Math.max(0, Math.floor(previousElapsed / duration)) : 0
+  let firstCycle = loop ? Math.max(0, Math.floor(previousElapsed / duration)) : 0
   const lastCycle = loop ? Math.max(0, Math.floor(elapsed / duration)) : 0
+  if (loop && typeof maxCatchUpCycles === 'number' && Number.isFinite(maxCatchUpCycles) && maxCatchUpCycles > 0) {
+    const catchUpCycles = Math.max(1, Math.floor(maxCatchUpCycles))
+    firstCycle = Math.max(firstCycle, lastCycle - catchUpCycles + 1)
+  }
 
   for (let cycle = firstCycle; cycle <= lastCycle; cycle += 1) {
     for (const marker of markers) {
