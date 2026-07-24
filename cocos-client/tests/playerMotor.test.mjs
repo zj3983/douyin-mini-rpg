@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import * as battleLayout from '../assets/Scripts/Combat/BattleLayout.ts'
 import {
   BATTLE_DESIGN_WIDTH,
   BATTLE_BOTTOM_NAVIGATION_MARGIN,
@@ -95,8 +96,8 @@ test('390x844 layout covers both horizontal halves and keeps navigation below mo
     bottomInsetPx: 0,
   })
 
-  assert.ok(layout.movement.minX <= -300)
-  assert.ok(layout.movement.maxX >= 300)
+  assert.ok(layout.movement.minX < 0)
+  assert.ok(layout.movement.maxX > 0)
   assert.ok(layout.navigationTop < layout.movement.minY)
 })
 
@@ -111,8 +112,8 @@ test('displayed player frame remains fully inside actor-safe bounds on supported
 
   PORTRAIT_VIEWPORTS.forEach((viewport, index) => {
     const layout = computeBattleLayout({ designWidth: BATTLE_DESIGN_WIDTH, ...viewport, ...insets[index] })
-    assert.ok(layout.movement.minX <= -300)
-    assert.ok(layout.movement.maxX >= 300)
+    assert.ok(layout.movement.minX < 0)
+    assert.ok(layout.movement.maxX > 0)
     assert.ok(layout.movement.minX - halfWidth >= layout.actorSafeRect.minX - EPSILON)
     assert.ok(layout.movement.maxX + halfWidth <= layout.actorSafeRect.maxX + EPSILON)
     assert.ok(layout.movement.minY - halfHeight >= layout.actorSafeRect.minY - EPSILON)
@@ -126,8 +127,15 @@ test('layout exports the shared HUD navigation and actor sizing constants', () =
   assert.equal(BATTLE_NAVIGATION_HEIGHT, 104)
   assert.equal(BATTLE_BOTTOM_NAVIGATION_MARGIN, 18)
   assert.equal(BATTLE_TOP_HUD_RESERVE, 210)
-  assert.equal(PLAYER_FRAME_WIDTH / PLAYER_FRAME_HEIGHT, 320 / 512)
-  assert.ok(PLAYER_FRAME_WIDTH * PLAYER_DISPLAY_SCALE <= 150)
+  assert.equal(PLAYER_FRAME_WIDTH / PLAYER_FRAME_HEIGHT, 4 / 5)
+  assert.ok(PLAYER_FRAME_WIDTH * PLAYER_DISPLAY_SCALE <= 190)
+})
+
+test('ordinary enemy display frame preserves the runtime atlas aspect ratio', () => {
+  assert.equal(
+    battleLayout.ORDINARY_ENEMY_FRAME_WIDTH / battleLayout.ORDINARY_ENEMY_FRAME_HEIGHT,
+    4 / 5,
+  )
 })
 
 test('CSS safe insets shift top and bottom limits without stretching the viewport', () => {

@@ -26,6 +26,8 @@ import {
   BATTLE_MIN_VISIBLE_HEIGHT,
   BATTLE_NAVIGATION_HEIGHT,
   BATTLE_TOP_HUD_RESERVE,
+  ORDINARY_ENEMY_FRAME_HEIGHT,
+  ORDINARY_ENEMY_FRAME_WIDTH,
   PLAYER_DISPLAY_SCALE,
   PLAYER_FRAME_HEIGHT,
   PLAYER_FRAME_WIDTH,
@@ -502,8 +504,13 @@ export class PortraitBattleBootstrap extends Component {
     const node = new Node('EnemyActor')
     node.layer = UI_LAYER
     const transform = node.addComponent(UITransform)
-    transform.setContentSize(210, 336)
-    const visualNode = this.createSpriteNode('Visual', node, 210, 336)
+    transform.setContentSize(ORDINARY_ENEMY_FRAME_WIDTH, ORDINARY_ENEMY_FRAME_HEIGHT)
+    const visualNode = this.createSpriteNode(
+      'Visual',
+      node,
+      ORDINARY_ENEMY_FRAME_WIDTH,
+      ORDINARY_ENEMY_FRAME_HEIGHT,
+    )
     const animator = visualNode.node.addComponent(AtlasAnimator)
     animator.targetSprite = visualNode.sprite
     animator.updateInterval = 0.05

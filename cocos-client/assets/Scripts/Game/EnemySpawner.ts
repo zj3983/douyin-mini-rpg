@@ -4,6 +4,8 @@ import {
   computeBattleLayout,
   computeBossVisualPlacement,
   computeOrdinaryEnemySpawn,
+  ORDINARY_ENEMY_FRAME_HEIGHT,
+  ORDINARY_ENEMY_FRAME_WIDTH,
 } from '../Combat/BattleLayout'
 import type { BattleRect } from '../Combat/CombatTypes'
 import type { OrdinaryEnemyKind } from '../Combat/EnemyBrain'
@@ -164,12 +166,12 @@ export class EnemySpawner extends Component {
     if (!defaults) {
       defaults = {
         root: {
-          width: rootTransform?.contentSize.width ?? 210,
-          height: rootTransform?.contentSize.height ?? 336,
+          width: rootTransform?.contentSize.width ?? ORDINARY_ENEMY_FRAME_WIDTH,
+          height: rootTransform?.contentSize.height ?? ORDINARY_ENEMY_FRAME_HEIGHT,
         },
         visual: {
-          width: visualTransform?.contentSize.width ?? 210,
-          height: visualTransform?.contentSize.height ?? 336,
+          width: visualTransform?.contentSize.width ?? ORDINARY_ENEMY_FRAME_WIDTH,
+          height: visualTransform?.contentSize.height ?? ORDINARY_ENEMY_FRAME_HEIGHT,
         },
       }
       this.defaultVisualSizes.set(node, defaults)
@@ -183,7 +185,10 @@ export class EnemySpawner extends Component {
     const visual = node.getComponent(EnemyVisualController)
     const sprite = visual?.animator?.targetSprite ?? null
     const visualTransform = sprite?.node.getComponent(UITransform) ?? null
-    const fallback = this.defaultVisualSizes.get(node)?.visual ?? { width: 210, height: 336 }
+    const fallback = this.defaultVisualSizes.get(node)?.visual ?? {
+      width: ORDINARY_ENEMY_FRAME_WIDTH,
+      height: ORDINARY_ENEMY_FRAME_HEIGHT,
+    }
     const runtimeFrameSize = visual?.animator?.currentFrameSize()
     const manifest = visual?.animator?.animationManifest?.json as AnimationAtlasManifest | undefined
     const declaredFrame = manifest?.actors.find((actor) => actor.id === enemy.profile.id)?.frameSize

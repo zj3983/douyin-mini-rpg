@@ -591,7 +591,8 @@ test('runtime-created enemies contain sprite animation combat and pool component
     assert.equal(source.includes(marker), true, `missing ${marker}`)
   }
   assert.match(source, /bindAnimationManifest\(visual, animator, 'move'\)/)
-  assert.match(source, /createSpriteNode\('Visual', node, 210, 336\)/)
+  assert.match(source, /ORDINARY_ENEMY_FRAME_WIDTH/)
+  assert.match(source, /ORDINARY_ENEMY_FRAME_HEIGHT/)
   assert.match(read('assets/Scripts/Game/EnemySpawner.ts'), /visual\?\.animator\?\.currentFrameSize\(\)/)
   for (const actorId of ['moss-wolf', 'green-wing-moth', 'bamboo-warden']) {
     assert.equal(manifest.includes(`\"id\": \"${actorId}\"`), true, `missing ${actorId}`)
