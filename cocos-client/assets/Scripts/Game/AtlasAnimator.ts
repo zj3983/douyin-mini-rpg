@@ -1,6 +1,11 @@
 import { _decorator, Component, JsonAsset, Rect, Sprite, SpriteFrame, Texture2D, resources } from 'cc'
 import { AtlasAction, AnimationAtlasManifest, findActorAtlas, findAtlasAction } from '../Core/AnimationAtlas'
 import {
+  actionDuration,
+  actionCompleted,
+  markersCrossed,
+} from '../Core/AnimationEventRuntime'
+import {
   consumeAnimationTime,
   frameIndexAtTime,
   resourcePathForPng,
@@ -50,6 +55,7 @@ export class AtlasAnimator extends Component {
   private resetState: VisualResetState = createVisualResetState()
   private frameCache = new Map<string, SpriteFrame[]>()
   private destroyed = false
+  private completionEmitted = false
 
   setActor(actorId: string) {
     if (this.actorId === actorId) return
@@ -67,6 +73,7 @@ export class AtlasAnimator extends Component {
     this.accumulatedTime = 0
     this.frameIndex = 0
     this.playing = false
+    this.completionEmitted = false
     if (this.targetSprite?.isValid) this.targetSprite.spriteFrame = null
   }
 
@@ -77,6 +84,7 @@ export class AtlasAnimator extends Component {
     this.playing = false
     this.action = null
     this.frames = []
+    this.completionEmitted = false
     if (this.targetSprite?.isValid) this.targetSprite.spriteFrame = null
     for (const frames of this.frameCache.values()) {
       for (const frame of frames) frame.destroy()
@@ -86,6 +94,7 @@ export class AtlasAnimator extends Component {
 
   reset(actionName = 'move') {
     this.frameIndex = 0
+    this.completionEmitted = false
     this.play(actionName)
   }
 
@@ -119,6 +128,7 @@ export class AtlasAnimator extends Component {
     this.accumulatedTime = 0
     this.frameIndex = 0
     this.playing = false
+    this.completionEmitted = false
 
     const cacheKey = this.frameCacheKey(this.actorId, action.atlas, action.name)
     const cachedFrames = this.frameCache.get(cacheKey)
@@ -147,7 +157,7 @@ export class AtlasAnimator extends Component {
   }
 
   update(deltaTime: number) {
-    if (!this.playing || !this.action || this.frames.length <= 1) return
+    if (!this.playing || !this.action || this.frames.length === 0) return
 
     this.accumulatedTime += deltaTime
     if (!shouldAdvanceAnimation({
@@ -166,8 +176,40 @@ export class AtlasAnimator extends Component {
     })
     if (!timing.shouldAdvance) return
 
+    const previousElapsed = this.elapsed
     this.elapsed += timing.elapsedDelta
     this.accumulatedTime = 0
+    const duration = actionDuration(this.action.order.length, this.action.fps)
+    for (const marker of markersCrossed({
+      previousElapsed,
+      elapsed: this.elapsed,
+      duration,
+      loop: this.action.loop,
+      markers: this.action.events ?? [],
+      maxCatchUpCycles: 2,
+    })) {
+      this.node.emit('atlas-animation-event', {
+        actorId: this.actorId,
+        action: this.action.name,
+        marker: marker.name,
+        normalizedTime: marker.at,
+      })
+    }
+
+    if (!this.completionEmitted && actionCompleted({
+      previousElapsed,
+      elapsed: this.elapsed,
+      duration,
+      loop: this.action.loop,
+    })) {
+      this.completionEmitted = true
+      this.node.emit('atlas-animation-complete', {
+        actorId: this.actorId,
+        action: this.action.name,
+      })
+      this.playing = false
+    }
+
     const nextFrameIndex = frameIndexAtTime({
       elapsed: this.elapsed,
       framesPerSecond: this.action.fps,
@@ -176,7 +218,6 @@ export class AtlasAnimator extends Component {
     })
     if (nextFrameIndex === this.frameIndex) return
     this.frameIndex = nextFrameIndex
-    if (!this.action.loop && nextFrameIndex >= this.action.order.length - 1) this.playing = false
     this.applyFrame()
   }
 

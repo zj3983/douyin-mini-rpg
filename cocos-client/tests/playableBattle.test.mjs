@@ -266,6 +266,25 @@ test('atlas animator owns and reuses cached action frames until destruction', ()
   assert.match(source, /this\.frameCache\.clear\(\)/)
 })
 
+test('atlas animator emits deterministic markers and one completion before frame-cache early exits', () => {
+  const source = read('assets/Scripts/Game/AtlasAnimator.ts')
+
+  assert.match(source, /import \{[\s\S]*actionDuration,[\s\S]*actionCompleted,[\s\S]*markersCrossed,[\s\S]*\} from '\.\.\/Core\/AnimationEventRuntime'/)
+  assert.match(source, /private completionEmitted = false/)
+  assert.match(source, /const previousElapsed = this\.elapsed/)
+  assert.match(source, /markersCrossed\(\{[\s\S]*previousElapsed,[\s\S]*elapsed: this\.elapsed,[\s\S]*duration,[\s\S]*loop: this\.action\.loop,[\s\S]*markers: this\.action\.events \?\? \[\],[\s\S]*maxCatchUpCycles: 2,[\s\S]*\}\)/)
+  assert.match(source, /this\.node\.emit\('atlas-animation-event', \{[\s\S]*actorId: this\.actorId,[\s\S]*action: this\.action\.name,[\s\S]*marker: marker\.name,[\s\S]*normalizedTime: marker\.at,[\s\S]*\}\)/)
+  assert.match(source, /actionCompleted\(\{[\s\S]*previousElapsed,[\s\S]*elapsed: this\.elapsed,[\s\S]*duration,[\s\S]*loop: this\.action\.loop,[\s\S]*\}\)/)
+  assert.match(source, /this\.node\.emit\('atlas-animation-complete', \{[\s\S]*actorId: this\.actorId,[\s\S]*action: this\.action\.name,[\s\S]*\}\)/)
+
+  const markerIndex = source.indexOf("this.node.emit('atlas-animation-event'")
+  const completionIndex = source.indexOf("this.node.emit('atlas-animation-complete'")
+  const sameFrameReturnIndex = source.indexOf('if (nextFrameIndex === this.frameIndex) return')
+  assert.ok(markerIndex >= 0 && markerIndex < sameFrameReturnIndex)
+  assert.ok(completionIndex >= 0 && completionIndex < sameFrameReturnIndex)
+  assert.ok((source.match(/this\.completionEmitted = false/g) ?? []).length >= 4)
+})
+
 test('atlas animator destruction invalidates late loads and checks every Cocos target', () => {
   const source = read('assets/Scripts/Game/AtlasAnimator.ts')
 
