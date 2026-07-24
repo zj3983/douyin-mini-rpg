@@ -73,19 +73,69 @@ test('distinct reward ids grant repeat clear rewards without lowering progress',
   assert.deepEqual(repeat.save.rewardLedger, ['world-6-clear-a', 'world-2-clear-b'])
 })
 
-test('fractional stages are floored and invalid stages preserve progress', () => {
+test('fractional stages are floored', () => {
   const initial = createDefaultSave()
   initial.world.highestClearedStage = 5
 
   const fractional = applyWorldBossClear(initial, { stage: 8.9, rewardId: 'fractional' })
   assert.equal(fractional.save.world.highestClearedStage, 8)
+  assert.deepEqual(fractional.granted, { dungeonPasses: 1, spiritStones: 80 })
+})
 
-  for (const [index, stage] of [NaN, Infinity, -1].entries()) {
-    const result = applyWorldBossClear(fractional.save, {
+test('invalid stages reject rewards without changing save state', () => {
+  const initial = createDefaultSave()
+  initial.world.highestClearedStage = 5
+  initial.inventory.dungeonPasses = 2
+  initial.spiritStones = 160
+  initial.rewardLedger.push('existing')
+
+  for (const [index, stage] of [NaN, Infinity, -Infinity, -1, 0, 0.9].entries()) {
+    const result = applyWorldBossClear(initial, {
       stage,
       rewardId: `invalid-${index}`,
     })
-    assert.equal(result.save.world.highestClearedStage, 8)
-    assert.deepEqual(result.granted, { dungeonPasses: 1, spiritStones: 80 })
+    assert.deepEqual(result.granted, { dungeonPasses: 0, spiritStones: 0 })
+    assert.deepEqual(result.save, initial)
+    assert.notEqual(result.save, initial)
+    assert.notEqual(result.save.inventory, initial.inventory)
+    assert.notEqual(result.save.rewardLedger, initial.rewardLedger)
   }
+})
+
+test('blank reward ids reject rewards without changing save state', () => {
+  const initial = createDefaultSave()
+
+  for (const rewardId of ['', '   ', '\t\r\n']) {
+    const result = applyWorldBossClear(initial, { stage: 1, rewardId })
+    assert.deepEqual(result.granted, { dungeonPasses: 0, spiritStones: 0 })
+    assert.deepEqual(result.save, initial)
+    assert.notEqual(result.save, initial)
+    assert.notEqual(result.save.rewardLedger, initial.rewardLedger)
+  }
+})
+
+test('reward ids are trimmed before storage and duplicate detection', () => {
+  const initial = createDefaultSave()
+  const first = applyWorldBossClear(initial, { stage: 1, rewardId: '  world-1-clear-a  ' })
+  const duplicate = applyWorldBossClear(first.save, { stage: 9, rewardId: 'world-1-clear-a' })
+  const paddedLedger = createDefaultSave()
+  paddedLedger.rewardLedger.push('  world-2-clear-a  ')
+  paddedLedger.inventory.dungeonPasses = 1
+  paddedLedger.spiritStones = 80
+  const paddedDuplicate = applyWorldBossClear(paddedLedger, {
+    stage: 2,
+    rewardId: 'world-2-clear-a',
+  })
+
+  assert.deepEqual(first.granted, { dungeonPasses: 1, spiritStones: 80 })
+  assert.deepEqual(first.save.rewardLedger, ['world-1-clear-a'])
+  assert.deepEqual(duplicate.granted, { dungeonPasses: 0, spiritStones: 0 })
+  assert.equal(duplicate.save.world.highestClearedStage, 1)
+  assert.equal(duplicate.save.inventory.dungeonPasses, 1)
+  assert.equal(duplicate.save.spiritStones, 80)
+  assert.deepEqual(duplicate.save.rewardLedger, ['world-1-clear-a'])
+  assert.deepEqual(paddedDuplicate.granted, { dungeonPasses: 0, spiritStones: 0 })
+  assert.equal(paddedDuplicate.save.inventory.dungeonPasses, 1)
+  assert.equal(paddedDuplicate.save.spiritStones, 80)
+  assert.deepEqual(paddedDuplicate.save.rewardLedger, ['  world-2-clear-a  '])
 })
