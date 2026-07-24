@@ -9,6 +9,38 @@ const defaultCreatorCandidates = [
   'D:/CocosDashboard/editors/Creator/3.8.8/CocosCreator.exe',
 ]
 
+const requiredDualModeAssets = [
+  'assets/Scenes/MainBattle.scene',
+  'assets/Scenes/MainBattle.scene.meta',
+  'assets/Data/scene-blueprint.json',
+  'assets/Data/scene-blueprint.json.meta',
+  'assets/resources/Data/dual-mode-slice.json',
+  'assets/resources/Data/dual-mode-slice.json.meta',
+  'assets/Scripts/Core/Dungeon.meta',
+  'assets/Scripts/Core/Dungeon/DungeonSession.ts',
+  'assets/Scripts/Core/Dungeon/DungeonSession.ts.meta',
+  'assets/Scripts/Core/Dungeon/DungeonTypes.ts',
+  'assets/Scripts/Core/Dungeon/DungeonTypes.ts.meta',
+  'assets/Scripts/Core/GameContent.ts',
+  'assets/Scripts/Core/GameContent.ts.meta',
+  'assets/Scripts/Core/Progression.meta',
+  'assets/Scripts/Core/Progression/BestEffortNotification.ts',
+  'assets/Scripts/Core/Progression/BestEffortNotification.ts.meta',
+  'assets/Scripts/Core/Progression/DualModeRuntime.ts',
+  'assets/Scripts/Core/Progression/DualModeRuntime.ts.meta',
+  'assets/Scripts/Core/Progression/PlayerSave.ts',
+  'assets/Scripts/Core/Progression/PlayerSave.ts.meta',
+  'assets/Scripts/Core/Progression/SaveRepository.ts',
+  'assets/Scripts/Core/Progression/SaveRepository.ts.meta',
+  'assets/Scripts/Core/World.meta',
+  'assets/Scripts/Core/World/WorldRewards.ts',
+  'assets/Scripts/Core/World/WorldRewards.ts.meta',
+  'assets/Scripts/Game/DungeonRunController.ts',
+  'assets/Scripts/Game/DungeonRunController.ts.meta',
+  'assets/Scripts/Game/DualModeGameController.ts',
+  'assets/Scripts/Game/DualModeGameController.ts.meta',
+]
+
 export function checkCocosBuildReadiness(options = {}) {
   const projectRoot = options.projectRoot ?? process.cwd()
   const files = options.files ?? null
@@ -26,6 +58,10 @@ export function checkCocosBuildReadiness(options = {}) {
 
   if (!hasPath(projectRoot, 'settings', files, (path) => path.includes('/packages/') || path.endsWith('builder.json'))) {
     blockers.push('settings is missing Creator build configuration, such as settings/v2/packages/builder.json.')
+  }
+
+  for (const asset of requiredDualModeAssets) {
+    if (!hasPath(projectRoot, asset, files)) blockers.push(`${asset} is missing from the Cocos import contract.`)
   }
 
   const hasBuildIndex = buildRoot

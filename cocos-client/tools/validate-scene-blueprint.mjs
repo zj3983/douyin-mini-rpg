@@ -1,13 +1,12 @@
 const requiredNodes = [
-  'Canvas/BattleRoot/Runtime',
-  'Canvas/BattleRoot/ActorLayer/EnemySpawner',
-  'Canvas/BattleRoot/EffectLayer/FlyingSwordSkill',
-  'Canvas/BattleRoot/HudLayer/StatusLabel',
-  'Canvas/BattleRoot/HudLayer/StageClearPanel',
-  'Canvas/Pools/SoulOrbPool',
-  'Canvas/Pools/DamageNumberPool',
-  'Canvas/Pools/BossSkillEffectPool',
-  'Canvas/Pools/EnemyPool',
+  'Canvas/WorldRoot/BattleRoot/Runtime',
+  'Canvas/WorldRoot/BattleRoot/ActorLayer/EnemySpawner',
+  'Canvas/WorldRoot/BattleRoot/EffectLayer/FlyingSwordSkill',
+  'Canvas/WorldRoot/BattleRoot/HudLayer/StageClearPanel',
+  'Canvas/WorldRoot/BattleRoot/DropLayer/SoulOrbPool',
+  'Canvas/DungeonRoot',
+  'Canvas/DungeonRoot/DungeonInteractButton',
+  'Canvas/DualModeGameController',
 ]
 
 const requiredComponents = [
@@ -16,16 +15,18 @@ const requiredComponents = [
   'FlyingSwordSkill',
   'StageClearPanelController',
   'NodePoolController',
+  'DungeonRunController',
+  'DualModeGameController',
 ]
 
 const requiredRuntimeBindings = [
   'designData',
-  'statusLabel',
   'stageClearPanel',
   'enemySpawner',
   'soulOrbPool',
   'damageNumberPool',
   'bossSkillEffectPool',
+  'dualMode',
 ]
 
 const requiredFlyingSwordBindings = [
@@ -47,13 +48,13 @@ export function validateSceneBlueprint(blueprint) {
     if (!componentNames.has(component)) errors.push(`missing component: ${component}`)
   }
 
-  const runtimeNode = nodes.find((node) => node.path === 'Canvas/BattleRoot/Runtime')
+  const runtimeNode = nodes.find((node) => node.path === 'Canvas/WorldRoot/BattleRoot/Runtime')
   const runtimeBindings = runtimeNode?.bindings ?? {}
   for (const binding of requiredRuntimeBindings) {
     if (!runtimeBindings[binding]) errors.push(`missing BattleRuntimeController binding: ${binding}`)
   }
 
-  const flyingSwordNode = nodes.find((node) => node.path === 'Canvas/BattleRoot/EffectLayer/FlyingSwordSkill')
+  const flyingSwordNode = nodes.find((node) => node.path === 'Canvas/WorldRoot/BattleRoot/EffectLayer/FlyingSwordSkill')
   const flyingSwordBindings = flyingSwordNode?.bindings ?? {}
   for (const binding of requiredFlyingSwordBindings) {
     if (!flyingSwordBindings[binding]) errors.push(`missing FlyingSwordSkill binding: ${binding}`)

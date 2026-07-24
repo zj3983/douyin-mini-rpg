@@ -51,6 +51,72 @@ test('main battle serializes PortraitBattleBootstrap on the existing BattleRoot'
   assert.deepEqual(bootstrap.node, { __id__: battleRootIndex })
 })
 
+test('main battle serializes stable dual-mode dungeon markers with world active', () => {
+  const scene = JSON.parse(readFileSync(resolve('assets/Scenes/MainBattle.scene'), 'utf8'))
+  const nodes = new Map(
+    scene
+      .map((entry, index) => [entry, index])
+      .filter(([entry]) => entry?.__type__ === 'cc.Node')
+      .map(([entry, index]) => [entry._name, { entry, index }]),
+  )
+
+  for (const name of [
+    'DualModeGameController',
+    'WorldRoot',
+    'DungeonRoot',
+    'DungeonFloor1',
+    'DungeonFloor2',
+    'DungeonFloor3',
+    'DungeonRoomLabel',
+    'DungeonInteractButton',
+  ]) {
+    assert.ok(nodes.has(name), `MainBattle.scene should serialize ${name}`)
+  }
+
+  const sceneRoot = scene[1]
+  const worldRoot = nodes.get('WorldRoot')
+  const dungeonRoot = nodes.get('DungeonRoot')
+  assert.equal(worldRoot.entry._active, true)
+  assert.equal(dungeonRoot.entry._active, false)
+  assert.deepEqual(worldRoot.entry._parent, { __id__: 1 })
+  assert.deepEqual(dungeonRoot.entry._parent, { __id__: 1 })
+  assert.ok(sceneRoot._children.some((child) => child.__id__ === worldRoot.index))
+  assert.ok(sceneRoot._children.some((child) => child.__id__ === dungeonRoot.index))
+
+  for (const name of ['DungeonFloor1', 'DungeonFloor2', 'DungeonFloor3', 'DungeonRoomLabel', 'DungeonInteractButton']) {
+    assert.deepEqual(nodes.get(name).entry._parent, { __id__: dungeonRoot.index }, `${name} should be under DungeonRoot`)
+  }
+})
+
+test('scene blueprint documents runtime-owned dual-mode dungeon assembly', () => {
+  const blueprint = JSON.parse(readFileSync(resolve('assets/Data/scene-blueprint.json'), 'utf8'))
+  const byPath = new Map(blueprint.nodes.map((node) => [node.path, node]))
+
+  assert.equal(blueprint.scene.notes.includes('runtime authority'), true)
+  assert.equal(byPath.get('Canvas').children.includes('WorldRoot'), true)
+  assert.equal(byPath.get('Canvas').children.includes('DungeonRoot'), true)
+  assert.deepEqual(byPath.get('Canvas/WorldRoot').bindings.dualModeController, 'Canvas/DualModeGameController')
+  assert.equal(byPath.get('Canvas/DungeonRoot').active, false)
+  assert.deepEqual(byPath.get('Canvas/DungeonRoot').children, [
+    'DungeonFloor1',
+    'DungeonFloor2',
+    'DungeonFloor3',
+    'DungeonRoomLabel',
+    'DungeonStatusLabel',
+    'DungeonInteractButton',
+    'DungeonRunController',
+  ])
+  assert.deepEqual(byPath.get('Canvas/WorldRoot/BattleRoot/HudLayer/StageClearPanel').size, { width: 472, height: 214 })
+  assert.equal(byPath.get('Canvas/WorldRoot/BattleRoot/HudLayer/BottomNavigation/DungeonEntryButton').components.includes('Button'), true)
+  assert.equal(byPath.get('Canvas/DungeonRoot/DungeonInteractButton').components.includes('Button'), true)
+  assert.deepEqual(byPath.get('Canvas/DualModeGameController').bindings, {
+    worldRoot: 'Canvas/WorldRoot',
+    dungeonRoot: 'Canvas/DungeonRoot',
+    dungeonRun: 'Canvas/DungeonRoot/DungeonRunController',
+    profileData: 'resources/Data/dual-mode-slice.json',
+  })
+})
+
 test('resources Data copies deep-equal their authority JSON files', () => {
   for (const file of ['cultivation-design.json', 'animation-atlas.json']) {
     const authority = JSON.parse(readFileSync(resolve('assets/Data', file), 'utf8'))

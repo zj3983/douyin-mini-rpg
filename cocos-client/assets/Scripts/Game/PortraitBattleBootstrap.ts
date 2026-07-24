@@ -69,6 +69,11 @@ const TOP_HUD_RESERVE = BATTLE_TOP_HUD_RESERVE
 const TOP_HUD_OFFSET = 83
 const BOSS_HUD_OFFSET = 179
 const UI_LAYER = Layers.Enum.UI_2D
+const DUNGEON_FLOOR_COLORS = [
+  new Color(17, 45, 47, 255),
+  new Color(35, 38, 55, 255),
+  new Color(49, 29, 38, 255),
+] as const
 
 interface BarParts {
   root: Node
@@ -89,6 +94,13 @@ export class PortraitBattleBootstrap extends Component {
   private topHud: Node | null = null
   private bossHud: Node | null = null
   private bottomNavigation: Node | null = null
+  private dungeonFloors: Node[] = []
+  private dungeonRoomLabel: Label | null = null
+  private dungeonStatusLabel: Label | null = null
+  private dungeonInteractLabel: Label | null = null
+  private dungeonInteractNode: Node | null = null
+  private dungeonEntryNode: Node | null = null
+  private worldDungeonStatusLabel: Label | null = null
   private loadErrorLabel: Label | null = null
   private bindRuntimeCallback: (() => void) | null = null
   private destroyed = false
@@ -125,6 +137,14 @@ export class PortraitBattleBootstrap extends Component {
     this.stopRuntimeBinding()
     this.runtimeNode?.off('battle-stage-changed', this.onStageChanged, this)
     this.runtimeNode?.off('world-stage-cleared', this.dualModeController?.handleWorldCleared, this.dualModeController)
+    this.dungeonEntryNode?.off(Button.EventType.CLICK, this.enterDungeonFromWorld, this)
+    this.dungeonInteractNode?.off(Button.EventType.CLICK, this.interactWithDungeon, this)
+    this.dualModeController?.node.off('dungeon-entry-rejected', this.onDungeonEntryRejected, this)
+    this.dualModeController?.node.off('dungeon-entry-accepted', this.onDungeonEntryAccepted, this)
+    this.dungeonRunController?.node.off('dungeon-run-began', this.onDungeonRunChanged, this)
+    this.dungeonRunController?.node.off('dungeon-room-changed', this.onDungeonRunChanged, this)
+    this.dungeonRunController?.node.off('dungeon-loot-found', this.onDungeonLootFound, this)
+    this.dungeonRunController?.node.off('dungeon-extracted', this.onDungeonExtracted, this)
     if (this.dungeonRunController?.onExtractionRequested === this.dungeonExtractionRequest) {
       this.dungeonRunController.onExtractionRequested = null
     }
@@ -161,7 +181,7 @@ export class PortraitBattleBootstrap extends Component {
     const worldRoot = this.createNode('WorldRoot', canvasNode, WIDTH, visibleHeight)
     const dungeonRoot = this.createNode('DungeonRoot', canvasNode, WIDTH, visibleHeight)
     dungeonRoot.active = false
-    const dualMode = this.createDualModeControllers(canvasNode, worldRoot, dungeonRoot)
+    const dualMode = this.createDualModeControllers(canvasNode, worldRoot, dungeonRoot, layout)
     const battleRoot = this.createNode('BattleRoot', worldRoot, WIDTH, visibleHeight)
     const worldLayer = this.createNode('WorldLayer', battleRoot, WIDTH, visibleHeight)
     const actorLayer = this.createNode('ActorLayer', battleRoot, WIDTH, visibleHeight)
@@ -175,6 +195,7 @@ export class PortraitBattleBootstrap extends Component {
       canvasNode,
       worldRoot,
       dungeonRoot,
+      ...this.dungeonFloors,
       battleRoot,
       worldLayer,
       actorLayer,
@@ -237,6 +258,7 @@ export class PortraitBattleBootstrap extends Component {
     this.topHud?.setPosition(0, this.topHudY(layout), 0)
     this.bossHud?.setPosition(0, this.bossHudY(layout), 0)
     this.bottomNavigation?.setPosition(0, layout.navigationTop - NAV_HEIGHT / 2, 0)
+    this.configureDungeonLayout(layout)
     this.playerController?.configureBounds(layout.movement)
     if (this.movementCoordinateSpace) this.battleInput?.configure(layout.movement, this.movementCoordinateSpace)
   }
@@ -301,9 +323,32 @@ export class PortraitBattleBootstrap extends Component {
     this.stageResourceController.activate(1)
   }
 
-  private createDualModeControllers(parent: Node, worldRoot: Node, dungeonRoot: Node) {
-    this.drawBand(dungeonRoot, WIDTH, HEIGHT, new Color(15, 24, 27, 255))
-    const roomLabel = this.createLabel('DungeonRoomLabel', dungeonRoot, '', 28, 560, 54)
+  private createDualModeControllers(parent: Node, worldRoot: Node, dungeonRoot: Node, layout: BattleLayout) {
+    this.dungeonFloors = [
+      this.createDungeonFloor(
+        dungeonRoot, 1, ['f1-entry', 'f1-combat'], 'f1-store', DUNGEON_FLOOR_COLORS[0], layout.visibleHeight,
+      ),
+      this.createDungeonFloor(
+        dungeonRoot, 2, ['f2-alchemy', 'f2-elite'], 'f3-boss', DUNGEON_FLOOR_COLORS[1], layout.visibleHeight,
+      ),
+      this.createDungeonFloor(
+        dungeonRoot, 3, ['f3-boss', 'f3-gate'], 'extract', DUNGEON_FLOOR_COLORS[2], layout.visibleHeight,
+      ),
+    ]
+    this.dungeonFloors[1].active = false
+    this.dungeonFloors[2].active = false
+
+    const roomLabel = this.createLabel('DungeonRoomLabel', dungeonRoot, 'No active room', 28, 650, 54)
+    this.dungeonRoomLabel = roomLabel
+    const statusLabel = this.createLabel('DungeonStatusLabel', dungeonRoot, 'Enter from the dungeon tab', 20, 650, 48)
+    this.dungeonStatusLabel = statusLabel
+    const dungeonInteractNode = this.createNode('DungeonInteractButton', dungeonRoot, 360, 68)
+    this.dungeonInteractNode = dungeonInteractNode
+    this.drawBand(dungeonInteractNode, 360, 68, new Color(34, 132, 126, 255))
+    this.dungeonInteractLabel = this.createLabel('DungeonInteractLabel', dungeonInteractNode, 'Search Room', 23, 336, 56)
+    dungeonInteractNode.addComponent(Button)
+    dungeonInteractNode.on(Button.EventType.CLICK, this.interactWithDungeon, this)
+    this.configureDungeonLayout(layout)
 
     const dungeonNode = this.createNode('DungeonRunController', dungeonRoot)
     const dungeonRun = dungeonNode.addComponent(DungeonRunController)
@@ -318,6 +363,12 @@ export class PortraitBattleBootstrap extends Component {
     this.dualModeController = dualMode
     this.dungeonExtractionRequest = (payload) => dualMode.handleDungeonExtracted(payload)
     dungeonRun.onExtractionRequested = this.dungeonExtractionRequest
+    dualModeNode.on('dungeon-entry-rejected', this.onDungeonEntryRejected, this)
+    dualModeNode.on('dungeon-entry-accepted', this.onDungeonEntryAccepted, this)
+    dungeonNode.on('dungeon-run-began', this.onDungeonRunChanged, this)
+    dungeonNode.on('dungeon-room-changed', this.onDungeonRunChanged, this)
+    dungeonNode.on('dungeon-loot-found', this.onDungeonLootFound, this)
+    dungeonNode.on('dungeon-extracted', this.onDungeonExtracted, this)
 
     const profilePath = 'Data/dual-mode-slice'
     resources.load(profilePath, JsonAsset, (error, asset) => {
@@ -329,6 +380,135 @@ export class PortraitBattleBootstrap extends Component {
       dungeonRun.profileData = asset
     })
     return dualMode
+  }
+
+  private createDungeonFloor(
+    parent: Node,
+    floor: number,
+    roomIds: readonly [string, string],
+    doorId: string,
+    color: Color,
+    visibleHeight: number,
+  ) {
+    const floorNode = this.createNode(`DungeonFloor${floor}`, parent, WIDTH, visibleHeight)
+    this.drawBand(floorNode, WIDTH, visibleHeight, color)
+    const floorLabel = this.createLabel(`DungeonFloor${floor}Label`, floorNode, `Floor ${floor}`, 38, 300, 58)
+    floorLabel.node.setPosition(0, visibleHeight / 2 - 100, 0)
+    roomIds.forEach((roomId, index) => {
+      const anchor = this.createNode(`DungeonFloor${floor}RoomAnchor${index + 1}`, floorNode, 210, 104)
+      anchor.setPosition(index === 0 ? -205 : 75, 80 - index * 120, 0)
+      this.drawBand(anchor, 210, 104, new Color(15, 20, 24, 220))
+      this.createLabel(`DungeonFloor${floor}Room${index + 1}Label`, anchor, roomId, 20, 190, 80)
+    })
+    const door = this.createNode(`DungeonFloor${floor}DoorAnchor`, floorNode, 126, 154)
+    door.setPosition(260, 18, 0)
+    this.drawBand(door, 126, 154, new Color(113, 89, 48, 255))
+    this.createLabel(`DungeonFloor${floor}DoorLabel`, door, doorId, 18, 110, 130)
+    return floorNode
+  }
+
+  private configureDungeonLayout(layout: BattleLayout) {
+    const visibleHeight = layout.visibleHeight
+    this.dungeonFloors.forEach((floor, index) => {
+      this.resizeNode(floor, WIDTH, visibleHeight)
+      const graphics = floor.getComponent(Graphics)
+      if (graphics) {
+        graphics.clear()
+        graphics.fillColor = DUNGEON_FLOOR_COLORS[index]
+        graphics.rect(-WIDTH / 2, -visibleHeight / 2, WIDTH, visibleHeight)
+        graphics.fill()
+      }
+      const floorLabel = floor.getChildByName(`${floor.name}Label`)
+      floorLabel?.setPosition(0, visibleHeight / 2 - 100, 0)
+    })
+    this.dungeonRoomLabel?.node.setPosition(0, visibleHeight / 2 - 170, 0)
+    const controlY = layout.navigationTop - NAV_HEIGHT / 2
+    this.dungeonInteractNode?.setPosition(0, controlY, 0)
+    this.dungeonStatusLabel?.node.setPosition(0, controlY + 72, 0)
+  }
+
+  private enterDungeonFromWorld() {
+    if (this.worldDungeonStatusLabel) this.worldDungeonStatusLabel.string = ''
+    this.dualModeController?.enterDungeon()
+  }
+
+  private interactWithDungeon() {
+    const dungeonRun = this.dungeonRunController
+    const snapshot = dungeonRun?.getRunSnapshot()
+    if (!dungeonRun || !snapshot) {
+      this.refreshDungeonPresentation('No active dungeon run')
+      return
+    }
+    const room = snapshot.profile.rooms.find((candidate) => candidate.id === snapshot.currentRoomId)
+    if (!room) {
+      this.refreshDungeonPresentation('Room data unavailable')
+      return
+    }
+    if (room.kind === 'extraction') {
+      if (!dungeonRun.extract()) this.refreshDungeonPresentation('Extraction rejected')
+      return
+    }
+    if (snapshot.searchedRoomIds.indexOf(room.id) < 0) {
+      const loot = dungeonRun.searchCurrentRoom()
+      if (room.kind !== 'entry') dungeonRun.grantDoorCurrency(1)
+      this.refreshDungeonPresentation(loot.length > 0 ? `Found ${loot.length} loot stack(s)` : 'Room searched')
+      return
+    }
+    const route: Readonly<Record<string, string>> = {
+      'f1-entry': 'f1-combat',
+      'f1-combat': 'f1-store',
+      'f1-store': 'f2-alchemy',
+      'f2-alchemy': 'f2-elite',
+      'f2-elite': 'f3-boss',
+      'f3-boss': 'f3-gate',
+    }
+    const nextRoomId = route[room.id]
+    if (!nextRoomId || !dungeonRun.moveTo(nextRoomId)) {
+      this.refreshDungeonPresentation('Door is still locked')
+    }
+  }
+
+  private onDungeonEntryRejected(payload: { reason?: string } | undefined) {
+    if (this.worldDungeonStatusLabel) {
+      this.worldDungeonStatusLabel.string = payload?.reason === 'missing-pass' ? 'Boss pass required' : 'Entry unavailable'
+    }
+  }
+
+  private onDungeonEntryAccepted() {
+    if (this.worldDungeonStatusLabel) this.worldDungeonStatusLabel.string = ''
+    this.refreshDungeonPresentation('Dungeon entered')
+  }
+
+  private onDungeonRunChanged() {
+    this.refreshDungeonPresentation()
+  }
+
+  private onDungeonLootFound(loot: readonly unknown[]) {
+    this.refreshDungeonPresentation(`Found ${loot.length} loot stack(s)`)
+  }
+
+  private onDungeonExtracted() {
+    this.refreshDungeonPresentation('Extraction complete')
+  }
+
+  private refreshDungeonPresentation(status?: string) {
+    const snapshot = this.dungeonRunController?.getRunSnapshot()
+    if (!snapshot) {
+      if (this.dungeonRoomLabel) this.dungeonRoomLabel.string = 'No active room'
+      if (this.dungeonStatusLabel && status) this.dungeonStatusLabel.string = status
+      return
+    }
+    const room = snapshot.profile.rooms.find((candidate) => candidate.id === snapshot.currentRoomId)
+    const floor = room?.floor ?? 1
+    this.dungeonFloors.forEach((node, index) => { node.active = index + 1 === floor })
+    if (this.dungeonRoomLabel) this.dungeonRoomLabel.string = `${snapshot.currentRoomId} | Floor ${floor}`
+    if (this.dungeonStatusLabel) {
+      this.dungeonStatusLabel.string = status ?? `Door currency ${snapshot.doorCurrency} | Loot ${snapshot.carriedLoot.length}`
+    }
+    if (this.dungeonInteractLabel) {
+      const searched = snapshot.searchedRoomIds.indexOf(snapshot.currentRoomId) >= 0
+      this.dungeonInteractLabel.string = room?.kind === 'extraction' ? 'Extract' : searched ? 'Open Door' : 'Search Room'
+    }
   }
 
   private createPlayer(parent: Node, layout: BattleLayout) {
@@ -502,9 +682,24 @@ export class PortraitBattleBootstrap extends Component {
     this.drawBand(bottomNavigation, WIDTH, NAV_HEIGHT, new Color(12, 22, 25, 238))
     const navLabels = ['战斗', '副本', '抽卡', '装备', '背包', '法宝']
     navLabels.forEach((text, index) => {
-      const label = this.createLabel(`Nav${index + 1}`, bottomNavigation, text, 23, 125, NAV_HEIGHT)
-      label.node.setPosition(-312.5 + index * 125, 0, 0)
+      const parentNode = index === 1
+        ? this.createNode('DungeonEntryButton', bottomNavigation, 125, NAV_HEIGHT)
+        : bottomNavigation
+      if (index === 1) {
+        const dungeonEntryNode = parentNode
+        this.dungeonEntryNode = dungeonEntryNode
+        dungeonEntryNode.setPosition(-312.5 + index * 125, 0, 0)
+        dungeonEntryNode.addComponent(Button)
+        dungeonEntryNode.on(Button.EventType.CLICK, this.enterDungeonFromWorld, this)
+      }
+      const label = this.createLabel(`Nav${index + 1}`, parentNode, text, 23, 125, NAV_HEIGHT)
+      label.node.setPosition(index === 1 ? 0 : -312.5 + index * 125, index === 1 ? 8 : 0, 0)
       label.color = index === 0 ? new Color(230, 199, 112, 255) : new Color(205, 215, 211, 255)
+      if (index === 1) {
+        this.worldDungeonStatusLabel = this.createLabel('DungeonEntryStatusLabel', parentNode, '', 14, 121, 26)
+        this.worldDungeonStatusLabel.node.setPosition(0, -31, 0)
+        this.worldDungeonStatusLabel.color = new Color(241, 169, 104, 255)
+      }
     })
 
     const stageClear = this.createNode('StageClearPanel', parent, 472, 214)
