@@ -7,6 +7,7 @@ const requiredComponents = [
   ['assets/Scripts/Game/StageDirector.ts', 'class StageDirector'],
   ['assets/Scripts/Game/EnemyController.ts', 'class EnemyController'],
   ['assets/Scripts/Game/DungeonRunController.ts', 'class DungeonRunController'],
+  ['assets/Scripts/Game/DualModeGameController.ts', 'class DualModeGameController'],
   ['assets/Scripts/Game/SoulOrbController.ts', 'class SoulOrbController'],
   ['assets/Scripts/Game/AssetBindingController.ts', 'class AssetBindingController'],
   ['assets/Scripts/Game/AtlasAnimator.ts', 'class AtlasAnimator'],
@@ -55,6 +56,70 @@ test('battle runtime controller exposes boss stage hooks', () => {
   assert.equal(source.includes('showResult'), true)
   assert.equal(source.includes('advanceToStage'), true)
   assert.equal(source.includes('advanceToNextStageFromPanel'), true)
+})
+
+test('dual-mode Cocos controllers delegate progression and dungeon rules to Core', () => {
+  const dungeon = readSource('assets/Scripts/Game/DungeonRunController.ts')
+  const dualMode = readSource('assets/Scripts/Game/DualModeGameController.ts')
+  const world = readSource('assets/Scripts/Game/BattleRuntimeController.ts')
+
+  assert.match(dungeon, /Core\/Dungeon\/DungeonSession/)
+  assert.match(dungeon, /Core\/Dungeon\/DungeonTypes/)
+  assert.doesNotMatch(dungeon, /CultivationRuntime|resolveDungeonFloor/)
+  assert.doesNotMatch(dungeon, /\.\.\/Combat\//)
+  assert.match(dungeon, /@property\(JsonAsset\)\s*profileData/)
+  assert.match(dungeon, /@property\(Label\)\s*roomLabel/)
+  assert.match(dungeon, /createDungeonSession\(/)
+  assert.match(dungeon, /emit\('dungeon-run-began'/)
+  assert.match(dungeon, /Number\.isSafeInteger\(amount\)/)
+  assert.match(dungeon, /Number\.isSafeInteger\(nextTotal\)/)
+  assert.match(dungeon, /enterRoom\(/)
+  assert.match(dungeon, /searchRoom\(/)
+  assert.match(dungeon, /extractRun\(/)
+  assert.match(dungeon, /emit\('dungeon-room-changed'/)
+  assert.match(dungeon, /emit\('dungeon-loot-found'/)
+  assert.match(dungeon, /emit\('dungeon-extracted'/)
+
+  assert.match(dualMode, /Core\/Progression\/PlayerSave/)
+  assert.match(dualMode, /Core\/Progression\/SaveRepository/)
+  assert.match(dualMode, /Core\/World\/WorldRewards/)
+  assert.doesNotMatch(dualMode, /\.\.\/Combat\//)
+  assert.match(dualMode, /createJsonSaveRepository\(sys\.localStorage,\s*'cultivation-save-v3'\)/)
+  assert.match(dualMode, /applyWorldBossClear\(/)
+  assert.match(dualMode, /consumeDungeonPass\(/)
+  assert.match(dualMode, /dungeonRun\.begin\(seed\)/)
+  assert.match(dualMode, /applyExtractionLoot\(/)
+  assert.match(dualMode, /didAcceptReward\(/)
+  assert.match(dualMode, /emit\('player-save-changed'/)
+
+  assert.match(world, /emit\('world-stage-cleared'/)
+  assert.match(world, /rewardId:\s*`world-\$\{this\.stageNumber\}-generation-\$\{this\.stageGeneration\}`/)
+})
+
+test('dual-mode bootstrap wires live events, roots, data, and listener cleanup', () => {
+  const source = readSource('assets/Scripts/Game/PortraitBattleBootstrap.ts')
+
+  assert.match(source, /DualModeGameController/)
+  assert.match(source, /DungeonRunController/)
+  assert.match(source, /createNode\('WorldRoot'/)
+  assert.match(source, /createNode\('DungeonRoot'/)
+  assert.match(source, /dungeonRoot\.active = false/)
+  assert.match(source, /Data\/dual-mode-slice/)
+  assert.match(source, /runtimeNode\.on\('world-stage-cleared',\s*dualMode\.handleWorldCleared,\s*dualMode\)/)
+  assert.match(source, /dungeonNode\.on\('dungeon-extracted',\s*dualMode\.handleDungeonExtracted,\s*dualMode\)/)
+  assert.match(source, /runtimeNode\?\.off\('world-stage-cleared',\s*this\.dualModeController\?\.handleWorldCleared,\s*this\.dualModeController\)/)
+  assert.match(source, /dungeonNode\?\.off\('dungeon-extracted',\s*this\.dualModeController\?\.handleDungeonExtracted,\s*this\.dualModeController\)/)
+})
+
+test('dual-mode persistence only follows newly accepted reducer rewards', () => {
+  const source = readSource('assets/Scripts/Game/DualModeGameController.ts')
+  const worldHandler = source.match(/handleWorldCleared[\s\S]*?\n  }/)?.[0] ?? ''
+  const extractionHandler = source.match(/handleDungeonExtracted[\s\S]*?\n  }/)?.[0] ?? ''
+
+  assert.match(worldHandler, /if \(!this\.didAcceptReward\([^)]+\)\) return/)
+  assert.match(worldHandler, /this\.persistSave\(/)
+  assert.match(extractionHandler, /if \(!this\.didAcceptReward\([^)]+\)\) return/)
+  assert.match(extractionHandler, /this\.persistSave\(/)
 })
 
 test('enemy spawner only maps runtime spawns to pooled nodes', () => {

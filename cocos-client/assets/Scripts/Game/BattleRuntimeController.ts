@@ -457,7 +457,13 @@ export class BattleRuntimeController extends Component {
     if (!markBattleAttemptCleared(this.attemptState)) return
     this.hud?.hideBoss()
     const result = this.runtime ? claimStageClearRuntime(this.runtime) : null
-    if (result?.ok && result.result) this.stageClearPanel?.showResult(result.result)
+    if (result?.ok && result.result) {
+      this.stageClearPanel?.showResult(result.result)
+      this.node.emit('world-stage-cleared', {
+        stage: this.stageNumber,
+        rewardId: `world-${this.stageNumber}-generation-${this.stageGeneration}`,
+      })
+    }
   }
 
   private freezeBattle() {

@@ -1,53 +1,108 @@
 import { _decorator, Component, JsonAsset, Label } from 'cc'
-import { dungeonRunPlanFromDesign, resolveDungeonFloor } from '../Core/CultivationRuntime'
-import { DungeonProfile } from '../Core/CultivationTypes'
+import {
+  createDungeonSession,
+  enterRoom,
+  extractRun,
+  searchRoom,
+} from '../Core/Dungeon/DungeonSession.ts'
+import type { DungeonProfile, DungeonRun } from '../Core/Dungeon/DungeonTypes.ts'
 
 const { ccclass, property } = _decorator
+
+function cloneRun(run: DungeonRun): DungeonRun {
+  return {
+    id: run.id,
+    profile: {
+      id: run.profile.id,
+      entryRoomId: run.profile.entryRoomId,
+      extractionRoomId: run.profile.extractionRoomId,
+      rooms: run.profile.rooms.map((room) => ({
+        id: room.id,
+        floor: room.floor,
+        kind: room.kind,
+        exits: room.exits.map((exit) => ({ ...exit })),
+        ...(room.loot ? { loot: room.loot.map((item) => ({ ...item })) } : {}),
+      })),
+    },
+    phase: run.phase,
+    currentRoomId: run.currentRoomId,
+    doorCurrency: run.doorCurrency,
+    searchedRoomIds: [...run.searchedRoomIds],
+    carriedLoot: run.carriedLoot.map((item) => ({ ...item })),
+  }
+}
 
 @ccclass('DungeonRunController')
 export class DungeonRunController extends Component {
   @property(JsonAsset)
-  designData: JsonAsset | null = null
+  profileData: JsonAsset | null = null
 
   @property(Label)
-  floorLabel: Label | null = null
+  roomLabel: Label | null = null
 
-  dungeonId = 'star-gate-ruins'
-  currentFloor = 1
-  dungeon: DungeonProfile | null = null
+  private run: DungeonRun | null = null
 
-  start() {
-    this.enterDungeon(this.dungeonId)
-  }
+  begin(seed: number) {
+    this.run = null
+    this.refreshRoomLabel()
+    if (!this.profileData) return false
 
-  enterDungeon(dungeonId: string) {
-    if (!this.designData) return
-
-    this.dungeonId = dungeonId
-    this.currentFloor = 1
-    this.dungeon = dungeonRunPlanFromDesign(this.designData.json as any, dungeonId)
-    this.updateLabel()
-  }
-
-  evacuate() {
-    if (!this.dungeon) return null
-    return resolveDungeonFloor(this.dungeon, this.currentFloor, { extracted: true, bossKilled: false })
-  }
-
-  clearFloor(bossKilled: boolean) {
-    if (!this.dungeon) return null
-
-    const result = resolveDungeonFloor(this.dungeon, this.currentFloor, { extracted: false, bossKilled })
-    if (result.status !== 'cleared') {
-      this.currentFloor = Math.min(this.currentFloor + 1, this.dungeon.floors.length)
+    try {
+      const nextRun = createDungeonSession(this.profileData.json as DungeonProfile, seed)
+      this.run = nextRun
+      this.refreshRoomLabel()
+      this.node.emit('dungeon-run-began', {
+        runId: nextRun.id,
+        roomId: nextRun.currentRoomId,
+      })
+      return true
+    } catch {
+      return false
     }
-    this.updateLabel()
-    return result
   }
 
-  private updateLabel() {
-    if (this.floorLabel && this.dungeon) {
-      this.floorLabel.string = `${this.dungeon.name} 第${this.currentFloor}层`
+  grantDoorCurrency(amount: number) {
+    if (!this.run || !Number.isSafeInteger(amount) || amount <= 0) return false
+    const nextTotal = this.run.doorCurrency + amount
+    if (!Number.isSafeInteger(nextTotal)) return false
+    this.run.doorCurrency = nextTotal
+    return true
+  }
+
+  moveTo(roomId: string) {
+    if (!this.run) return false
+    const result = enterRoom(this.run, roomId)
+    if (!result.ok) return false
+    this.refreshRoomLabel()
+    this.node.emit('dungeon-room-changed', { roomId: this.run.currentRoomId })
+    return true
+  }
+
+  searchCurrentRoom() {
+    if (!this.run) return []
+    const result = searchRoom(this.run)
+    if (result.loot.length > 0) {
+      this.node.emit('dungeon-loot-found', result.loot.map((item) => ({ ...item })))
     }
+    return result.loot
+  }
+
+  extract() {
+    if (!this.run) return false
+    const result = extractRun(this.run)
+    if (!result.ok) return false
+    this.node.emit('dungeon-extracted', {
+      runId: this.run.id,
+      loot: result.loot.map((item) => ({ ...item })),
+    })
+    return true
+  }
+
+  getRunSnapshot() {
+    return this.run ? cloneRun(this.run) : null
+  }
+
+  private refreshRoomLabel() {
+    if (this.roomLabel) this.roomLabel.string = this.run?.currentRoomId ?? ''
   }
 }

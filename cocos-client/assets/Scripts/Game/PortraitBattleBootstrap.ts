@@ -53,6 +53,8 @@ import { PoolableActor } from './PoolableActor'
 import { SoulOrbController } from './SoulOrbController'
 import { StageClearPanelController } from './StageClearPanelController'
 import { DamageNumberController } from './DamageNumberController'
+import { DualModeGameController } from './DualModeGameController'
+import { DungeonRunController } from './DungeonRunController'
 import { StageBackgroundController } from './StageBackgroundController'
 import { StageResourceController } from './StageResourceController'
 import { createDefaultViewportMetricsProvider } from './ViewportMetrics.ts'
@@ -91,6 +93,8 @@ export class PortraitBattleBootstrap extends Component {
   private destroyed = false
   private assembled = false
   private runtimeNode: Node | null = null
+  private dungeonNode: Node | null = null
+  private dualModeController: DualModeGameController | null = null
   private stageBackgroundController: StageBackgroundController | null = null
   private stageResourceController: StageResourceController | null = null
   private combatAudioController: CombatAudioController | null = null
@@ -118,6 +122,8 @@ export class PortraitBattleBootstrap extends Component {
     this.destroyed = true
     this.stopRuntimeBinding()
     this.runtimeNode?.off('battle-stage-changed', this.onStageChanged, this)
+    this.runtimeNode?.off('world-stage-cleared', this.dualModeController?.handleWorldCleared, this.dualModeController)
+    this.dungeonNode?.off('dungeon-extracted', this.dualModeController?.handleDungeonExtracted, this.dualModeController)
     this.stageResourceController?.destroy()
     this.stageBackgroundController?.destroy()
     this.viewportMetricsCleanup?.()
@@ -147,7 +153,11 @@ export class PortraitBattleBootstrap extends Component {
     camera.visibility = UI_LAYER
     camera.priority = 100
     canvas.cameraComponent = camera
-    const battleRoot = this.createNode('BattleRoot', canvasNode, WIDTH, visibleHeight)
+    const worldRoot = this.createNode('WorldRoot', canvasNode, WIDTH, visibleHeight)
+    const dungeonRoot = this.createNode('DungeonRoot', canvasNode, WIDTH, visibleHeight)
+    dungeonRoot.active = false
+    const dualMode = this.createDualModeControllers(canvasNode, worldRoot, dungeonRoot)
+    const battleRoot = this.createNode('BattleRoot', worldRoot, WIDTH, visibleHeight)
     const worldLayer = this.createNode('WorldLayer', battleRoot, WIDTH, visibleHeight)
     const actorLayer = this.createNode('ActorLayer', battleRoot, WIDTH, visibleHeight)
     this.movementCoordinateSpace = actorLayer.getComponent(UITransform)
@@ -156,7 +166,17 @@ export class PortraitBattleBootstrap extends Component {
     const inputLayer = this.createNode('InputLayer', battleRoot)
     this.configureInputLayer(inputLayer, layout)
     const hudLayer = this.createNode('HudLayer', battleRoot, WIDTH, visibleHeight)
-    this.fullHeightNodes = [canvasNode, battleRoot, worldLayer, actorLayer, effectLayer, dropLayer, hudLayer]
+    this.fullHeightNodes = [
+      canvasNode,
+      worldRoot,
+      dungeonRoot,
+      battleRoot,
+      worldLayer,
+      actorLayer,
+      effectLayer,
+      dropLayer,
+      hudLayer,
+    ]
     this.inputLayer = inputLayer
 
     this.createWorld(worldLayer, backgroundWidth, visibleHeight)
@@ -192,6 +212,7 @@ export class PortraitBattleBootstrap extends Component {
       hud: hudParts.hud,
       stageClearPanel: hudParts.stageClearPanel,
       battleInput,
+      dualMode,
     })
     this.createFlyingSword(effectLayer, runtime, controller, visibleHeight)
 
@@ -275,6 +296,35 @@ export class PortraitBattleBootstrap extends Component {
     this.stageResourceController.activate(1)
   }
 
+  private createDualModeControllers(parent: Node, worldRoot: Node, dungeonRoot: Node) {
+    this.drawBand(dungeonRoot, WIDTH, HEIGHT, new Color(15, 24, 27, 255))
+    const roomLabel = this.createLabel('DungeonRoomLabel', dungeonRoot, '', 28, 560, 54)
+
+    const dungeonNode = this.createNode('DungeonRunController', dungeonRoot)
+    const dungeonRun = dungeonNode.addComponent(DungeonRunController)
+    dungeonRun.roomLabel = roomLabel
+    this.dungeonNode = dungeonNode
+
+    const dualModeNode = this.createNode('DualModeGameController', parent)
+    const dualMode = dualModeNode.addComponent(DualModeGameController)
+    dualMode.worldRoot = worldRoot
+    dualMode.dungeonRoot = dungeonRoot
+    dualMode.dungeonRun = dungeonRun
+    this.dualModeController = dualMode
+    dungeonNode.on('dungeon-extracted', dualMode.handleDungeonExtracted, dualMode)
+
+    const profilePath = 'Data/dual-mode-slice'
+    resources.load(profilePath, JsonAsset, (error, asset) => {
+      if (this.destroyed) return
+      if (error || !asset) {
+        this.showLoadError(profilePath)
+        return
+      }
+      dungeonRun.profileData = asset
+    })
+    return dualMode
+  }
+
   private createPlayer(parent: Node, layout: BattleLayout) {
     const player = this.createSpriteNode('Player', parent, PLAYER_FRAME_WIDTH, PLAYER_FRAME_HEIGHT)
     player.node.setPosition(-210, -80, 0)
@@ -309,11 +359,14 @@ export class PortraitBattleBootstrap extends Component {
     hud: BattleHudController
     stageClearPanel: StageClearPanelController
     battleInput: BattleInputController
+    dualMode: DualModeGameController
   }) {
     const runtimeNode = this.createNode('Runtime', parent)
+    const { dualMode } = bindings
     this.runtimeNode = runtimeNode
     this.combatAudioController?.bindFeedbackSource(runtimeNode)
     runtimeNode.on('battle-stage-changed', this.onStageChanged, this)
+    runtimeNode.on('world-stage-cleared', dualMode.handleWorldCleared, dualMode)
     const designPath = 'Data/cultivation-design'
     let state: RuntimeLoadState = { status: 'loading' }
     resources.load(designPath, JsonAsset, (error, asset) => {
