@@ -8,9 +8,15 @@ import {
 import { createDefaultSave } from '../Core/Progression/PlayerSave.ts'
 import { createJsonSaveRepository } from '../Core/Progression/SaveRepository.ts'
 import type { SaveRepository } from '../Core/Progression/SaveRepository.ts'
+import { notifyBestEffort } from '../Core/Progression/BestEffortNotification.ts'
 import { DungeonRunController } from './DungeonRunController'
 
 const { ccclass, property } = _decorator
+
+interface GameNotification {
+  eventName: string
+  payload?: unknown
+}
 
 @ccclass('DualModeGameController')
 export class DualModeGameController extends Component {
@@ -32,7 +38,7 @@ export class DualModeGameController extends Component {
     try {
       initialSave = this.repository.load() ?? initialSave
     } catch {
-      this.node.emit('save-load-failed')
+      this.notifyAll([{ eventName: 'save-load-failed' }])
     }
     this.runtime = createDualModeRuntime({
       initialSave,
@@ -46,7 +52,10 @@ export class DualModeGameController extends Component {
     const result = this.runtime?.handleWorldCleared(payload)
     if (!result) return this.reject('world-clear-rejected', 'controller-not-ready')
     if (!result.ok) return this.reject('world-clear-rejected', 'reason' in result ? result.reason : 'transition-rejected')
-    this.emitSaveChanged()
+    this.notifyAll([{
+      eventName: 'player-save-changed',
+      payload: this.getSaveSnapshot(),
+    }])
     return true
   }
 
@@ -58,8 +67,11 @@ export class DualModeGameController extends Component {
       return this.reject('dungeon-entry-rejected', 'reason' in result ? result.reason : 'transition-rejected')
     }
     this.applyMode('dungeon')
-    this.node.emit('player-save-changed', this.getSaveSnapshot())
-    this.node.emit('dungeon-entry-accepted', { seed: result.seed, runId: result.runId })
+    const notifications: GameNotification[] = [
+      { eventName: 'player-save-changed', payload: this.getSaveSnapshot() },
+      { eventName: 'dungeon-entry-accepted', payload: { seed: result.seed, runId: result.runId } },
+    ]
+    this.notifyAll(notifications)
     return true
   }
 
@@ -70,19 +82,21 @@ export class DualModeGameController extends Component {
       return this.reject('dungeon-extraction-rejected', 'reason' in result ? result.reason : 'transition-rejected')
     }
     this.applyMode('world')
+    const notifications: GameNotification[] = []
     if (result.saveChanged) {
-      try {
-        this.emitSaveChanged()
-      } catch {
-      }
+      notifications.push({
+        eventName: 'player-save-changed',
+        payload: this.getSaveSnapshot(),
+      })
     }
-    try {
-      this.node.emit('dungeon-extraction-accepted', {
+    notifications.push({
+      eventName: 'dungeon-extraction-accepted',
+      payload: {
         runId: result.runId,
         duplicate: result.duplicate,
-      })
-    } catch {
-    }
+      },
+    })
+    this.notifyAll(notifications)
     return true
   }
 
@@ -106,15 +120,22 @@ export class DualModeGameController extends Component {
     if (this.dungeonRoot) this.dungeonRoot.active = mode === 'dungeon'
   }
 
-  private emitSaveChanged() {
-    this.node.emit('player-save-changed', this.getSaveSnapshot())
+  private reject(eventName: string, reason: string) {
+    const notifications: GameNotification[] = []
+    if (reason === 'save-persist-failed' || reason === 'save-persist-rollback-failed') {
+      notifications.push({
+        eventName: 'save-persist-failed',
+        payload: { operation: eventName, reason },
+      })
+    }
+    notifications.push({ eventName, payload: { reason } })
+    this.notifyAll(notifications)
+    return false
   }
 
-  private reject(eventName: string, reason: string) {
-    if (reason === 'save-persist-failed' || reason === 'save-persist-rollback-failed') {
-      this.node.emit('save-persist-failed', { operation: eventName, reason })
-    }
-    this.node.emit(eventName, { reason })
-    return false
+  private notifyAll(notifications: readonly GameNotification[]) {
+    notifyBestEffort(notifications, (notification) => {
+      this.node.emit(notification.eventName, notification.payload)
+    })
   }
 }

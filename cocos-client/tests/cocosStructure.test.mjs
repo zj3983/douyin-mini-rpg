@@ -120,7 +120,7 @@ test('dual-mode Cocos controllers delegate progression and dungeon rules to Core
   assert.match(dualMode, /createJsonSaveRepository\(sys\.localStorage,\s*'cultivation-save-v3'\)/)
   assert.match(dualMode, /createDualModeRuntime\(/)
   assert.match(dualMode, /save-persist-failed/)
-  assert.match(dualMode, /emit\('player-save-changed'/)
+  assert.match(dualMode, /eventName:\s*'player-save-changed'/)
   assert.match(runtime, /applyWorldBossClear/)
   assert.match(runtime, /applyExtractionLoot/)
   assert.match(runtime, /consumeDungeonPass/)
@@ -234,6 +234,8 @@ test('dual-mode Cocos adapter reflects transactional runtime mode and returns ex
   const extractionHandler = extractBlock(source, 'handleDungeonExtracted(payload: unknown)')
   const committedExtraction = extractionHandler.slice(extractionHandler.indexOf("this.applyMode('world')"))
   const saveSnapshot = extractBlock(source, '\n  getSaveSnapshot()')
+  const reject = extractBlock(source, 'private reject(eventName: string, reason: string)')
+  const notify = extractBlock(source, 'private notifyAll(notifications:')
 
   assert.match(worldHandler, /runtime\?\.handleWorldCleared\(payload\)/)
   assert.match(enterDungeon, /runtime\.enterDungeon\(seed\)/)
@@ -243,8 +245,10 @@ test('dual-mode Cocos adapter reflects transactional runtime mode and returns ex
     'this.runtime.enterDungeon(seed)',
     'if (!result.ok)',
     "this.applyMode('dungeon')",
-    "this.node.emit('player-save-changed'",
-    "this.node.emit('dungeon-entry-accepted'",
+    "eventName: 'player-save-changed'",
+    "eventName: 'dungeon-entry-accepted'",
+    'this.notifyAll(notifications)',
+    'return true',
   ])
   assertStatementOrder(rejectedEntry, [
     'this.applyMode(this.runtime.getMode())',
@@ -256,13 +260,24 @@ test('dual-mode Cocos adapter reflects transactional runtime mode and returns ex
     "this.applyMode('world')",
     'return true',
   ])
-  assert.equal(countOccurrences(committedExtraction, 'try {'), 2)
-  assert.equal(countOccurrences(committedExtraction, 'catch {'), 2)
   assertStatementOrder(committedExtraction, [
     "this.applyMode('world')",
-    'this.emitSaveChanged()',
-    "this.node.emit('dungeon-extraction-accepted'",
+    "eventName: 'player-save-changed'",
+    "eventName: 'dungeon-extraction-accepted'",
+    'this.notifyAll(notifications)',
     'return true',
+  ])
+  for (const handler of [worldHandler, enterDungeon, extractionHandler, reject]) {
+    assert.doesNotMatch(handler, /node\.emit\(/)
+  }
+  assert.match(source, /Core\/Progression\/BestEffortNotification/)
+  assert.match(notify, /notifyBestEffort\(notifications/)
+  assert.equal(countOccurrences(source, 'this.node.emit('), 1)
+  assertStatementOrder(reject, [
+    "eventName: 'save-persist-failed'",
+    'notifications.push({ eventName, payload: { reason } })',
+    'this.notifyAll(notifications)',
+    'return false',
   ])
   assert.match(source, /save-persist-rollback-failed/)
   assert.doesNotMatch(source, /acknowledged|acknowledgeExtraction/)
