@@ -14,7 +14,13 @@ function createRepository({ failAt = Infinity } = {}) {
   }
 }
 
-function createDungeonPort({ beginOk = true, activeRunId = null, phase = 'exploring' } = {}) {
+function createDungeonPort({
+  beginOk = true,
+  activeRunId = null,
+  phase = 'exploring',
+  cancelOk = true,
+  cancelThrows = false,
+} = {}) {
   let runId = activeRunId
   let runPhase = activeRunId ? phase : null
   const calls = { begin: [], cancel: 0 }
@@ -41,6 +47,8 @@ function createDungeonPort({ beginOk = true, activeRunId = null, phase = 'explor
     },
     cancelRun() {
       calls.cancel += 1
+      if (cancelThrows) throw new Error('cancel unavailable')
+      if (!cancelOk) return false
       if (runId === null) return false
       runId = null
       runPhase = null
@@ -52,10 +60,6 @@ function createDungeonPort({ beginOk = true, activeRunId = null, phase = 'explor
     markExtracted() {
       assert.notEqual(runId, null)
       runPhase = 'extracted'
-    },
-    finishAcknowledgedExtraction() {
-      runId = null
-      runPhase = null
     },
   }
 }
@@ -168,7 +172,7 @@ test('malformed world and extraction envelopes reject without throwing or persis
     {},
     { runId: 7, loot: [] },
     { runId: 'run', loot: null },
-    { runId: 'run', loot: [], acknowledged: true },
+    { runId: 'run', loot: [{ itemId: 'item', amount: 0 }] },
     throwingExtraction,
   ]) {
     assert.doesNotThrow(() => runtime.handleDungeonExtracted(payload))
@@ -194,6 +198,43 @@ test('entry persistence failure rolls back the started session and all in-memory
   assert.equal(dungeon.calls.cancel, 1)
 })
 
+test('failed entry cancellation retains the candidate session and surfaces rollback failure', () => {
+  const repository = createRepository({ failAt: 1 })
+  const dungeon = createDungeonPort({ cancelOk: false })
+  const runtime = createDualModeRuntime({
+    initialSave: saveWithPasses(1),
+    repository,
+    dungeon,
+  })
+
+  assert.deepEqual(runtime.enterDungeon(13), {
+    ok: false,
+    reason: 'save-persist-rollback-failed',
+  })
+  assert.equal(runtime.getSaveSnapshot().inventory.dungeonPasses, 1)
+  assert.equal(runtime.getMode(), 'dungeon')
+  assert.equal(runtime.getActiveRunId(), 'mist-vault-13')
+  assert.equal(dungeon.hasRun(), true)
+  assert.equal(dungeon.calls.cancel, 1)
+})
+
+test('throwing entry cancellation also retains the candidate session and surfaces rollback failure', () => {
+  const dungeon = createDungeonPort({ cancelThrows: true })
+  const runtime = createDualModeRuntime({
+    initialSave: saveWithPasses(1),
+    repository: createRepository({ failAt: 1 }),
+    dungeon,
+  })
+
+  assert.deepEqual(runtime.enterDungeon(16), {
+    ok: false,
+    reason: 'save-persist-rollback-failed',
+  })
+  assert.equal(runtime.getMode(), 'dungeon')
+  assert.equal(runtime.getActiveRunId(), 'mist-vault-16')
+  assert.equal(dungeon.hasRun(), true)
+})
+
 test('world persistence failure does not assign the reducer result', () => {
   const runtime = createDualModeRuntime({
     initialSave: createDefaultSave(),
@@ -208,7 +249,7 @@ test('world persistence failure does not assign the reducer result', () => {
   assert.deepEqual(runtime.getSaveSnapshot(), createDefaultSave())
 })
 
-test('accepted and duplicate matching extraction return to world while writing loot once', () => {
+test('accepted matching extraction atomically returns to world and clears the active run', () => {
   const repository = createRepository()
   const dungeon = createDungeonPort()
   const runtime = createDualModeRuntime({
@@ -219,7 +260,7 @@ test('accepted and duplicate matching extraction return to world while writing l
   assert.equal(runtime.enterDungeon(14).ok, true)
   dungeon.markExtracted()
 
-  const payload = { runId: 'mist-vault-14', loot: [{ itemId: 'mist-herb', amount: 2 }], acknowledged: false }
+  const payload = { runId: 'mist-vault-14', loot: [{ itemId: 'mist-herb', amount: 2 }] }
   assert.deepEqual(runtime.handleDungeonExtracted(payload), {
     ok: true,
     runId: 'mist-vault-14',
@@ -227,19 +268,29 @@ test('accepted and duplicate matching extraction return to world while writing l
     saveChanged: true,
   })
   assert.equal(runtime.getMode(), 'world')
+  assert.equal(runtime.getActiveRunId(), null)
   assert.equal(runtime.getSaveSnapshot().inventory.materials['mist-herb'], 2)
   assert.equal(repository.saved.length, 2)
+})
 
-  assert.deepEqual(runtime.handleDungeonExtracted(payload), {
+test('duplicate matching extraction atomically returns to world without writing', () => {
+  const repository = createRepository()
+  const dungeon = createDungeonPort({ activeRunId: 'mist-vault-14', phase: 'extracted' })
+  const runtime = createDualModeRuntime({
+    initialSave: saveWithPasses(0, ['mist-vault-14']),
+    repository,
+    dungeon,
+  })
+
+  assert.deepEqual(runtime.handleDungeonExtracted({ runId: 'mist-vault-14', loot: [] }), {
     ok: true,
     runId: 'mist-vault-14',
     duplicate: true,
     saveChanged: false,
   })
-  assert.equal(repository.saved.length, 2)
-  assert.equal(runtime.acknowledgeExtraction('mist-vault-14'), true)
-  dungeon.finishAcknowledgedExtraction()
+  assert.equal(runtime.getMode(), 'world')
   assert.equal(runtime.getActiveRunId(), null)
+  assert.equal(repository.saved.length, 0)
 })
 
 test('mismatched, invalid-loot, and persist-failed extraction remain active and retryable', () => {
@@ -254,15 +305,15 @@ test('mismatched, invalid-loot, and persist-failed extraction remain active and 
   dungeon.markExtracted()
 
   assert.deepEqual(
-    runtime.handleDungeonExtracted({ runId: 'mist-vault-99', loot: [], acknowledged: false }),
+    runtime.handleDungeonExtracted({ runId: 'mist-vault-99', loot: [] }),
     { ok: false, reason: 'run-id-mismatch' },
   )
   assert.deepEqual(
-    runtime.handleDungeonExtracted({ runId: 'mist-vault-15', loot: [{ itemId: '', amount: 1 }], acknowledged: false }),
+    runtime.handleDungeonExtracted({ runId: 'mist-vault-15', loot: [{ itemId: '', amount: 1 }] }),
     { ok: false, reason: 'invalid-extraction-event' },
   )
   assert.deepEqual(
-    runtime.handleDungeonExtracted({ runId: 'mist-vault-15', loot: [{ itemId: 'mist-herb', amount: 1 }], acknowledged: false }),
+    runtime.handleDungeonExtracted({ runId: 'mist-vault-15', loot: [{ itemId: 'mist-herb', amount: 1 }] }),
     { ok: false, reason: 'save-persist-failed' },
   )
   assert.equal(runtime.getMode(), 'dungeon')

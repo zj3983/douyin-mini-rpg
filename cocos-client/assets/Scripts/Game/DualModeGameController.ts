@@ -1,5 +1,4 @@
 import { _decorator, Component, Node, sys } from 'cc'
-import type { DungeonExtractionEvent } from '../Core/Dungeon/DungeonTypes.ts'
 import {
   createDualModeRuntime,
   type DualMode,
@@ -52,9 +51,12 @@ export class DualModeGameController extends Component {
   }
 
   enterDungeon(seed?: number) {
-    const result = this.runtime?.enterDungeon(seed)
-    if (!result) return this.reject('dungeon-entry-rejected', 'controller-not-ready')
-    if (!result.ok) return this.reject('dungeon-entry-rejected', 'reason' in result ? result.reason : 'transition-rejected')
+    if (!this.runtime) return this.reject('dungeon-entry-rejected', 'controller-not-ready')
+    const result = this.runtime.enterDungeon(seed)
+    if (!result.ok) {
+      this.applyMode(this.runtime.getMode())
+      return this.reject('dungeon-entry-rejected', 'reason' in result ? result.reason : 'transition-rejected')
+    }
     this.applyMode('dungeon')
     this.node.emit('player-save-changed', this.getSaveSnapshot())
     this.node.emit('dungeon-entry-accepted', { seed: result.seed, runId: result.runId })
@@ -67,18 +69,20 @@ export class DualModeGameController extends Component {
     if (!result.ok) {
       return this.reject('dungeon-extraction-rejected', 'reason' in result ? result.reason : 'transition-rejected')
     }
-    if (!this.runtime.acknowledgeExtraction(result.runId)) {
-      return this.reject('dungeon-extraction-rejected', 'acknowledgement-failed')
-    }
-
     this.applyMode('world')
-    const extraction = payload as DungeonExtractionEvent
-    extraction.acknowledged = true
-    if (result.saveChanged) this.emitSaveChanged()
-    this.node.emit('dungeon-extraction-accepted', {
-      runId: result.runId,
-      duplicate: result.duplicate,
-    })
+    if (result.saveChanged) {
+      try {
+        this.emitSaveChanged()
+      } catch {
+      }
+    }
+    try {
+      this.node.emit('dungeon-extraction-accepted', {
+        runId: result.runId,
+        duplicate: result.duplicate,
+      })
+    } catch {
+    }
     return true
   }
 
@@ -107,8 +111,8 @@ export class DualModeGameController extends Component {
   }
 
   private reject(eventName: string, reason: string) {
-    if (reason === 'save-persist-failed') {
-      this.node.emit('save-persist-failed', { operation: eventName })
+    if (reason === 'save-persist-failed' || reason === 'save-persist-rollback-failed') {
+      this.node.emit('save-persist-failed', { operation: eventName, reason })
     }
     this.node.emit(eventName, { reason })
     return false

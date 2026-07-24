@@ -130,7 +130,7 @@ test('dual-mode Cocos controllers delegate progression and dungeon rules to Core
   assert.match(world, /rewardId:\s*`world-\$\{this\.stageNumber\}-generation-\$\{this\.stageGeneration\}`/)
 })
 
-test('dungeon begin validates a candidate before replacing the active run', () => {
+test('dungeon begin commits before best-effort observer notification', () => {
   const source = readSource('assets/Scripts/Game/DungeonRunController.ts')
   const begin = extractBlock(source, 'begin(seed: number)')
 
@@ -139,36 +139,45 @@ test('dungeon begin validates a candidate before replacing the active run', () =
   assertStatementOrder(begin, [
     'if (this.run) return false',
     'if (!this.profileData) return false',
-    'const nextRun = createDungeonSession',
+    'nextRun = createDungeonSession',
     'this.run = nextRun',
     'this.refreshRoomLabel()',
     "this.node.emit('dungeon-run-began'",
+    'return true',
   ])
+  const committed = begin.slice(begin.indexOf('this.run = nextRun'))
+  const notification = extractBlock(committed, 'try {')
+  assert.match(notification, /this\.node\.emit\('dungeon-run-began'/)
+  assert.doesNotMatch(notification, /return false/)
 })
 
-test('dungeon run lifecycle exposes safe preview, cancellation, and acknowledged extraction', () => {
+test('dungeon extraction uses a direct authority callback and isolates post-commit notifications', () => {
   const source = readSource('assets/Scripts/Game/DungeonRunController.ts')
   const preview = extractBlock(source, 'previewRunId(seed: number)')
   const cancel = extractBlock(source, 'cancelRun()')
   const extract = extractBlock(source, 'extract()')
-  const unacknowledged = extractBlock(extract, 'if (!payload.acknowledged)')
 
   assert.match(source, /hasRun\(\)/)
   assert.match(preview, /createDungeonSession\(/)
   assert.doesNotMatch(preview, /this\.run\s*=/)
   assertStatementOrder(cancel, ['if (!this.run) return false', 'this.run = null', 'this.refreshRoomLabel()'])
-  assert.match(source, /DungeonExtractionEvent/)
-  assert.match(extract, /try\s*{[\s\S]*this\.node\.emit\('dungeon-extracted', payload\)[\s\S]*}\s*catch\s*{[\s\S]*run\.phase = 'exploring'/)
-  assert.equal(countOccurrences(extract, "run.phase = 'exploring'"), 2)
-  assert.match(unacknowledged, /run\.phase = 'exploring'/)
+  assert.match(source, /onExtractionRequested[\s\S]*DungeonExtractionEvent[\s\S]*boolean/)
+  assert.doesNotMatch(source, /acknowledged/)
+  assert.match(extract, /try\s*{[\s\S]*onExtractionRequested\(request\)[\s\S]*}\s*catch\s*{[\s\S]*restoreExtraction\(run\)[\s\S]*return false/)
+  assert.match(extract, /if \(!accepted\)[\s\S]*restoreExtraction\(run\)[\s\S]*return false/)
+  assert.match(extract, /const notification:[\s\S]*loot: request\.loot\.map/)
+  assert.match(extract, /try\s*{[\s\S]*this\.node\.emit\('dungeon-extracted', notification\)[\s\S]*}\s*catch\s*{\s*}/)
   assertStatementOrder(extract, [
     'const run = this.run',
     'const result = extractRun(run)',
-    'acknowledged: false',
-    "this.node.emit('dungeon-extracted', payload)",
-    'if (!payload.acknowledged)',
+    'const request:',
+    'onExtractionRequested(request)',
+    'if (!accepted)',
     'this.run = null',
     'this.refreshRoomLabel()',
+    'const notification:',
+    "this.node.emit('dungeon-extracted', notification)",
+    'return true',
   ])
 })
 
@@ -192,7 +201,7 @@ test('world clear emits exactly once inside the successful claimed-result branch
   ])
 })
 
-test('dual-mode bootstrap wires live events, roots, data, and listener cleanup', () => {
+test('dual-mode bootstrap wires direct extraction authority, live events, and cleanup', () => {
   const source = readSource('assets/Scripts/Game/PortraitBattleBootstrap.ts')
   const onDestroy = extractBlock(source, 'onDestroy()')
   const runtimeSetupStart = source.indexOf("const runtimeNode = this.createNode('Runtime', parent)")
@@ -209,37 +218,55 @@ test('dual-mode bootstrap wires live events, roots, data, and listener cleanup',
   assert.match(source, /Data\/dual-mode-slice/)
   assert.match(runtimeSetup, /runtimeNode\.on\('battle-stage-changed',\s*this\.onStageChanged,\s*this\)/)
   assert.match(runtimeSetup, /runtimeNode\.on\('world-stage-cleared',\s*dualMode\.handleWorldCleared,\s*dualMode\)/)
-  assert.match(source, /dungeonNode\.on\('dungeon-extracted',\s*dualMode\.handleDungeonExtracted,\s*dualMode\)/)
+  assert.match(source, /dungeonRun\.onExtractionRequested\s*=\s*this\.dungeonExtractionRequest/)
+  assert.match(source, /dualMode\.handleDungeonExtracted\(payload\)/)
   assert.match(onDestroy, /runtimeNode\?\.off\('battle-stage-changed',\s*this\.onStageChanged,\s*this\)/)
   assert.match(onDestroy, /runtimeNode\?\.off\('world-stage-cleared',\s*this\.dualModeController\?\.handleWorldCleared,\s*this\.dualModeController\)/)
-  assert.match(onDestroy, /dungeonNode\?\.off\('dungeon-extracted',\s*this\.dualModeController\?\.handleDungeonExtracted,\s*this\.dualModeController\)/)
+  assert.match(onDestroy, /onExtractionRequested\s*=\s*null/)
   assertStatementOrder(profileLoad, ['if (this.destroyed) return', 'dungeonRun.profileData = asset'])
 })
 
-test('dual-mode Cocos adapter delegates transitions and acknowledges only accepted extraction', () => {
+test('dual-mode Cocos adapter reflects transactional runtime mode and returns extraction authority', () => {
   const source = readSource('assets/Scripts/Game/DualModeGameController.ts')
   const worldHandler = extractBlock(source, 'handleWorldCleared(payload: unknown)')
   const enterDungeon = extractBlock(source, 'enterDungeon(seed?: number)')
+  const rejectedEntry = extractBlock(enterDungeon, 'if (!result.ok)')
   const extractionHandler = extractBlock(source, 'handleDungeonExtracted(payload: unknown)')
+  const committedExtraction = extractionHandler.slice(extractionHandler.indexOf("this.applyMode('world')"))
   const saveSnapshot = extractBlock(source, '\n  getSaveSnapshot()')
 
   assert.match(worldHandler, /runtime\?\.handleWorldCleared\(payload\)/)
-  assert.match(enterDungeon, /runtime\?\.enterDungeon\(seed\)/)
+  assert.match(enterDungeon, /runtime\.enterDungeon\(seed\)/)
   assert.doesNotMatch(enterDungeon, /repository\?\.save|this\.save\s*=/)
   assertStatementOrder(enterDungeon, [
-    'this.runtime?.enterDungeon(seed)',
+    'if (!this.runtime)',
+    'this.runtime.enterDungeon(seed)',
     'if (!result.ok)',
     "this.applyMode('dungeon')",
     "this.node.emit('player-save-changed'",
     "this.node.emit('dungeon-entry-accepted'",
   ])
+  assertStatementOrder(rejectedEntry, [
+    'this.applyMode(this.runtime.getMode())',
+    "this.reject('dungeon-entry-rejected'",
+  ])
   assertStatementOrder(extractionHandler, [
     'this.runtime?.handleDungeonExtracted(payload)',
     'if (!result.ok)',
-    'this.runtime.acknowledgeExtraction(result.runId)',
     "this.applyMode('world')",
-    'extraction.acknowledged = true',
+    'return true',
   ])
+  assert.equal(countOccurrences(committedExtraction, 'try {'), 2)
+  assert.equal(countOccurrences(committedExtraction, 'catch {'), 2)
+  assertStatementOrder(committedExtraction, [
+    "this.applyMode('world')",
+    'this.emitSaveChanged()',
+    "this.node.emit('dungeon-extraction-accepted'",
+    'return true',
+  ])
+  assert.match(source, /save-persist-rollback-failed/)
+  assert.doesNotMatch(source, /acknowledged|acknowledgeExtraction/)
+  assert.doesNotMatch(readSource('assets/Scripts/Core/Progression/DualModeRuntime.ts'), /acknowledged|acknowledgeExtraction/)
   assert.match(saveSnapshot, /runtime\?\.getSaveSnapshot\(\)/)
   assert.doesNotMatch(saveSnapshot, /return this\.save\b/)
 })

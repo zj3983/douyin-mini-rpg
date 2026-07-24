@@ -46,6 +46,8 @@ export class DungeonRunController extends Component {
 
   private run: DungeonRun | null = null
 
+  onExtractionRequested: ((payload: DungeonExtractionEvent) => boolean) | null = null
+
   hasRun() {
     return this.run !== null
   }
@@ -67,18 +69,24 @@ export class DungeonRunController extends Component {
     if (this.run) return false
     if (!this.profileData) return false
 
+    let nextRun: DungeonRun
     try {
-      const nextRun = createDungeonSession(this.profileData.json as DungeonProfile, seed)
-      this.run = nextRun
-      this.refreshRoomLabel()
+      nextRun = createDungeonSession(this.profileData.json as DungeonProfile, seed)
+    } catch {
+      return false
+    }
+
+    this.run = nextRun
+    this.refreshRoomLabel()
+    try {
       this.node.emit('dungeon-run-began', {
         runId: nextRun.id,
         roomId: nextRun.currentRoomId,
       })
-      return true
     } catch {
-      return false
+      // Observers cannot invalidate an installed run.
     }
+    return true
   }
 
   cancelRun() {
@@ -123,24 +131,37 @@ export class DungeonRunController extends Component {
     const run = this.run
     const result = extractRun(run)
     if (!result.ok) return false
-    const payload: DungeonExtractionEvent = {
+    const request: DungeonExtractionEvent = {
       runId: run.id,
       loot: result.loot.map((item) => ({ ...item })),
-      acknowledged: false,
     }
-    try {
-      this.node.emit('dungeon-extracted', payload)
-    } catch {
-      if (this.run === run) run.phase = 'exploring'
+    const onExtractionRequested = this.onExtractionRequested
+    if (!onExtractionRequested) {
+      this.restoreExtraction(run)
       return false
     }
-    if (!payload.acknowledged) {
-      if (this.run === run) run.phase = 'exploring'
+    let accepted = false
+    try {
+      accepted = onExtractionRequested(request)
+    } catch {
+      this.restoreExtraction(run)
+      return false
+    }
+    if (!accepted) {
+      this.restoreExtraction(run)
       return false
     }
     if (this.run !== run) return false
     this.run = null
     this.refreshRoomLabel()
+    const notification: DungeonExtractionEvent = {
+      runId: request.runId,
+      loot: request.loot.map((item) => ({ ...item })),
+    }
+    try {
+      this.node.emit('dungeon-extracted', notification)
+    } catch {
+    }
     return true
   }
 
@@ -150,5 +171,9 @@ export class DungeonRunController extends Component {
 
   private refreshRoomLabel() {
     if (this.roomLabel) this.roomLabel.string = this.run?.currentRoomId ?? ''
+  }
+
+  private restoreExtraction(run: DungeonRun) {
+    if (this.run === run && run.phase === 'extracted') run.phase = 'exploring'
   }
 }

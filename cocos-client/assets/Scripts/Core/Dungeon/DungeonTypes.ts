@@ -40,5 +40,4 @@ export interface DungeonRun {
 export interface DungeonExtractionEvent {
   runId: string
   loot: RunLoot[]
-  acknowledged: boolean
 }

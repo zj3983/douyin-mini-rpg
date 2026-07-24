@@ -100,8 +100,8 @@ function parseDungeonExtractionEvent(value: unknown): DungeonExtractionEvent | n
     if (!isRecord(value)) return null
     const runId = canonicalId(value.runId)
     const loot = parseLoot(value.loot)
-    if (runId === null || loot === null || value.acknowledged !== false) return null
-    return { runId, loot, acknowledged: false }
+    if (runId === null || loot === null) return null
+    return { runId, loot }
   } catch {
     return null
   }
@@ -197,10 +197,16 @@ export function createDualModeRuntime(options: DualModeRuntimeOptions) {
     if (!began) return { ok: false, reason: 'dungeon-begin-failed' }
 
     if (!persist(passResult.save)) {
+      let didRollback = false
       try {
-        options.dungeon.cancelRun()
+        didRollback = options.dungeon.cancelRun()
       } catch {
-        // The save remains authoritative even if a platform adapter cannot cancel cleanly.
+        didRollback = false
+      }
+      if (!didRollback) {
+        activeRunId = candidate.runId
+        mode = 'dungeon'
+        return { ok: false, reason: 'save-persist-rollback-failed' }
       }
       return { ok: false, reason: 'save-persist-failed' }
     }
@@ -241,6 +247,7 @@ export function createDualModeRuntime(options: DualModeRuntimeOptions) {
     }
 
     if (hasReward(runId)) {
+      activeRunId = null
       mode = 'world'
       return { ok: true, runId, duplicate: true, saveChanged: false }
     }
@@ -252,22 +259,15 @@ export function createDualModeRuntime(options: DualModeRuntimeOptions) {
     if (!persist(next)) return { ok: false, reason: 'save-persist-failed' }
 
     save = next
+    activeRunId = null
     mode = 'world'
     return { ok: true, runId, duplicate: false, saveChanged: true }
-  }
-
-  function acknowledgeExtraction(runId: string): boolean {
-    const canonicalRunId = canonicalId(runId)
-    if (mode !== 'world' || canonicalRunId === null || canonicalRunId !== activeRunId) return false
-    activeRunId = null
-    return true
   }
 
   return {
     enterDungeon,
     handleWorldCleared,
     handleDungeonExtracted,
-    acknowledgeExtraction,
     getMode: () => mode,
     getActiveRunId: () => activeRunId,
     getSaveSnapshot: () => migratePlayerSave(save),

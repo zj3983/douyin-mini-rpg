@@ -55,6 +55,7 @@ import { StageClearPanelController } from './StageClearPanelController'
 import { DamageNumberController } from './DamageNumberController'
 import { DualModeGameController } from './DualModeGameController'
 import { DungeonRunController } from './DungeonRunController'
+import type { DungeonExtractionEvent } from '../Core/Dungeon/DungeonTypes.ts'
 import { StageBackgroundController } from './StageBackgroundController'
 import { StageResourceController } from './StageResourceController'
 import { createDefaultViewportMetricsProvider } from './ViewportMetrics.ts'
@@ -93,7 +94,8 @@ export class PortraitBattleBootstrap extends Component {
   private destroyed = false
   private assembled = false
   private runtimeNode: Node | null = null
-  private dungeonNode: Node | null = null
+  private dungeonRunController: DungeonRunController | null = null
+  private dungeonExtractionRequest: ((payload: DungeonExtractionEvent) => boolean) | null = null
   private dualModeController: DualModeGameController | null = null
   private stageBackgroundController: StageBackgroundController | null = null
   private stageResourceController: StageResourceController | null = null
@@ -123,7 +125,10 @@ export class PortraitBattleBootstrap extends Component {
     this.stopRuntimeBinding()
     this.runtimeNode?.off('battle-stage-changed', this.onStageChanged, this)
     this.runtimeNode?.off('world-stage-cleared', this.dualModeController?.handleWorldCleared, this.dualModeController)
-    this.dungeonNode?.off('dungeon-extracted', this.dualModeController?.handleDungeonExtracted, this.dualModeController)
+    if (this.dungeonRunController?.onExtractionRequested === this.dungeonExtractionRequest) {
+      this.dungeonRunController.onExtractionRequested = null
+    }
+    this.dungeonExtractionRequest = null
     this.stageResourceController?.destroy()
     this.stageBackgroundController?.destroy()
     this.viewportMetricsCleanup?.()
@@ -303,7 +308,7 @@ export class PortraitBattleBootstrap extends Component {
     const dungeonNode = this.createNode('DungeonRunController', dungeonRoot)
     const dungeonRun = dungeonNode.addComponent(DungeonRunController)
     dungeonRun.roomLabel = roomLabel
-    this.dungeonNode = dungeonNode
+    this.dungeonRunController = dungeonRun
 
     const dualModeNode = this.createNode('DualModeGameController', parent)
     const dualMode = dualModeNode.addComponent(DualModeGameController)
@@ -311,7 +316,8 @@ export class PortraitBattleBootstrap extends Component {
     dualMode.dungeonRoot = dungeonRoot
     dualMode.dungeonRun = dungeonRun
     this.dualModeController = dualMode
-    dungeonNode.on('dungeon-extracted', dualMode.handleDungeonExtracted, dualMode)
+    this.dungeonExtractionRequest = (payload) => dualMode.handleDungeonExtracted(payload)
+    dungeonRun.onExtractionRequested = this.dungeonExtractionRequest
 
     const profilePath = 'Data/dual-mode-slice'
     resources.load(profilePath, JsonAsset, (error, asset) => {
