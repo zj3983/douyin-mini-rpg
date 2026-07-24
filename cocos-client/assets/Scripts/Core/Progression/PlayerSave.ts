@@ -1,4 +1,10 @@
-import type { ArtifactId, PlayerLoadout, RelicId } from '../GameContent.ts'
+import {
+  ARTIFACT_IDS,
+  RELIC_IDS,
+  type ArtifactId,
+  type PlayerLoadout,
+  type RelicId,
+} from '../GameContent.ts'
 import type { RunLoot } from '../Dungeon/DungeonTypes.ts'
 import { validateLoadout } from '../Loadout/LoadoutRules.ts'
 
@@ -24,17 +30,24 @@ export interface PlayerSaveV3 {
   rewardLedger: string[]
 }
 
-const ARTIFACT_IDS = new Set<ArtifactId>([
-  'flying-sword',
-  'thunder-seal',
-  'soul-bell',
-  'flame-ruler',
-])
-
-const RELIC_IDS = new Set<RelicId>(['soul-magnet', 'jade-guard', 'spirit-vessel'])
+const ARTIFACT_ID_SET = new Set<ArtifactId>(ARTIFACT_IDS)
+const RELIC_ID_SET = new Set<RelicId>(RELIC_IDS)
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function ownNumber(value: Record<string, number>, key: string): number | undefined {
+  return Object.prototype.hasOwnProperty.call(value, key) ? value[key] : undefined
+}
+
+function setOwnNumber(value: Record<string, number>, key: string, count: number): void {
+  Object.defineProperty(value, key, {
+    configurable: true,
+    enumerable: true,
+    value: count,
+    writable: true,
+  })
 }
 
 function nonnegativeFinite(value: unknown, fallback = 0): number {
@@ -62,7 +75,7 @@ function numberRecord(
       && Number.isFinite(count)
       && count >= 0
     ) {
-      result[key] = Math.floor(count)
+      setOwnNumber(result, key, Math.floor(count))
     }
   }
   return result
@@ -76,12 +89,12 @@ function contentIds<T extends string>(value: unknown, allowedIds: ReadonlySet<T>
 function legalLoadout(value: Record<string, unknown>): PlayerLoadout {
   const result: PlayerLoadout = { active: [], relics: [] }
 
-  for (const artifactId of contentIds(value.active, ARTIFACT_IDS)) {
+  for (const artifactId of contentIds(value.active, ARTIFACT_ID_SET)) {
     const candidate = { active: [...result.active, artifactId], relics: result.relics }
     if (validateLoadout(candidate).ok) result.active.push(artifactId)
   }
 
-  for (const relicId of contentIds(value.relics, RELIC_IDS)) {
+  for (const relicId of contentIds(value.relics, RELIC_ID_SET)) {
     const candidate = { active: result.active, relics: [...result.relics, relicId] }
     if (validateLoadout(candidate).ok) result.relics.push(relicId)
   }
@@ -139,8 +152,8 @@ export function migratePlayerSave(input: unknown): PlayerSaveV3 {
     },
     inventory: {
       dungeonPasses: nonnegativeInteger(inventory.dungeonPasses) ?? 0,
-      artifacts: numberRecord(inventory.artifacts, ARTIFACT_IDS),
-      relics: numberRecord(inventory.relics, RELIC_IDS),
+      artifacts: numberRecord(inventory.artifacts, ARTIFACT_ID_SET),
+      relics: numberRecord(inventory.relics, RELIC_ID_SET),
       materials: numberRecord(inventory.materials),
     },
     loadout: legalLoadout(loadout),
@@ -154,9 +167,12 @@ export function consumeDungeonPass(
   current: PlayerSaveV3,
 ): { ok: true; save: PlayerSaveV3 } | { ok: false; save: PlayerSaveV3 } {
   const save = migratePlayerSave(current)
+  const rawInventory = isRecord(current) && isRecord(current.inventory) ? current.inventory : null
+  const dungeonPasses = rawInventory?.dungeonPasses
   if (
-    !Number.isSafeInteger(current.inventory.dungeonPasses)
-    || current.inventory.dungeonPasses <= 0
+    typeof dungeonPasses !== 'number'
+    || !Number.isSafeInteger(dungeonPasses)
+    || dungeonPasses <= 0
   ) {
     return { ok: false, save }
   }
@@ -200,9 +216,9 @@ function canonicalLoot(value: unknown): CanonicalLoot[] | null {
 }
 
 function addLootCount(counts: Record<string, number>, item: CanonicalLoot): boolean {
-  const next = (counts[item.itemId] ?? 0) + item.amount
+  const next = (ownNumber(counts, item.itemId) ?? 0) + item.amount
   if (!Number.isSafeInteger(next)) return false
-  counts[item.itemId] = next
+  setOwnNumber(counts, item.itemId, next)
   return true
 }
 
@@ -211,12 +227,12 @@ function canApplyCounts(
   additions: Record<string, number>,
 ): boolean {
   return Object.keys(additions).every((itemId) =>
-    Number.isSafeInteger((current[itemId] ?? 0) + additions[itemId]))
+    Number.isSafeInteger((ownNumber(current, itemId) ?? 0) + additions[itemId]))
 }
 
 function applyCounts(current: Record<string, number>, additions: Record<string, number>): void {
   for (const itemId of Object.keys(additions)) {
-    current[itemId] = (current[itemId] ?? 0) + additions[itemId]
+    setOwnNumber(current, itemId, (ownNumber(current, itemId) ?? 0) + additions[itemId])
   }
 }
 
@@ -236,9 +252,9 @@ export function applyExtractionLoot(
   const materials: Record<string, number> = {}
 
   for (const item of canonicalItems) {
-    const additions = ARTIFACT_IDS.has(item.itemId as ArtifactId)
+    const additions = ARTIFACT_ID_SET.has(item.itemId as ArtifactId)
       ? artifacts
-      : RELIC_IDS.has(item.itemId as RelicId)
+      : RELIC_ID_SET.has(item.itemId as RelicId)
         ? relics
         : materials
     if (!addLootCount(additions, item)) return save

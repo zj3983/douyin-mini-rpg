@@ -5,13 +5,20 @@ import {
   consumeDungeonPass,
   createDefaultSave,
 } from '../assets/Scripts/Core/Progression/PlayerSave.ts'
+import { ARTIFACT_IDS, RELIC_IDS } from '../assets/Scripts/Core/GameContent.ts'
 import { applyWorldBossClear } from '../assets/Scripts/Core/World/WorldRewards.ts'
-
-const ARTIFACT_IDS = ['flying-sword', 'thunder-seal', 'soul-bell', 'flame-ruler']
-const RELIC_IDS = ['soul-magnet', 'jade-guard', 'spirit-vessel']
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value))
+}
+
+function defineOwn(target, key, value) {
+  Object.defineProperty(target, key, {
+    configurable: true,
+    enumerable: true,
+    value,
+    writable: true,
+  })
 }
 
 function assertDeeplyIsolated(actual, expected) {
@@ -94,6 +101,22 @@ test('dungeon pass consumption rejects non-safe-integer counts without decrement
   }
 })
 
+test('dungeon pass consumption safely rejects malformed runtime save shapes', () => {
+  for (const current of [{}, { inventory: null }]) {
+    const snapshot = clone(current)
+
+    const first = consumeDungeonPass(current)
+    const second = consumeDungeonPass(current)
+
+    assert.equal(first.ok, false)
+    assert.equal(second.ok, false)
+    assert.deepEqual(first.save, createDefaultSave())
+    assert.deepEqual(second.save, createDefaultSave())
+    assertDeeplyIsolated(first.save, second.save)
+    assert.deepEqual(current, snapshot)
+  }
+})
+
 test('extraction classifies every known artifact and relic and canonicalizes item IDs', () => {
   const initial = createDefaultSave()
   const loot = [
@@ -125,6 +148,28 @@ test('extraction preserves and adds to existing inventory counts', () => {
   assert.deepEqual(extracted.inventory.artifacts, { 'flying-sword': 6 })
   assert.deepEqual(extracted.inventory.relics, { 'jade-guard': 8 })
   assert.deepEqual(extracted.inventory.materials, { 'mist-herb': 10, bamboo: 7 })
+})
+
+test('prototype-named material IDs persist as serializable own properties', () => {
+  const initial = createDefaultSave()
+  defineOwn(initial.inventory.materials, 'toString', 2)
+  defineOwn(initial.inventory.materials, 'constructor', 3)
+  defineOwn(initial.inventory.materials, '__proto__', 4)
+
+  const extracted = applyExtractionLoot(initial, 'prototype-materials', [
+    { itemId: 'toString', amount: 1 },
+    { itemId: 'constructor', amount: 2 },
+    { itemId: '__proto__', amount: 3 },
+  ])
+
+  const expected = JSON.parse('{"toString":3,"constructor":5,"__proto__":7}')
+  assert.deepEqual(JSON.parse(JSON.stringify(extracted.inventory.materials)), expected)
+  assert.equal(Object.getPrototypeOf(extracted.inventory.materials), Object.prototype)
+  for (const itemId of Object.keys(expected)) {
+    assert.equal(Object.prototype.hasOwnProperty.call(extracted.inventory.materials, itemId), true)
+    assert.equal(extracted.inventory.materials[itemId], expected[itemId])
+  }
+  assert.deepEqual(extracted.rewardLedger, ['prototype-materials'])
 })
 
 test('invalid extraction payloads grant nothing and record no reward', () => {
