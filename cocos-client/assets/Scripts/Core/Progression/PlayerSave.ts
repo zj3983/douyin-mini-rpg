@@ -1,4 +1,5 @@
 import type { ArtifactId, PlayerLoadout, RelicId } from '../GameContent.ts'
+import type { RunLoot } from '../Dungeon/DungeonTypes.ts'
 import { validateLoadout } from '../Loadout/LoadoutRules.ts'
 
 export interface PlayerSaveV3 {
@@ -147,4 +148,108 @@ export function migratePlayerSave(input: unknown): PlayerSaveV3 {
       ? input.rewardLedger.filter((entry): entry is string => typeof entry === 'string')
       : [],
   }
+}
+
+export function consumeDungeonPass(
+  current: PlayerSaveV3,
+): { ok: true; save: PlayerSaveV3 } | { ok: false; save: PlayerSaveV3 } {
+  const save = migratePlayerSave(current)
+  if (save.inventory.dungeonPasses <= 0) return { ok: false, save }
+
+  save.inventory.dungeonPasses -= 1
+  return { ok: true, save }
+}
+
+interface CanonicalLoot {
+  itemId: string
+  amount: number
+}
+
+function canonicalRewardId(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const rewardId = value.trim()
+  return rewardId === '' ? null : rewardId
+}
+
+function canonicalLoot(value: unknown): CanonicalLoot[] | null {
+  if (!Array.isArray(value)) return null
+
+  const result: CanonicalLoot[] = []
+  for (const entry of value) {
+    if (!isRecord(entry) || typeof entry.itemId !== 'string') return null
+
+    const itemId = entry.itemId.trim()
+    const amount = entry.amount
+    if (
+      itemId === ''
+      || typeof amount !== 'number'
+      || !Number.isFinite(amount)
+      || !Number.isInteger(amount)
+      || amount <= 0
+    ) {
+      return null
+    }
+    result.push({ itemId, amount })
+  }
+  return result
+}
+
+function addLootCount(counts: Record<string, number>, item: CanonicalLoot): boolean {
+  const next = (counts[item.itemId] ?? 0) + item.amount
+  if (!Number.isSafeInteger(next)) return false
+  counts[item.itemId] = next
+  return true
+}
+
+function canApplyCounts(
+  current: Record<string, number>,
+  additions: Record<string, number>,
+): boolean {
+  return Object.keys(additions).every((itemId) =>
+    Number.isSafeInteger((current[itemId] ?? 0) + additions[itemId]))
+}
+
+function applyCounts(current: Record<string, number>, additions: Record<string, number>): void {
+  for (const itemId of Object.keys(additions)) {
+    current[itemId] = (current[itemId] ?? 0) + additions[itemId]
+  }
+}
+
+export function applyExtractionLoot(
+  current: PlayerSaveV3,
+  rewardId: string,
+  loot: RunLoot[],
+): PlayerSaveV3 {
+  const save = migratePlayerSave(current)
+  const canonicalId = canonicalRewardId(rewardId)
+  const canonicalItems = canonicalLoot(loot)
+  if (canonicalId === null || canonicalItems === null) return save
+  if (save.rewardLedger.some((entry) => entry.trim() === canonicalId)) return save
+
+  const artifacts: Record<string, number> = {}
+  const relics: Record<string, number> = {}
+  const materials: Record<string, number> = {}
+
+  for (const item of canonicalItems) {
+    const additions = ARTIFACT_IDS.has(item.itemId as ArtifactId)
+      ? artifacts
+      : RELIC_IDS.has(item.itemId as RelicId)
+        ? relics
+        : materials
+    if (!addLootCount(additions, item)) return save
+  }
+
+  if (
+    !canApplyCounts(save.inventory.artifacts, artifacts)
+    || !canApplyCounts(save.inventory.relics, relics)
+    || !canApplyCounts(save.inventory.materials, materials)
+  ) {
+    return save
+  }
+
+  applyCounts(save.inventory.artifacts, artifacts)
+  applyCounts(save.inventory.relics, relics)
+  applyCounts(save.inventory.materials, materials)
+  save.rewardLedger.push(canonicalId)
+  return save
 }
