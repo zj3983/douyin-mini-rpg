@@ -116,8 +116,10 @@ base = {
     "version": 2,
     "actors": {
         "test-actor": {
+            "id": "test-actor",
             "masterFrameSize": [128, 160],
             "runtimeFrameSize": [64, 80],
+            "anchor": {"x": 0.5, "y": 0.85},
             "quality": {
                 "maxCenterDrift": 0.08,
                 "maxScaleDrift": 0.12,
@@ -150,15 +152,37 @@ def rejected(mutator):
         builder.check_source_manifest(temp)
     except ValueError:
         return True
+    except Exception as error:
+        return f"wrong exception {type(error).__name__}"
     return False
 
 actor = lambda data: data["actors"]["test-actor"]
 action = lambda data: actor(data)["actions"]["idle"]
 cases = [
     ("wrong version", lambda data: data.update(version=1)),
+    ("actor not object", lambda data: data["actors"].update({"test-actor": []})),
+    ("missing actor id", lambda data: actor(data).pop("id")),
+    ("mismatched actor id", lambda data: actor(data).update(id="other-actor")),
     ("missing quality", lambda data: actor(data).pop("quality")),
     ("missing quality key", lambda data: actor(data)["quality"].pop("safePadding")),
     ("non-numeric quality", lambda data: actor(data)["quality"].update(maxCenterDrift="0.08")),
+    ("negative quality", lambda data: actor(data)["quality"].update(maxCenterDrift=-0.01)),
+    ("quality above one", lambda data: actor(data)["quality"].update(maxScaleDrift=1.01)),
+    ("negative safe padding", lambda data: actor(data)["quality"].update(safePadding=-0.01)),
+    ("safe padding at upper bound", lambda data: actor(data)["quality"].update(safePadding=0.4)),
+    ("inverted alpha coverage", lambda data: actor(data)["quality"].update(minAlphaCoverage=0.8, maxAlphaCoverage=0.7)),
+    ("missing source", lambda data: action(data).pop("source")),
+    ("empty source", lambda data: action(data).update(source="  ")),
+    ("absolute source", lambda data: action(data).update(source="/actors/test")),
+    ("windows absolute source", lambda data: action(data).update(source="C:/actors/test")),
+    ("traversal source", lambda data: action(data).update(source="test-actor/../secret")),
+    ("string loop", lambda data: action(data).update(loop="true")),
+    ("missing anchor", lambda data: actor(data).pop("anchor")),
+    ("invalid anchor coordinate", lambda data: actor(data).update(anchor={"x": 1.1, "y": 0.85})),
+    ("non-numeric anchor coordinate", lambda data: actor(data).update(anchor={"x": "0.5", "y": 0.85})),
+    ("string dimension", lambda data: actor(data).update(masterFrameSize=["128", 160])),
+    ("float dimension", lambda data: actor(data).update(runtimeFrameSize=[64.0, 80])),
+    ("boolean dimension", lambda data: actor(data).update(runtimeFrameSize=[True, 80])),
     ("unsupported source mode", lambda data: action(data).update(sourceMode="sprite-sheet")),
     ("zero frames", lambda data: action(data).update(frames=0)),
     ("too many frames", lambda data: action(data).update(frames=17)),
@@ -171,7 +195,11 @@ cases = [
     ("event at one", lambda data: action(data).update(events=[{"name": "one", "time": 1}])),
 ]
 
-failed = [label for label, mutate in cases if not rejected(mutate)]
+failed = []
+for label, mutate in cases:
+    result = rejected(mutate)
+    if result is not True:
+        failed.append(f"{label} ({result})")
 if failed:
     raise AssertionError(f"builder accepted invalid contracts: {failed}")
 

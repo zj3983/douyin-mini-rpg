@@ -2,7 +2,7 @@
 import argparse
 import json
 import math
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 from collections import deque
 
@@ -22,7 +22,9 @@ QUALITY_KEYS = (
 def _as_size(value: Any, label: str) -> tuple[int, int]:
     if not isinstance(value, list) or len(value) != 2:
         raise ValueError(f"{label} must be [width, height]")
-    width, height = int(value[0]), int(value[1])
+    width, height = value
+    if type(width) is not int or type(height) is not int:
+        raise ValueError(f"{label} dimensions must be integers")
     if width <= 0 or height <= 0 or width * 5 != height * 4:
         raise ValueError(f"{label} must be a positive 4:5 size")
     return width, height
@@ -235,6 +237,34 @@ def _validate_actor_quality(actor_id: str, quality: Any):
     for key in QUALITY_KEYS:
         if key not in quality or not _is_number(quality[key]):
             raise ValueError(f"{actor_id}.quality.{key} must be numeric")
+    for key in ("maxCenterDrift", "maxScaleDrift", "minAlphaCoverage", "maxAlphaCoverage"):
+        if not 0 <= quality[key] <= 1:
+            raise ValueError(f"{actor_id}.quality.{key} must be in [0, 1]")
+    if not 0 <= quality["safePadding"] < 0.4:
+        raise ValueError(f"{actor_id}.quality.safePadding must be in [0, 0.4)")
+    if quality["minAlphaCoverage"] >= quality["maxAlphaCoverage"]:
+        raise ValueError(f"{actor_id}.quality alpha coverage minimum must be below maximum")
+
+
+def _validate_anchor(actor_id: str, anchor: Any):
+    if not isinstance(anchor, dict):
+        raise ValueError(f"{actor_id}.anchor must be an object")
+    for coordinate in ("x", "y"):
+        value = anchor.get(coordinate)
+        if not _is_number(value) or not 0 <= value <= 1:
+            raise ValueError(f"{actor_id}.anchor.{coordinate} must be numeric and in [0, 1]")
+
+
+def _validate_source_path(label: str, source: Any):
+    if not isinstance(source, str) or not source.strip() or source != source.strip():
+        raise ValueError(f"{label} source must be a non-empty relative path")
+    normalized = source.replace("\\", "/")
+    windows_path = PureWindowsPath(source)
+    posix_path = PurePosixPath(normalized)
+    if windows_path.is_absolute() or windows_path.drive or posix_path.is_absolute():
+        raise ValueError(f"{label} source must be relative")
+    if any(part in ("", ".", "..") for part in normalized.split("/")):
+        raise ValueError(f"{label} source must not contain empty or traversal segments")
 
 
 def _validate_action(actor_id: str, action_name: str, action: Any):
@@ -252,6 +282,11 @@ def _validate_action(actor_id: str, action_name: str, action: Any):
 
     if action.get("sourceMode") not in SOURCE_MODES:
         raise ValueError(f"{label} sourceMode must be one of {sorted(SOURCE_MODES)}")
+
+    _validate_source_path(label, action.get("source"))
+
+    if type(action.get("loop")) is not bool:
+        raise ValueError(f"{label} loop must be boolean")
 
     events = action.get("events", [])
     if not isinstance(events, list):
@@ -279,8 +314,16 @@ def check_source_manifest(root: Path):
     if not isinstance(actors, dict) or not actors:
         raise ValueError("source manifest must define actors")
     for actor_id, actor in actors.items():
+        if not isinstance(actor_id, str) or not actor_id.strip():
+            raise ValueError("source manifest actor keys must be non-empty strings")
+        if not isinstance(actor, dict):
+            raise ValueError(f"{actor_id} must be an object")
+        declared_id = actor.get("id")
+        if not isinstance(declared_id, str) or not declared_id.strip() or declared_id != actor_id:
+            raise ValueError(f"{actor_id}.id must be non-empty and match its actor key")
         _as_size(actor.get("masterFrameSize"), f"{actor_id}.masterFrameSize")
         _as_size(actor.get("runtimeFrameSize"), f"{actor_id}.runtimeFrameSize")
+        _validate_anchor(actor_id, actor.get("anchor"))
         _validate_actor_quality(actor_id, actor.get("quality"))
         if not isinstance(actor.get("actions"), dict) or not actor["actions"]:
             raise ValueError(f"{actor_id} must define actions")
