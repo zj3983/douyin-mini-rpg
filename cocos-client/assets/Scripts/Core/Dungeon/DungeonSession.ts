@@ -1,4 +1,22 @@
-import type { DungeonExit, DungeonProfile, DungeonRoom, DungeonRun, RunLoot } from './DungeonTypes.ts'
+import type {
+  DungeonExit,
+  DungeonProfile,
+  DungeonRoom,
+  DungeonRoomKind,
+  DungeonRun,
+  RunLoot,
+} from './DungeonTypes.ts'
+
+const MAX_UINT32 = 4294967295
+const DUNGEON_ROOM_KINDS = new Set<DungeonRoomKind>([
+  'entry',
+  'combat',
+  'treasure',
+  'alchemy',
+  'elite',
+  'boss',
+  'extraction',
+])
 
 function cloneLoot(item: RunLoot): RunLoot {
   return { itemId: item.itemId, amount: item.amount }
@@ -38,15 +56,29 @@ function invalidInteger(value: number, allowZero: boolean): boolean {
 
 export function validateDungeonProfile(profile: DungeonProfile): void {
   if (!profile || !Array.isArray(profile.rooms)) throw new Error('Dungeon rooms are missing.')
+  if (typeof profile.id !== 'string' || profile.id.trim().length === 0) {
+    throw new Error('Dungeon profile ID must not be blank.')
+  }
 
   const ids = new Set<string>()
   for (const room of profile.rooms) {
+    if (!room || typeof room.id !== 'string' || room.id.trim().length === 0) {
+      throw new Error('Dungeon room IDs must not be blank.')
+    }
     if (ids.has(room.id)) throw new Error('Dungeon room IDs must be unique.')
     ids.add(room.id)
+    if (!DUNGEON_ROOM_KINDS.has(room.kind)) throw new Error(`Invalid dungeon room kind in ${room.id}.`)
   }
 
+  if (profile.entryRoomId === profile.extractionRoomId) {
+    throw new Error('Dungeon entry and extraction rooms must be distinct.')
+  }
   if (!ids.has(profile.entryRoomId)) throw new Error('Dungeon entry room is missing.')
   if (!ids.has(profile.extractionRoomId)) throw new Error('Dungeon extraction room is missing.')
+  const entryRoom = roomById(profile, profile.entryRoomId) as DungeonRoom
+  const extractionRoom = roomById(profile, profile.extractionRoomId) as DungeonRoom
+  if (entryRoom.kind !== 'entry') throw new Error('Dungeon entry room must have entry kind.')
+  if (extractionRoom.kind !== 'extraction') throw new Error('Dungeon extraction room must have extraction kind.')
 
   for (const room of profile.rooms) {
     if (invalidInteger(room.floor, false)) throw new Error(`Invalid floor in ${room.id}.`)
@@ -79,12 +111,33 @@ export function validateDungeonProfile(profile: DungeonProfile): void {
       if (!visited.has(exit.to)) pending.push(exit.to)
     }
   }
-  if (!visited.has(profile.extractionRoomId)) {
-    throw new Error('Dungeon extraction room is unreachable from the entry room.')
+  if (visited.size !== profile.rooms.length) {
+    throw new Error('Dungeon rooms are unreachable from the entry room.')
+  }
+
+  const reverseExits = new Map<string, string[]>()
+  for (const room of profile.rooms) reverseExits.set(room.id, [])
+  for (const room of profile.rooms) {
+    for (const exit of room.exits) (reverseExits.get(exit.to) as string[]).push(room.id)
+  }
+
+  const reachesExtraction = new Set<string>()
+  const reversePending: string[] = [profile.extractionRoomId]
+  while (reversePending.length > 0) {
+    const roomId = reversePending.shift() as string
+    if (reachesExtraction.has(roomId)) continue
+    reachesExtraction.add(roomId)
+    for (const previousRoomId of reverseExits.get(roomId) as string[]) {
+      if (!reachesExtraction.has(previousRoomId)) reversePending.push(previousRoomId)
+    }
+  }
+  if (reachesExtraction.size !== profile.rooms.length) {
+    throw new Error('Every dungeon room must have a path to the extraction room.')
   }
 }
 
 export function createDungeonSession(profile: DungeonProfile, seed: number): DungeonRun {
+  if (invalidInteger(seed, true) || seed > MAX_UINT32) throw new Error('Dungeon seed must be a uint32 integer.')
   validateDungeonProfile(profile)
   const isolatedProfile = cloneProfile(profile)
   return {
@@ -100,6 +153,9 @@ export function createDungeonSession(profile: DungeonProfile, seed: number): Dun
 
 export function enterRoom(run: DungeonRun, targetId: string) {
   if (run.phase !== 'exploring') return { ok: false as const, reason: 'inactive' as const }
+  if (invalidInteger(run.doorCurrency, true)) {
+    return { ok: false as const, reason: 'invalid-currency' as const }
+  }
   const current = roomById(run.profile, run.currentRoomId)
   if (!current) return { ok: false as const, reason: 'not-connected' as const }
   const exit = current.exits.find((candidate) => candidate.to === targetId)

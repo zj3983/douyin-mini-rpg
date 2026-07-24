@@ -60,6 +60,18 @@ test('entering a connected room deducts the exact door cost', () => {
   assert.equal(run.doorCurrency, 3)
 })
 
+test('invalid door currency rejects entry without mutating the run', () => {
+  for (const currency of [Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5]) {
+    const run = createDungeonSession(makeProfile(), 7)
+    run.doorCurrency = currency
+    const currentRoomId = run.currentRoomId
+
+    assert.deepEqual(enterRoom(run, 'f1-store'), { ok: false, reason: 'invalid-currency' })
+    assert.equal(run.currentRoomId, currentRoomId)
+    assert.ok(Object.is(run.doorCurrency, currency))
+  }
+})
+
 test('disconnected and inactive entry attempts do not mutate the run', () => {
   const run = createDungeonSession(makeProfile(), 7)
   run.doorCurrency = 9
@@ -111,20 +123,73 @@ test('sessions and searched loot are deeply isolated and rooms can be searched o
 
 test('extraction only succeeds at the gate while exploring and returns cloned loot', () => {
   const run = createDungeonSession(makeProfile(), 7)
-  run.carriedLoot.push({ itemId: 'spirit-ore', amount: 3 })
 
   assert.deepEqual(extractRun(run), { ok: false, loot: [] })
   assert.equal(run.phase, 'exploring')
 
-  run.currentRoomId = 'f3-gate'
+  run.doorCurrency = 2
+  assert.deepEqual(enterRoom(run, 'f1-store'), { ok: true })
+  assert.deepEqual(searchRoom(run), { loot: [{ itemId: 'flying-sword', amount: 1 }] })
+  assert.deepEqual(enterRoom(run, 'f3-gate'), { ok: true })
   const extracted = extractRun(run)
-  assert.deepEqual(extracted, { ok: true, loot: [{ itemId: 'spirit-ore', amount: 3 }] })
+  assert.deepEqual(extracted, { ok: true, loot: [{ itemId: 'flying-sword', amount: 1 }] })
   assert.equal(run.phase, 'extracted')
   assert.notEqual(extracted.loot[0], run.carriedLoot[0])
 
   extracted.loot[0].amount = 100
-  assert.equal(run.carriedLoot[0].amount, 3)
+  assert.equal(run.carriedLoot[0].amount, 1)
   assert.deepEqual(extractRun(run), { ok: false, loot: [] })
+})
+
+test('profile validation enforces runtime identity and room kind invariants', () => {
+  const cases = [
+    ['blank profile ID', (profile) => { profile.id = '  ' }],
+    ['blank room ID', (profile) => { profile.rooms[1].id = '  ' }],
+    ['invalid room kind', (profile) => { profile.rooms[1].kind = 'shop' }],
+    ['same entry and extraction', (profile) => { profile.extractionRoomId = profile.entryRoomId }],
+    ['wrong entry kind', (profile) => { profile.rooms[0].kind = 'combat' }],
+    ['wrong extraction kind', (profile) => { profile.rooms[3].kind = 'treasure' }],
+  ]
+
+  for (const [name, mutate] of cases) {
+    const profile = makeProfile()
+    mutate(profile)
+    assert.throws(() => validateDungeonProfile(profile), undefined, name)
+  }
+})
+
+test('profile validation rejects rooms unreachable from entry', () => {
+  const profile = makeProfile()
+  profile.rooms.push({
+    id: 'f2-orphan',
+    floor: 2,
+    kind: 'combat',
+    exits: [{ to: 'f3-gate', cost: 0 }],
+  })
+
+  assert.throws(() => validateDungeonProfile(profile), /unreachable from the entry/i)
+})
+
+test('profile validation rejects reachable rooms with no path to extraction', () => {
+  const profile = makeProfile()
+  profile.rooms[0].exits.push({ to: 'f1-dead-end', cost: 0 })
+  profile.rooms.push({
+    id: 'f1-dead-end',
+    floor: 1,
+    kind: 'combat',
+    exits: [],
+  })
+
+  assert.throws(() => validateDungeonProfile(profile), /path to the extraction/i)
+})
+
+test('session seeds must be uint32 integers', () => {
+  for (const seed of [Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5, 4294967296]) {
+    assert.throws(() => createDungeonSession(makeProfile(), seed), /seed/i)
+  }
+
+  assert.equal(createDungeonSession(makeProfile(), 0).id, 'mist-vault-0')
+  assert.equal(createDungeonSession(makeProfile(), 4294967295).id, 'mist-vault-4294967295')
 })
 
 test('profile validation rejects malformed room graphs and loot', () => {
