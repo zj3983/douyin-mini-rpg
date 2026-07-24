@@ -55,8 +55,7 @@ export class StageClearPanelController extends Component {
     if (this.rewardLabel) {
       this.rewardLabel.string = [
         `灵石 +${result.reward.spiritStones}`,
-        `法宝精华 +${result.reward.artifactEssence}`,
-        `${result.reward.dungeonPass.name} x1`,
+        `副本卷 x${result.reward.dungeonPasses}`,
       ].join('   ')
     }
     if (this.nextStageLabel) this.nextStageLabel.string = `前往第${result.nextStageId}关`

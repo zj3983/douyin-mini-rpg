@@ -115,6 +115,11 @@ export class DungeonRunController extends Component {
     return this.run?.id === runId && this.run.phase === 'extracted'
   }
 
+  extractedLoot(runId: string) {
+    if (!this.isExtractedRun(runId) || !this.run) return null
+    return this.run.carriedLoot.map((item) => ({ ...item }))
+  }
+
   interact(): DungeonInteractionResult | null {
     if (!this.run) return null
     const result = interactDungeonRun(this.run)

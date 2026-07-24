@@ -112,6 +112,7 @@ export class DualModeGameController extends Component {
       begin: (seed) => this.dungeonRun?.begin(seed) ?? false,
       cancelRun: () => this.dungeonRun?.cancelRun() ?? false,
       isExtractedRun: (runId) => this.dungeonRun?.isExtractedRun(runId) ?? false,
+      extractedLoot: (runId) => this.dungeonRun?.extractedLoot(runId) ?? null,
     }
   }
 

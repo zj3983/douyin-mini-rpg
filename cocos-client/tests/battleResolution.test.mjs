@@ -1,11 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import * as battleLayout from '../assets/Scripts/Combat/BattleLayout.ts'
+import { computeDungeonEntryNavLayout } from '../assets/Scripts/Game/DungeonEntryLayout.ts'
 import { createViewportMetricsProvider } from '../assets/Scripts/Game/ViewportMetrics.ts'
 
 const selectBattleResolution = battleLayout.selectBattleResolution
 const computeBattleViewportState = battleLayout.computeBattleViewportState
-const computeDungeonEntryNavLayout = battleLayout.computeDungeonEntryNavLayout
 
 test('portrait viewports keep the fixed-width dynamic-height policy', () => {
   assert.equal(typeof selectBattleResolution, 'function')

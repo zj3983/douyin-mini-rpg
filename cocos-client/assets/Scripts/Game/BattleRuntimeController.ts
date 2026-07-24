@@ -70,11 +70,13 @@ import { NodePoolController } from './NodePoolController'
 import { PlayerController } from './PlayerController'
 import { SoulOrbController } from './SoulOrbController'
 import { StageClearPanelController } from './StageClearPanelController'
+import { createWorldRewardSessionId, worldRewardId } from '../Core/World/WorldRewardId.ts'
 
 const { ccclass, property } = _decorator
 
 @ccclass('BattleRuntimeController')
 export class BattleRuntimeController extends Component {
+  private readonly rewardSessionId = createWorldRewardSessionId()
   @property(JsonAsset) designData: JsonAsset | null = null
   @property(NodePoolController) soulOrbPool: NodePoolController | null = null
   @property(NodePoolController) damageNumberPool: NodePoolController | null = null
@@ -461,7 +463,7 @@ export class BattleRuntimeController extends Component {
       this.stageClearPanel?.showResult(result.result)
       this.node.emit('world-stage-cleared', {
         stage: this.stageNumber,
-        rewardId: `world-${this.stageNumber}-generation-${this.stageGeneration}`,
+        rewardId: worldRewardId(this.stageNumber, this.rewardSessionId, this.stageGeneration),
       })
     }
   }

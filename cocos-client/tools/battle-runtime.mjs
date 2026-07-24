@@ -122,12 +122,6 @@ export function claimStageClear(runtime) {
 
   runtime.stageClearClaimed = true
   const stageId = runtime.stage.id
-  const passCycle = [
-    { id: 'mist-bamboo-secret', name: '青竹令' },
-    { id: 'flame-cave', name: '赤焰符券' },
-    { id: 'soul-bell-valley', name: '摄魂残铃' },
-    { id: 'star-gate-ruins', name: '星门残券' },
-  ]
   return {
     ok: true,
     reason: null,
@@ -136,9 +130,8 @@ export function claimStageClear(runtime) {
       stageId,
       nextStageId: stageId + 1,
       reward: {
-        spiritStones: 180 + stageId * 20,
-        artifactEssence: 2 + stageId,
-        dungeonPass: passCycle[(stageId - 1) % passCycle.length],
+        spiritStones: 80,
+        dungeonPasses: 1,
       },
     },
   }

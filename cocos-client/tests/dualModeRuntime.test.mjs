@@ -18,6 +18,7 @@ function createDungeonPort({
   beginOk = true,
   activeRunId = null,
   phase = 'exploring',
+  authoritativeLoot = [],
   cancelOk = true,
   cancelThrows = false,
 } = {}) {
@@ -56,6 +57,11 @@ function createDungeonPort({
     },
     isExtractedRun(candidateRunId) {
       return runId === candidateRunId && runPhase === 'extracted'
+    },
+    extractedLoot(candidateRunId) {
+      return runId === candidateRunId && runPhase === 'extracted'
+        ? authoritativeLoot.map((item) => ({ ...item }))
+        : null
     },
     markExtracted() {
       assert.notEqual(runId, null)
@@ -251,7 +257,7 @@ test('world persistence failure does not assign the reducer result', () => {
 
 test('accepted matching extraction atomically returns to world and clears the active run', () => {
   const repository = createRepository()
-  const dungeon = createDungeonPort()
+  const dungeon = createDungeonPort({ authoritativeLoot: [{ itemId: 'mist-herb', amount: 2 }] })
   const runtime = createDualModeRuntime({
     initialSave: saveWithPasses(1),
     repository,
@@ -271,6 +277,26 @@ test('accepted matching extraction atomically returns to world and clears the ac
   assert.equal(runtime.getActiveRunId(), null)
   assert.equal(runtime.getSaveSnapshot().inventory.materials['mist-herb'], 2)
   assert.equal(repository.saved.length, 2)
+})
+
+test('extraction rejects caller loot that differs from the authoritative dungeon session', () => {
+  const repository = createRepository()
+  const dungeon = createDungeonPort({ authoritativeLoot: [{ itemId: 'flying-sword', amount: 1 }] })
+  const runtime = createDualModeRuntime({
+    initialSave: saveWithPasses(1),
+    repository,
+    dungeon,
+  })
+  assert.equal(runtime.enterDungeon(18).ok, true)
+  dungeon.markExtracted()
+
+  assert.deepEqual(runtime.handleDungeonExtracted({
+    runId: 'mist-vault-18',
+    loot: [{ itemId: 'flying-sword', amount: 999999 }],
+  }), { ok: false, reason: 'loot-mismatch' })
+  assert.equal(runtime.getMode(), 'dungeon')
+  assert.equal(runtime.getSaveSnapshot().inventory.artifacts['flying-sword'], undefined)
+  assert.equal(repository.saved.length, 1)
 })
 
 test('duplicate matching extraction atomically returns to world without writing', () => {
@@ -295,7 +321,7 @@ test('duplicate matching extraction atomically returns to world without writing'
 
 test('mismatched, invalid-loot, and persist-failed extraction remain active and retryable', () => {
   const repository = createRepository({ failAt: 2 })
-  const dungeon = createDungeonPort()
+  const dungeon = createDungeonPort({ authoritativeLoot: [{ itemId: 'mist-herb', amount: 1 }] })
   const runtime = createDualModeRuntime({
     initialSave: saveWithPasses(1),
     repository,

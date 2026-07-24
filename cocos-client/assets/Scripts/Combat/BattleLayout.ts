@@ -54,12 +54,6 @@ export interface BossVisualPlacement {
   readonly visualSize: Readonly<VisualFrameSize>
 }
 
-export interface DungeonEntryNavLayout {
-  readonly navigation: Readonly<{ centerY: number; minY: number; maxY: number }>
-  readonly label: Readonly<{ centerY: number; minY: number; maxY: number; height: number }>
-  readonly status: Readonly<{ centerY: number; minY: number; maxY: number; height: number }>
-}
-
 export const BATTLE_DESIGN_WIDTH = 750
 export const BATTLE_MIN_VISIBLE_HEIGHT = 1334
 export const BATTLE_NAVIGATION_HEIGHT = 104
@@ -70,9 +64,6 @@ export const PLAYER_FRAME_WIDTH = PLAYER_FRAME_HEIGHT * 4 / 5
 export const PLAYER_DISPLAY_SCALE = 0.45
 export const ORDINARY_ENEMY_FRAME_HEIGHT = 336
 export const ORDINARY_ENEMY_FRAME_WIDTH = ORDINARY_ENEMY_FRAME_HEIGHT * 4 / 5
-export const DUNGEON_ENTRY_LABEL_HEIGHT = 44
-export const DUNGEON_ENTRY_STATUS_HEIGHT = 24
-export const DUNGEON_ENTRY_TRACK_PADDING = 8
 
 const FIXED_WIDTH_RESOLUTION: Readonly<BattleResolution> = Object.freeze({
   designWidth: BATTLE_DESIGN_WIDTH,
@@ -185,30 +176,6 @@ export function computeBattleViewportState(input: BattleViewportStateInput): Rea
     resolutionMode: resolution.mode,
   })
   return Object.freeze({ resolution, layout })
-}
-
-export function computeDungeonEntryNavLayout(navigationTop: number): Readonly<DungeonEntryNavLayout> {
-  const safeNavigationTop = Number.isFinite(navigationTop) ? navigationTop : 0
-  const navigation = Object.freeze({
-    centerY: safeNavigationTop - BATTLE_NAVIGATION_HEIGHT / 2,
-    minY: safeNavigationTop - BATTLE_NAVIGATION_HEIGHT,
-    maxY: safeNavigationTop,
-  })
-  const labelMinY = navigation.minY + DUNGEON_ENTRY_TRACK_PADDING
-  const label = Object.freeze({
-    centerY: labelMinY + DUNGEON_ENTRY_LABEL_HEIGHT / 2,
-    minY: labelMinY,
-    maxY: labelMinY + DUNGEON_ENTRY_LABEL_HEIGHT,
-    height: DUNGEON_ENTRY_LABEL_HEIGHT,
-  })
-  const statusMaxY = navigation.maxY - DUNGEON_ENTRY_TRACK_PADDING
-  const status = Object.freeze({
-    centerY: statusMaxY - DUNGEON_ENTRY_STATUS_HEIGHT / 2,
-    minY: statusMaxY - DUNGEON_ENTRY_STATUS_HEIGHT,
-    maxY: statusMaxY,
-    height: DUNGEON_ENTRY_STATUS_HEIGHT,
-  })
-  return Object.freeze({ navigation, label, status })
 }
 
 export function computeBossVisualPlacement(

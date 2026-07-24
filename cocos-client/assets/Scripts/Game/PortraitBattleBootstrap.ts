@@ -31,9 +31,9 @@ import {
   PLAYER_DISPLAY_SCALE,
   PLAYER_FRAME_HEIGHT,
   PLAYER_FRAME_WIDTH,
-  computeDungeonEntryNavLayout,
   computeBattleViewportState,
 } from '../Combat/BattleLayout.ts'
+import { computeDungeonEntryNavLayout } from './DungeonEntryLayout.ts'
 import type { BattleLayout, BattleResolutionMode } from '../Combat/BattleLayout.ts'
 import { BOSS_HAZARD_POOL_CAPACITY } from '../Combat/BossBrain.ts'
 import type { PlayerActionToken } from '../Combat/PlayerMotor.ts'

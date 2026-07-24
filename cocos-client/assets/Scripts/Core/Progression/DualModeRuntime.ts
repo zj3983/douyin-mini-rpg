@@ -20,6 +20,7 @@ export interface DungeonSessionPort {
   begin(seed: number): boolean
   cancelRun(): boolean
   isExtractedRun(runId: string): boolean
+  extractedLoot(runId: string): RunLoot[] | null
 }
 
 export interface DualModeRuntimeOptions {
@@ -105,6 +106,13 @@ function parseDungeonExtractionEvent(value: unknown): DungeonExtractionEvent | n
   } catch {
     return null
   }
+}
+
+function sameLoot(left: readonly RunLoot[], right: readonly RunLoot[]): boolean {
+  if (left.length !== right.length) return false
+  return left.every((item, index) => (
+    item.itemId === right[index].itemId && item.amount === right[index].amount
+  ))
 }
 
 function defaultSeedSource(): number {
@@ -238,12 +246,17 @@ export function createDualModeRuntime(options: DualModeRuntimeOptions) {
     if (activeRunId === null) return { ok: false, reason: 'no-active-run' }
     if (runId !== activeRunId) return { ok: false, reason: 'run-id-mismatch' }
 
+    let authoritativeLoot: RunLoot[] | null
     try {
       if (!options.dungeon.isExtractedRun(runId)) {
         return { ok: false, reason: 'run-not-extracted' }
       }
+      authoritativeLoot = options.dungeon.extractedLoot(runId)
     } catch {
       return { ok: false, reason: 'dungeon-unavailable' }
+    }
+    if (authoritativeLoot === null || !sameLoot(event.loot, authoritativeLoot)) {
+      return { ok: false, reason: 'loot-mismatch' }
     }
 
     if (hasReward(runId)) {
@@ -252,7 +265,7 @@ export function createDualModeRuntime(options: DualModeRuntimeOptions) {
       return { ok: true, runId, duplicate: true, saveChanged: false }
     }
 
-    const next = applyExtractionLoot(save, runId, event.loot)
+    const next = applyExtractionLoot(save, runId, authoritativeLoot)
     if (!didAcceptReward(save, next)) {
       return { ok: false, reason: 'extraction-reward-rejected' }
     }

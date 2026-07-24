@@ -141,7 +141,7 @@ test('dual-mode Cocos controllers delegate progression and dungeon rules to Core
   assert.doesNotMatch(runtime, /Core\/Battle|structuredClone|\.flatMap\(|Object\.values\(/)
 
   assert.match(world, /emit\('world-stage-cleared'/)
-  assert.match(world, /rewardId:\s*`world-\$\{this\.stageNumber\}-generation-\$\{this\.stageGeneration\}`/)
+  assert.match(world, /rewardId:\s*worldRewardId\(this\.stageNumber, this\.rewardSessionId, this\.stageGeneration\)/)
 })
 
 test('dungeon begin commits before best-effort observer notification', () => {
@@ -580,6 +580,6 @@ test('stage clear panel renders reward fields and next stage action', () => {
   assert.equal(source.includes('nextStageButton'), true)
   assert.equal(source.includes('nextStageTarget'), true)
   assert.equal(source.includes('spiritStones'), true)
-  assert.equal(source.includes('artifactEssence'), true)
-  assert.equal(source.includes('dungeonPass'), true)
+  assert.equal(source.includes('artifactEssence'), false)
+  assert.equal(source.includes('dungeonPasses'), true)
 })

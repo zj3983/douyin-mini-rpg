@@ -113,6 +113,9 @@ test('world boss pass supports a searched three-floor extraction persisted exact
       return true
     },
     isExtractedRun: (runId) => run?.id === runId && run.phase === 'extracted',
+    extractedLoot: (runId) => run?.id === runId && run.phase === 'extracted'
+      ? run.carriedLoot.map((item) => ({ ...item }))
+      : null,
   }
   const runtime = createDualModeRuntime({
     initialSave: createDefaultSave(),
