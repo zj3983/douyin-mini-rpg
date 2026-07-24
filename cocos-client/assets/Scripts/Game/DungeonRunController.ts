@@ -5,7 +5,11 @@ import {
   extractRun,
   searchRoom,
 } from '../Core/Dungeon/DungeonSession.ts'
-import type { DungeonProfile, DungeonRun } from '../Core/Dungeon/DungeonTypes.ts'
+import type {
+  DungeonExtractionEvent,
+  DungeonProfile,
+  DungeonRun,
+} from '../Core/Dungeon/DungeonTypes.ts'
 
 const { ccclass, property } = _decorator
 
@@ -42,7 +46,25 @@ export class DungeonRunController extends Component {
 
   private run: DungeonRun | null = null
 
+  hasRun() {
+    return this.run !== null
+  }
+
+  currentRunId() {
+    return this.run?.id ?? null
+  }
+
+  previewRunId(seed: number) {
+    if (!this.profileData) return null
+    try {
+      return createDungeonSession(this.profileData.json as DungeonProfile, seed).id
+    } catch {
+      return null
+    }
+  }
+
   begin(seed: number) {
+    if (this.run) return false
     if (!this.profileData) return false
 
     try {
@@ -57,6 +79,17 @@ export class DungeonRunController extends Component {
     } catch {
       return false
     }
+  }
+
+  cancelRun() {
+    if (!this.run) return false
+    this.run = null
+    this.refreshRoomLabel()
+    return true
+  }
+
+  isExtractedRun(runId: string) {
+    return this.run?.id === runId && this.run.phase === 'extracted'
   }
 
   grantDoorCurrency(amount: number) {
@@ -87,12 +120,27 @@ export class DungeonRunController extends Component {
 
   extract() {
     if (!this.run) return false
-    const result = extractRun(this.run)
+    const run = this.run
+    const result = extractRun(run)
     if (!result.ok) return false
-    this.node.emit('dungeon-extracted', {
-      runId: this.run.id,
+    const payload: DungeonExtractionEvent = {
+      runId: run.id,
       loot: result.loot.map((item) => ({ ...item })),
-    })
+      acknowledged: false,
+    }
+    try {
+      this.node.emit('dungeon-extracted', payload)
+    } catch {
+      if (this.run === run) run.phase = 'exploring'
+      return false
+    }
+    if (!payload.acknowledged) {
+      if (this.run === run) run.phase = 'exploring'
+      return false
+    }
+    if (this.run !== run) return false
+    this.run = null
+    this.refreshRoomLabel()
     return true
   }
 

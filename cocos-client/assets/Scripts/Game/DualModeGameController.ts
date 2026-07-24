@@ -1,20 +1,17 @@
 import { _decorator, Component, Node, sys } from 'cc'
-import type { RunLoot } from '../Core/Dungeon/DungeonTypes.ts'
+import type { DungeonExtractionEvent } from '../Core/Dungeon/DungeonTypes.ts'
 import {
-  applyExtractionLoot,
-  consumeDungeonPass,
-  createDefaultSave,
-  migratePlayerSave,
-} from '../Core/Progression/PlayerSave.ts'
-import type { PlayerSaveV3 } from '../Core/Progression/PlayerSave.ts'
+  createDualModeRuntime,
+  type DualMode,
+  type DualModeRuntime,
+  type DungeonSessionPort,
+} from '../Core/Progression/DualModeRuntime.ts'
+import { createDefaultSave } from '../Core/Progression/PlayerSave.ts'
 import { createJsonSaveRepository } from '../Core/Progression/SaveRepository.ts'
 import type { SaveRepository } from '../Core/Progression/SaveRepository.ts'
-import { applyWorldBossClear } from '../Core/World/WorldRewards.ts'
 import { DungeonRunController } from './DungeonRunController'
 
 const { ccclass, property } = _decorator
-const DEFAULT_DUNGEON_SEED = 0
-const MAX_UINT32 = 4294967295
 
 @ccclass('DualModeGameController')
 export class DualModeGameController extends Component {
@@ -27,66 +24,93 @@ export class DualModeGameController extends Component {
   @property(DungeonRunController)
   dungeonRun: DungeonRunController | null = null
 
-  private save: PlayerSaveV3 = createDefaultSave()
   private repository: SaveRepository | null = null
+  private runtime: DualModeRuntime | null = null
 
   onLoad() {
     this.repository = createJsonSaveRepository(sys.localStorage, 'cultivation-save-v3')
-    this.save = this.repository.load() ?? createDefaultSave()
+    let initialSave = createDefaultSave()
+    try {
+      initialSave = this.repository.load() ?? initialSave
+    } catch {
+      this.node.emit('save-load-failed')
+    }
+    this.runtime = createDualModeRuntime({
+      initialSave,
+      repository: this.repository,
+      dungeon: this.createDungeonPort(),
+    })
+    this.applyMode(this.runtime.getMode())
   }
 
-  handleWorldCleared(payload: { stage: number; rewardId: string }) {
-    const previous = this.save
-    const next = applyWorldBossClear(previous, payload).save
-    if (!this.didAcceptReward(previous, next)) return false
-    this.persistSave(next)
+  handleWorldCleared(payload: unknown) {
+    const result = this.runtime?.handleWorldCleared(payload)
+    if (!result) return this.reject('world-clear-rejected', 'controller-not-ready')
+    if (!result.ok) return this.reject('world-clear-rejected', 'reason' in result ? result.reason : 'transition-rejected')
+    this.emitSaveChanged()
     return true
   }
 
-  enterDungeon(seed = DEFAULT_DUNGEON_SEED) {
-    if (!Number.isSafeInteger(seed) || seed < 0 || seed > MAX_UINT32) {
-      return this.rejectDungeonEntry('invalid-seed')
+  enterDungeon(seed?: number) {
+    const result = this.runtime?.enterDungeon(seed)
+    if (!result) return this.reject('dungeon-entry-rejected', 'controller-not-ready')
+    if (!result.ok) return this.reject('dungeon-entry-rejected', 'reason' in result ? result.reason : 'transition-rejected')
+    this.applyMode('dungeon')
+    this.node.emit('player-save-changed', this.getSaveSnapshot())
+    this.node.emit('dungeon-entry-accepted', { seed: result.seed, runId: result.runId })
+    return true
+  }
+
+  handleDungeonExtracted(payload: unknown) {
+    const result = this.runtime?.handleDungeonExtracted(payload)
+    if (!result) return this.reject('dungeon-extraction-rejected', 'controller-not-ready')
+    if (!result.ok) {
+      return this.reject('dungeon-extraction-rejected', 'reason' in result ? result.reason : 'transition-rejected')
+    }
+    if (!this.runtime.acknowledgeExtraction(result.runId)) {
+      return this.reject('dungeon-extraction-rejected', 'acknowledgement-failed')
     }
 
-    const passResult = consumeDungeonPass(this.save)
-    if (!passResult.ok) return this.rejectDungeonEntry('missing-pass')
-    if (!this.dungeonRun) return this.rejectDungeonEntry('missing-dungeon-controller')
-    if (!this.dungeonRun.begin(seed)) return this.rejectDungeonEntry('dungeon-begin-failed')
-
-    this.persistSave(passResult.save)
-    if (this.worldRoot) this.worldRoot.active = false
-    if (this.dungeonRoot) this.dungeonRoot.active = true
-    this.node.emit('dungeon-entry-accepted', { seed })
-    return true
-  }
-
-  handleDungeonExtracted(payload: { runId: string; loot: RunLoot[] }) {
-    const previous = this.save
-    const next = applyExtractionLoot(previous, payload.runId, payload.loot)
-    if (!this.didAcceptReward(previous, next)) return false
-
-    this.persistSave(next)
-    if (this.dungeonRoot) this.dungeonRoot.active = false
-    if (this.worldRoot) this.worldRoot.active = true
+    this.applyMode('world')
+    const extraction = payload as DungeonExtractionEvent
+    extraction.acknowledged = true
+    if (result.saveChanged) this.emitSaveChanged()
+    this.node.emit('dungeon-extraction-accepted', {
+      runId: result.runId,
+      duplicate: result.duplicate,
+    })
     return true
   }
 
   getSaveSnapshot() {
-    return migratePlayerSave(this.save)
+    return this.runtime?.getSaveSnapshot() ?? createDefaultSave()
   }
 
-  private didAcceptReward(previous: PlayerSaveV3, next: PlayerSaveV3) {
-    return next.rewardLedger.length > previous.rewardLedger.length
+  private createDungeonPort(): DungeonSessionPort {
+    return {
+      hasRun: () => this.dungeonRun?.hasRun() ?? false,
+      currentRunId: () => this.dungeonRun?.currentRunId() ?? null,
+      previewRunId: (seed) => this.dungeonRun?.previewRunId(seed) ?? null,
+      begin: (seed) => this.dungeonRun?.begin(seed) ?? false,
+      cancelRun: () => this.dungeonRun?.cancelRun() ?? false,
+      isExtractedRun: (runId) => this.dungeonRun?.isExtractedRun(runId) ?? false,
+    }
   }
 
-  private persistSave(next: PlayerSaveV3) {
-    this.save = next
-    this.repository?.save(next)
+  private applyMode(mode: DualMode) {
+    if (this.worldRoot) this.worldRoot.active = mode === 'world'
+    if (this.dungeonRoot) this.dungeonRoot.active = mode === 'dungeon'
+  }
+
+  private emitSaveChanged() {
     this.node.emit('player-save-changed', this.getSaveSnapshot())
   }
 
-  private rejectDungeonEntry(reason: string) {
-    this.node.emit('dungeon-entry-rejected', { reason })
+  private reject(eventName: string, reason: string) {
+    if (reason === 'save-persist-failed') {
+      this.node.emit('save-persist-failed', { operation: eventName })
+    }
+    this.node.emit(eventName, { reason })
     return false
   }
 }

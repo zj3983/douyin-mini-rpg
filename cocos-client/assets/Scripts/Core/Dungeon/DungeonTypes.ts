@@ -36,3 +36,9 @@ export interface DungeonRun {
   searchedRoomIds: string[]
   carriedLoot: RunLoot[]
 }
+
+export interface DungeonExtractionEvent {
+  runId: string
+  loot: RunLoot[]
+  acknowledged: boolean
+}
