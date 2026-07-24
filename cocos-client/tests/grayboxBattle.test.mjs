@@ -56,9 +56,7 @@ test('portrait bootstrap assembles and wires the dungeon graybox through real Bu
   assert.match(source, /graphics\.clear\(\)/)
   assert.match(source, /graphics\.rect\(-WIDTH \/ 2, -visibleHeight \/ 2, WIDTH, visibleHeight\)/)
   assert.match(source, /dungeon-entry-rejected/)
-  assert.match(source, /dungeon-room-changed/)
-  assert.match(source, /dungeon-loot-found/)
-  assert.match(source, /dungeon-extracted/)
+  assert.match(source, /dungeonRun\.onRunChanged = this\.dungeonPresentationCallback/)
   assert.match(source, /visibleHeight/)
   assert.doesNotMatch(source, /document\.|window\.|querySelector|createElement/)
   assert.doesNotMatch(source, /applyWorldBossClear|consumeDungeonPass|applyExtractionLoot/)
@@ -71,6 +69,15 @@ test('dungeon interaction authority exists in Core', () => {
   assert.match(controller, /Core\/Dungeon\/DungeonInteraction/)
   assert.match(controller, /interactDungeonRun\(this\.run\)/)
   assert.doesNotMatch(controller, /grantDoorCurrency|doorCurrency\s*[+\-*/]?=/)
+})
+
+test('bootstrap refreshes dungeon UI through the direct controller callback, not analytics listener order', () => {
+  const source = read('assets/Scripts/Game/PortraitBattleBootstrap.ts')
+
+  assert.match(source, /dungeonRun\.onRunChanged = this\.dungeonPresentationCallback/)
+  assert.match(source, /this\.refreshDungeonPresentation\([^)]*,\s*snapshot\)/)
+  assert.match(source, /if \(this\.dungeonRunController\?\.onRunChanged === this\.dungeonPresentationCallback\)/)
+  assert.doesNotMatch(source, /dungeonNode\.on\('dungeon-(?:run-began|room-changed|loot-found|extracted)'/)
 })
 
 test('dual and dungeon adapters stay isolated from legacy battle and new combat modules', () => {

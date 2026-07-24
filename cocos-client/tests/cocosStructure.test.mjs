@@ -98,6 +98,8 @@ test('dual-mode Cocos controllers delegate progression and dungeon rules to Core
   assert.match(dungeon, /Core\/Dungeon\/DungeonInteraction/)
   assert.match(dungeon, /Core\/Dungeon\/DungeonTypes/)
   assert.match(dungeon, /Core\/Progression\/BestEffortNotification/)
+  assert.match(dungeon, /onRunChanged/)
+  assert.match(dungeon, /notifyPresentationBestEffort/)
   assert.doesNotMatch(dungeon, /CultivationRuntime|resolveDungeonFloor/)
   assert.doesNotMatch(dungeon, /\.\.\/Combat\//)
   assert.match(dungeon, /@property\(JsonAsset\)\s*profileData/)
@@ -116,7 +118,12 @@ test('dual-mode Cocos controllers delegate progression and dungeon rules to Core
   assert.match(safeEmit, /this\.node\.emit\(notification\.eventName/)
   const interact = extractBlock(dungeon, 'interact():')
   assert.doesNotMatch(interact, /this\.node\.emit/)
-  assertStatementOrder(interact, ['const result = interactDungeonRun(this.run)', 'this.emitBestEffort', 'return result'])
+  assertStatementOrder(interact, [
+    'const result = interactDungeonRun(this.run)',
+    'this.notifyPresentationBestEffort',
+    'this.emitBestEffort',
+    'return result',
+  ])
 
   assert.match(dualMode, /Core\/Progression\/DualModeRuntime/)
   assert.match(dualMode, /Core\/Progression\/SaveRepository/)
@@ -149,6 +156,7 @@ test('dungeon begin commits before best-effort observer notification', () => {
     'nextRun = createDungeonSession',
     'this.run = nextRun',
     'this.refreshRoomLabel()',
+    'this.notifyPresentationBestEffort',
     "this.emitBestEffort('dungeon-run-began'",
     'return true',
   ])
@@ -166,7 +174,13 @@ test('dungeon extraction uses a direct authority callback and isolates post-comm
   assert.match(source, /hasRun\(\)/)
   assert.match(preview, /createDungeonSession\(/)
   assert.doesNotMatch(preview, /this\.run\s*=/)
-  assertStatementOrder(cancel, ['if (!this.run) return false', 'this.run = null', 'this.refreshRoomLabel()'])
+  assertStatementOrder(cancel, [
+    'if (!this.run) return false',
+    'this.run = null',
+    'this.refreshRoomLabel()',
+    'this.notifyPresentationBestEffort',
+    'return true',
+  ])
   assert.match(source, /onExtractionRequested[\s\S]*DungeonExtractionEvent[\s\S]*boolean/)
   assert.doesNotMatch(source, /acknowledged/)
   assert.match(extract, /try\s*{[\s\S]*onExtractionRequested\(request\)[\s\S]*}\s*catch\s*{[\s\S]*restoreExtraction\(run\)[\s\S]*return false/)
@@ -181,6 +195,7 @@ test('dungeon extraction uses a direct authority callback and isolates post-comm
     'if (!accepted)',
     'this.run = null',
     'this.refreshRoomLabel()',
+    'this.notifyPresentationBestEffort',
     'const notification:',
     "this.emitBestEffort('dungeon-extracted', notification)",
     'return true',

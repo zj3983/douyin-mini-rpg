@@ -21,7 +21,7 @@ test('portrait viewports keep the fixed-width dynamic-height policy', () => {
   assert.strictEqual(second, first)
 })
 
-test('dungeon entry label and status have stable nonoverlapping bounds above the safe nav edge', () => {
+test('dungeon entry label and status use nonoverlapping tracks entirely inside the safe nav cell', () => {
   assert.equal(typeof computeDungeonEntryNavLayout, 'function')
   for (const viewport of [
     { cssWidth: 390, cssHeight: 844, bottomInsetPx: 34 },
@@ -40,9 +40,10 @@ test('dungeon entry label and status have stable nonoverlapping bounds above the
     assert.ok(entry.navigation.minY > visibleBottom)
     assert.ok(entry.label.minY >= entry.navigation.minY)
     assert.ok(entry.label.maxY <= entry.navigation.maxY)
-    assert.ok(entry.status.minY >= entry.navigation.maxY)
+    assert.ok(entry.status.minY >= entry.navigation.minY)
+    assert.ok(entry.status.maxY <= entry.navigation.maxY)
     assert.ok(entry.label.maxY < entry.status.minY)
-    assert.ok(entry.status.maxY < layout.actorSafeRect.maxY)
+    assert.ok(entry.status.maxY <= layout.actorSafeRect.minY)
   }
 })
 

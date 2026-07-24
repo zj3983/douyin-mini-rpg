@@ -1,4 +1,10 @@
 const requiredNodes = [
+  'Canvas/WorldRoot',
+  'Canvas/DungeonRoot/DungeonFloor1',
+  'Canvas/DungeonRoot/DungeonFloor2',
+  'Canvas/DungeonRoot/DungeonFloor3',
+  'Canvas/DungeonRoot/DungeonRoomLabel',
+  'Canvas/DungeonRoot/DungeonStatusLabel',
   'Canvas/WorldRoot/BattleRoot/Runtime',
   'Canvas/WorldRoot/BattleRoot/ActorLayer/EnemySpawner',
   'Canvas/WorldRoot/BattleRoot/EffectLayer/FlyingSwordSkill',
@@ -47,6 +53,12 @@ const controllerBindingContracts = [
 
 export function validateSceneBlueprint(blueprint) {
   const errors = []
+  if (!blueprint?.scene || typeof blueprint.scene !== 'object' || Array.isArray(blueprint.scene)) {
+    errors.push('missing scene object')
+  } else if (blueprint.scene.name !== 'MainBattle') {
+    errors.push('scene name must be MainBattle')
+  }
+  if (!Array.isArray(blueprint?.nodes)) errors.push('missing nodes array')
   const nodes = Array.isArray(blueprint?.nodes) ? blueprint.nodes : []
   const nodePaths = new Set(nodes.map((node) => node.path))
   const componentNames = new Set(nodes.flatMap((node) => node.components ?? []))
@@ -69,6 +81,11 @@ export function validateSceneBlueprint(blueprint) {
   const flyingSwordBindings = flyingSwordNode?.bindings ?? {}
   for (const binding of requiredFlyingSwordBindings) {
     if (!flyingSwordBindings[binding]) errors.push(`missing FlyingSwordSkill binding: ${binding}`)
+  }
+
+  const dungeonStatusNode = nodes.find((node) => node.path === 'Canvas/DungeonRoot/DungeonStatusLabel')
+  if (dungeonStatusNode?.bindings?.presentation !== 'Canvas/DungeonRoot/DungeonRunController.onRunChanged') {
+    errors.push('missing DungeonStatusLabel presentation binding: DungeonRunController.onRunChanged')
   }
 
   for (const contract of controllerBindingContracts) {

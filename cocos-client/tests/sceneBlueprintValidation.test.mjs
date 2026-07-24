@@ -7,7 +7,11 @@ import { validateSceneBlueprint } from '../tools/validate-scene-blueprint.mjs'
 const readBlueprint = () => JSON.parse(readFileSync(resolve('assets/Data/scene-blueprint.json'), 'utf8'))
 
 test('scene blueprint validator accepts the runtime authority bindings', () => {
-  assert.deepEqual(validateSceneBlueprint(readBlueprint()), { ok: true, errors: [] })
+  const blueprint = readBlueprint()
+  assert.deepEqual(validateSceneBlueprint(blueprint), { ok: true, errors: [] })
+  const status = blueprint.nodes.find((node) => node.path === 'Canvas/DungeonRoot/DungeonStatusLabel')
+  assert.equal(status.bindings.presentation, 'Canvas/DungeonRoot/DungeonRunController.onRunChanged')
+  assert.equal('events' in status.bindings, false)
 })
 
 test('scene blueprint validator rejects unknown and misplaced controller bindings', () => {

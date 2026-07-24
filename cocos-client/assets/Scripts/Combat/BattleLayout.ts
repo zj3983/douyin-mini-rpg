@@ -70,9 +70,9 @@ export const PLAYER_FRAME_WIDTH = PLAYER_FRAME_HEIGHT * 4 / 5
 export const PLAYER_DISPLAY_SCALE = 0.45
 export const ORDINARY_ENEMY_FRAME_HEIGHT = 336
 export const ORDINARY_ENEMY_FRAME_WIDTH = ORDINARY_ENEMY_FRAME_HEIGHT * 4 / 5
-export const DUNGEON_ENTRY_LABEL_HEIGHT = 48
-export const DUNGEON_ENTRY_STATUS_HEIGHT = 26
-export const DUNGEON_ENTRY_STATUS_GAP = 3
+export const DUNGEON_ENTRY_LABEL_HEIGHT = 44
+export const DUNGEON_ENTRY_STATUS_HEIGHT = 24
+export const DUNGEON_ENTRY_TRACK_PADDING = 8
 
 const FIXED_WIDTH_RESOLUTION: Readonly<BattleResolution> = Object.freeze({
   designWidth: BATTLE_DESIGN_WIDTH,
@@ -194,17 +194,18 @@ export function computeDungeonEntryNavLayout(navigationTop: number): Readonly<Du
     minY: safeNavigationTop - BATTLE_NAVIGATION_HEIGHT,
     maxY: safeNavigationTop,
   })
+  const labelMinY = navigation.minY + DUNGEON_ENTRY_TRACK_PADDING
   const label = Object.freeze({
-    centerY: navigation.centerY,
-    minY: navigation.centerY - DUNGEON_ENTRY_LABEL_HEIGHT / 2,
-    maxY: navigation.centerY + DUNGEON_ENTRY_LABEL_HEIGHT / 2,
+    centerY: labelMinY + DUNGEON_ENTRY_LABEL_HEIGHT / 2,
+    minY: labelMinY,
+    maxY: labelMinY + DUNGEON_ENTRY_LABEL_HEIGHT,
     height: DUNGEON_ENTRY_LABEL_HEIGHT,
   })
-  const statusMinY = navigation.maxY + DUNGEON_ENTRY_STATUS_GAP
+  const statusMaxY = navigation.maxY - DUNGEON_ENTRY_TRACK_PADDING
   const status = Object.freeze({
-    centerY: statusMinY + DUNGEON_ENTRY_STATUS_HEIGHT / 2,
-    minY: statusMinY,
-    maxY: statusMinY + DUNGEON_ENTRY_STATUS_HEIGHT,
+    centerY: statusMaxY - DUNGEON_ENTRY_STATUS_HEIGHT / 2,
+    minY: statusMaxY - DUNGEON_ENTRY_STATUS_HEIGHT,
+    maxY: statusMaxY,
     height: DUNGEON_ENTRY_STATUS_HEIGHT,
   })
   return Object.freeze({ navigation, label, status })

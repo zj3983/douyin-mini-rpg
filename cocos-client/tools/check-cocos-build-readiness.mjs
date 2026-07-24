@@ -1,6 +1,8 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { join, relative, resolve, sep } from 'node:path'
+import { validateDungeonProfile } from '../assets/Scripts/Core/Dungeon/DungeonSession.ts'
+import { validateSceneBlueprint } from './validate-scene-blueprint.mjs'
 
 const defaultCreatorCandidates = [
   'D:/CocosCreator/CocosCreator.exe',
@@ -47,6 +49,21 @@ export const requiredDualModeAssets = [
 ]
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const REQUIRED_SCENE_NODES = [
+  'WorldRoot',
+  'DualModeGameController',
+  'DungeonRoot',
+  'DungeonFloor1',
+  'DungeonFloor2',
+  'DungeonFloor3',
+  'DungeonRoomLabel',
+  'DungeonInteractButton',
+]
+const REQUIRED_STRUCTURED_ASSETS = [
+  'assets/Scenes/MainBattle.scene',
+  'assets/Data/scene-blueprint.json',
+  'assets/resources/Data/dual-mode-slice.json',
+]
 
 function metaConvention(path) {
   if (path.endsWith('.scene.meta')) return { importer: 'scene', ver: '1.1.50' }
@@ -80,31 +97,41 @@ export function checkCocosBuildReadiness(options = {}) {
     if (!hasPath(projectRoot, asset, files)) blockers.push(`${asset} is missing from the Cocos import contract.`)
   }
 
-  const metaUuidOwners = new Map()
-  for (const asset of requiredDualModeAssets) {
-    const isRequiredJson = asset.endsWith('.scene') || asset.endsWith('.json') || asset.endsWith('.meta')
-    if (!isRequiredJson || !hasPath(projectRoot, asset, files)) continue
-    let parsed
-    try {
-      const contents = readFile(asset)
-      if (typeof contents !== 'string') throw new TypeError('required JSON contents are unavailable')
-      parsed = JSON.parse(contents)
-    } catch {
-      blockers.push(`${asset} contains malformed JSON or could not be read.`)
-      continue
+  for (const asset of REQUIRED_STRUCTURED_ASSETS) {
+    if (!hasPath(projectRoot, asset, files)) continue
+    const parsed = parseJsonAsset(asset, readFile, blockers)
+    if (parsed === undefined) continue
+    if (asset.endsWith('.scene')) {
+      for (const error of validateCocosSceneStructure(parsed)) blockers.push(`${asset} ${error}.`)
+    } else if (asset.endsWith('scene-blueprint.json')) {
+      const report = validateSceneBlueprint(parsed)
+      if (!report.ok) blockers.push(`${asset} fails scene blueprint structural validation: ${report.errors.join('; ')}.`)
+    } else {
+      try {
+        validateDungeonProfile(parsed)
+      } catch (error) {
+        blockers.push(`${asset} fails dungeon profile validation: ${error instanceof Error ? error.message : String(error)}`)
+      }
     }
-    if (!asset.endsWith('.meta')) continue
+  }
 
+  const requiredMetaPaths = new Set(requiredDualModeAssets.filter((asset) => asset.endsWith('.meta')))
+  const metaUuidOwners = new Map()
+  for (const asset of discoverAssetMetaPaths(projectRoot, files)) {
+    const parsed = parseJsonAsset(asset, readFile, blockers)
+    if (parsed === undefined) continue
     if (typeof parsed.uuid !== 'string' || !UUID_PATTERN.test(parsed.uuid)) {
       blockers.push(`${asset} has a missing or invalid UUID.`)
     } else if (metaUuidOwners.has(parsed.uuid)) {
-      blockers.push(`${asset} has duplicate required meta UUID ${parsed.uuid} also used by ${metaUuidOwners.get(parsed.uuid)}.`)
+      blockers.push(`${asset} has duplicate asset meta UUID ${parsed.uuid} also used by ${metaUuidOwners.get(parsed.uuid)}.`)
     } else {
       metaUuidOwners.set(parsed.uuid, asset)
     }
-    const expected = metaConvention(asset)
-    if (parsed.importer !== expected.importer || parsed.ver !== expected.ver) {
-      blockers.push(`${asset} must use importer ${expected.importer} version ${expected.ver}.`)
+    if (requiredMetaPaths.has(asset)) {
+      const expected = metaConvention(asset)
+      if (parsed.importer !== expected.importer || parsed.ver !== expected.ver) {
+        blockers.push(`${asset} must use importer ${expected.importer} version ${expected.ver}.`)
+      }
     }
   }
 
@@ -122,6 +149,62 @@ export function checkCocosBuildReadiness(options = {}) {
     buildRoot,
     blockers,
   }
+}
+
+export function validateCocosSceneStructure(scene) {
+  const errors = []
+  if (!Array.isArray(scene)) return ['must be a Cocos scene array']
+  const sceneAssetIndex = scene.findIndex((entry) => entry?.__type__ === 'cc.SceneAsset')
+  const sceneIndex = scene.findIndex((entry) => entry?.__type__ === 'cc.Scene')
+  if (sceneAssetIndex < 0) errors.push('is missing a cc.SceneAsset record')
+  if (sceneIndex < 0) errors.push('is missing a cc.Scene record')
+  if (sceneAssetIndex >= 0 && scene[sceneAssetIndex]?.scene?.__id__ !== sceneIndex) {
+    errors.push('has a SceneAsset that does not reference its cc.Scene record')
+  }
+  visitReferences(scene, scene.length, errors, '$')
+  const nodeNames = new Set(
+    scene.filter((entry) => entry?.__type__ === 'cc.Node' && typeof entry._name === 'string').map((entry) => entry._name),
+  )
+  for (const name of REQUIRED_SCENE_NODES) {
+    if (!nodeNames.has(name)) errors.push(`is missing required stable node ${name}`)
+  }
+  return errors
+}
+
+function visitReferences(value, recordCount, errors, path) {
+  if (!value || typeof value !== 'object') return
+  if (!Array.isArray(value) && Object.hasOwn(value, '__id__')) {
+    if (!Number.isSafeInteger(value.__id__) || value.__id__ < 0 || value.__id__ >= recordCount) {
+      errors.push(`has invalid __id__ reference at ${path}`)
+    }
+  }
+  for (const [key, child] of Object.entries(value)) visitReferences(child, recordCount, errors, `${path}.${key}`)
+}
+
+function parseJsonAsset(asset, readFile, blockers) {
+  try {
+    const contents = readFile(asset)
+    if (typeof contents !== 'string') throw new TypeError('JSON contents are unavailable')
+    return JSON.parse(contents)
+  } catch {
+    blockers.push(`${asset} contains malformed JSON or could not be read.`)
+    return undefined
+  }
+}
+
+function discoverAssetMetaPaths(projectRoot, files) {
+  if (files) {
+    return Array.from(files)
+      .map(normalizePath)
+      .filter((path) => path.startsWith('assets/') && path.endsWith('.meta'))
+      .sort()
+  }
+  const assetRoot = join(projectRoot, 'assets')
+  if (!existsSync(assetRoot)) return []
+  return walk(assetRoot)
+    .map((path) => normalizePath(relative(projectRoot, path)))
+    .filter((path) => path.endsWith('.meta'))
+    .sort()
 }
 
 export function findCreatorCommand(candidates = defaultCreatorCandidates) {

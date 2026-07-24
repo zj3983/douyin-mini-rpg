@@ -27,7 +27,7 @@ async function loadController() {
       searchedRoomIds: [],
       carriedLoot: [],
     })
-    export const extractRun = () => ({ ok: false, loot: [] })
+    export const extractRun = () => globalThis.__dungeonExtractionResult ?? ({ ok: false, loot: [] })
   `)
   const interactionUrl = moduleUrl(`
     export const interactDungeonRun = () => globalThis.__dungeonInteractionResults.shift()
@@ -49,17 +49,27 @@ async function loadController() {
   return import(moduleUrl(javascript))
 }
 
-test('throwing dungeon observers cannot change interaction results or block later notifications', async () => {
+test('throwing presentation and analytics observers cannot change committed interaction results', async () => {
   const { DungeonRunController } = await loadController()
   const controller = new DungeonRunController()
   const attempted = []
+  const timeline = []
   controller.node = {
     emit(eventName) {
       attempted.push(eventName)
+      timeline.push(`analytics:${eventName}`)
       throw new Error(`observer failed for ${eventName}`)
     },
   }
   controller.profileData = { json: {} }
+  const presentationChanges = []
+  controller.onRunChanged = (snapshot, change) => {
+    presentationChanges.push({ hasSnapshot: snapshot !== null, type: change.type })
+    timeline.push(`presentation:${change.type}`)
+    if (snapshot) snapshot.doorCurrency = 999
+    if (change.type === 'searched' && change.loot[0]) change.loot[0].amount = 999
+    throw new Error(`presentation failed for ${change.type}`)
+  }
   assert.equal(controller.begin(1), true)
 
   const searched = { type: 'searched', roomId: 'entry', loot: [{ itemId: 'ore', amount: 1 }], doorCurrencyGranted: 1 }
@@ -68,6 +78,30 @@ test('throwing dungeon observers cannot change interaction results or block late
 
   assert.deepEqual(controller.interact(), searched)
   assert.deepEqual(controller.interact(), moved)
-  assert.deepEqual(attempted, ['dungeon-run-began', 'dungeon-loot-found', 'dungeon-room-changed'])
+  assert.deepEqual(searched.loot, [{ itemId: 'ore', amount: 1 }])
+  assert.equal(controller.cancelRun(), true)
+  assert.equal(controller.begin(2), true)
+  globalThis.__dungeonExtractionResult = { ok: true, loot: [{ itemId: 'ore', amount: 1 }] }
+  controller.onExtractionRequested = () => true
+  assert.equal(controller.extract(), true)
+  assert.deepEqual(attempted, [
+    'dungeon-run-began',
+    'dungeon-loot-found',
+    'dungeon-room-changed',
+    'dungeon-run-began',
+    'dungeon-extracted',
+  ])
+  assert.deepEqual(presentationChanges, [
+    { hasSnapshot: true, type: 'began' },
+    { hasSnapshot: true, type: 'searched' },
+    { hasSnapshot: true, type: 'moved' },
+    { hasSnapshot: false, type: 'cancelled' },
+    { hasSnapshot: true, type: 'began' },
+    { hasSnapshot: false, type: 'extracted' },
+  ])
+  assert.ok(timeline.indexOf('presentation:searched') < timeline.indexOf('analytics:dungeon-loot-found'))
+  assert.ok(timeline.indexOf('presentation:moved') < timeline.indexOf('analytics:dungeon-room-changed'))
+  assert.ok(timeline.indexOf('presentation:extracted') < timeline.indexOf('analytics:dungeon-extracted'))
   delete globalThis.__dungeonInteractionResults
+  delete globalThis.__dungeonExtractionResult
 })

@@ -38,6 +38,19 @@ function cloneRun(run: DungeonRun): DungeonRun {
   }
 }
 
+export type DungeonRunPresentationChange =
+  | { readonly type: 'began' }
+  | { readonly type: 'cancelled' }
+  | { readonly type: 'extracted' }
+  | Extract<DungeonInteractionResult, { type: 'searched' | 'moved' }>
+
+function clonePresentationChange(change: DungeonRunPresentationChange): DungeonRunPresentationChange {
+  if (change.type === 'searched') {
+    return { ...change, loot: change.loot.map((item) => ({ ...item })) }
+  }
+  return { ...change }
+}
+
 @ccclass('DungeonRunController')
 export class DungeonRunController extends Component {
   @property(JsonAsset)
@@ -49,6 +62,8 @@ export class DungeonRunController extends Component {
   private run: DungeonRun | null = null
 
   onExtractionRequested: ((payload: DungeonExtractionEvent) => boolean) | null = null
+
+  onRunChanged: ((snapshot: DungeonRun | null, change: DungeonRunPresentationChange) => void) | null = null
 
   hasRun() {
     return this.run !== null
@@ -80,6 +95,7 @@ export class DungeonRunController extends Component {
 
     this.run = nextRun
     this.refreshRoomLabel()
+    this.notifyPresentationBestEffort({ type: 'began' })
     this.emitBestEffort('dungeon-run-began', {
       runId: nextRun.id,
       roomId: nextRun.currentRoomId,
@@ -91,6 +107,7 @@ export class DungeonRunController extends Component {
     if (!this.run) return false
     this.run = null
     this.refreshRoomLabel()
+    this.notifyPresentationBestEffort({ type: 'cancelled' })
     return true
   }
 
@@ -102,11 +119,13 @@ export class DungeonRunController extends Component {
     if (!this.run) return null
     const result = interactDungeonRun(this.run)
     if (result.type === 'searched') {
+      this.notifyPresentationBestEffort(result)
       if (result.loot.length > 0) {
         this.emitBestEffort('dungeon-loot-found', result.loot.map((item) => ({ ...item })))
       }
     } else if (result.type === 'moved') {
       this.refreshRoomLabel()
+      this.notifyPresentationBestEffort(result)
       this.emitBestEffort('dungeon-room-changed', { roomId: result.roomId })
     } else if (result.type === 'extraction-requested') {
       this.extract()
@@ -142,6 +161,7 @@ export class DungeonRunController extends Component {
     if (this.run !== run) return false
     this.run = null
     this.refreshRoomLabel()
+    this.notifyPresentationBestEffort({ type: 'extracted' })
     const notification: DungeonExtractionEvent = {
       runId: request.runId,
       loot: request.loot.map((item) => ({ ...item })),
@@ -158,6 +178,17 @@ export class DungeonRunController extends Component {
     if (this.roomLabel) this.roomLabel.string = this.run?.currentRoomId ?? ''
   }
 
+  private notifyPresentationBestEffort(change: DungeonRunPresentationChange) {
+    const callback = this.onRunChanged
+    if (!callback) return
+    const notification = {
+      snapshot: this.getRunSnapshot(),
+      change: clonePresentationChange(change),
+    }
+    notifyBestEffort([notification], (item) => callback(item.snapshot, item.change))
+  }
+
+  // Analytics observers are optional; presentation is delivered through onRunChanged.
   private emitBestEffort(eventName: string, ...args: unknown[]) {
     notifyBestEffort([{ eventName, args }], (notification) => {
       this.node.emit(notification.eventName, ...notification.args)
