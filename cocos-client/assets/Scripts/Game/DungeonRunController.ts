@@ -10,6 +10,7 @@ import type {
   DungeonProfile,
   DungeonRun,
 } from '../Core/Dungeon/DungeonTypes.ts'
+import { notifyBestEffort } from '../Core/Progression/BestEffortNotification.ts'
 
 const { ccclass, property } = _decorator
 
@@ -79,14 +80,10 @@ export class DungeonRunController extends Component {
 
     this.run = nextRun
     this.refreshRoomLabel()
-    try {
-      this.node.emit('dungeon-run-began', {
-        runId: nextRun.id,
-        roomId: nextRun.currentRoomId,
-      })
-    } catch {
-      // Observers cannot invalidate an installed run.
-    }
+    this.emitBestEffort('dungeon-run-began', {
+      runId: nextRun.id,
+      roomId: nextRun.currentRoomId,
+    })
     return true
   }
 
@@ -106,11 +103,11 @@ export class DungeonRunController extends Component {
     const result = interactDungeonRun(this.run)
     if (result.type === 'searched') {
       if (result.loot.length > 0) {
-        this.node.emit('dungeon-loot-found', result.loot.map((item) => ({ ...item })))
+        this.emitBestEffort('dungeon-loot-found', result.loot.map((item) => ({ ...item })))
       }
     } else if (result.type === 'moved') {
       this.refreshRoomLabel()
-      this.node.emit('dungeon-room-changed', { roomId: result.roomId })
+      this.emitBestEffort('dungeon-room-changed', { roomId: result.roomId })
     } else if (result.type === 'extraction-requested') {
       this.extract()
     }
@@ -149,10 +146,7 @@ export class DungeonRunController extends Component {
       runId: request.runId,
       loot: request.loot.map((item) => ({ ...item })),
     }
-    try {
-      this.node.emit('dungeon-extracted', notification)
-    } catch {
-    }
+    this.emitBestEffort('dungeon-extracted', notification)
     return true
   }
 
@@ -162,6 +156,12 @@ export class DungeonRunController extends Component {
 
   private refreshRoomLabel() {
     if (this.roomLabel) this.roomLabel.string = this.run?.currentRoomId ?? ''
+  }
+
+  private emitBestEffort(eventName: string, ...args: unknown[]) {
+    notifyBestEffort([{ eventName, args }], (notification) => {
+      this.node.emit(notification.eventName, ...notification.args)
+    })
   }
 
   private restoreExtraction(run: DungeonRun) {

@@ -5,6 +5,7 @@ import { createViewportMetricsProvider } from '../assets/Scripts/Game/ViewportMe
 
 const selectBattleResolution = battleLayout.selectBattleResolution
 const computeBattleViewportState = battleLayout.computeBattleViewportState
+const computeDungeonEntryNavLayout = battleLayout.computeDungeonEntryNavLayout
 
 test('portrait viewports keep the fixed-width dynamic-height policy', () => {
   assert.equal(typeof selectBattleResolution, 'function')
@@ -18,6 +19,31 @@ test('portrait viewports keep the fixed-width dynamic-height policy', () => {
     mode: 'fixed-width',
   })
   assert.strictEqual(second, first)
+})
+
+test('dungeon entry label and status have stable nonoverlapping bounds above the safe nav edge', () => {
+  assert.equal(typeof computeDungeonEntryNavLayout, 'function')
+  for (const viewport of [
+    { cssWidth: 390, cssHeight: 844, bottomInsetPx: 34 },
+    { cssWidth: 430, cssHeight: 932, bottomInsetPx: 21 },
+    { cssWidth: 750, cssHeight: 1334, bottomInsetPx: 0 },
+  ]) {
+    const layout = battleLayout.computeBattleLayout({
+      designWidth: 750,
+      topInsetPx: 0,
+      ...viewport,
+    })
+    const entry = computeDungeonEntryNavLayout(layout.navigationTop)
+    const visibleBottom = -layout.visibleHeight / 2
+
+    assert.equal(entry.navigation.maxY, layout.navigationTop)
+    assert.ok(entry.navigation.minY > visibleBottom)
+    assert.ok(entry.label.minY >= entry.navigation.minY)
+    assert.ok(entry.label.maxY <= entry.navigation.maxY)
+    assert.ok(entry.status.minY >= entry.navigation.maxY)
+    assert.ok(entry.label.maxY < entry.status.minY)
+    assert.ok(entry.status.maxY < layout.actorSafeRect.maxY)
+  }
 })
 
 test('landscape viewports show the complete portrait battle canvas', () => {

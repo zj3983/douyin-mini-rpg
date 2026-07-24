@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { join, relative, resolve, sep } from 'node:path'
 
@@ -9,7 +9,7 @@ const defaultCreatorCandidates = [
   'D:/CocosDashboard/editors/Creator/3.8.8/CocosCreator.exe',
 ]
 
-const requiredDualModeAssets = [
+export const requiredDualModeAssets = [
   'assets/Scenes/MainBattle.scene',
   'assets/Scenes/MainBattle.scene.meta',
   'assets/Data/scene-blueprint.json',
@@ -46,11 +46,22 @@ const requiredDualModeAssets = [
   'assets/Scripts/Game/DualModeGameController.ts.meta',
 ]
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function metaConvention(path) {
+  if (path.endsWith('.scene.meta')) return { importer: 'scene', ver: '1.1.50' }
+  if (path.endsWith('.json.meta')) return { importer: 'json', ver: '2.0.1' }
+  if (path.endsWith('.ts.meta')) return { importer: 'typescript', ver: '4.0.24' }
+  return { importer: 'directory', ver: '1.2.0' }
+}
+
 export function checkCocosBuildReadiness(options = {}) {
   const projectRoot = options.projectRoot ?? process.cwd()
   const files = options.files ?? null
   const creatorCommand = options.creatorCommand ?? process.env.COCOS_CREATOR_PATH ?? findCreatorCommand()
   const buildRoot = options.buildRoot ? resolve(options.buildRoot) : null
+  const readFile = options.readFile
+    ?? (files ? () => undefined : (path) => readFileSync(join(projectRoot, ...path.split('/')), 'utf8'))
   const blockers = []
 
   if (!creatorCommand) {
@@ -67,6 +78,34 @@ export function checkCocosBuildReadiness(options = {}) {
 
   for (const asset of requiredDualModeAssets) {
     if (!hasPath(projectRoot, asset, files)) blockers.push(`${asset} is missing from the Cocos import contract.`)
+  }
+
+  const metaUuidOwners = new Map()
+  for (const asset of requiredDualModeAssets) {
+    const isRequiredJson = asset.endsWith('.scene') || asset.endsWith('.json') || asset.endsWith('.meta')
+    if (!isRequiredJson || !hasPath(projectRoot, asset, files)) continue
+    let parsed
+    try {
+      const contents = readFile(asset)
+      if (typeof contents !== 'string') throw new TypeError('required JSON contents are unavailable')
+      parsed = JSON.parse(contents)
+    } catch {
+      blockers.push(`${asset} contains malformed JSON or could not be read.`)
+      continue
+    }
+    if (!asset.endsWith('.meta')) continue
+
+    if (typeof parsed.uuid !== 'string' || !UUID_PATTERN.test(parsed.uuid)) {
+      blockers.push(`${asset} has a missing or invalid UUID.`)
+    } else if (metaUuidOwners.has(parsed.uuid)) {
+      blockers.push(`${asset} has duplicate required meta UUID ${parsed.uuid} also used by ${metaUuidOwners.get(parsed.uuid)}.`)
+    } else {
+      metaUuidOwners.set(parsed.uuid, asset)
+    }
+    const expected = metaConvention(asset)
+    if (parsed.importer !== expected.importer || parsed.ver !== expected.ver) {
+      blockers.push(`${asset} must use importer ${expected.importer} version ${expected.ver}.`)
+    }
   }
 
   const hasBuildIndex = buildRoot

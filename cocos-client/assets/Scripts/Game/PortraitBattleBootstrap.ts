@@ -31,6 +31,7 @@ import {
   PLAYER_DISPLAY_SCALE,
   PLAYER_FRAME_HEIGHT,
   PLAYER_FRAME_WIDTH,
+  computeDungeonEntryNavLayout,
   computeBattleViewportState,
 } from '../Combat/BattleLayout.ts'
 import type { BattleLayout, BattleResolutionMode } from '../Combat/BattleLayout.ts'
@@ -657,7 +658,8 @@ export class PortraitBattleBootstrap extends Component {
 
     const bottomNavigation = this.createNode('BottomNavigation', parent, WIDTH, NAV_HEIGHT)
     this.bottomNavigation = bottomNavigation
-    bottomNavigation.setPosition(0, layout.navigationTop - NAV_HEIGHT / 2, 0)
+    const dungeonEntryLayout = computeDungeonEntryNavLayout(layout.navigationTop)
+    bottomNavigation.setPosition(0, dungeonEntryLayout.navigation.centerY, 0)
     this.drawBand(bottomNavigation, WIDTH, NAV_HEIGHT, new Color(12, 22, 25, 238))
     const navLabels = ['战斗', '副本', '抽卡', '装备', '背包', '法宝']
     navLabels.forEach((text, index) => {
@@ -671,12 +673,15 @@ export class PortraitBattleBootstrap extends Component {
         dungeonEntryNode.addComponent(Button)
         dungeonEntryNode.on(Button.EventType.CLICK, this.enterDungeonFromWorld, this)
       }
-      const label = this.createLabel(`Nav${index + 1}`, parentNode, text, 23, 125, NAV_HEIGHT)
-      label.node.setPosition(index === 1 ? 0 : -312.5 + index * 125, index === 1 ? 8 : 0, 0)
+      const labelHeight = index === 1 ? dungeonEntryLayout.label.height : NAV_HEIGHT
+      const label = this.createLabel(`Nav${index + 1}`, parentNode, text, 23, 125, labelHeight)
+      const labelY = index === 1 ? dungeonEntryLayout.label.centerY - dungeonEntryLayout.navigation.centerY : 0
+      label.node.setPosition(index === 1 ? 0 : -312.5 + index * 125, labelY, 0)
       label.color = index === 0 ? new Color(230, 199, 112, 255) : new Color(205, 215, 211, 255)
       if (index === 1) {
         this.worldDungeonStatusLabel = this.createLabel('DungeonEntryStatusLabel', parentNode, '', 14, 121, 26)
-        this.worldDungeonStatusLabel.node.setPosition(0, -31, 0)
+        const statusY = dungeonEntryLayout.status.centerY - dungeonEntryLayout.navigation.centerY
+        this.worldDungeonStatusLabel.node.setPosition(0, statusY, 0)
         this.worldDungeonStatusLabel.color = new Color(241, 169, 104, 255)
       }
     })

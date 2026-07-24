@@ -97,18 +97,26 @@ test('dual-mode Cocos controllers delegate progression and dungeon rules to Core
   assert.match(dungeon, /Core\/Dungeon\/DungeonSession/)
   assert.match(dungeon, /Core\/Dungeon\/DungeonInteraction/)
   assert.match(dungeon, /Core\/Dungeon\/DungeonTypes/)
+  assert.match(dungeon, /Core\/Progression\/BestEffortNotification/)
   assert.doesNotMatch(dungeon, /CultivationRuntime|resolveDungeonFloor/)
   assert.doesNotMatch(dungeon, /\.\.\/Combat\//)
   assert.match(dungeon, /@property\(JsonAsset\)\s*profileData/)
   assert.match(dungeon, /@property\(Label\)\s*roomLabel/)
   assert.match(dungeon, /createDungeonSession\(/)
-  assert.match(dungeon, /emit\('dungeon-run-began'/)
+  assert.match(dungeon, /emitBestEffort\('dungeon-run-began'/)
   assert.match(dungeon, /interactDungeonRun\(this\.run\)/)
   assert.doesNotMatch(dungeon, /grantDoorCurrency|doorCurrency\s*[+\-*/]?=/)
   assert.match(dungeon, /extractRun\(/)
-  assert.match(dungeon, /emit\('dungeon-room-changed'/)
-  assert.match(dungeon, /emit\('dungeon-loot-found'/)
-  assert.match(dungeon, /emit\('dungeon-extracted'/)
+  assert.match(dungeon, /emitBestEffort\('dungeon-room-changed'/)
+  assert.match(dungeon, /emitBestEffort\('dungeon-loot-found'/)
+  assert.match(dungeon, /emitBestEffort\('dungeon-extracted'/)
+  assert.equal(countOccurrences(dungeon, 'this.node.emit('), 1)
+  const safeEmit = extractBlock(dungeon, 'private emitBestEffort(')
+  assert.match(safeEmit, /notifyBestEffort/)
+  assert.match(safeEmit, /this\.node\.emit\(notification\.eventName/)
+  const interact = extractBlock(dungeon, 'interact():')
+  assert.doesNotMatch(interact, /this\.node\.emit/)
+  assertStatementOrder(interact, ['const result = interactDungeonRun(this.run)', 'this.emitBestEffort', 'return result'])
 
   assert.match(dualMode, /Core\/Progression\/DualModeRuntime/)
   assert.match(dualMode, /Core\/Progression\/SaveRepository/)
@@ -141,13 +149,12 @@ test('dungeon begin commits before best-effort observer notification', () => {
     'nextRun = createDungeonSession',
     'this.run = nextRun',
     'this.refreshRoomLabel()',
-    "this.node.emit('dungeon-run-began'",
+    "this.emitBestEffort('dungeon-run-began'",
     'return true',
   ])
   const committed = begin.slice(begin.indexOf('this.run = nextRun'))
-  const notification = extractBlock(committed, 'try {')
-  assert.match(notification, /this\.node\.emit\('dungeon-run-began'/)
-  assert.doesNotMatch(notification, /return false/)
+  assert.match(committed, /this\.emitBestEffort\('dungeon-run-began'/)
+  assert.doesNotMatch(committed.slice(committed.indexOf('this.emitBestEffort')), /return false/)
 })
 
 test('dungeon extraction uses a direct authority callback and isolates post-commit notifications', () => {
@@ -165,7 +172,7 @@ test('dungeon extraction uses a direct authority callback and isolates post-comm
   assert.match(extract, /try\s*{[\s\S]*onExtractionRequested\(request\)[\s\S]*}\s*catch\s*{[\s\S]*restoreExtraction\(run\)[\s\S]*return false/)
   assert.match(extract, /if \(!accepted\)[\s\S]*restoreExtraction\(run\)[\s\S]*return false/)
   assert.match(extract, /const notification:[\s\S]*loot: request\.loot\.map/)
-  assert.match(extract, /try\s*{[\s\S]*this\.node\.emit\('dungeon-extracted', notification\)[\s\S]*}\s*catch\s*{\s*}/)
+  assert.match(extract, /this\.emitBestEffort\('dungeon-extracted', notification\)/)
   assertStatementOrder(extract, [
     'const run = this.run',
     'const result = extractRun(run)',
@@ -175,7 +182,7 @@ test('dungeon extraction uses a direct authority callback and isolates post-comm
     'this.run = null',
     'this.refreshRoomLabel()',
     'const notification:',
-    "this.node.emit('dungeon-extracted', notification)",
+    "this.emitBestEffort('dungeon-extracted', notification)",
     'return true',
   ])
 })
