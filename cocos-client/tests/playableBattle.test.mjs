@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import * as swordRuntime from '../tools/homing-sword-runtime.mjs'
 import * as battleRuntime from '../tools/battle-runtime.mjs'
+import { actionCompleted, actionDuration, markersCrossed } from '../tools/animation-event-runtime.mjs'
 import {
   createPlayerMotor,
   requestMove,
@@ -266,22 +267,166 @@ test('atlas animator owns and reuses cached action frames until destruction', ()
   assert.match(source, /this\.frameCache\.clear\(\)/)
 })
 
-test('atlas animator emits deterministic markers and one completion before frame-cache early exits', () => {
+function advanceAtlasHarness(state, elapsedDelta, callbacks = {}) {
+  const previousElapsed = state.elapsed
+  state.elapsed += elapsedDelta
+  const action = state.action
+  const actorId = state.actorId
+  const generation = state.generation
+  const duration = actionDuration(action.frameCount, action.fps)
+  const crossedMarkers = markersCrossed({
+    previousElapsed,
+    elapsed: state.elapsed,
+    duration,
+    loop: action.loop,
+    markers: action.events,
+    maxCatchUpCycles: 2,
+  })
+  const completed = !state.completionEmitted && actionCompleted({
+    previousElapsed,
+    elapsed: state.elapsed,
+    duration,
+    loop: action.loop,
+  })
+
+  state.frameIndex = Math.min(action.frameCount - 1, Math.floor(state.elapsed * action.fps))
+  if (completed) {
+    state.completionEmitted = true
+    state.playing = false
+  }
+
+  const contextCurrent = () => !state.destroyed
+    && state.nodeValid
+    && state.generation === generation
+    && state.action === action
+
+  for (const marker of crossedMarkers) {
+    callbacks.marker?.({ actorId, action: action.name, marker: marker.name, normalizedTime: marker.at }, state)
+    if (!contextCurrent()) return
+  }
+  if (completed) {
+    callbacks.complete?.({ actorId, action: action.name }, state)
+    if (!contextCurrent()) return
+  }
+}
+
+const atlasHarnessState = (overrides = {}) => ({
+  actorId: 'qinglan',
+  action: {
+    name: 'cast',
+    frameCount: 4,
+    fps: 4,
+    loop: false,
+    events: [{ name: 'release', at: 0.25 }],
+  },
+  generation: 7,
+  elapsed: 0,
+  frameIndex: 0,
+  playing: true,
+  completionEmitted: false,
+  destroyed: false,
+  nodeValid: true,
+  ...overrides,
+})
+
+test('atlas animator transition harness rejects stale writes after marker callbacks', () => {
+  for (const mutate of [
+    (state) => { state.generation += 1; state.action = null; state.playing = false },
+    (state) => { state.generation += 1; state.actorId = 'moss-wolf'; state.action = null },
+    (state) => { state.generation += 1; state.destroyed = true; state.nodeValid = false },
+  ]) {
+    const state = atlasHarnessState({
+      action: {
+        name: 'cast',
+        frameCount: 8,
+        fps: 8,
+        loop: false,
+        events: [{ name: 'first', at: 0.2 }, { name: 'second', at: 0.4 }],
+      },
+    })
+    const seen = []
+    advanceAtlasHarness(state, 0.75, {
+      marker(payload, liveState) {
+        seen.push(payload.marker)
+        mutate(liveState)
+      },
+    })
+    assert.deepEqual(seen, ['first'])
+  }
+})
+
+test('atlas animator transition harness preserves cached play started by completion callback', () => {
+  const state = atlasHarnessState()
+  const cachedAction = { name: 'move', frameCount: 6, fps: 12, loop: true, events: [] }
+
+  advanceAtlasHarness(state, 1, {
+    complete(payload, liveState) {
+      assert.deepEqual(payload, { actorId: 'qinglan', action: 'cast' })
+      liveState.generation += 1
+      liveState.action = cachedAction
+      liveState.elapsed = 0
+      liveState.frameIndex = 0
+      liveState.playing = true
+      liveState.completionEmitted = false
+    },
+  })
+
+  assert.equal(state.action, cachedAction)
+  assert.equal(state.playing, true)
+  assert.equal(state.frameIndex, 0)
+  assert.equal(state.completionEmitted, false)
+})
+
+test('atlas animator transition harness completes one-frame actions and emits every crossed marker', () => {
+  const state = atlasHarnessState({
+    action: {
+      name: 'seal',
+      frameCount: 1,
+      fps: 2,
+      loop: false,
+      events: [{ name: 'form', at: 0.2 }, { name: 'flash', at: 0.45 }, { name: 'release', at: 0.8 }],
+    },
+  })
+  const markers = []
+  let completions = 0
+
+  advanceAtlasHarness(state, 2, {
+    marker: (payload) => markers.push(payload),
+    complete: () => { completions += 1 },
+  })
+
+  assert.deepEqual(markers, [
+    { actorId: 'qinglan', action: 'seal', marker: 'form', normalizedTime: 0.2 },
+    { actorId: 'qinglan', action: 'seal', marker: 'flash', normalizedTime: 0.45 },
+    { actorId: 'qinglan', action: 'seal', marker: 'release', normalizedTime: 0.8 },
+  ])
+  assert.equal(completions, 1)
+  assert.equal(state.frameIndex, 0)
+  assert.equal(state.playing, false)
+})
+
+test('atlas animator snapshots and commits transition state before synchronous emits', () => {
   const source = read('assets/Scripts/Game/AtlasAnimator.ts')
 
   assert.match(source, /import \{[\s\S]*actionDuration,[\s\S]*actionCompleted,[\s\S]*markersCrossed,[\s\S]*\} from '\.\.\/Core\/AnimationEventRuntime'/)
   assert.match(source, /private completionEmitted = false/)
+  assert.match(source, /if \(!this\.playing \|\| !this\.action \|\| this\.frames\.length === 0\) return/)
   assert.match(source, /const previousElapsed = this\.elapsed/)
-  assert.match(source, /markersCrossed\(\{[\s\S]*previousElapsed,[\s\S]*elapsed: this\.elapsed,[\s\S]*duration,[\s\S]*loop: this\.action\.loop,[\s\S]*markers: this\.action\.events \?\? \[\],[\s\S]*maxCatchUpCycles: 2,[\s\S]*\}\)/)
-  assert.match(source, /this\.node\.emit\('atlas-animation-event', \{[\s\S]*actorId: this\.actorId,[\s\S]*action: this\.action\.name,[\s\S]*marker: marker\.name,[\s\S]*normalizedTime: marker\.at,[\s\S]*\}\)/)
-  assert.match(source, /actionCompleted\(\{[\s\S]*previousElapsed,[\s\S]*elapsed: this\.elapsed,[\s\S]*duration,[\s\S]*loop: this\.action\.loop,[\s\S]*\}\)/)
-  assert.match(source, /this\.node\.emit\('atlas-animation-complete', \{[\s\S]*actorId: this\.actorId,[\s\S]*action: this\.action\.name,[\s\S]*\}\)/)
+  assert.match(source, /const action = this\.action[\s\S]*const actorId = this\.actorId[\s\S]*const loadGeneration = this\.loadGeneration/)
+  assert.match(source, /markersCrossed\(\{[\s\S]*previousElapsed,[\s\S]*elapsed: this\.elapsed,[\s\S]*duration,[\s\S]*loop: action\.loop,[\s\S]*markers: action\.events \?\? \[\],[\s\S]*maxCatchUpCycles: 2,[\s\S]*\}\)/)
+  assert.match(source, /actionCompleted\(\{[\s\S]*previousElapsed,[\s\S]*elapsed: this\.elapsed,[\s\S]*duration,[\s\S]*loop: action\.loop,[\s\S]*\}\)/)
+  assert.match(source, /this\.node\.emit\('atlas-animation-event', \{[\s\S]*actorId,[\s\S]*action: action\.name,[\s\S]*marker: marker\.name,[\s\S]*normalizedTime: marker\.at,[\s\S]*\}\)[\s\S]*if \(!this\.isUpdateContextCurrent\(action, loadGeneration\)\) return/)
+  assert.match(source, /this\.node\.emit\('atlas-animation-complete', \{[\s\S]*actorId,[\s\S]*action: action\.name,[\s\S]*\}\)[\s\S]*if \(!this\.isUpdateContextCurrent\(action, loadGeneration\)\) return/)
+  assert.match(source, /private isUpdateContextCurrent\(action: AtlasAction, loadGeneration: number\)/)
 
+  const snapshotIndex = source.indexOf('const action = this.action')
+  const frameCommitIndex = source.indexOf('this.frameIndex = nextFrameIndex')
+  const completionCommitIndex = source.indexOf('this.completionEmitted = true')
   const markerIndex = source.indexOf("this.node.emit('atlas-animation-event'")
   const completionIndex = source.indexOf("this.node.emit('atlas-animation-complete'")
-  const sameFrameReturnIndex = source.indexOf('if (nextFrameIndex === this.frameIndex) return')
-  assert.ok(markerIndex >= 0 && markerIndex < sameFrameReturnIndex)
-  assert.ok(completionIndex >= 0 && completionIndex < sameFrameReturnIndex)
+  assert.ok(snapshotIndex >= 0 && snapshotIndex < frameCommitIndex)
+  assert.ok(frameCommitIndex >= 0 && frameCommitIndex < markerIndex)
+  assert.ok(completionCommitIndex >= 0 && completionCommitIndex < completionIndex)
   assert.ok((source.match(/this\.completionEmitted = false/g) ?? []).length >= 4)
 })
 

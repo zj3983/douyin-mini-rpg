@@ -179,46 +179,65 @@ export class AtlasAnimator extends Component {
     const previousElapsed = this.elapsed
     this.elapsed += timing.elapsedDelta
     this.accumulatedTime = 0
-    const duration = actionDuration(this.action.order.length, this.action.fps)
-    for (const marker of markersCrossed({
+    const action = this.action
+    const actorId = this.actorId
+    const loadGeneration = this.loadGeneration
+    const duration = actionDuration(action.order.length, action.fps)
+    const crossedMarkers = markersCrossed({
       previousElapsed,
       elapsed: this.elapsed,
       duration,
-      loop: this.action.loop,
-      markers: this.action.events ?? [],
+      loop: action.loop,
+      markers: action.events ?? [],
       maxCatchUpCycles: 2,
-    })) {
-      this.node.emit('atlas-animation-event', {
-        actorId: this.actorId,
-        action: this.action.name,
-        marker: marker.name,
-        normalizedTime: marker.at,
-      })
-    }
-
-    if (!this.completionEmitted && actionCompleted({
+    })
+    const completed = !this.completionEmitted && actionCompleted({
       previousElapsed,
       elapsed: this.elapsed,
       duration,
-      loop: this.action.loop,
-    })) {
+      loop: action.loop,
+    })
+    const nextFrameIndex = frameIndexAtTime({
+      elapsed: this.elapsed,
+      framesPerSecond: action.fps,
+      frameCount: action.order.length,
+      loop: action.loop,
+    })
+
+    if (nextFrameIndex !== this.frameIndex) {
+      this.frameIndex = nextFrameIndex
+      this.applyFrame()
+    }
+    if (completed) {
       this.completionEmitted = true
-      this.node.emit('atlas-animation-complete', {
-        actorId: this.actorId,
-        action: this.action.name,
-      })
       this.playing = false
     }
 
-    const nextFrameIndex = frameIndexAtTime({
-      elapsed: this.elapsed,
-      framesPerSecond: this.action.fps,
-      frameCount: this.action.order.length,
-      loop: this.action.loop,
-    })
-    if (nextFrameIndex === this.frameIndex) return
-    this.frameIndex = nextFrameIndex
-    this.applyFrame()
+    for (const marker of crossedMarkers) {
+      this.node.emit('atlas-animation-event', {
+        actorId,
+        action: action.name,
+        marker: marker.name,
+        normalizedTime: marker.at,
+      })
+      if (!this.isUpdateContextCurrent(action, loadGeneration)) return
+    }
+
+    if (completed) {
+      this.node.emit('atlas-animation-complete', {
+        actorId,
+        action: action.name,
+      })
+      if (!this.isUpdateContextCurrent(action, loadGeneration)) return
+    }
+  }
+
+  private isUpdateContextCurrent(action: AtlasAction, loadGeneration: number) {
+    return !this.destroyed
+      && this.isValid
+      && this.node.isValid
+      && this.loadGeneration === loadGeneration
+      && this.action === action
   }
 
   private buildFrames(texture: Texture2D, actorId: string, atlas: string, action: AtlasAction) {
