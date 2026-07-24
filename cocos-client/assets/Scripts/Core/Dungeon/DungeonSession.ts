@@ -84,10 +84,13 @@ export function validateDungeonProfile(profile: DungeonProfile): void {
     if (invalidInteger(room.floor, false)) throw new Error(`Invalid floor in ${room.id}.`)
     if (!Array.isArray(room.exits)) throw new Error(`Dungeon exits are missing in ${room.id}.`)
 
+    const exitTargets = new Set<string>()
     for (const exit of room.exits) {
       if (!exit || typeof exit.to !== 'string' || exit.to.trim().length === 0 || !ids.has(exit.to)) {
         throw new Error(`Broken dungeon exit: ${room.id} -> ${exit && exit.to}`)
       }
+      if (exitTargets.has(exit.to)) throw new Error(`Duplicate dungeon exit target in ${room.id}: ${exit.to}`)
+      exitTargets.add(exit.to)
       if (invalidInteger(exit.cost, true)) throw new Error(`Invalid door cost in ${room.id}.`)
     }
 

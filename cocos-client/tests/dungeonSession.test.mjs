@@ -183,6 +183,13 @@ test('profile validation rejects reachable rooms with no path to extraction', ()
   assert.throws(() => validateDungeonProfile(profile), /path to the extraction/i)
 })
 
+test('profile validation rejects duplicate exit targets with ambiguous costs', () => {
+  const profile = makeProfile()
+  profile.rooms[0].exits.push({ to: 'f1-store', cost: 5 })
+
+  assert.throws(() => validateDungeonProfile(profile), /duplicate.*exit/i)
+})
+
 test('session seeds must be uint32 integers', () => {
   for (const seed of [Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5, 4294967296]) {
     assert.throws(() => createDungeonSession(makeProfile(), seed), /seed/i)
