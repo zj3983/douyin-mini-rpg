@@ -2,6 +2,15 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { validateLoadout } from '../assets/Scripts/Core/Loadout/LoadoutRules.ts'
 
+test('empty default loadout is valid', () => {
+  const result = validateLoadout({
+    active: [],
+    relics: [],
+  })
+
+  assert.deepEqual(result, { ok: true })
+})
+
 test('one active artifact and zero relics is valid', () => {
   const result = validateLoadout({
     active: ['flying-sword'],
