@@ -1291,3 +1291,293 @@ print("runtime folder boundaries enforced")
     rmSync(tempRoot, { recursive: true, force: true })
   }
 })
+
+test('committed cleanup failures retry cleanup without rolling back installed targets', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'vertical-slice-commit-cleanup-'))
+  try {
+    const script = String.raw`
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+temp = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("builder", root / "tools/build-vertical-slice-atlases.py")
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+
+runtime = temp / "runtime"
+sources = temp / "sources"
+replacements = []
+for name in ("Alpha", "Beta"):
+    source = sources / name
+    source.mkdir(parents=True)
+    (source / "idle.png").write_bytes(f"new-{name}".encode())
+    target = runtime / "Assets/ActorAtlases" / name
+    target.mkdir(parents=True)
+    (target / "idle.png").write_bytes(f"old-{name}".encode())
+    replacements.append((source, target))
+
+original_remove = builder._remove_path
+failed = {"done": False}
+def fail_one_backup_cleanup(path):
+    path = Path(path)
+    if path.exists() and "promotion-backup" in path.name and "Alpha" in path.name and not failed["done"]:
+        failed["done"] = True
+        raise OSError("injected mixed backup cleanup failure")
+    return original_remove(path)
+
+builder._remove_path = fail_one_backup_cleanup
+try:
+    try:
+        builder._commit_journaled_replacements(replacements, runtime)
+    except RuntimeError as error:
+        assert "cleanup" in str(error).lower(), error
+    else:
+        raise AssertionError("cleanup failure was not surfaced")
+finally:
+    builder._remove_path = original_remove
+
+for name in ("Alpha", "Beta"):
+    assert (runtime / "Assets/ActorAtlases" / name / "idle.png").read_bytes() == f"new-{name}".encode()
+journal_path = builder._promotion_journal_path(runtime)
+journal = json.loads(journal_path.read_text(encoding="utf-8"))
+assert journal["state"] == "cleanup-failed"
+builder.recover_incomplete_promotion(runtime)
+assert not journal_path.exists()
+for name in ("Alpha", "Beta"):
+    assert (runtime / "Assets/ActorAtlases" / name / "idle.png").read_bytes() == f"new-{name}".encode()
+print("committed cleanup converged")
+`
+    assert.match(runPython(script, [tempRoot]), /committed cleanup converged/)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('rollback progress converges after a transient entry failure', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'vertical-slice-rollback-progress-'))
+  try {
+    const script = String.raw`
+import importlib.util
+import json
+import os
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+temp = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("builder", root / "tools/build-vertical-slice-atlases.py")
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+
+runtime = temp / "runtime"
+replacements = []
+for name in ("Alpha", "Beta"):
+    source = temp / "sources" / name
+    source.mkdir(parents=True)
+    (source / "idle.png").write_bytes(f"new-{name}".encode())
+    target = runtime / "Assets/ActorAtlases" / name
+    target.mkdir(parents=True)
+    (target / "idle.png").write_bytes(f"old-{name}".encode())
+    replacements.append((source, target))
+
+try:
+    builder._commit_journaled_replacements(
+        replacements, runtime,
+        fault_after_replacement=2,
+        simulate_interruption=True,
+    )
+except BaseException:
+    pass
+else:
+    raise AssertionError("interrupted transaction was not left for recovery")
+
+original_copytree = builder.shutil.copytree
+failed = {"done": False}
+def fail_one_restore(source, target, *args, **kwargs):
+    if "promotion-backup" in Path(source).name and "Alpha" in Path(source).name and not failed["done"]:
+        failed["done"] = True
+        raise OSError("transient restore failure")
+    return original_copytree(source, target, *args, **kwargs)
+builder.shutil.copytree = fail_one_restore
+try:
+    try:
+        builder.recover_incomplete_promotion(runtime)
+    except RuntimeError as error:
+        assert "transient restore failure" in str(error), error
+    else:
+        raise AssertionError("transient rollback failure was not surfaced")
+finally:
+    builder.shutil.copytree = original_copytree
+
+journal_path = builder._promotion_journal_path(runtime)
+journal = json.loads(journal_path.read_text(encoding="utf-8"))
+assert journal["state"] == "recovery-failed"
+assert any(entry["state"] == "rolled-back" for entry in journal["entries"])
+builder.recover_incomplete_promotion(runtime)
+assert not journal_path.exists()
+for name in ("Alpha", "Beta"):
+    assert (runtime / "Assets/ActorAtlases" / name / "idle.png").read_bytes() == f"old-{name}".encode()
+print("rollback progress converged")
+`
+    assert.match(runPython(script, [tempRoot]), /rollback progress converged/)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('journal validation rejects external paths before touching them', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'vertical-slice-journal-trust-'))
+  try {
+    const script = String.raw`
+import copy
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+temp = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("builder", root / "tools/build-vertical-slice-atlases.py")
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+
+runtime = temp / "project/runtime"
+source = temp / "project/source/Alpha"
+source.mkdir(parents=True)
+(source / "idle.png").write_bytes(b"new")
+target = runtime / "Assets/ActorAtlases/Alpha"
+target.mkdir(parents=True)
+(target / "idle.png").write_bytes(b"old")
+try:
+    builder._commit_journaled_replacements(
+        [(source, target)], runtime,
+        fault_after_replacement=1,
+        simulate_interruption=True,
+    )
+except BaseException:
+    pass
+journal_path = builder._promotion_journal_path(runtime)
+valid = json.loads(journal_path.read_text(encoding="utf-8"))
+assert valid["version"] >= 2
+assert valid["token"]
+assert valid["allowedTargets"] == [valid["entries"][0]["target"]]
+
+outside = temp / "outside-sentinel.txt"
+outside.write_bytes(b"do-not-touch")
+outside_stage = temp / "outside-stage.txt"
+outside_stage.write_bytes(b"stage-do-not-touch")
+outside_backup = temp / "outside-backup.txt"
+outside_backup.write_bytes(b"backup-do-not-touch")
+baseline = (outside.read_bytes(), outside_stage.read_bytes(), outside_backup.read_bytes())
+
+tamperers = [
+    lambda data: data.update(version=999),
+    lambda data: data.update(runtimeRoot=str(temp / "wrong-runtime")),
+    lambda data: data.update(token="../bad"),
+    lambda data: data["entries"][0].update(target=str(outside)),
+    lambda data: data["entries"][0].update(staged=str(outside_stage)),
+    lambda data: data["entries"][0].update(backup=str(outside_backup)),
+]
+for tamper in tamperers:
+    data = copy.deepcopy(valid)
+    tamper(data)
+    journal_path.write_text(json.dumps(data), encoding="utf-8")
+    try:
+        builder.recover_incomplete_promotion(runtime)
+    except (RuntimeError, ValueError):
+        pass
+    else:
+        raise AssertionError("tampered journal was accepted")
+    assert (outside.read_bytes(), outside_stage.read_bytes(), outside_backup.read_bytes()) == baseline
+    assert target.exists()
+
+journal_path.write_text(json.dumps(valid), encoding="utf-8")
+builder.recover_incomplete_promotion(runtime)
+assert (target / "idle.png").read_bytes() == b"old"
+print("journal trust boundary enforced")
+`
+    assert.match(runPython(script, [tempRoot]), /journal trust boundary enforced/)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('copy and initial journal write failures remove every partial staging path', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'vertical-slice-staging-cleanup-'))
+  try {
+    const script = String.raw`
+import importlib.util
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+temp = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("builder", root / "tools/build-vertical-slice-atlases.py")
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+
+runtime = temp / "runtime"
+source = temp / "source.txt"
+source.write_bytes(b"new")
+target = runtime / "Assets/ActorAtlases/Alpha/file.txt"
+target.parent.mkdir(parents=True)
+target.write_bytes(b"old")
+token = "copyfail"
+staged = builder._staging_path_for_target(target, token)
+backup = builder._backup_path_for_target(target, token)
+original_copy2 = builder.shutil.copy2
+def partial_copy_then_fail(source_path, staged_path):
+    Path(staged_path).write_bytes(b"partial")
+    raise OSError("injected copy failure")
+builder.shutil.copy2 = partial_copy_then_fail
+try:
+    try:
+        builder._stage_replacement(source, target, token)
+    except OSError as error:
+        assert "copy failure" in str(error), error
+    else:
+        raise AssertionError("copy failure was not surfaced")
+finally:
+    builder.shutil.copy2 = original_copy2
+assert not staged.exists() and not backup.exists()
+assert target.read_bytes() == b"old"
+
+replacements = []
+for name in ("Alpha", "Beta"):
+    replacement = temp / "sources" / name
+    replacement.mkdir(parents=True)
+    (replacement / "idle.png").write_bytes(f"new-{name}".encode())
+    actor_target = runtime / "Assets/ActorAtlases" / name
+    actor_target.mkdir(parents=True, exist_ok=True)
+    (actor_target / "idle.png").write_bytes(f"old-{name}".encode())
+    replacements.append((replacement, actor_target))
+
+original_write = builder._write_journal
+def fail_initial_journal(path, journal):
+    raise OSError("injected initial journal write failure")
+builder._write_journal = fail_initial_journal
+try:
+    try:
+        builder._commit_journaled_replacements(replacements, runtime)
+    except OSError as error:
+        assert "journal write failure" in str(error), error
+    else:
+        raise AssertionError("initial journal write failure was not surfaced")
+finally:
+    builder._write_journal = original_write
+
+assert not builder._promotion_journal_path(runtime).exists()
+assert not list((runtime / "Assets/ActorAtlases").glob(".*.promotion-stage-*"))
+assert not list((runtime / "Assets/ActorAtlases").glob(".*.promotion-backup-*"))
+for name in ("Alpha", "Beta"):
+    assert (runtime / "Assets/ActorAtlases" / name / "idle.png").read_bytes() == f"old-{name}".encode()
+print("staging failures cleaned")
+`
+    assert.match(runPython(script, [tempRoot]), /staging failures cleaned/)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})

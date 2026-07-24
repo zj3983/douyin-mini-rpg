@@ -5,6 +5,7 @@ import json
 import math
 import os
 import re
+import secrets
 import shutil
 import stat
 import tempfile
@@ -45,6 +46,8 @@ WINDOWS_RESERVED_NAMES = {
     *(f"lpt{index}" for index in range(1, 10)),
 }
 PROMOTION_JOURNAL_NAME = ".animation-promotion-transaction.json"
+PROMOTION_JOURNAL_VERSION = 2
+PROMOTION_TOKEN = re.compile(r"^[0-9a-f]{16}$")
 
 
 class PromotionInterrupted(BaseException):
@@ -791,7 +794,8 @@ def _remove_path(path: Path):
 
 
 def _promotion_journal_path(runtime_output_root):
-    runtime_root = Path(runtime_output_root).resolve()
+    runtime_root = Path(runtime_output_root).absolute()
+    _assert_no_reparse_chain(runtime_root)
     runtime_root.parent.mkdir(parents=True, exist_ok=True)
     return runtime_root.parent / PROMOTION_JOURNAL_NAME
 
@@ -800,11 +804,15 @@ def _write_journal(path: Path, journal):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.write-{next(tempfile._get_candidate_names())}")
-    temporary.write_text(
-        json.dumps(journal, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    os.replace(temporary, path)
+    try:
+        temporary.write_text(
+            json.dumps(journal, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(temporary, path)
+    except Exception:
+        _remove_path(temporary)
+        raise
 
 
 def _staging_path_for_target(target: Path, token: str):
@@ -843,33 +851,135 @@ def _stage_replacement(source: Path, target: Path, token: str):
     backup = _backup_path_for_target(target, token)
     _remove_path(staged)
     _remove_path(backup)
-    if source.is_dir():
-        shutil.copytree(source, staged)
-        kind = "directory"
-    elif source.is_file():
-        shutil.copy2(source, staged)
-        kind = "file"
-    else:
-        raise FileNotFoundError(f"replacement source missing: {source}")
-    _assert_same_replace_volume(staged, target)
+    try:
+        if source.is_dir():
+            shutil.copytree(source, staged)
+            kind = "directory"
+        elif source.is_file():
+            shutil.copy2(source, staged)
+            kind = "file"
+        else:
+            raise FileNotFoundError(f"replacement source missing: {source}")
+        _assert_same_replace_volume(staged, target)
+    except Exception:
+        _remove_path(staged)
+        _remove_path(backup)
+        raise
     return {
-        "target": str(target.resolve()),
-        "staged": str(staged.resolve()),
-        "backup": str(backup.resolve()),
+        "target": str(target.absolute()),
+        "staged": str(staged.absolute()),
+        "backup": str(backup.absolute()),
         "kind": kind,
         "targetExisted": target.exists() or target.is_symlink(),
         "state": "prepared",
     }
 
 
-def _read_promotion_journal(path: Path):
+def _path_key(path: Path):
+    return os.path.normcase(str(Path(path).absolute()))
+
+
+def _runtime_project_root(runtime_root: Path):
+    runtime_root = Path(runtime_root).absolute()
+    if runtime_root.name.casefold() == "resources" and runtime_root.parent.name.casefold() == "assets":
+        return runtime_root.parent.parent
+    return runtime_root.parent
+
+
+def _validate_promotion_journal(journal, runtime_output_root):
+    runtime_root = Path(runtime_output_root).absolute()
+    if not isinstance(journal, dict) or journal.get("version") != PROMOTION_JOURNAL_VERSION:
+        raise RuntimeError("invalid promotion transaction journal version")
+    if _path_key(journal.get("runtimeRoot", "")) != _path_key(runtime_root):
+        raise RuntimeError("promotion transaction runtimeRoot mismatch")
+    token = journal.get("token")
+    if not isinstance(token, str) or not PROMOTION_TOKEN.fullmatch(token):
+        raise RuntimeError("invalid promotion transaction token")
+    state = journal.get("state")
+    if state not in ("prepared", "committed", "cleanup-failed", "recovery-failed"):
+        raise RuntimeError("invalid promotion transaction state")
+    entries = journal.get("entries")
+    allowed_targets = journal.get("allowedTargets")
+    manifest_targets = journal.get("manifestTargets")
+    if not isinstance(entries, list) or not entries:
+        raise RuntimeError("promotion transaction entries must be a non-empty array")
+    if not isinstance(allowed_targets, list) or not isinstance(manifest_targets, list):
+        raise RuntimeError("promotion transaction target whitelists are invalid")
+    if len(set(map(_path_key, allowed_targets))) != len(allowed_targets):
+        raise RuntimeError("promotion transaction allowed targets must be unique")
+
+    project_root = _runtime_project_root(runtime_root)
+    candidate_value = journal.get("candidateRoot")
+    candidate_root = None
+    if candidate_value is not None:
+        candidate_root = Path(candidate_value).absolute()
+        try:
+            candidate_root.relative_to(project_root)
+        except ValueError as error:
+            raise RuntimeError("promotion candidate root must stay inside project root") from error
+        _assert_no_reparse_chain(candidate_root)
+
+    expected_manifest_targets = {
+        _path_key(project_root / "assets" / "Data" / "animation-atlas.json"),
+        _path_key(project_root / "assets" / "resources" / "Data" / "animation-atlas.json"),
+    }
+    manifest_keys = set(map(_path_key, manifest_targets))
+    if manifest_keys and manifest_keys != expected_manifest_targets:
+        raise RuntimeError("promotion manifest target whitelist is invalid")
+
+    entry_target_keys = []
+    runtime_actor_root = runtime_root / "Assets" / "ActorAtlases"
+    valid_states = {
+        "prepared", "backing-up", "backed-up", "installing", "installed", "rolled-back"
+    }
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise RuntimeError("promotion transaction entry must be an object")
+        if entry.get("kind") not in ("file", "directory") or type(entry.get("targetExisted")) is not bool:
+            raise RuntimeError("promotion transaction entry metadata is invalid")
+        if entry.get("state") not in valid_states:
+            raise RuntimeError("promotion transaction entry state is invalid")
+        target = Path(entry.get("target", "")).absolute()
+        staged = Path(entry.get("staged", "")).absolute()
+        backup = Path(entry.get("backup", "")).absolute()
+        target_key = _path_key(target)
+        entry_target_keys.append(target_key)
+        if _path_key(staged) != _path_key(_staging_path_for_target(target, token)):
+            raise RuntimeError("promotion staged path does not match target/token")
+        if _path_key(backup) != _path_key(_backup_path_for_target(target, token)):
+            raise RuntimeError("promotion backup path does not match target/token")
+        if staged.parent != target.parent or backup.parent != target.parent:
+            raise RuntimeError("promotion staging and backup must share target parent")
+
+        is_manifest = target_key in manifest_keys
+        is_runtime_actor = target.parent == runtime_actor_root and bool(PORTABLE_FOLDER.fullmatch(target.name))
+        is_candidate = (
+            candidate_root is not None
+            and target.parent == candidate_root
+            and bool(PORTABLE_ACTOR_ID.fullmatch(target.name))
+        )
+        if sum((is_manifest, is_runtime_actor, is_candidate)) != 1:
+            raise RuntimeError(f"promotion target is outside its whitelist: {target}")
+        if is_manifest and entry["kind"] != "file":
+            raise RuntimeError("promotion manifest target must be a file")
+        if (is_runtime_actor or is_candidate) and entry["kind"] != "directory":
+            raise RuntimeError("promotion actor target must be a directory")
+        for checked in (target, staged, backup):
+            _assert_no_reparse_chain(checked)
+
+    if entry_target_keys != list(map(_path_key, allowed_targets)):
+        raise RuntimeError("promotion allowedTargets must exactly match journal entries")
+    if len(set(entry_target_keys)) != len(entry_target_keys):
+        raise RuntimeError("promotion transaction targets must be unique")
+    return journal
+
+
+def _read_promotion_journal(path: Path, runtime_output_root):
     try:
         journal = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise RuntimeError(f"cannot read promotion transaction journal: {path}") from error
-    if not isinstance(journal, dict) or not isinstance(journal.get("entries"), list):
-        raise RuntimeError(f"invalid promotion transaction journal: {path}")
-    return journal
+    return _validate_promotion_journal(journal, runtime_output_root)
 
 
 def _cleanup_committed_journal(journal_path: Path, journal):
@@ -892,27 +1002,32 @@ def recover_incomplete_promotion(runtime_output_root):
     journal_path = _promotion_journal_path(runtime_output_root)
     if not journal_path.exists():
         return False
-    journal = _read_promotion_journal(journal_path)
-    if journal.get("state") == "committed":
+    journal = _read_promotion_journal(journal_path, runtime_output_root)
+    if journal.get("state") in ("committed", "cleanup-failed"):
         _cleanup_committed_journal(journal_path, journal)
         return True
 
     errors = []
     for entry in reversed(journal["entries"]):
+        if entry.get("state") == "rolled-back":
+            continue
         target = Path(entry["target"])
         staged = Path(entry["staged"])
         backup = Path(entry["backup"])
         try:
             if backup.exists() or backup.is_symlink():
                 _remove_path(target)
-                _assert_same_replace_volume(backup, target)
-                os.replace(backup, target)
+                if backup.is_dir():
+                    shutil.copytree(backup, target)
+                else:
+                    shutil.copy2(backup, target)
             elif entry.get("targetExisted"):
                 if entry.get("state") not in ("prepared", "backing-up") or not target.exists():
                     raise RuntimeError(f"missing backup for mutated target {target}")
             elif entry.get("state") not in ("prepared", "backing-up"):
                 _remove_path(target)
-            _remove_path(staged)
+            entry["state"] = "rolled-back"
+            _write_journal(journal_path, journal)
         except Exception as error:
             errors.append(f"{target}: {error}")
     if errors:
@@ -920,6 +1035,19 @@ def recover_incomplete_promotion(runtime_output_root):
         journal["recoveryErrors"] = errors
         _write_journal(journal_path, journal)
         raise RuntimeError("promotion recovery incomplete: " + "; ".join(errors))
+
+    cleanup_errors = []
+    for entry in journal["entries"]:
+        for key in ("staged", "backup"):
+            try:
+                _remove_path(Path(entry[key]))
+            except Exception as error:
+                cleanup_errors.append(f"{key} {entry[key]}: {error}")
+    if cleanup_errors:
+        journal["state"] = "recovery-failed"
+        journal["recoveryErrors"] = cleanup_errors
+        _write_journal(journal_path, journal)
+        raise RuntimeError("promotion rollback cleanup incomplete: " + "; ".join(cleanup_errors))
     journal_path.unlink(missing_ok=True)
     return True
 
@@ -928,11 +1056,13 @@ def _commit_journaled_replacements(
     replacements,
     runtime_output_root,
     *,
+    candidate_root=None,
+    manifest_targets=(),
     fault_after_replacement=None,
     simulate_interruption=False,
 ):
     recover_incomplete_promotion(runtime_output_root)
-    token = next(tempfile._get_candidate_names())
+    token = secrets.token_hex(8)
     journal_path = _promotion_journal_path(runtime_output_root)
     entries = []
     try:
@@ -943,12 +1073,23 @@ def _commit_journaled_replacements(
             _remove_path(Path(entry["staged"]))
         raise
     journal = {
-        "version": 1,
+        "version": PROMOTION_JOURNAL_VERSION,
         "state": "prepared",
-        "runtimeRoot": str(Path(runtime_output_root).resolve()),
+        "runtimeRoot": str(Path(runtime_output_root).absolute()),
+        "candidateRoot": None if candidate_root is None else str(Path(candidate_root).absolute()),
+        "manifestTargets": [str(Path(target).absolute()) for target in manifest_targets],
+        "allowedTargets": [entry["target"] for entry in entries],
+        "token": token,
         "entries": entries,
     }
-    _write_journal(journal_path, journal)
+    try:
+        _validate_promotion_journal(journal, runtime_output_root)
+        _write_journal(journal_path, journal)
+    except Exception:
+        for entry in entries:
+            _remove_path(Path(entry["staged"]))
+            _remove_path(Path(entry["backup"]))
+        raise
     installed_count = 0
     try:
         for entry in entries:
@@ -976,13 +1117,13 @@ def _commit_journaled_replacements(
                 raise RuntimeError(message)
         journal["state"] = "committed"
         _write_journal(journal_path, journal)
-        _cleanup_committed_journal(journal_path, journal)
     except Exception as error:
         try:
             recover_incomplete_promotion(runtime_output_root)
         except Exception as recovery_error:
             raise RuntimeError(f"{error}; rollback failed: {recovery_error}") from error
         raise
+    _cleanup_committed_journal(journal_path, journal)
 
 
 def build_candidate_actors(data, selected_actor_ids, source_root, candidate_root):
@@ -1246,6 +1387,8 @@ def promote_selected_actors(
         _commit_journaled_replacements(
             replacements,
             runtime_output_root,
+            candidate_root=candidate_root,
+            manifest_targets=(source_manifest_path, resource_manifest_path),
             fault_after_replacement=fault_after_replacement,
             simulate_interruption=simulate_interruption,
         )
