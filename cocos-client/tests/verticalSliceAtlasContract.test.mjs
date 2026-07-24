@@ -99,4 +99,12 @@ test('stage-one runtime manifest is ready for the four production actor packs', 
       assert.ok(actor.actions.some((action) => action.name === actionName), `${actorId}/${actionName}`)
     }
   }
+
+  const qinglan = actors.get('qinglan-sword-cultivator')
+  assert.deepEqual(qinglan.actions.find(({ name }) => name === 'hand_seal').events, [
+    { name: 'seal-formed', at: 0.6 },
+  ])
+  assert.deepEqual(qinglan.actions.find(({ name }) => name === 'cast').events, [
+    { name: 'sword-release', at: 0.42 },
+  ])
 })

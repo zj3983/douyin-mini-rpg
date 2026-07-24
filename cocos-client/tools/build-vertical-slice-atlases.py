@@ -2,7 +2,10 @@
 import argparse
 import json
 import math
+import os
 import re
+import shutil
+import tempfile
 from collections import deque
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from statistics import median
@@ -355,6 +358,7 @@ def write_actor_report(
     atlas_dimensions,
     warnings,
     report_root,
+    status="candidate",
 ):
     actor_id = _validate_actor_id(actor_id)
     report_root = Path(report_root).resolve()
@@ -370,7 +374,7 @@ def write_actor_report(
         for action_name in source_modes
     }
     report = {
-        "status": "candidate",
+        "status": status,
         "actorId": actor_id,
         "sourceModes": source_modes,
         "actions": actions,
@@ -386,15 +390,19 @@ def write_actor_report(
     return report
 
 
-def pack_action(frames, frame_size, max_texture_size=4096):
+def pack_action(frames, frame_size, max_texture_size=2048):
     width, height = _as_size(list(frame_size), "frame_size")
     if not frames:
         raise ValueError("action must contain at least one frame")
+    if width > max_texture_size or height > max_texture_size:
+        raise ValueError(f"action exceeds {max_texture_size} texture size")
     columns = max(1, min(len(frames), max_texture_size // width))
     rows = (len(frames) + columns - 1) // columns
-    if rows * height > max_texture_size:
-        raise ValueError("action exceeds max texture size")
-    atlas = Image.new("RGBA", (columns * width, rows * height), (0, 0, 0, 0))
+    output_width = columns * width
+    output_height = rows * height
+    if output_width > max_texture_size or output_height > max_texture_size:
+        raise ValueError(f"action exceeds {max_texture_size} texture size")
+    atlas = Image.new("RGBA", (output_width, output_height), (0, 0, 0, 0))
     rects = []
     for index, frame in enumerate(frames):
         if frame.size != (width, height):
@@ -429,7 +437,7 @@ def _normalize_action_frames(source_frames, frame_size, anchor):
     return frames
 
 
-def build_actor(source_config, source_root, output_root, report_root=None):
+def build_actor(source_config, source_root, output_root, report_root=None, report_status="candidate"):
     source_root = Path(source_root)
     output_root = Path(output_root)
     actor_id = _validate_actor_id(source_config["id"])
@@ -464,14 +472,21 @@ def build_actor(source_config, source_root, output_root, report_root=None):
         atlas_path = actor_dir / f"{action_name}.png"
         atlas.save(atlas_path)
         relative_atlas = f"Assets/ActorAtlases/{folder}/{action_name}.png"
-        actions.append({
+        action = {
             "name": action_name,
             "atlas": relative_atlas,
             "fps": action_config.get("fps", 8),
             "loop": bool(action_config.get("loop", False)),
             "order": list(range(len(rects))),
             "frames": rects,
-        })
+        }
+        events = action_config.get("events", [])
+        if events:
+            action["events"] = [
+                {"name": event["name"], "at": float(event["time"])}
+                for event in events
+            ]
+        actions.append(action)
 
     actor = {
         "id": actor_id,
@@ -491,6 +506,7 @@ def build_actor(source_config, source_root, output_root, report_root=None):
             atlas_dimensions=atlas_dimensions,
             warnings=[],
             report_root=report_root,
+            status=report_status,
         )
     return actor
 
@@ -534,6 +550,182 @@ def _load_existing_runtime_actors(path: Path):
     if not isinstance(actors, list):
         raise ValueError("existing animation manifest actors must be a list")
     return actors
+
+
+def select_actor_ids(data, requested):
+    actors = data.get("actors", {})
+    if not isinstance(actors, dict) or not actors:
+        raise ValueError("source manifest must define actors")
+    if not requested:
+        return list(actors.keys())
+    if any(not isinstance(actor_id, str) or not actor_id.strip() for actor_id in requested):
+        raise ValueError("selected actor ids must be non-empty")
+    if len(set(requested)) != len(requested):
+        raise ValueError("selected actor ids must not contain duplicates")
+    unknown = [actor_id for actor_id in requested if actor_id not in actors]
+    if unknown:
+        raise ValueError(f"unknown actor ids: {', '.join(unknown)}")
+    return list(requested)
+
+
+def _candidate_actor_root(candidate_root: Path, actor_id: str):
+    actor_id = _validate_actor_id(actor_id)
+    root = Path(candidate_root).resolve()
+    candidate = (root / actor_id).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError as error:
+        raise ValueError("candidate actor path must stay inside candidate root") from error
+    return candidate
+
+
+def _build_actor_candidate(source_config, source_root, actor_root, status="candidate"):
+    actor_root = Path(actor_root)
+    return build_actor(
+        source_config,
+        source_root,
+        actor_root,
+        actor_root / "reports",
+        report_status=status,
+    )
+
+
+def _replace_paths_atomically(replacements):
+    token = next(tempfile._get_candidate_names())
+    applied = []
+    try:
+        for replacement, target in replacements:
+            replacement = Path(replacement)
+            target = Path(target)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            backup = target.with_name(f".{target.name}.backup-{token}")
+            if backup.exists():
+                if backup.is_dir():
+                    shutil.rmtree(backup)
+                else:
+                    backup.unlink()
+            had_target = target.exists()
+            if had_target:
+                os.replace(target, backup)
+            try:
+                os.replace(replacement, target)
+            except Exception:
+                if had_target and backup.exists():
+                    os.replace(backup, target)
+                raise
+            applied.append((target, backup, had_target))
+    except Exception:
+        for target, backup, had_target in reversed(applied):
+            if target.exists():
+                if target.is_dir():
+                    shutil.rmtree(target)
+                else:
+                    target.unlink()
+            if had_target and backup.exists():
+                os.replace(backup, target)
+        raise
+    for _, backup, had_target in applied:
+        if had_target and backup.exists():
+            if backup.is_dir():
+                shutil.rmtree(backup)
+            else:
+                backup.unlink()
+
+
+def build_candidate_actors(data, selected_actor_ids, source_root, candidate_root):
+    selected = select_actor_ids(data, selected_actor_ids)
+    candidate_root = Path(candidate_root)
+    candidate_root.mkdir(parents=True, exist_ok=True)
+    built = []
+    for actor_id in selected:
+        target = _candidate_actor_root(candidate_root, actor_id)
+        stage = Path(tempfile.mkdtemp(prefix=f".{actor_id}-", dir=candidate_root))
+        try:
+            actor = _build_actor_candidate(data["actors"][actor_id], source_root, stage)
+            _replace_paths_atomically([(stage, target)])
+            built.append(actor)
+        except Exception:
+            if stage.exists():
+                shutil.rmtree(stage)
+            raise
+    return built
+
+
+def _manifest_payload(actors):
+    return (json.dumps({
+        "version": 2,
+        "framePacking": "vertical-slice-action-atlases",
+        "actors": actors,
+    }, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+
+
+def promote_selected_actors(
+    data,
+    selected_actor_ids,
+    source_root,
+    candidate_root,
+    runtime_output_root,
+    source_manifest_path,
+    resource_manifest_path,
+):
+    selected = select_actor_ids(data, selected_actor_ids)
+    candidate_root = Path(candidate_root).resolve()
+    candidate_root.parent.mkdir(parents=True, exist_ok=True)
+    transaction = Path(tempfile.mkdtemp(prefix=".animation-promotion-", dir=candidate_root.parent))
+    source_manifest_path = Path(source_manifest_path)
+    resource_manifest_path = Path(resource_manifest_path)
+    runtime_output_root = Path(runtime_output_root)
+    replacements = []
+    try:
+        built = []
+        for actor_id in selected:
+            actor_root = transaction / "candidates" / actor_id
+            actor = _build_actor_candidate(data["actors"][actor_id], source_root, actor_root)
+            report_path = actor_root / "reports" / f"{actor_id}-report.json"
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            if report.get("warnings"):
+                raise ValueError(f"{actor_id} candidate report contains warnings")
+            report["status"] = "approved"
+            report_path.write_text(
+                json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            built.append(actor)
+
+        existing_actors = _load_existing_runtime_actors(source_manifest_path)
+        merged_actors = merge_actor_manifests(existing_actors, built)
+        payload = _manifest_payload(merged_actors)
+        manifest_stage = transaction / "manifests"
+        manifest_stage.mkdir(parents=True, exist_ok=True)
+        staged_source_manifest = manifest_stage / "source.json"
+        staged_resource_manifest = manifest_stage / "resource.json"
+        staged_source_manifest.write_bytes(payload)
+        staged_resource_manifest.write_bytes(payload)
+
+        runtime_stage = transaction / "runtime"
+        for actor_id in selected:
+            config = data["actors"][actor_id]
+            folder = _validate_actor_folder(config.get("folder") or "".join(part.title() for part in actor_id.split("-")))
+            candidate_actor = transaction / "candidates" / actor_id
+            source_actor_dir = _resolve_actor_output_directory(candidate_actor, folder)
+            staged_actor_dir = runtime_stage / folder
+            shutil.copytree(source_actor_dir, staged_actor_dir)
+            runtime_actor_dir = _resolve_actor_output_directory(runtime_output_root, folder)
+            replacements.append((staged_actor_dir, runtime_actor_dir))
+
+            staged_candidate = transaction / "approved" / actor_id
+            shutil.copytree(candidate_actor, staged_candidate)
+            replacements.append((staged_candidate, _candidate_actor_root(candidate_root, actor_id)))
+
+        replacements.extend([
+            (staged_source_manifest, source_manifest_path),
+            (staged_resource_manifest, resource_manifest_path),
+        ])
+        _replace_paths_atomically(replacements)
+        return built
+    finally:
+        if transaction.exists():
+            shutil.rmtree(transaction)
 
 
 def _load_source_manifest(root: Path):
@@ -650,25 +842,34 @@ def check_source_manifest(root: Path):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--promote", action="store_true")
     parser.add_argument("--actor", action="append", default=[])
     parser.add_argument("--report-root")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     data = check_source_manifest(root)
     if args.check:
+        if args.promote or args.actor or args.report_root:
+            parser.error("--check is read-only and cannot be combined with build options")
         print("vertical slice atlas source manifest ok")
         return
-    selected = args.actor or list(data["actors"].keys())
+    selected = select_actor_ids(data, args.actor)
     source_root = root / data.get("sourceRoot", "art-source/vertical-slice")
-    output_root = root / "assets/resources"
-    report_root = Path(args.report_root) if args.report_root else root / "artifacts/animation-reports"
-    built_actors = [
-        build_actor(data["actors"][actor_id], source_root, output_root, report_root)
-        for actor_id in selected
-    ]
-    existing_actors = [] if not args.actor else _load_existing_runtime_actors(root / "assets/Data/animation-atlas.json")
-    actors = merge_actor_manifests(existing_actors, built_actors)
-    write_manifest(actors, root / "assets/Data/animation-atlas.json", root / "assets/resources/Data/animation-atlas.json")
+    candidate_root = Path(args.report_root) if args.report_root else root / "artifacts/animation-candidates"
+    if args.promote:
+        promote_selected_actors(
+            data,
+            selected,
+            source_root,
+            candidate_root,
+            root / "assets/resources",
+            root / "assets/Data/animation-atlas.json",
+            root / "assets/resources/Data/animation-atlas.json",
+        )
+        print(f"promoted {len(selected)} actor atlas candidate(s)")
+    else:
+        build_candidate_actors(data, selected, source_root, candidate_root)
+        print(f"built {len(selected)} actor atlas candidate(s) under {candidate_root}")
 
 
 if __name__ == "__main__":

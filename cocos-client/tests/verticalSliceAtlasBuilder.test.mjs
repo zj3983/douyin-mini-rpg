@@ -602,3 +602,170 @@ print("bounded deterministic and safe")
     rmSync(tempRoot, { recursive: true, force: true })
   }
 })
+
+test('mobile atlas packing enforces 2048 and runtime metadata retains validated events', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'vertical-slice-mobile-budget-'))
+  try {
+    const script = String.raw`
+import importlib.util
+import sys
+from pathlib import Path
+from PIL import Image, ImageDraw
+
+root = Path(sys.argv[1])
+temp = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("builder", root / "tools/build-vertical-slice-atlases.py")
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+
+frames = [Image.new("RGBA", (512, 640), (60, 120, 180, 255)) for _ in range(13)]
+try:
+    builder.pack_action(frames, (512, 640))
+except ValueError as error:
+    assert "2048" in str(error) or "texture" in str(error)
+else:
+    raise AssertionError("atlas larger than 2048 must fail")
+
+source = temp / "source/test-actor/cast"
+source.mkdir(parents=True)
+for index in range(2):
+    image = Image.new("RGBA", (128, 160), (0, 0, 0, 0))
+    ImageDraw.Draw(image).rectangle((38 + index, 24, 89 + index, 139), fill=(80, 170, 220, 255))
+    image.save(source / f"{index:02d}.png")
+actor = builder.build_actor({
+    "id": "test-actor",
+    "type": "character",
+    "masterFrameSize": [128, 160],
+    "runtimeFrameSize": [64, 80],
+    "anchor": {"x": 0.5, "y": 0.85},
+    "quality": builder.DEFAULT_QUALITY,
+    "actions": {"cast": {
+        "frames": 2, "fps": 8, "loop": False,
+        "source": "test-actor/cast", "sourceMode": "layered-keyframes",
+        "events": [{"name": "sword-release", "time": 0.42}],
+    }},
+}, temp / "source", temp / "output")
+assert actor["actions"][0]["events"] == [{"name": "sword-release", "at": 0.42}]
+print("budget and events ok")
+`
+    assert.match(runPython(script, [tempRoot]), /budget and events ok/)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('candidate builds are isolated and promotion is selective, atomic, and status-aware', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'vertical-slice-atomic-'))
+  try {
+    const script = String.raw`
+import hashlib
+import importlib.util
+import json
+import sys
+from pathlib import Path
+from PIL import Image, ImageDraw
+
+root = Path(sys.argv[1])
+temp = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("builder", root / "tools/build-vertical-slice-atlases.py")
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+
+def write_action(actor_id, action="idle", frames=2, valid=True):
+    directory = temp / "source" / actor_id / action
+    directory.mkdir(parents=True, exist_ok=True)
+    count = frames if valid else frames - 1
+    for index in range(count):
+        image = Image.new("RGBA", (128, 160), (0, 0, 0, 0))
+        ImageDraw.Draw(image).rectangle((38 + index, 24, 89 + index, 139), fill=(80, 170, 220, 255))
+        image.save(directory / f"{index:02d}.png")
+
+def actor(actor_id, folder):
+    return {
+        "id": actor_id, "folder": folder, "type": "monster",
+        "masterFrameSize": [128, 160], "runtimeFrameSize": [64, 80],
+        "anchor": {"x": 0.5, "y": 0.85}, "quality": builder.DEFAULT_QUALITY,
+        "actions": {"idle": {
+            "frames": 2, "fps": 6, "loop": True,
+            "source": f"{actor_id}/idle", "sourceMode": "frame-sequence",
+            "events": [{"name": "ready", "time": 0.5}],
+        }},
+    }
+
+write_action("alpha", valid=True)
+write_action("beta", valid=False)
+data = {"version": 2, "actors": {"alpha": actor("alpha", "Alpha"), "beta": actor("beta", "Beta")}}
+runtime = temp / "runtime"
+source_manifest = temp / "assets/Data/animation-atlas.json"
+resource_manifest = temp / "assets/resources/Data/animation-atlas.json"
+candidate_root = temp / "artifacts/animation-candidates"
+report_sentinel = candidate_root / "alpha/reports/alpha-report.json"
+runtime_png = runtime / "Assets/ActorAtlases/Alpha/idle.png"
+unrelated_png = runtime / "Assets/ActorAtlases/Legacy/idle.png"
+for path, payload in ((report_sentinel, b"report-sentinel"), (runtime_png, b"runtime-sentinel"), (unrelated_png, b"legacy-sentinel")):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(payload)
+existing = {
+    "version": 2,
+    "framePacking": "vertical-slice-action-atlases",
+    "actors": [
+        {"id": "alpha", "type": "monster", "atlas": "old-alpha", "frameSize": {"w": 1, "h": 1}, "actions": []},
+        {"id": "legacy", "type": "monster", "atlas": "legacy", "frameSize": {"w": 1, "h": 1}, "actions": []},
+    ],
+}
+payload = (json.dumps(existing, ensure_ascii=False, indent=2) + "\n").encode()
+source_manifest.parent.mkdir(parents=True)
+resource_manifest.parent.mkdir(parents=True)
+source_manifest.write_bytes(payload)
+resource_manifest.write_bytes(payload)
+
+watched = [report_sentinel, runtime_png, unrelated_png, source_manifest, resource_manifest]
+before = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in watched}
+try:
+    builder.promote_selected_actors(
+        data, ["alpha", "beta"], temp / "source", candidate_root,
+        runtime, source_manifest, resource_manifest,
+    )
+except FileNotFoundError:
+    pass
+else:
+    raise AssertionError("failed multi-actor promotion must fail")
+after = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in watched}
+assert before == after
+
+candidate = builder.build_candidate_actors(data, ["alpha"], temp / "source", candidate_root)
+assert candidate[0]["id"] == "alpha"
+assert runtime_png.read_bytes() == b"runtime-sentinel"
+assert source_manifest.read_bytes() == payload == resource_manifest.read_bytes()
+candidate_report = json.loads(report_sentinel.read_text(encoding="utf-8"))
+assert candidate_report["status"] == "candidate"
+
+builder.promote_selected_actors(
+    data, ["alpha"], temp / "source", candidate_root,
+    runtime, source_manifest, resource_manifest,
+)
+assert runtime_png.read_bytes() != b"runtime-sentinel"
+assert unrelated_png.read_bytes() == b"legacy-sentinel"
+assert source_manifest.read_bytes() == resource_manifest.read_bytes()
+promoted = json.loads(source_manifest.read_text(encoding="utf-8"))
+assert [entry["id"] for entry in promoted["actors"]] == ["alpha", "legacy"]
+assert promoted["actors"][1] == existing["actors"][1]
+assert promoted["actors"][0]["actions"][0]["events"] == [{"name": "ready", "at": 0.5}]
+approved_report = json.loads(report_sentinel.read_text(encoding="utf-8"))
+assert approved_report["status"] == "approved"
+
+assert builder.select_actor_ids(data, []) == ["alpha", "beta"]
+for invalid in (["unknown"], ["alpha", "alpha"], [""]):
+    try:
+        builder.select_actor_ids(data, invalid)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(f"invalid selection accepted: {invalid}")
+print("atomic candidate promotion ok")
+`
+    assert.match(runPython(script, [tempRoot]), /atomic candidate promotion ok/)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
