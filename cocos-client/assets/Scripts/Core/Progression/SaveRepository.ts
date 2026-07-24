@@ -11,7 +11,7 @@ export interface StoragePort {
 }
 
 export function createMemorySaveRepository(initial?: unknown): SaveRepository {
-  let stored = initial === undefined ? null : migratePlayerSave(initial)
+  let stored = initial === undefined || initial === null ? null : migratePlayerSave(initial)
 
   return {
     load() {

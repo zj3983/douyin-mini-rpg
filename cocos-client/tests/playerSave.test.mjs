@@ -46,6 +46,19 @@ test('migratePlayerSave preserves legacy spirit stones and maps stage', () => {
   assert.equal(migrated.world.highestClearedStage, 9)
 })
 
+test('migratePlayerSave prefers valid world progress for any version and falls back to legacy stage', () => {
+  assert.equal(migratePlayerSave({
+    version: 4,
+    stage: 3,
+    world: { highestClearedStage: 11.9 },
+  }).world.highestClearedStage, 11)
+  assert.equal(migratePlayerSave({
+    version: 3,
+    stage: 7.8,
+    world: { highestClearedStage: -1 },
+  }).world.highestClearedStage, 7)
+})
+
 test('migratePlayerSave rejects invalid spirit stone and stage values', () => {
   assert.equal(migratePlayerSave({ spiritStones: -1, stage: Infinity }).spiritStones, 0)
   assert.equal(migratePlayerSave({ spiritStones: NaN, stage: -3 }).world.highestClearedStage, 0)
@@ -110,6 +123,54 @@ test('migratePlayerSave preserves valid version 3 progression in new containers'
   assert.notEqual(migrated.rewardLedger, input.rewardLedger)
 })
 
+test('migratePlayerSave floors nonnegative integral progression fields', () => {
+  const migrated = migratePlayerSave({
+    world: {
+      highestClearedStage: 8.9,
+      claimedFirstClears: [1.9, -2, 3.1, Infinity, '4'],
+    },
+    inventory: {
+      dungeonPasses: 5.8,
+      artifacts: { 'flying-sword': 2.9, 'thunder-seal': -1 },
+      relics: { 'jade-guard': 4.7 },
+      materials: { bamboo: 9.6, ore: NaN },
+    },
+  })
+
+  assert.equal(migrated.world.highestClearedStage, 8)
+  assert.deepEqual(migrated.world.claimedFirstClears, [1, 3])
+  assert.equal(migrated.inventory.dungeonPasses, 5)
+  assert.deepEqual(migrated.inventory.artifacts, { 'flying-sword': 2 })
+  assert.deepEqual(migrated.inventory.relics, { 'jade-guard': 4 })
+  assert.deepEqual(migrated.inventory.materials, { bamboo: 9 })
+})
+
+test('migratePlayerSave produces a canonical legal loadout', () => {
+  const migrated = migratePlayerSave({
+    version: 3,
+    loadout: {
+      active: [
+        'flying-sword',
+        'flying-sword',
+        'unknown-artifact',
+        'thunder-seal',
+        'soul-bell',
+        'flame-ruler',
+      ],
+      relics: ['soul-magnet', 'soul-magnet', 'jade-guard', 'spirit-vessel'],
+    },
+  })
+
+  assert.deepEqual(migrated.loadout, {
+    active: ['flying-sword', 'thunder-seal', 'soul-bell'],
+    relics: ['soul-magnet', 'jade-guard'],
+  })
+  assert.equal(
+    new Set([...migrated.loadout.active, ...migrated.loadout.relics]).size,
+    migrated.loadout.active.length + migrated.loadout.relics.length,
+  )
+})
+
 test('createMemorySaveRepository round-trips isolated deep copies', () => {
   const repository = createMemorySaveRepository()
   const source = createDefaultSave()
@@ -132,6 +193,11 @@ test('createMemorySaveRepository round-trips isolated deep copies', () => {
   assert.equal(secondLoad?.inventory.materials.bamboo, 6)
   assert.deepEqual(secondLoad?.rewardLedger, ['reward:one'])
   assert.notEqual(firstLoad, secondLoad)
+})
+
+test('createMemorySaveRepository treats null as an empty repository', () => {
+  assert.equal(createMemorySaveRepository(null).load(), null)
+  assert.equal(createMemorySaveRepository().load(), null)
 })
 
 test('createJsonSaveRepository loads JSON and migrates legacy data', () => {

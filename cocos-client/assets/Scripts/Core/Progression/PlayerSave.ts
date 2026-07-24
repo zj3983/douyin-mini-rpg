@@ -1,4 +1,5 @@
 import type { ArtifactId, PlayerLoadout, RelicId } from '../GameContent.ts'
+import { validateLoadout } from '../Loadout/LoadoutRules.ts'
 
 export interface PlayerSaveV3 {
   version: 3
@@ -39,6 +40,12 @@ function nonnegativeFinite(value: unknown, fallback = 0): number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : fallback
 }
 
+function nonnegativeInteger(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? Math.floor(value)
+    : null
+}
+
 function numberRecord(
   value: unknown,
   allowedKeys?: ReadonlySet<string>,
@@ -54,7 +61,7 @@ function numberRecord(
       && Number.isFinite(count)
       && count >= 0
     ) {
-      result[key] = count
+      result[key] = Math.floor(count)
     }
   }
   return result
@@ -63,6 +70,22 @@ function numberRecord(
 function contentIds<T extends string>(value: unknown, allowedIds: ReadonlySet<T>): T[] {
   if (!Array.isArray(value)) return []
   return value.filter((entry): entry is T => typeof entry === 'string' && allowedIds.has(entry as T))
+}
+
+function legalLoadout(value: Record<string, unknown>): PlayerLoadout {
+  const result: PlayerLoadout = { active: [], relics: [] }
+
+  for (const artifactId of contentIds(value.active, ARTIFACT_IDS)) {
+    const candidate = { active: [...result.active, artifactId], relics: result.relics }
+    if (validateLoadout(candidate).ok) result.active.push(artifactId)
+  }
+
+  for (const relicId of contentIds(value.relics, RELIC_IDS)) {
+    const candidate = { active: result.active, relics: [...result.relics, relicId] }
+    if (validateLoadout(candidate).ok) result.relics.push(relicId)
+  }
+
+  return result
 }
 
 export function createDefaultSave(): PlayerSaveV3 {
@@ -99,9 +122,9 @@ export function migratePlayerSave(input: unknown): PlayerSaveV3 {
   const world = isRecord(input.world) ? input.world : {}
   const inventory = isRecord(input.inventory) ? input.inventory : {}
   const loadout = isRecord(input.loadout) ? input.loadout : {}
-  const highestClearedStage = input.version === 3
-    ? nonnegativeFinite(world.highestClearedStage)
-    : nonnegativeFinite(input.stage)
+  const highestClearedStage = nonnegativeInteger(world.highestClearedStage)
+    ?? nonnegativeInteger(input.stage)
+    ?? 0
 
   return {
     ...defaults,
@@ -110,19 +133,16 @@ export function migratePlayerSave(input: unknown): PlayerSaveV3 {
       highestClearedStage,
       claimedFirstClears: Array.isArray(world.claimedFirstClears)
         ? world.claimedFirstClears.filter((entry): entry is number =>
-          typeof entry === 'number' && Number.isFinite(entry) && entry >= 0)
+          typeof entry === 'number' && Number.isFinite(entry) && entry >= 0).map(Math.floor)
         : [],
     },
     inventory: {
-      dungeonPasses: nonnegativeFinite(inventory.dungeonPasses),
+      dungeonPasses: nonnegativeInteger(inventory.dungeonPasses) ?? 0,
       artifacts: numberRecord(inventory.artifacts, ARTIFACT_IDS),
       relics: numberRecord(inventory.relics, RELIC_IDS),
       materials: numberRecord(inventory.materials),
     },
-    loadout: {
-      active: contentIds(loadout.active, ARTIFACT_IDS),
-      relics: contentIds(loadout.relics, RELIC_IDS),
-    },
+    loadout: legalLoadout(loadout),
     rewardLedger: Array.isArray(input.rewardLedger)
       ? input.rewardLedger.filter((entry): entry is string => typeof entry === 'string')
       : [],
