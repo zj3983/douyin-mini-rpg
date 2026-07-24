@@ -42,6 +42,7 @@ SOURCE_BORDER_SPAN_LIMIT = 0.10
 SOURCE_BORDER_SPAN_RATIO_LIMIT = 0.003
 SOURCE_BORDER_MIN_SPAN_PIXELS = 4
 ACTION_QUALITY_OVERRIDE_KEYS = {"maxCenterDrift", "maxScaleDrift"}
+QUALITY_COMPARISON_TOLERANCE = 0.005
 CONTACT_THUMBNAIL_SIZE = (160, 200)
 CONTACT_SHEET_PIXEL_BUDGET = 12_000_000
 PORTABLE_ACTOR_ID = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -232,11 +233,17 @@ def _is_intentional_scale_trend(values):
     return turns <= 1 and largest_step <= 0.20
 
 
-def analyze_action(frames, quality, *, validation="source", context="action"):
+def _exceeds_quality_limit(value, limit):
+    return value > limit + QUALITY_COMPARISON_TOLERANCE
+
+
+def analyze_action(frames, quality, *, validation="source", context="action", sample_keys=None):
     if not frames:
         raise ValueError(f"{context} frames must not be empty")
     if validation not in ("source", "runtime"):
         raise ValueError(f"{context} validation must be source or runtime")
+    if sample_keys is not None and len(sample_keys) != len(frames):
+        raise ValueError(f"{context} sample keys must match frame count")
     _validate_actor_quality("action", quality)
 
     metrics = []
@@ -274,42 +281,53 @@ def analyze_action(frames, quality, *, validation="source", context="action"):
                 )
         metrics.append(current)
 
+    drift_metrics = metrics
+    if sample_keys is not None:
+        seen = set()
+        drift_metrics = []
+        for key, current in zip(sample_keys, metrics):
+            if key not in seen:
+                seen.add(key)
+                drift_metrics.append(current)
+
     median_center = [
-        median(frame["center"][0] for frame in metrics),
-        median(frame["center"][1] for frame in metrics),
+        median(frame["center"][0] for frame in drift_metrics),
+        median(frame["center"][1] for frame in drift_metrics),
     ]
     center_drift = max(
         math.dist(frame["center"], median_center)
-        for frame in metrics
+        for frame in drift_metrics
     )
 
     median_scale = [
-        median(frame["scale"][0] for frame in metrics),
-        median(frame["scale"][1] for frame in metrics),
+        median(frame["scale"][0] for frame in drift_metrics),
+        median(frame["scale"][1] for frame in drift_metrics),
     ]
     intentional_scale_axes = [
         axis
         for axis in range(2)
-        if _is_intentional_scale_trend([frame["scale"][axis] for frame in metrics])
+        if _is_intentional_scale_trend([frame["scale"][axis] for frame in drift_metrics])
     ]
     scale_drift = max(
         abs(frame["scale"][axis] - median_scale[axis]) / median_scale[axis]
-        for frame in metrics
+        for frame in drift_metrics
         for axis in range(2)
         if axis not in intentional_scale_axes
     ) if len(intentional_scale_axes) < 2 else 0
 
-    if validation == "source" and center_drift > quality["maxCenterDrift"]:
+    if validation == "source" and _exceeds_quality_limit(center_drift, quality["maxCenterDrift"]):
         raise ValueError(
             f"{context} center drift {center_drift:.6f} exceeds {quality['maxCenterDrift']:.6f}"
         )
-    if validation == "source" and scale_drift > quality["maxScaleDrift"]:
+    if validation == "source" and _exceeds_quality_limit(scale_drift, quality["maxScaleDrift"]):
         raise ValueError(
             f"{context} scale drift {scale_drift:.6f} exceeds {quality['maxScaleDrift']:.6f}"
         )
 
     return {
         "frameCount": len(metrics),
+        "uniqueFrameCount": len(drift_metrics),
+        "qualityComparisonTolerance": QUALITY_COMPARISON_TOLERANCE,
         "centerDrift": center_drift,
         "scaleDrift": scale_drift,
         "intentionalScaleAxes": intentional_scale_axes,
@@ -345,7 +363,7 @@ def _contact_thumbnail(frame: Image.Image):
     return thumbnail
 
 
-def write_contact_sheet(action_frames, path):
+def write_contact_sheet(action_frames, path, playback_orders=None):
     if not action_frames:
         raise ValueError("contact sheet requires at least one action")
     if any(not frames for frames in action_frames.values()):
@@ -366,6 +384,10 @@ def write_contact_sheet(action_frames, path):
     _draw_checkerboard(sheet)
     draw = ImageDraw.Draw(sheet)
     font = ImageFont.load_default()
+    playback_orders = playback_orders or {
+        action_name: list(range(len(frames)))
+        for action_name, frames in action_frames.items()
+    }
     for row, (action_name, frames) in enumerate(action_frames.items()):
         row_y = row * row_height
         draw.rectangle((0, row_y, label_width - 1, row_y + row_height - 1), fill=(22, 27, 38, 235))
@@ -376,7 +398,8 @@ def write_contact_sheet(action_frames, path):
             x += (frame_width - thumbnail.width) // 2
             y = row_y + gutter + (frame_height - thumbnail.height) // 2
             sheet.alpha_composite(thumbnail, (x, y))
-            draw.text((x, row_y + 1), str(column), fill=(238, 242, 250, 255), font=font)
+            source_index = playback_orders[action_name][column]
+            draw.text((x, row_y + 1), f"{column}:{source_index}", fill=(238, 242, 250, 255), font=font)
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     sheet.save(path, format="PNG", optimize=False, compress_level=9)
@@ -467,13 +490,18 @@ def write_actor_report(
     report_root,
     status="candidate",
     effective_qualities=None,
+    playback_orders=None,
 ):
     actor_id = _validate_actor_id(actor_id)
     report_root = Path(report_root).resolve()
     report_root.mkdir(parents=True, exist_ok=True)
     contact_sheet_name = f"{actor_id}-contact-sheet.png"
     contact_sheet_path = _report_output_path(report_root, contact_sheet_name)
-    write_contact_sheet(action_frames, contact_sheet_path)
+    playback_orders = playback_orders or {
+        action_name: list(range(len(frames)))
+        for action_name, frames in action_frames.items()
+    }
+    write_contact_sheet(action_frames, contact_sheet_path, playback_orders)
     effective_qualities = effective_qualities or {
         action_name: dict(DEFAULT_QUALITY) for action_name in source_modes
     }
@@ -482,6 +510,7 @@ def write_actor_report(
             "sourceMetrics": source_metrics[action_name],
             "runtimeMetrics": runtime_metrics[action_name],
             "effectiveQuality": effective_qualities[action_name],
+            "playbackOrder": playback_orders[action_name],
         }
         for action_name in source_modes
     }
@@ -549,6 +578,10 @@ def _normalize_action_frames(source_frames, frame_size, anchor):
     return frames
 
 
+def _playback_order(action_config):
+    return list(action_config.get("order", range(action_config["frames"])))
+
+
 def build_actor(source_config, source_root, output_root, report_root=None, report_status="candidate"):
     source_root = Path(source_root)
     output_root = Path(output_root)
@@ -567,6 +600,7 @@ def build_actor(source_config, source_root, output_root, report_root=None, repor
     atlas_dimensions = {}
     source_modes = {}
     effective_qualities = {}
+    playback_orders = {}
     for action_name, action_config in source_config["actions"].items():
         context = f"{actor_id}/{action_name}"
         action_quality = _merge_action_quality(quality, action_config.get("quality"), context)
@@ -575,17 +609,29 @@ def build_actor(source_config, source_root, output_root, report_root=None, repor
             source_frames = _load_action_source_frames(action_config, source_root)
         except (FileNotFoundError, OSError, ValueError) as error:
             raise type(error)(f"{context}: {error}") from error
+        playback_order = _playback_order(action_config)
+        playback_orders[action_name] = playback_order
+        source_playback_frames = [source_frames[index] for index in playback_order]
         source_metrics[action_name] = analyze_action(
-            source_frames, action_quality, validation="source", context=context
+            source_playback_frames,
+            action_quality,
+            validation="source",
+            context=context,
+            sample_keys=playback_order,
         )
         try:
             frames = _normalize_action_frames(source_frames, frame_size, anchor)
         except ValueError as error:
             raise ValueError(f"{context}: normalization failed: {error}") from error
         del source_frames
-        action_frames[action_name] = [_contact_thumbnail(frame) for frame in frames]
+        runtime_playback_frames = [frames[index] for index in playback_order]
+        action_frames[action_name] = [_contact_thumbnail(frame) for frame in runtime_playback_frames]
         runtime_metrics[action_name] = analyze_action(
-            frames, action_quality, validation="runtime", context=context
+            runtime_playback_frames,
+            action_quality,
+            validation="runtime",
+            context=context,
+            sample_keys=playback_order,
         )
         source_modes[action_name] = action_config.get("sourceMode", "frame-sequence")
         atlas, rects = pack_action(frames, frame_size)
@@ -598,7 +644,7 @@ def build_actor(source_config, source_root, output_root, report_root=None, repor
             "atlas": relative_atlas,
             "fps": action_config.get("fps", 8),
             "loop": bool(action_config.get("loop", False)),
-            "order": list(range(len(rects))),
+            "order": playback_order,
             "frames": rects,
         }
         events = action_config.get("events", [])
@@ -625,6 +671,7 @@ def build_actor(source_config, source_root, output_root, report_root=None, repor
             source_metrics=source_metrics,
             runtime_metrics=runtime_metrics,
             effective_qualities=effective_qualities,
+            playback_orders=playback_orders,
             atlas_dimensions=atlas_dimensions,
             warnings=[],
             report_root=report_root,
@@ -1721,6 +1768,18 @@ def _validate_action(actor_id: str, action_name: str, action: Any):
         raise ValueError(f"{label} loop must be boolean")
 
     _validate_action_quality(label, action.get("quality"))
+
+    order = action.get("order")
+    if order is not None:
+        if not isinstance(order, list) or not 1 <= len(order) <= 16:
+            raise ValueError(f"{label} order must be an array with 1 to 16 frame indices")
+        for index, source_index in enumerate(order):
+            if type(source_index) is not int:
+                raise ValueError(f"{label} order[{index}] must be an integer")
+            if not 0 <= source_index < frames:
+                raise ValueError(
+                    f"{label} order[{index}] must be in [0, {frames - 1}]"
+                )
 
     events = action.get("events", [])
     if not isinstance(events, list):

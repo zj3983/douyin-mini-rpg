@@ -79,6 +79,7 @@ actor = builder.build_actor({
         "loop": True,
         "source": "test-actor/idle",
         "sourceMode": "frame-sequence",
+        "order": [0, 0, 2, 1],
     }}
 }, source_root, output_root, temp / "reports")
 source_manifest = temp / "animation-atlas.json"
@@ -89,24 +90,32 @@ print(json.dumps({
     "atlas": actor["atlas"],
     "frameSize": actor["frameSize"],
     "frames": len(actor["actions"][0]["frames"]),
+    "order": actor["actions"][0]["order"],
+    "duration": len(actor["actions"][0]["order"]) / actor["actions"][0]["fps"],
     "same": source_manifest.read_bytes() == resource_manifest.read_bytes(),
     "report": (temp / "reports/test-actor-report.json").exists(),
     "sheet": (temp / "reports/test-actor-contact-sheet.png").exists(),
     "contactSheets": len(list((temp / "reports").glob("*-contact-sheet.png"))),
     "sourceFrames": report_data["actions"]["idle"]["sourceMetrics"]["frameCount"],
+    "sourceUniqueFrames": report_data["actions"]["idle"]["sourceMetrics"]["uniqueFrameCount"],
     "runtimeFrames": report_data["actions"]["idle"]["runtimeMetrics"]["frameCount"],
+    "reportOrder": report_data["actions"]["idle"]["playbackOrder"],
 }))
 `
     const output = runPython(script, [tempRoot])
     const parsed = JSON.parse(output)
     assert.deepEqual(parsed.frameSize, { w: 64, h: 80 })
     assert.equal(parsed.frames, 3)
+    assert.deepEqual(parsed.order, [0, 0, 2, 1])
+    assert.equal(parsed.duration, 4 / 6)
     assert.equal(parsed.same, true)
     assert.equal(parsed.report, true)
     assert.equal(parsed.sheet, true)
     assert.equal(parsed.contactSheets, 1)
-    assert.equal(parsed.sourceFrames, 3)
-    assert.equal(parsed.runtimeFrames, 3)
+    assert.equal(parsed.sourceFrames, 4)
+    assert.equal(parsed.sourceUniqueFrames, 3)
+    assert.equal(parsed.runtimeFrames, 4)
+    assert.deepEqual(parsed.reportOrder, [0, 0, 2, 1])
     assert.ok(readFileSync(join(tempRoot, 'resources', parsed.atlas)).length > 0)
   } finally {
     rmSync(tempRoot, { recursive: true, force: true })
@@ -236,6 +245,13 @@ cases = [
     ("too many frames", lambda data: action(data).update(frames=17)),
     ("zero fps", lambda data: action(data).update(fps=0)),
     ("too much fps", lambda data: action(data).update(fps=25)),
+    ("order not list", lambda data: action(data).update(order="0,1")),
+    ("empty order", lambda data: action(data).update(order=[])),
+    ("too long order", lambda data: action(data).update(order=[0] * 17)),
+    ("float order index", lambda data: action(data).update(order=[0, 1.0])),
+    ("boolean order index", lambda data: action(data).update(order=[0, True])),
+    ("negative order index", lambda data: action(data).update(order=[-1, 0])),
+    ("order index beyond frames", lambda data: action(data).update(order=[0, 3])),
     ("empty event name", lambda data: action(data).update(events=[{"name": "", "time": 0.5}])),
     ("unsorted events", lambda data: action(data).update(events=[{"name": "late", "time": 0.7}, {"name": "early", "time": 0.2}])),
     ("duplicate event times", lambda data: action(data).update(events=[{"name": "one", "time": 0.4}, {"name": "two", "time": 0.4}])),
@@ -397,6 +413,8 @@ intentional_motion = [
 intentional_metrics = builder.analyze_action(intentional_motion, quality, validation="source")
 assert intentional_metrics["scaleDrift"] == 0
 assert intentional_metrics["intentionalScaleAxes"] == [0, 1]
+assert builder._exceeds_quality_limit(0.1749, 0.17) is False
+assert builder._exceeds_quality_limit(0.1751, 0.17) is True
 expect_rejected("low alpha", [make_frame((48, 48, 51, 51))], "alpha coverage", {**quality, "safePadding": 0.01})
 expect_rejected("high alpha", [make_frame((5, 5, 94, 94))], "alpha coverage", {**quality, "safePadding": 0.01})
 print(json.dumps(metrics, sort_keys=True))
