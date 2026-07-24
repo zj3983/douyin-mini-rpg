@@ -45,13 +45,19 @@ function numberRecord(
 ): Record<string, number> {
   if (!isRecord(value)) return {}
 
-  return Object.fromEntries(
-    Object.entries(value).filter(([key, count]) =>
+  const result: Record<string, number> = {}
+  for (const key of Object.keys(value)) {
+    const count = value[key]
+    if (
       (!allowedKeys || allowedKeys.has(key))
       && typeof count === 'number'
       && Number.isFinite(count)
-      && count >= 0),
-  )
+      && count >= 0
+    ) {
+      result[key] = count
+    }
+  }
+  return result
 }
 
 function contentIds<T extends string>(value: unknown, allowedIds: ReadonlySet<T>): T[] {
