@@ -84,6 +84,35 @@ function writeCompleteFixture(root, mainIndex = validMainIndex) {
   writeBossTalismanFixture(root)
 }
 
+test('build-output check accepts Cocos production filename hashes', () => {
+  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-hashed-'))
+  writeFixture(buildRoot, 'assets/main/index.a1b2c.js', validMainIndex)
+  writeFixture(buildRoot, 'assets/main/import/main-battle.c3d4e.json', `["MainBattle","${classId}"]`)
+
+  const uuids = []
+  const paths = {}
+  for (const talisman of talismans) {
+    const index = uuids.length
+    uuids.push(talisman.spriteFrameUuid)
+    paths[index] = [talisman.resourcePath, 3, 1]
+    writeFixture(
+      buildRoot,
+      `assets/resources/import/${talisman.assetUuid.slice(0, 2)}/${talisman.assetUuid}@f9941.a1b2c.json`,
+      `{"name":"talisman_${talisman.name}"}`,
+    )
+    writeFixture(
+      buildRoot,
+      `assets/resources/native/${talisman.assetUuid.slice(0, 2)}/${talisman.assetUuid}.d3e4f.png`,
+      'png-fixture',
+    )
+  }
+  writeFixture(buildRoot, 'assets/resources/config.f5a6b.json', JSON.stringify({ uuids, paths }))
+
+  const report = checkCocosBuildOutput({ buildRoot, projectRoot })
+
+  assert.equal(report.ok, true, report.errors.join('\n'))
+})
+
 test('build-output check fails when the compiled bootstrap is missing', () => {
   const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-missing-'))
   writeFixture(buildRoot, 'assets/main/index.js', 'System.register("main", [])')

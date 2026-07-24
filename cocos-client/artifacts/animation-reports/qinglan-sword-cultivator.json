@@ -1,0 +1,7190 @@
+{
+  "actions": {
+    "cast": {
+      "effectiveQuality": {
+        "maxAlphaCoverage": 0.72,
+        "maxCenterDrift": 0.08,
+        "maxScaleDrift": 0.17,
+        "minAlphaCoverage": 0.02,
+        "safePadding": 0.08
+      },
+      "packedSourceQualityMetrics": {
+        "alphaCoverage": {
+          "max": 0.249481201171875,
+          "median": 0.2432098388671875,
+          "min": 0.22152099609375
+        },
+        "centerDrift": 0.0012506102026235756,
+        "frameCount": 12,
+        "frames": [
+          {
+            "alphaCoverage": 0.2292724609375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              106,
+              52,
+              406,
+              602
+            ],
+            "center": [
+              0.5,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.20703125,
+              0.08125,
+              0.20703125,
+              0.059375
+            ],
+            "scale": [
+              0.5859375,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.24876708984375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              108,
+              52,
+              404,
+              602
+            ],
+            "center": [
+              0.5,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.2109375,
+              0.08125,
+              0.2109375,
+              0.059375
+            ],
+            "scale": [
+              0.578125,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.24644775390625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              114,
+              52,
+              397,
+              602
+            ],
+            "center": [
+              0.4990234375,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.22265625,
+              0.08125,
+              0.224609375,
+              0.059375
+            ],
+            "scale": [
+              0.552734375,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.249481201171875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              84,
+              53,
+              429,
+              602
+            ],
+            "center": [
+              0.5009765625,
+              0.51171875
+            ],
+            "edgeMargins": [
+              0.1640625,
+              0.0828125,
+              0.162109375,
+              0.059375
+            ],
+            "scale": [
+              0.673828125,
+              0.8578125
+            ]
+          },
+          {
+            "alphaCoverage": 0.2425994873046875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              84,
+              52,
+              429,
+              602
+            ],
+            "center": [
+              0.5009765625,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.1640625,
+              0.08125,
+              0.162109375,
+              0.059375
+            ],
+            "scale": [
+              0.673828125,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2319549560546875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              120,
+              52,
+              391,
+              602
+            ],
+            "center": [
+              0.4990234375,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.234375,
+              0.08125,
+              0.236328125,
+              0.059375
+            ],
+            "scale": [
+              0.529296875,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.246246337890625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              87,
+              52,
+              425,
+              602
+            ],
+            "center": [
+              0.5,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.169921875,
+              0.08125,
+              0.169921875,
+              0.059375
+            ],
+            "scale": [
+              0.66015625,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.23817138671875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              87,
+              52,
+              425,
+              602
+            ],
+            "center": [
+              0.5,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.169921875,
+              0.08125,
+              0.169921875,
+              0.059375
+            ],
+            "scale": [
+              0.66015625,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2458465576171875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              82,
+              52,
+              431,
+              602
+            ],
+            "center": [
+              0.5009765625,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.16015625,
+              0.08125,
+              0.158203125,
+              0.059375
+            ],
+            "scale": [
+              0.681640625,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2438201904296875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              81,
+              52,
+              431,
+              602
+            ],
+            "center": [
+              0.5,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.158203125,
+              0.08125,
+              0.158203125,
+              0.059375
+            ],
+            "scale": [
+              0.68359375,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2333404541015625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              112,
+              52,
+              399,
+              602
+            ],
+            "center": [
+              0.4990234375,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.21875,
+              0.08125,
+              0.220703125,
+              0.059375
+            ],
+            "scale": [
+              0.560546875,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.22152099609375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              121,
+              53,
+              391,
+              602
+            ],
+            "center": [
+              0.5,
+              0.51171875
+            ],
+            "edgeMargins": [
+              0.236328125,
+              0.0828125,
+              0.236328125,
+              0.059375
+            ],
+            "scale": [
+              0.52734375,
+              0.8578125
+            ]
+          }
+        ],
+        "intentionalScaleAxes": [],
+        "medianCenter": [
+          0.5,
+          0.5109375
+        ],
+        "medianScale": [
+          0.623046875,
+          0.859375
+        ],
+        "minimumEdgeMargin": 0.059375,
+        "qualityComparisonTolerance": 0.005,
+        "scaleDrift": 0.1536050156739812,
+        "uniqueFrameCount": 12
+      },
+      "playbackOrder": [
+        0,
+        0,
+        1,
+        1,
+        5,
+        5,
+        6,
+        6,
+        9,
+        9,
+        10,
+        11
+      ],
+      "runtimeMetrics": {
+        "alphaCoverage": {
+          "max": 0.21773681640625,
+          "median": 0.208636474609375,
+          "min": 0.19439697265625
+        },
+        "centerDrift": 0.001953125,
+        "frameCount": 12,
+        "frames": [
+          {
+            "alphaCoverage": 0.201416015625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              58,
+              32,
+              198,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.2265625,
+              0.1,
+              0.2265625,
+              0.1
+            ],
+            "scale": [
+              0.546875,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.201416015625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              58,
+              32,
+              198,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.2265625,
+              0.1,
+              0.2265625,
+              0.1
+            ],
+            "scale": [
+              0.546875,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.21773681640625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              59,
+              32,
+              197,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.23046875,
+              0.1,
+              0.23046875,
+              0.1
+            ],
+            "scale": [
+              0.5390625,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.21773681640625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              59,
+              32,
+              197,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.23046875,
+              0.1,
+              0.23046875,
+              0.1
+            ],
+            "scale": [
+              0.5390625,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.20184326171875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              65,
+              33,
+              191,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5015625
+            ],
+            "edgeMargins": [
+              0.25390625,
+              0.103125,
+              0.25390625,
+              0.1
+            ],
+            "scale": [
+              0.4921875,
+              0.796875
+            ]
+          },
+          {
+            "alphaCoverage": 0.20184326171875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              65,
+              33,
+              191,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5015625
+            ],
+            "edgeMargins": [
+              0.25390625,
+              0.103125,
+              0.25390625,
+              0.1
+            ],
+            "scale": [
+              0.4921875,
+              0.796875
+            ]
+          },
+          {
+            "alphaCoverage": 0.2147705078125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              50,
+              32,
+              207,
+              288
+            ],
+            "center": [
+              0.501953125,
+              0.5
+            ],
+            "edgeMargins": [
+              0.1953125,
+              0.1,
+              0.19140625,
+              0.1
+            ],
+            "scale": [
+              0.61328125,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.2147705078125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              50,
+              32,
+              207,
+              288
+            ],
+            "center": [
+              0.501953125,
+              0.5
+            ],
+            "edgeMargins": [
+              0.1953125,
+              0.1,
+              0.19140625,
+              0.1
+            ],
+            "scale": [
+              0.61328125,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.21297607421875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              46,
+              32,
+              209,
+              288
+            ],
+            "center": [
+              0.498046875,
+              0.5
+            ],
+            "edgeMargins": [
+              0.1796875,
+              0.1,
+              0.18359375,
+              0.1
+            ],
+            "scale": [
+              0.63671875,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.21297607421875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              46,
+              32,
+              209,
+              288
+            ],
+            "center": [
+              0.498046875,
+              0.5
+            ],
+            "edgeMargins": [
+              0.1796875,
+              0.1,
+              0.18359375,
+              0.1
+            ],
+            "scale": [
+              0.63671875,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.204296875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              61,
+              32,
+              194,
+              288
+            ],
+            "center": [
+              0.498046875,
+              0.5
+            ],
+            "edgeMargins": [
+              0.23828125,
+              0.1,
+              0.2421875,
+              0.1
+            ],
+            "scale": [
+              0.51953125,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.19439697265625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              65,
+              32,
+              191,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.25390625,
+              0.1,
+              0.25390625,
+              0.1
+            ],
+            "scale": [
+              0.4921875,
+              0.8
+            ]
+          }
+        ],
+        "intentionalScaleAxes": [
+          1
+        ],
+        "medianCenter": [
+          0.5,
+          0.5
+        ],
+        "medianScale": [
+          0.5390625,
+          0.8
+        ],
+        "minimumEdgeMargin": 0.1,
+        "qualityComparisonTolerance": 0.005,
+        "scaleDrift": 0.18115942028985507,
+        "uniqueFrameCount": 7
+      },
+      "sourceMetrics": {
+        "alphaCoverage": {
+          "max": 0.24876708984375,
+          "median": 0.238580322265625,
+          "min": 0.22152099609375
+        },
+        "centerDrift": 0.0009765625,
+        "frameCount": 12,
+        "frames": [
+          {
+            "alphaCoverage": 0.2292724609375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              106,
+              52,
+              406,
+              602
+            ],
+            "center": [
+              0.5,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.20703125,
+              0.08125,
+              0.20703125,
+              0.059375
+            ],
+            "scale": [
+              0.5859375,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2292724609375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              106,
+              52,
+              406,
+              602
+            ],
+            "center": [
+              0.5,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.20703125,
+              0.08125,
+              0.20703125,
+              0.059375
+            ],
+            "scale": [
+              0.5859375,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.24876708984375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              108,
+              52,
+              404,
+              602
+            ],
+            "center": [
+              0.5,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.2109375,
+              0.08125,
+              0.2109375,
+              0.059375
+            ],
+            "scale": [
+              0.578125,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.24876708984375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              108,
+              52,
+              404,
+              602
+            ],
+            "center": [
+              0.5,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.2109375,
+              0.08125,
+              0.2109375,
+              0.059375
+            ],
+            "scale": [
+              0.578125,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2319549560546875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              120,
+              52,
+              391,
+              602
+            ],
+            "center": [
+              0.4990234375,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.234375,
+              0.08125,
+              0.236328125,
+              0.059375
+            ],
+            "scale": [
+              0.529296875,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2319549560546875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              120,
+              52,
+              391,
+              602
+            ],
+            "center": [
+              0.4990234375,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.234375,
+              0.08125,
+              0.236328125,
+              0.059375
+            ],
+            "scale": [
+              0.529296875,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.246246337890625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              87,
+              52,
+              425,
+              602
+            ],
+            "center": [
+              0.5,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.169921875,
+              0.08125,
+              0.169921875,
+              0.059375
+            ],
+            "scale": [
+              0.66015625,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.246246337890625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              87,
+              52,
+              425,
+              602
+            ],
+            "center": [
+              0.5,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.169921875,
+              0.08125,
+              0.169921875,
+              0.059375
+            ],
+            "scale": [
+              0.66015625,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2438201904296875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              81,
+              52,
+              431,
+              602
+            ],
+            "center": [
+              0.5,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.158203125,
+              0.08125,
+              0.158203125,
+              0.059375
+            ],
+            "scale": [
+              0.68359375,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2438201904296875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              81,
+              52,
+              431,
+              602
+            ],
+            "center": [
+              0.5,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.158203125,
+              0.08125,
+              0.158203125,
+              0.059375
+            ],
+            "scale": [
+              0.68359375,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2333404541015625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              112,
+              52,
+              399,
+              602
+            ],
+            "center": [
+              0.4990234375,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.21875,
+              0.08125,
+              0.220703125,
+              0.059375
+            ],
+            "scale": [
+              0.560546875,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.22152099609375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              121,
+              53,
+              391,
+              602
+            ],
+            "center": [
+              0.5,
+              0.51171875
+            ],
+            "edgeMargins": [
+              0.236328125,
+              0.0828125,
+              0.236328125,
+              0.059375
+            ],
+            "scale": [
+              0.52734375,
+              0.8578125
+            ]
+          }
+        ],
+        "intentionalScaleAxes": [
+          1
+        ],
+        "medianCenter": [
+          0.5,
+          0.5109375
+        ],
+        "medianScale": [
+          0.578125,
+          0.859375
+        ],
+        "minimumEdgeMargin": 0.059375,
+        "qualityComparisonTolerance": 0.005,
+        "scaleDrift": 0.18243243243243243,
+        "uniqueFrameCount": 7
+      }
+    },
+    "death": {
+      "effectiveQuality": {
+        "maxAlphaCoverage": 0.72,
+        "maxCenterDrift": 0.08,
+        "maxScaleDrift": 0.12,
+        "minAlphaCoverage": 0.02,
+        "safePadding": 0.08
+      },
+      "packedSourceQualityMetrics": {
+        "alphaCoverage": {
+          "max": 0.2458709716796875,
+          "median": 0.22466125488281252,
+          "min": 0.20390625
+        },
+        "centerDrift": 0.041062101643805936,
+        "frameCount": 10,
+        "frames": [
+          {
+            "alphaCoverage": 0.2458709716796875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              92,
+              13,
+              419,
+              563
+            ],
+            "center": [
+              0.4990234375,
+              0.45
+            ],
+            "edgeMargins": [
+              0.1796875,
+              0.0203125,
+              0.181640625,
+              0.1203125
+            ],
+            "scale": [
+              0.638671875,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.240716552734375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              91,
+              22,
+              416,
+              564
+            ],
+            "center": [
+              0.4951171875,
+              0.4578125
+            ],
+            "edgeMargins": [
+              0.177734375,
+              0.034375,
+              0.1875,
+              0.11875
+            ],
+            "scale": [
+              0.634765625,
+              0.846875
+            ]
+          },
+          {
+            "alphaCoverage": 0.2358612060546875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              90,
+              31,
+              413,
+              565
+            ],
+            "center": [
+              0.4912109375,
+              0.465625
+            ],
+            "edgeMargins": [
+              0.17578125,
+              0.0484375,
+              0.193359375,
+              0.1171875
+            ],
+            "scale": [
+              0.630859375,
+              0.834375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2317169189453125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              89,
+              41,
+              411,
+              567
+            ],
+            "center": [
+              0.48828125,
+              0.475
+            ],
+            "edgeMargins": [
+              0.173828125,
+              0.0640625,
+              0.197265625,
+              0.1140625
+            ],
+            "scale": [
+              0.62890625,
+              0.821875
+            ]
+          },
+          {
+            "alphaCoverage": 0.2269012451171875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              88,
+              50,
+              408,
+              568
+            ],
+            "center": [
+              0.484375,
+              0.4828125
+            ],
+            "edgeMargins": [
+              0.171875,
+              0.078125,
+              0.203125,
+              0.1125
+            ],
+            "scale": [
+              0.625,
+              0.809375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2224212646484375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              87,
+              58,
+              405,
+              569
+            ],
+            "center": [
+              0.48046875,
+              0.48984375
+            ],
+            "edgeMargins": [
+              0.169921875,
+              0.090625,
+              0.208984375,
+              0.1109375
+            ],
+            "scale": [
+              0.62109375,
+              0.7984375
+            ]
+          },
+          {
+            "alphaCoverage": 0.21773681640625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              86,
+              68,
+              402,
+              571
+            ],
+            "center": [
+              0.4765625,
+              0.49921875
+            ],
+            "edgeMargins": [
+              0.16796875,
+              0.10625,
+              0.21484375,
+              0.1078125
+            ],
+            "scale": [
+              0.6171875,
+              0.7859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.21287841796875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              85,
+              77,
+              399,
+              572
+            ],
+            "center": [
+              0.47265625,
+              0.50703125
+            ],
+            "edgeMargins": [
+              0.166015625,
+              0.1203125,
+              0.220703125,
+              0.10625
+            ],
+            "scale": [
+              0.61328125,
+              0.7734375
+            ]
+          },
+          {
+            "alphaCoverage": 0.208282470703125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              84,
+              86,
+              396,
+              573
+            ],
+            "center": [
+              0.46875,
+              0.51484375
+            ],
+            "edgeMargins": [
+              0.1640625,
+              0.134375,
+              0.2265625,
+              0.1046875
+            ],
+            "scale": [
+              0.609375,
+              0.7609375
+            ]
+          },
+          {
+            "alphaCoverage": 0.20390625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              83,
+              95,
+              393,
+              575
+            ],
+            "center": [
+              0.46484375,
+              0.5234375
+            ],
+            "edgeMargins": [
+              0.162109375,
+              0.1484375,
+              0.232421875,
+              0.1015625
+            ],
+            "scale": [
+              0.60546875,
+              0.75
+            ]
+          }
+        ],
+        "intentionalScaleAxes": [
+          0,
+          1
+        ],
+        "medianCenter": [
+          0.482421875,
+          0.486328125
+        ],
+        "medianScale": [
+          0.623046875,
+          0.80390625
+        ],
+        "minimumEdgeMargin": 0.0203125,
+        "qualityComparisonTolerance": 0.005,
+        "scaleDrift": 0,
+        "uniqueFrameCount": 10
+      },
+      "playbackOrder": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "runtimeMetrics": {
+        "alphaCoverage": {
+          "max": 0.23897705078125,
+          "median": 0.22982177734375,
+          "min": 0.22052001953125
+        },
+        "centerDrift": 0.001953125,
+        "frameCount": 10,
+        "frames": [
+          {
+            "alphaCoverage": 0.22052001953125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              52,
+              32,
+              204,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.203125,
+              0.1,
+              0.203125,
+              0.1
+            ],
+            "scale": [
+              0.59375,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.2232666015625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              51,
+              32,
+              205,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.19921875,
+              0.1,
+              0.19921875,
+              0.1
+            ],
+            "scale": [
+              0.6015625,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.22459716796875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              50,
+              32,
+              205,
+              288
+            ],
+            "center": [
+              0.498046875,
+              0.5
+            ],
+            "edgeMargins": [
+              0.1953125,
+              0.1,
+              0.19921875,
+              0.1
+            ],
+            "scale": [
+              0.60546875,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.227587890625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              50,
+              32,
+              207,
+              288
+            ],
+            "center": [
+              0.501953125,
+              0.5
+            ],
+            "edgeMargins": [
+              0.1953125,
+              0.1,
+              0.19140625,
+              0.1
+            ],
+            "scale": [
+              0.61328125,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.22918701171875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              49,
+              32,
+              207,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.19140625,
+              0.1,
+              0.19140625,
+              0.1
+            ],
+            "scale": [
+              0.6171875,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.23045654296875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              48,
+              32,
+              207,
+              288
+            ],
+            "center": [
+              0.498046875,
+              0.5
+            ],
+            "edgeMargins": [
+              0.1875,
+              0.1,
+              0.19140625,
+              0.1
+            ],
+            "scale": [
+              0.62109375,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.233251953125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              48,
+              32,
+              209,
+              288
+            ],
+            "center": [
+              0.501953125,
+              0.5
+            ],
+            "edgeMargins": [
+              0.1875,
+              0.1,
+              0.18359375,
+              0.1
+            ],
+            "scale": [
+              0.62890625,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.23482666015625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              47,
+              32,
+              209,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.18359375,
+              0.1,
+              0.18359375,
+              0.1
+            ],
+            "scale": [
+              0.6328125,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.23758544921875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              46,
+              32,
+              210,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.1796875,
+              0.1,
+              0.1796875,
+              0.1
+            ],
+            "scale": [
+              0.640625,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.23897705078125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              46,
+              32,
+              211,
+              288
+            ],
+            "center": [
+              0.501953125,
+              0.5
+            ],
+            "edgeMargins": [
+              0.1796875,
+              0.1,
+              0.17578125,
+              0.1
+            ],
+            "scale": [
+              0.64453125,
+              0.8
+            ]
+          }
+        ],
+        "intentionalScaleAxes": [
+          0,
+          1
+        ],
+        "medianCenter": [
+          0.5,
+          0.5
+        ],
+        "medianScale": [
+          0.619140625,
+          0.8
+        ],
+        "minimumEdgeMargin": 0.1,
+        "qualityComparisonTolerance": 0.005,
+        "scaleDrift": 0,
+        "uniqueFrameCount": 10
+      },
+      "sourceMetrics": {
+        "alphaCoverage": {
+          "max": 0.2458709716796875,
+          "median": 0.22466125488281252,
+          "min": 0.20390625
+        },
+        "centerDrift": 0.041062101643805936,
+        "frameCount": 10,
+        "frames": [
+          {
+            "alphaCoverage": 0.2458709716796875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              92,
+              13,
+              419,
+              563
+            ],
+            "center": [
+              0.4990234375,
+              0.45
+            ],
+            "edgeMargins": [
+              0.1796875,
+              0.0203125,
+              0.181640625,
+              0.1203125
+            ],
+            "scale": [
+              0.638671875,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.240716552734375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              91,
+              22,
+              416,
+              564
+            ],
+            "center": [
+              0.4951171875,
+              0.4578125
+            ],
+            "edgeMargins": [
+              0.177734375,
+              0.034375,
+              0.1875,
+              0.11875
+            ],
+            "scale": [
+              0.634765625,
+              0.846875
+            ]
+          },
+          {
+            "alphaCoverage": 0.2358612060546875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              90,
+              31,
+              413,
+              565
+            ],
+            "center": [
+              0.4912109375,
+              0.465625
+            ],
+            "edgeMargins": [
+              0.17578125,
+              0.0484375,
+              0.193359375,
+              0.1171875
+            ],
+            "scale": [
+              0.630859375,
+              0.834375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2317169189453125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              89,
+              41,
+              411,
+              567
+            ],
+            "center": [
+              0.48828125,
+              0.475
+            ],
+            "edgeMargins": [
+              0.173828125,
+              0.0640625,
+              0.197265625,
+              0.1140625
+            ],
+            "scale": [
+              0.62890625,
+              0.821875
+            ]
+          },
+          {
+            "alphaCoverage": 0.2269012451171875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              88,
+              50,
+              408,
+              568
+            ],
+            "center": [
+              0.484375,
+              0.4828125
+            ],
+            "edgeMargins": [
+              0.171875,
+              0.078125,
+              0.203125,
+              0.1125
+            ],
+            "scale": [
+              0.625,
+              0.809375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2224212646484375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              87,
+              58,
+              405,
+              569
+            ],
+            "center": [
+              0.48046875,
+              0.48984375
+            ],
+            "edgeMargins": [
+              0.169921875,
+              0.090625,
+              0.208984375,
+              0.1109375
+            ],
+            "scale": [
+              0.62109375,
+              0.7984375
+            ]
+          },
+          {
+            "alphaCoverage": 0.21773681640625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              86,
+              68,
+              402,
+              571
+            ],
+            "center": [
+              0.4765625,
+              0.49921875
+            ],
+            "edgeMargins": [
+              0.16796875,
+              0.10625,
+              0.21484375,
+              0.1078125
+            ],
+            "scale": [
+              0.6171875,
+              0.7859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.21287841796875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              85,
+              77,
+              399,
+              572
+            ],
+            "center": [
+              0.47265625,
+              0.50703125
+            ],
+            "edgeMargins": [
+              0.166015625,
+              0.1203125,
+              0.220703125,
+              0.10625
+            ],
+            "scale": [
+              0.61328125,
+              0.7734375
+            ]
+          },
+          {
+            "alphaCoverage": 0.208282470703125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              84,
+              86,
+              396,
+              573
+            ],
+            "center": [
+              0.46875,
+              0.51484375
+            ],
+            "edgeMargins": [
+              0.1640625,
+              0.134375,
+              0.2265625,
+              0.1046875
+            ],
+            "scale": [
+              0.609375,
+              0.7609375
+            ]
+          },
+          {
+            "alphaCoverage": 0.20390625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              83,
+              95,
+              393,
+              575
+            ],
+            "center": [
+              0.46484375,
+              0.5234375
+            ],
+            "edgeMargins": [
+              0.162109375,
+              0.1484375,
+              0.232421875,
+              0.1015625
+            ],
+            "scale": [
+              0.60546875,
+              0.75
+            ]
+          }
+        ],
+        "intentionalScaleAxes": [
+          0,
+          1
+        ],
+        "medianCenter": [
+          0.482421875,
+          0.486328125
+        ],
+        "medianScale": [
+          0.623046875,
+          0.80390625
+        ],
+        "minimumEdgeMargin": 0.0203125,
+        "qualityComparisonTolerance": 0.005,
+        "scaleDrift": 0,
+        "uniqueFrameCount": 10
+      }
+    },
+    "hand_seal": {
+      "effectiveQuality": {
+        "maxAlphaCoverage": 0.72,
+        "maxCenterDrift": 0.08,
+        "maxScaleDrift": 0.12,
+        "minAlphaCoverage": 0.02,
+        "safePadding": 0.08
+      },
+      "packedSourceQualityMetrics": {
+        "alphaCoverage": {
+          "max": 0.20643310546875,
+          "median": 0.18196258544921876,
+          "min": 0.14515380859375
+        },
+        "centerDrift": 0.0009765625,
+        "frameCount": 10,
+        "frames": [
+          {
+            "alphaCoverage": 0.20643310546875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              158,
+              52,
+              353,
+              602
+            ],
+            "center": [
+              0.4990234375,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.30859375,
+              0.08125,
+              0.310546875,
+              0.059375
+            ],
+            "scale": [
+              0.380859375,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.1873443603515625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              160,
+              52,
+              353,
+              602
+            ],
+            "center": [
+              0.5009765625,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.3125,
+              0.08125,
+              0.310546875,
+              0.059375
+            ],
+            "scale": [
+              0.376953125,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.1576629638671875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              159,
+              52,
+              353,
+              602
+            ],
+            "center": [
+              0.5,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.310546875,
+              0.08125,
+              0.310546875,
+              0.059375
+            ],
+            "scale": [
+              0.37890625,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.16156005859375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              158,
+              52,
+              353,
+              602
+            ],
+            "center": [
+              0.4990234375,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.30859375,
+              0.08125,
+              0.310546875,
+              0.059375
+            ],
+            "scale": [
+              0.380859375,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.14515380859375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              158,
+              52,
+              353,
+              602
+            ],
+            "center": [
+              0.4990234375,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.30859375,
+              0.08125,
+              0.310546875,
+              0.059375
+            ],
+            "scale": [
+              0.380859375,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.1564605712890625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              159,
+              52,
+              353,
+              602
+            ],
+            "center": [
+              0.5,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.310546875,
+              0.08125,
+              0.310546875,
+              0.059375
+            ],
+            "scale": [
+              0.37890625,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.178826904296875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              158,
+              52,
+              353,
+              602
+            ],
+            "center": [
+              0.4990234375,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.30859375,
+              0.08125,
+              0.310546875,
+              0.059375
+            ],
+            "scale": [
+              0.380859375,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.1850982666015625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              159,
+              52,
+              353,
+              602
+            ],
+            "center": [
+              0.5,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.310546875,
+              0.08125,
+              0.310546875,
+              0.059375
+            ],
+            "scale": [
+              0.37890625,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.1889923095703125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              159,
+              52,
+              353,
+              602
+            ],
+            "center": [
+              0.5,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.310546875,
+              0.08125,
+              0.310546875,
+              0.059375
+            ],
+            "scale": [
+              0.37890625,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.197320556640625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              153,
+              52,
+              359,
+              602
+            ],
+            "center": [
+              0.5,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.298828125,
+              0.08125,
+              0.298828125,
+              0.059375
+            ],
+            "scale": [
+              0.40234375,
+              0.859375
+            ]
+          }
+        ],
+        "intentionalScaleAxes": [
+          1
+        ],
+        "medianCenter": [
+          0.5,
+          0.5109375
+        ],
+        "medianScale": [
+          0.3798828125,
+          0.859375
+        ],
+        "minimumEdgeMargin": 0.059375,
+        "qualityComparisonTolerance": 0.005,
+        "scaleDrift": 0.05912596401028278,
+        "uniqueFrameCount": 10
+      },
+      "playbackOrder": [
+        0,
+        0,
+        1,
+        1,
+        7,
+        7,
+        7,
+        9,
+        9,
+        9
+      ],
+      "runtimeMetrics": {
+        "alphaCoverage": {
+          "max": 0.1814208984375,
+          "median": 0.16857299804687498,
+          "min": 0.1614501953125
+        },
+        "centerDrift": 0.0025012204052472205,
+        "frameCount": 10,
+        "frames": [
+          {
+            "alphaCoverage": 0.1814208984375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              82,
+              33,
+              173,
+              288
+            ],
+            "center": [
+              0.498046875,
+              0.5015625
+            ],
+            "edgeMargins": [
+              0.3203125,
+              0.103125,
+              0.32421875,
+              0.1
+            ],
+            "scale": [
+              0.35546875,
+              0.796875
+            ]
+          },
+          {
+            "alphaCoverage": 0.1814208984375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              82,
+              33,
+              173,
+              288
+            ],
+            "center": [
+              0.498046875,
+              0.5015625
+            ],
+            "edgeMargins": [
+              0.3203125,
+              0.103125,
+              0.32421875,
+              0.1
+            ],
+            "scale": [
+              0.35546875,
+              0.796875
+            ]
+          },
+          {
+            "alphaCoverage": 0.16456298828125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              83,
+              32,
+              173,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.32421875,
+              0.1,
+              0.32421875,
+              0.1
+            ],
+            "scale": [
+              0.3515625,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.16456298828125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              83,
+              32,
+              173,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.32421875,
+              0.1,
+              0.32421875,
+              0.1
+            ],
+            "scale": [
+              0.3515625,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.1614501953125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              83,
+              32,
+              173,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.32421875,
+              0.1,
+              0.32421875,
+              0.1
+            ],
+            "scale": [
+              0.3515625,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.1614501953125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              83,
+              32,
+              173,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.32421875,
+              0.1,
+              0.32421875,
+              0.1
+            ],
+            "scale": [
+              0.3515625,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.1614501953125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              83,
+              32,
+              173,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.32421875,
+              0.1,
+              0.32421875,
+              0.1
+            ],
+            "scale": [
+              0.3515625,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.1725830078125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              80,
+              32,
+              176,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.3125,
+              0.1,
+              0.3125,
+              0.1
+            ],
+            "scale": [
+              0.375,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.1725830078125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              80,
+              32,
+              176,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.3125,
+              0.1,
+              0.3125,
+              0.1
+            ],
+            "scale": [
+              0.375,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.1725830078125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              80,
+              32,
+              176,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.3125,
+              0.1,
+              0.3125,
+              0.1
+            ],
+            "scale": [
+              0.375,
+              0.8
+            ]
+          }
+        ],
+        "intentionalScaleAxes": [
+          0,
+          1
+        ],
+        "medianCenter": [
+          0.5,
+          0.5
+        ],
+        "medianScale": [
+          0.353515625,
+          0.8
+        ],
+        "minimumEdgeMargin": 0.1,
+        "qualityComparisonTolerance": 0.005,
+        "scaleDrift": 0,
+        "uniqueFrameCount": 4
+      },
+      "sourceMetrics": {
+        "alphaCoverage": {
+          "max": 0.20643310546875,
+          "median": 0.19233245849609376,
+          "min": 0.1850982666015625
+        },
+        "centerDrift": 0.0009765625,
+        "frameCount": 10,
+        "frames": [
+          {
+            "alphaCoverage": 0.20643310546875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              158,
+              52,
+              353,
+              602
+            ],
+            "center": [
+              0.4990234375,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.30859375,
+              0.08125,
+              0.310546875,
+              0.059375
+            ],
+            "scale": [
+              0.380859375,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.20643310546875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              158,
+              52,
+              353,
+              602
+            ],
+            "center": [
+              0.4990234375,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.30859375,
+              0.08125,
+              0.310546875,
+              0.059375
+            ],
+            "scale": [
+              0.380859375,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.1873443603515625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              160,
+              52,
+              353,
+              602
+            ],
+            "center": [
+              0.5009765625,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.3125,
+              0.08125,
+              0.310546875,
+              0.059375
+            ],
+            "scale": [
+              0.376953125,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.1873443603515625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              160,
+              52,
+              353,
+              602
+            ],
+            "center": [
+              0.5009765625,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.3125,
+              0.08125,
+              0.310546875,
+              0.059375
+            ],
+            "scale": [
+              0.376953125,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.1850982666015625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              159,
+              52,
+              353,
+              602
+            ],
+            "center": [
+              0.5,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.310546875,
+              0.08125,
+              0.310546875,
+              0.059375
+            ],
+            "scale": [
+              0.37890625,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.1850982666015625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              159,
+              52,
+              353,
+              602
+            ],
+            "center": [
+              0.5,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.310546875,
+              0.08125,
+              0.310546875,
+              0.059375
+            ],
+            "scale": [
+              0.37890625,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.1850982666015625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              159,
+              52,
+              353,
+              602
+            ],
+            "center": [
+              0.5,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.310546875,
+              0.08125,
+              0.310546875,
+              0.059375
+            ],
+            "scale": [
+              0.37890625,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.197320556640625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              153,
+              52,
+              359,
+              602
+            ],
+            "center": [
+              0.5,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.298828125,
+              0.08125,
+              0.298828125,
+              0.059375
+            ],
+            "scale": [
+              0.40234375,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.197320556640625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              153,
+              52,
+              359,
+              602
+            ],
+            "center": [
+              0.5,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.298828125,
+              0.08125,
+              0.298828125,
+              0.059375
+            ],
+            "scale": [
+              0.40234375,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.197320556640625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              153,
+              52,
+              359,
+              602
+            ],
+            "center": [
+              0.5,
+              0.5109375
+            ],
+            "edgeMargins": [
+              0.298828125,
+              0.08125,
+              0.298828125,
+              0.059375
+            ],
+            "scale": [
+              0.40234375,
+              0.859375
+            ]
+          }
+        ],
+        "intentionalScaleAxes": [
+          0,
+          1
+        ],
+        "medianCenter": [
+          0.5,
+          0.5109375
+        ],
+        "medianScale": [
+          0.3798828125,
+          0.859375
+        ],
+        "minimumEdgeMargin": 0.059375,
+        "qualityComparisonTolerance": 0.005,
+        "scaleDrift": 0,
+        "uniqueFrameCount": 4
+      }
+    },
+    "hurt": {
+      "effectiveQuality": {
+        "maxAlphaCoverage": 0.72,
+        "maxCenterDrift": 0.08,
+        "maxScaleDrift": 0.12,
+        "minAlphaCoverage": 0.02,
+        "safePadding": 0.08
+      },
+      "packedSourceQualityMetrics": {
+        "alphaCoverage": {
+          "max": 0.24322509765625,
+          "median": 0.24322509765625,
+          "min": 0.24322509765625
+        },
+        "centerDrift": 0.009889835079040748,
+        "frameCount": 6,
+        "frames": [
+          {
+            "alphaCoverage": 0.24322509765625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              92,
+              19,
+              419,
+              563
+            ],
+            "center": [
+              0.4990234375,
+              0.4546875
+            ],
+            "edgeMargins": [
+              0.1796875,
+              0.0296875,
+              0.181640625,
+              0.1203125
+            ],
+            "scale": [
+              0.638671875,
+              0.85
+            ]
+          },
+          {
+            "alphaCoverage": 0.24322509765625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              87,
+              20,
+              414,
+              564
+            ],
+            "center": [
+              0.4892578125,
+              0.45625
+            ],
+            "edgeMargins": [
+              0.169921875,
+              0.03125,
+              0.19140625,
+              0.11875
+            ],
+            "scale": [
+              0.638671875,
+              0.85
+            ]
+          },
+          {
+            "alphaCoverage": 0.24322509765625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              83,
+              21,
+              410,
+              565
+            ],
+            "center": [
+              0.4814453125,
+              0.4578125
+            ],
+            "edgeMargins": [
+              0.162109375,
+              0.0328125,
+              0.19921875,
+              0.1171875
+            ],
+            "scale": [
+              0.638671875,
+              0.85
+            ]
+          },
+          {
+            "alphaCoverage": 0.24322509765625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              83,
+              21,
+              410,
+              565
+            ],
+            "center": [
+              0.4814453125,
+              0.4578125
+            ],
+            "edgeMargins": [
+              0.162109375,
+              0.0328125,
+              0.19921875,
+              0.1171875
+            ],
+            "scale": [
+              0.638671875,
+              0.85
+            ]
+          },
+          {
+            "alphaCoverage": 0.24322509765625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              87,
+              20,
+              414,
+              564
+            ],
+            "center": [
+              0.4892578125,
+              0.45625
+            ],
+            "edgeMargins": [
+              0.169921875,
+              0.03125,
+              0.19140625,
+              0.11875
+            ],
+            "scale": [
+              0.638671875,
+              0.85
+            ]
+          },
+          {
+            "alphaCoverage": 0.24322509765625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              92,
+              19,
+              419,
+              563
+            ],
+            "center": [
+              0.4990234375,
+              0.4546875
+            ],
+            "edgeMargins": [
+              0.1796875,
+              0.0296875,
+              0.181640625,
+              0.1203125
+            ],
+            "scale": [
+              0.638671875,
+              0.85
+            ]
+          }
+        ],
+        "intentionalScaleAxes": [
+          0,
+          1
+        ],
+        "medianCenter": [
+          0.4892578125,
+          0.45625
+        ],
+        "medianScale": [
+          0.638671875,
+          0.85
+        ],
+        "minimumEdgeMargin": 0.0296875,
+        "qualityComparisonTolerance": 0.005,
+        "scaleDrift": 0,
+        "uniqueFrameCount": 6
+      },
+      "playbackOrder": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "runtimeMetrics": {
+        "alphaCoverage": {
+          "max": 0.2232177734375,
+          "median": 0.2232177734375,
+          "min": 0.2232177734375
+        },
+        "centerDrift": 0.0,
+        "frameCount": 6,
+        "frames": [
+          {
+            "alphaCoverage": 0.2232177734375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              51,
+              32,
+              205,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.19921875,
+              0.1,
+              0.19921875,
+              0.1
+            ],
+            "scale": [
+              0.6015625,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.2232177734375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              51,
+              32,
+              205,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.19921875,
+              0.1,
+              0.19921875,
+              0.1
+            ],
+            "scale": [
+              0.6015625,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.2232177734375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              51,
+              32,
+              205,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.19921875,
+              0.1,
+              0.19921875,
+              0.1
+            ],
+            "scale": [
+              0.6015625,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.2232177734375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              51,
+              32,
+              205,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.19921875,
+              0.1,
+              0.19921875,
+              0.1
+            ],
+            "scale": [
+              0.6015625,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.2232177734375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              51,
+              32,
+              205,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.19921875,
+              0.1,
+              0.19921875,
+              0.1
+            ],
+            "scale": [
+              0.6015625,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.2232177734375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              51,
+              32,
+              205,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.19921875,
+              0.1,
+              0.19921875,
+              0.1
+            ],
+            "scale": [
+              0.6015625,
+              0.8
+            ]
+          }
+        ],
+        "intentionalScaleAxes": [
+          0,
+          1
+        ],
+        "medianCenter": [
+          0.5,
+          0.5
+        ],
+        "medianScale": [
+          0.6015625,
+          0.8
+        ],
+        "minimumEdgeMargin": 0.1,
+        "qualityComparisonTolerance": 0.005,
+        "scaleDrift": 0,
+        "uniqueFrameCount": 6
+      },
+      "sourceMetrics": {
+        "alphaCoverage": {
+          "max": 0.24322509765625,
+          "median": 0.24322509765625,
+          "min": 0.24322509765625
+        },
+        "centerDrift": 0.009889835079040748,
+        "frameCount": 6,
+        "frames": [
+          {
+            "alphaCoverage": 0.24322509765625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              92,
+              19,
+              419,
+              563
+            ],
+            "center": [
+              0.4990234375,
+              0.4546875
+            ],
+            "edgeMargins": [
+              0.1796875,
+              0.0296875,
+              0.181640625,
+              0.1203125
+            ],
+            "scale": [
+              0.638671875,
+              0.85
+            ]
+          },
+          {
+            "alphaCoverage": 0.24322509765625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              87,
+              20,
+              414,
+              564
+            ],
+            "center": [
+              0.4892578125,
+              0.45625
+            ],
+            "edgeMargins": [
+              0.169921875,
+              0.03125,
+              0.19140625,
+              0.11875
+            ],
+            "scale": [
+              0.638671875,
+              0.85
+            ]
+          },
+          {
+            "alphaCoverage": 0.24322509765625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              83,
+              21,
+              410,
+              565
+            ],
+            "center": [
+              0.4814453125,
+              0.4578125
+            ],
+            "edgeMargins": [
+              0.162109375,
+              0.0328125,
+              0.19921875,
+              0.1171875
+            ],
+            "scale": [
+              0.638671875,
+              0.85
+            ]
+          },
+          {
+            "alphaCoverage": 0.24322509765625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              83,
+              21,
+              410,
+              565
+            ],
+            "center": [
+              0.4814453125,
+              0.4578125
+            ],
+            "edgeMargins": [
+              0.162109375,
+              0.0328125,
+              0.19921875,
+              0.1171875
+            ],
+            "scale": [
+              0.638671875,
+              0.85
+            ]
+          },
+          {
+            "alphaCoverage": 0.24322509765625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              87,
+              20,
+              414,
+              564
+            ],
+            "center": [
+              0.4892578125,
+              0.45625
+            ],
+            "edgeMargins": [
+              0.169921875,
+              0.03125,
+              0.19140625,
+              0.11875
+            ],
+            "scale": [
+              0.638671875,
+              0.85
+            ]
+          },
+          {
+            "alphaCoverage": 0.24322509765625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              92,
+              19,
+              419,
+              563
+            ],
+            "center": [
+              0.4990234375,
+              0.4546875
+            ],
+            "edgeMargins": [
+              0.1796875,
+              0.0296875,
+              0.181640625,
+              0.1203125
+            ],
+            "scale": [
+              0.638671875,
+              0.85
+            ]
+          }
+        ],
+        "intentionalScaleAxes": [
+          0,
+          1
+        ],
+        "medianCenter": [
+          0.4892578125,
+          0.45625
+        ],
+        "medianScale": [
+          0.638671875,
+          0.85
+        ],
+        "minimumEdgeMargin": 0.0296875,
+        "qualityComparisonTolerance": 0.005,
+        "scaleDrift": 0,
+        "uniqueFrameCount": 6
+      }
+    },
+    "idle": {
+      "effectiveQuality": {
+        "maxAlphaCoverage": 0.72,
+        "maxCenterDrift": 0.08,
+        "maxScaleDrift": 0.12,
+        "minAlphaCoverage": 0.02,
+        "safePadding": 0.08
+      },
+      "packedSourceQualityMetrics": {
+        "alphaCoverage": {
+          "max": 0.2458709716796875,
+          "median": 0.2458709716796875,
+          "min": 0.2458709716796875
+        },
+        "centerDrift": 0.008734640537108554,
+        "frameCount": 8,
+        "frames": [
+          {
+            "alphaCoverage": 0.2458709716796875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              92,
+              14,
+              419,
+              564
+            ],
+            "center": [
+              0.4990234375,
+              0.4515625
+            ],
+            "edgeMargins": [
+              0.1796875,
+              0.021875,
+              0.181640625,
+              0.11875
+            ],
+            "scale": [
+              0.638671875,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2458709716796875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              95,
+              15,
+              422,
+              565
+            ],
+            "center": [
+              0.5048828125,
+              0.453125
+            ],
+            "edgeMargins": [
+              0.185546875,
+              0.0234375,
+              0.17578125,
+              0.1171875
+            ],
+            "scale": [
+              0.638671875,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2458709716796875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              96,
+              14,
+              423,
+              564
+            ],
+            "center": [
+              0.5068359375,
+              0.4515625
+            ],
+            "edgeMargins": [
+              0.1875,
+              0.021875,
+              0.173828125,
+              0.11875
+            ],
+            "scale": [
+              0.638671875,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2458709716796875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              94,
+              13,
+              421,
+              563
+            ],
+            "center": [
+              0.5029296875,
+              0.45
+            ],
+            "edgeMargins": [
+              0.18359375,
+              0.0203125,
+              0.177734375,
+              0.1203125
+            ],
+            "scale": [
+              0.638671875,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2458709716796875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              90,
+              11,
+              417,
+              561
+            ],
+            "center": [
+              0.4951171875,
+              0.446875
+            ],
+            "edgeMargins": [
+              0.17578125,
+              0.0171875,
+              0.185546875,
+              0.1234375
+            ],
+            "scale": [
+              0.638671875,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2458709716796875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              88,
+              11,
+              415,
+              561
+            ],
+            "center": [
+              0.4912109375,
+              0.446875
+            ],
+            "edgeMargins": [
+              0.171875,
+              0.0171875,
+              0.189453125,
+              0.1234375
+            ],
+            "scale": [
+              0.638671875,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2458709716796875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              89,
+              13,
+              416,
+              563
+            ],
+            "center": [
+              0.4931640625,
+              0.45
+            ],
+            "edgeMargins": [
+              0.173828125,
+              0.0203125,
+              0.1875,
+              0.1203125
+            ],
+            "scale": [
+              0.638671875,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2458709716796875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              92,
+              14,
+              419,
+              564
+            ],
+            "center": [
+              0.4990234375,
+              0.4515625
+            ],
+            "edgeMargins": [
+              0.1796875,
+              0.021875,
+              0.181640625,
+              0.11875
+            ],
+            "scale": [
+              0.638671875,
+              0.859375
+            ]
+          }
+        ],
+        "intentionalScaleAxes": [
+          0,
+          1
+        ],
+        "medianCenter": [
+          0.4990234375,
+          0.45078125
+        ],
+        "medianScale": [
+          0.638671875,
+          0.859375
+        ],
+        "minimumEdgeMargin": 0.0171875,
+        "qualityComparisonTolerance": 0.005,
+        "scaleDrift": 0,
+        "uniqueFrameCount": 8
+      },
+      "playbackOrder": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "runtimeMetrics": {
+        "alphaCoverage": {
+          "max": 0.22052001953125,
+          "median": 0.22052001953125,
+          "min": 0.22052001953125
+        },
+        "centerDrift": 0.0,
+        "frameCount": 8,
+        "frames": [
+          {
+            "alphaCoverage": 0.22052001953125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              52,
+              32,
+              204,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.203125,
+              0.1,
+              0.203125,
+              0.1
+            ],
+            "scale": [
+              0.59375,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.22052001953125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              52,
+              32,
+              204,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.203125,
+              0.1,
+              0.203125,
+              0.1
+            ],
+            "scale": [
+              0.59375,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.22052001953125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              52,
+              32,
+              204,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.203125,
+              0.1,
+              0.203125,
+              0.1
+            ],
+            "scale": [
+              0.59375,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.22052001953125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              52,
+              32,
+              204,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.203125,
+              0.1,
+              0.203125,
+              0.1
+            ],
+            "scale": [
+              0.59375,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.22052001953125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              52,
+              32,
+              204,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.203125,
+              0.1,
+              0.203125,
+              0.1
+            ],
+            "scale": [
+              0.59375,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.22052001953125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              52,
+              32,
+              204,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.203125,
+              0.1,
+              0.203125,
+              0.1
+            ],
+            "scale": [
+              0.59375,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.22052001953125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              52,
+              32,
+              204,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.203125,
+              0.1,
+              0.203125,
+              0.1
+            ],
+            "scale": [
+              0.59375,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.22052001953125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              52,
+              32,
+              204,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.203125,
+              0.1,
+              0.203125,
+              0.1
+            ],
+            "scale": [
+              0.59375,
+              0.8
+            ]
+          }
+        ],
+        "intentionalScaleAxes": [
+          0,
+          1
+        ],
+        "medianCenter": [
+          0.5,
+          0.5
+        ],
+        "medianScale": [
+          0.59375,
+          0.8
+        ],
+        "minimumEdgeMargin": 0.1,
+        "qualityComparisonTolerance": 0.005,
+        "scaleDrift": 0,
+        "uniqueFrameCount": 8
+      },
+      "sourceMetrics": {
+        "alphaCoverage": {
+          "max": 0.2458709716796875,
+          "median": 0.2458709716796875,
+          "min": 0.2458709716796875
+        },
+        "centerDrift": 0.008734640537108554,
+        "frameCount": 8,
+        "frames": [
+          {
+            "alphaCoverage": 0.2458709716796875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              92,
+              14,
+              419,
+              564
+            ],
+            "center": [
+              0.4990234375,
+              0.4515625
+            ],
+            "edgeMargins": [
+              0.1796875,
+              0.021875,
+              0.181640625,
+              0.11875
+            ],
+            "scale": [
+              0.638671875,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2458709716796875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              95,
+              15,
+              422,
+              565
+            ],
+            "center": [
+              0.5048828125,
+              0.453125
+            ],
+            "edgeMargins": [
+              0.185546875,
+              0.0234375,
+              0.17578125,
+              0.1171875
+            ],
+            "scale": [
+              0.638671875,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2458709716796875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              96,
+              14,
+              423,
+              564
+            ],
+            "center": [
+              0.5068359375,
+              0.4515625
+            ],
+            "edgeMargins": [
+              0.1875,
+              0.021875,
+              0.173828125,
+              0.11875
+            ],
+            "scale": [
+              0.638671875,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2458709716796875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              94,
+              13,
+              421,
+              563
+            ],
+            "center": [
+              0.5029296875,
+              0.45
+            ],
+            "edgeMargins": [
+              0.18359375,
+              0.0203125,
+              0.177734375,
+              0.1203125
+            ],
+            "scale": [
+              0.638671875,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2458709716796875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              90,
+              11,
+              417,
+              561
+            ],
+            "center": [
+              0.4951171875,
+              0.446875
+            ],
+            "edgeMargins": [
+              0.17578125,
+              0.0171875,
+              0.185546875,
+              0.1234375
+            ],
+            "scale": [
+              0.638671875,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2458709716796875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              88,
+              11,
+              415,
+              561
+            ],
+            "center": [
+              0.4912109375,
+              0.446875
+            ],
+            "edgeMargins": [
+              0.171875,
+              0.0171875,
+              0.189453125,
+              0.1234375
+            ],
+            "scale": [
+              0.638671875,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2458709716796875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              89,
+              13,
+              416,
+              563
+            ],
+            "center": [
+              0.4931640625,
+              0.45
+            ],
+            "edgeMargins": [
+              0.173828125,
+              0.0203125,
+              0.1875,
+              0.1203125
+            ],
+            "scale": [
+              0.638671875,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.2458709716796875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              92,
+              14,
+              419,
+              564
+            ],
+            "center": [
+              0.4990234375,
+              0.4515625
+            ],
+            "edgeMargins": [
+              0.1796875,
+              0.021875,
+              0.181640625,
+              0.11875
+            ],
+            "scale": [
+              0.638671875,
+              0.859375
+            ]
+          }
+        ],
+        "intentionalScaleAxes": [
+          0,
+          1
+        ],
+        "medianCenter": [
+          0.4990234375,
+          0.45078125
+        ],
+        "medianScale": [
+          0.638671875,
+          0.859375
+        ],
+        "minimumEdgeMargin": 0.0171875,
+        "qualityComparisonTolerance": 0.005,
+        "scaleDrift": 0,
+        "uniqueFrameCount": 8
+      }
+    },
+    "sword_ride": {
+      "effectiveQuality": {
+        "maxAlphaCoverage": 0.72,
+        "maxCenterDrift": 0.08,
+        "maxScaleDrift": 0.12,
+        "minAlphaCoverage": 0.02,
+        "safePadding": 0.08
+      },
+      "packedSourceQualityMetrics": {
+        "alphaCoverage": {
+          "max": 0.248724365234375,
+          "median": 0.2458709716796875,
+          "min": 0.2429595947265625
+        },
+        "centerDrift": 0.006101757559302082,
+        "frameCount": 10,
+        "frames": [
+          {
+            "alphaCoverage": 0.2458709716796875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              92,
+              14,
+              419,
+              564
+            ],
+            "center": [
+              0.4990234375,
+              0.4515625
+            ],
+            "edgeMargins": [
+              0.1796875,
+              0.021875,
+              0.181640625,
+              0.11875
+            ],
+            "scale": [
+              0.638671875,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.24739990234375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              93,
+              15,
+              421,
+              567
+            ],
+            "center": [
+              0.501953125,
+              0.4546875
+            ],
+            "edgeMargins": [
+              0.181640625,
+              0.0234375,
+              0.177734375,
+              0.1140625
+            ],
+            "scale": [
+              0.640625,
+              0.8625
+            ]
+          },
+          {
+            "alphaCoverage": 0.248724365234375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              93,
+              14,
+              422,
+              567
+            ],
+            "center": [
+              0.5029296875,
+              0.45390625
+            ],
+            "edgeMargins": [
+              0.181640625,
+              0.021875,
+              0.17578125,
+              0.1140625
+            ],
+            "scale": [
+              0.642578125,
+              0.8640625
+            ]
+          },
+          {
+            "alphaCoverage": 0.248724365234375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              93,
+              13,
+              422,
+              566
+            ],
+            "center": [
+              0.5029296875,
+              0.45234375
+            ],
+            "edgeMargins": [
+              0.181640625,
+              0.0203125,
+              0.17578125,
+              0.115625
+            ],
+            "scale": [
+              0.642578125,
+              0.8640625
+            ]
+          },
+          {
+            "alphaCoverage": 0.2469329833984375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              93,
+              12,
+              421,
+              563
+            ],
+            "center": [
+              0.501953125,
+              0.44921875
+            ],
+            "edgeMargins": [
+              0.181640625,
+              0.01875,
+              0.177734375,
+              0.1203125
+            ],
+            "scale": [
+              0.640625,
+              0.8609375
+            ]
+          },
+          {
+            "alphaCoverage": 0.244659423828125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              92,
+              11,
+              418,
+              560
+            ],
+            "center": [
+              0.498046875,
+              0.44609375
+            ],
+            "edgeMargins": [
+              0.1796875,
+              0.0171875,
+              0.18359375,
+              0.125
+            ],
+            "scale": [
+              0.63671875,
+              0.8578125
+            ]
+          },
+          {
+            "alphaCoverage": 0.2429595947265625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              91,
+              12,
+              416,
+              559
+            ],
+            "center": [
+              0.4951171875,
+              0.44609375
+            ],
+            "edgeMargins": [
+              0.177734375,
+              0.01875,
+              0.1875,
+              0.1265625
+            ],
+            "scale": [
+              0.634765625,
+              0.8546875
+            ]
+          },
+          {
+            "alphaCoverage": 0.2429595947265625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              91,
+              12,
+              416,
+              559
+            ],
+            "center": [
+              0.4951171875,
+              0.44609375
+            ],
+            "edgeMargins": [
+              0.177734375,
+              0.01875,
+              0.1875,
+              0.1265625
+            ],
+            "scale": [
+              0.634765625,
+              0.8546875
+            ]
+          },
+          {
+            "alphaCoverage": 0.24422607421875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              92,
+              14,
+              418,
+              562
+            ],
+            "center": [
+              0.498046875,
+              0.45
+            ],
+            "edgeMargins": [
+              0.1796875,
+              0.021875,
+              0.18359375,
+              0.121875
+            ],
+            "scale": [
+              0.63671875,
+              0.85625
+            ]
+          },
+          {
+            "alphaCoverage": 0.2458709716796875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              92,
+              14,
+              419,
+              564
+            ],
+            "center": [
+              0.4990234375,
+              0.4515625
+            ],
+            "edgeMargins": [
+              0.1796875,
+              0.021875,
+              0.181640625,
+              0.11875
+            ],
+            "scale": [
+              0.638671875,
+              0.859375
+            ]
+          }
+        ],
+        "intentionalScaleAxes": [],
+        "medianCenter": [
+          0.4990234375,
+          0.45078125
+        ],
+        "medianScale": [
+          0.638671875,
+          0.859375
+        ],
+        "minimumEdgeMargin": 0.0171875,
+        "qualityComparisonTolerance": 0.005,
+        "scaleDrift": 0.0061162079510703364,
+        "uniqueFrameCount": 10
+      },
+      "playbackOrder": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "runtimeMetrics": {
+        "alphaCoverage": {
+          "max": 0.22056884765625,
+          "median": 0.22052001953125,
+          "min": 0.22049560546875
+        },
+        "centerDrift": 0.0,
+        "frameCount": 10,
+        "frames": [
+          {
+            "alphaCoverage": 0.22052001953125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              52,
+              32,
+              204,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.203125,
+              0.1,
+              0.203125,
+              0.1
+            ],
+            "scale": [
+              0.59375,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.22049560546875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              52,
+              32,
+              204,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.203125,
+              0.1,
+              0.203125,
+              0.1
+            ],
+            "scale": [
+              0.59375,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.22049560546875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              52,
+              32,
+              204,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.203125,
+              0.1,
+              0.203125,
+              0.1
+            ],
+            "scale": [
+              0.59375,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.22049560546875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              52,
+              32,
+              204,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.203125,
+              0.1,
+              0.203125,
+              0.1
+            ],
+            "scale": [
+              0.59375,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.220556640625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              52,
+              32,
+              204,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.203125,
+              0.1,
+              0.203125,
+              0.1
+            ],
+            "scale": [
+              0.59375,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.2205322265625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              52,
+              32,
+              204,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.203125,
+              0.1,
+              0.203125,
+              0.1
+            ],
+            "scale": [
+              0.59375,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.22056884765625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              52,
+              32,
+              204,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.203125,
+              0.1,
+              0.203125,
+              0.1
+            ],
+            "scale": [
+              0.59375,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.22056884765625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              52,
+              32,
+              204,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.203125,
+              0.1,
+              0.203125,
+              0.1
+            ],
+            "scale": [
+              0.59375,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.22049560546875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              52,
+              32,
+              204,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.203125,
+              0.1,
+              0.203125,
+              0.1
+            ],
+            "scale": [
+              0.59375,
+              0.8
+            ]
+          },
+          {
+            "alphaCoverage": 0.22052001953125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              52,
+              32,
+              204,
+              288
+            ],
+            "center": [
+              0.5,
+              0.5
+            ],
+            "edgeMargins": [
+              0.203125,
+              0.1,
+              0.203125,
+              0.1
+            ],
+            "scale": [
+              0.59375,
+              0.8
+            ]
+          }
+        ],
+        "intentionalScaleAxes": [
+          0,
+          1
+        ],
+        "medianCenter": [
+          0.5,
+          0.5
+        ],
+        "medianScale": [
+          0.59375,
+          0.8
+        ],
+        "minimumEdgeMargin": 0.1,
+        "qualityComparisonTolerance": 0.005,
+        "scaleDrift": 0,
+        "uniqueFrameCount": 10
+      },
+      "sourceMetrics": {
+        "alphaCoverage": {
+          "max": 0.248724365234375,
+          "median": 0.2458709716796875,
+          "min": 0.2429595947265625
+        },
+        "centerDrift": 0.006101757559302082,
+        "frameCount": 10,
+        "frames": [
+          {
+            "alphaCoverage": 0.2458709716796875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              92,
+              14,
+              419,
+              564
+            ],
+            "center": [
+              0.4990234375,
+              0.4515625
+            ],
+            "edgeMargins": [
+              0.1796875,
+              0.021875,
+              0.181640625,
+              0.11875
+            ],
+            "scale": [
+              0.638671875,
+              0.859375
+            ]
+          },
+          {
+            "alphaCoverage": 0.24739990234375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              93,
+              15,
+              421,
+              567
+            ],
+            "center": [
+              0.501953125,
+              0.4546875
+            ],
+            "edgeMargins": [
+              0.181640625,
+              0.0234375,
+              0.177734375,
+              0.1140625
+            ],
+            "scale": [
+              0.640625,
+              0.8625
+            ]
+          },
+          {
+            "alphaCoverage": 0.248724365234375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              93,
+              14,
+              422,
+              567
+            ],
+            "center": [
+              0.5029296875,
+              0.45390625
+            ],
+            "edgeMargins": [
+              0.181640625,
+              0.021875,
+              0.17578125,
+              0.1140625
+            ],
+            "scale": [
+              0.642578125,
+              0.8640625
+            ]
+          },
+          {
+            "alphaCoverage": 0.248724365234375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              93,
+              13,
+              422,
+              566
+            ],
+            "center": [
+              0.5029296875,
+              0.45234375
+            ],
+            "edgeMargins": [
+              0.181640625,
+              0.0203125,
+              0.17578125,
+              0.115625
+            ],
+            "scale": [
+              0.642578125,
+              0.8640625
+            ]
+          },
+          {
+            "alphaCoverage": 0.2469329833984375,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              93,
+              12,
+              421,
+              563
+            ],
+            "center": [
+              0.501953125,
+              0.44921875
+            ],
+            "edgeMargins": [
+              0.181640625,
+              0.01875,
+              0.177734375,
+              0.1203125
+            ],
+            "scale": [
+              0.640625,
+              0.8609375
+            ]
+          },
+          {
+            "alphaCoverage": 0.244659423828125,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              92,
+              11,
+              418,
+              560
+            ],
+            "center": [
+              0.498046875,
+              0.44609375
+            ],
+            "edgeMargins": [
+              0.1796875,
+              0.0171875,
+              0.18359375,
+              0.125
+            ],
+            "scale": [
+              0.63671875,
+              0.8578125
+            ]
+          },
+          {
+            "alphaCoverage": 0.2429595947265625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              91,
+              12,
+              416,
+              559
+            ],
+            "center": [
+              0.4951171875,
+              0.44609375
+            ],
+            "edgeMargins": [
+              0.177734375,
+              0.01875,
+              0.1875,
+              0.1265625
+            ],
+            "scale": [
+              0.634765625,
+              0.8546875
+            ]
+          },
+          {
+            "alphaCoverage": 0.2429595947265625,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              91,
+              12,
+              416,
+              559
+            ],
+            "center": [
+              0.4951171875,
+              0.44609375
+            ],
+            "edgeMargins": [
+              0.177734375,
+              0.01875,
+              0.1875,
+              0.1265625
+            ],
+            "scale": [
+              0.634765625,
+              0.8546875
+            ]
+          },
+          {
+            "alphaCoverage": 0.24422607421875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              92,
+              14,
+              418,
+              562
+            ],
+            "center": [
+              0.498046875,
+              0.45
+            ],
+            "edgeMargins": [
+              0.1796875,
+              0.021875,
+              0.18359375,
+              0.121875
+            ],
+            "scale": [
+              0.63671875,
+              0.85625
+            ]
+          },
+          {
+            "alphaCoverage": 0.2458709716796875,
+            "borderContact": {
+              "edgePixelCounts": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "edgeSpans": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0
+              },
+              "visiblePixels": 0,
+              "visibleRatio": 0.0
+            },
+            "bounds": [
+              92,
+              14,
+              419,
+              564
+            ],
+            "center": [
+              0.4990234375,
+              0.4515625
+            ],
+            "edgeMargins": [
+              0.1796875,
+              0.021875,
+              0.181640625,
+              0.11875
+            ],
+            "scale": [
+              0.638671875,
+              0.859375
+            ]
+          }
+        ],
+        "intentionalScaleAxes": [],
+        "medianCenter": [
+          0.4990234375,
+          0.45078125
+        ],
+        "medianScale": [
+          0.638671875,
+          0.859375
+        ],
+        "minimumEdgeMargin": 0.0171875,
+        "qualityComparisonTolerance": 0.005,
+        "scaleDrift": 0.0061162079510703364,
+        "uniqueFrameCount": 10
+      }
+    }
+  },
+  "actorId": "qinglan-sword-cultivator",
+  "atlasDimensions": {
+    "cast": [
+      2048,
+      640
+    ],
+    "death": [
+      2048,
+      640
+    ],
+    "hand_seal": [
+      2048,
+      640
+    ],
+    "hurt": [
+      1536,
+      320
+    ],
+    "idle": [
+      2048,
+      320
+    ],
+    "sword_ride": [
+      2048,
+      640
+    ]
+  },
+  "contactSheet": "qinglan-sword-cultivator-contact-sheet.png",
+  "sourceModes": {
+    "cast": "layered-keyframes",
+    "death": "layered-keyframes",
+    "hand_seal": "layered-keyframes",
+    "hurt": "layered-keyframes",
+    "idle": "layered-keyframes",
+    "sword_ride": "layered-keyframes"
+  },
+  "status": "approved",
+  "warnings": []
+}

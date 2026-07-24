@@ -37,6 +37,17 @@ function collectFiles(root) {
   })
 }
 
+function findBuildFile(directory, basename, extension) {
+  if (!existsSync(directory)) return null
+  const exactName = `${basename}${extension}`
+  const hashedPrefix = `${basename}.`
+  return readdirSync(directory, { withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name)
+    .find((name) => name === exactName || (name.startsWith(hashedPrefix) && name.endsWith(extension)))
+    ?? null
+}
+
 export function checkCocosBuildOutput({ buildRoot, projectRoot = process.cwd() }) {
   const resolvedBuildRoot = resolve(buildRoot)
   const metaPath = resolve(projectRoot, 'assets/Scripts/Game/PortraitBattleBootstrap.ts.meta')
@@ -46,9 +57,11 @@ export function checkCocosBuildOutput({ buildRoot, projectRoot = process.cwd() }
   }
 
   const classId = compressScriptUuid(JSON.parse(readFileSync(metaPath, 'utf8')).uuid)
-  const mainIndexPath = join(resolvedBuildRoot, 'assets/main/index.js')
-  if (!existsSync(mainIndexPath)) {
-    errors.push(`missing built main index: ${mainIndexPath}`)
+  const mainRoot = join(resolvedBuildRoot, 'assets/main')
+  const mainIndexName = findBuildFile(mainRoot, 'index', '.js')
+  const mainIndexPath = mainIndexName ? join(mainRoot, mainIndexName) : null
+  if (!mainIndexPath) {
+    errors.push(`missing built main index in: ${mainRoot}`)
   } else {
     const mainIndex = readFileSync(mainIndexPath, 'utf8')
     if (!mainIndex.includes('PortraitBattleBootstrap')) errors.push('built main index omits PortraitBattleBootstrap')
@@ -67,10 +80,11 @@ export function checkCocosBuildOutput({ buildRoot, projectRoot = process.cwd() }
   }
 
   const resourcesRoot = join(resolvedBuildRoot, 'assets/resources')
-  const resourcesConfigPath = join(resourcesRoot, 'config.json')
+  const resourcesConfigName = findBuildFile(resourcesRoot, 'config', '.json')
+  const resourcesConfigPath = resourcesConfigName ? join(resourcesRoot, resourcesConfigName) : null
   let resourcesConfig = null
-  if (!existsSync(resourcesConfigPath)) {
-    errors.push(`missing built resources config: ${resourcesConfigPath}`)
+  if (!resourcesConfigPath) {
+    errors.push(`missing built resources config in: ${resourcesRoot}`)
   } else {
     try {
       resourcesConfig = JSON.parse(readFileSync(resourcesConfigPath, 'utf8'))
@@ -105,10 +119,12 @@ export function checkCocosBuildOutput({ buildRoot, projectRoot = process.cwd() }
         }
       }
 
-      const importPath = join(resourcesRoot, 'import', assetUuid.slice(0, 2), `${assetUuid}@f9941.json`)
-      if (!existsSync(importPath)) errors.push(`built ${assetName} import artifact is missing: ${importPath}`)
-      const nativePath = join(resourcesRoot, 'native', assetUuid.slice(0, 2), `${assetUuid}.png`)
-      if (!existsSync(nativePath)) errors.push(`built ${assetName} native artifact is missing: ${nativePath}`)
+      const importRoot = join(resourcesRoot, 'import', assetUuid.slice(0, 2))
+      const importName = findBuildFile(importRoot, `${assetUuid}@f9941`, '.json')
+      if (!importName) errors.push(`built ${assetName} import artifact is missing in: ${importRoot}`)
+      const nativeRoot = join(resourcesRoot, 'native', assetUuid.slice(0, 2))
+      const nativeName = findBuildFile(nativeRoot, assetUuid, '.png')
+      if (!nativeName) errors.push(`built ${assetName} native artifact is missing in: ${nativeRoot}`)
     }
   }
 
