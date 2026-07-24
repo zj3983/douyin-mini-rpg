@@ -1,23 +1,19 @@
-export type ArtifactId =
-  | 'flying-sword'
-  | 'thunder-seal'
-  | 'soul-bell'
-  | 'flame-ruler'
-
-export type RelicId = 'soul-magnet' | 'jade-guard' | 'spirit-vessel'
-
-export const ARTIFACT_IDS: readonly ArtifactId[] = [
+export const ARTIFACT_IDS = [
   'flying-sword',
   'thunder-seal',
   'soul-bell',
   'flame-ruler',
-]
+] as const
 
-export const RELIC_IDS: readonly RelicId[] = [
+export type ArtifactId = typeof ARTIFACT_IDS[number]
+
+export const RELIC_IDS = [
   'soul-magnet',
   'jade-guard',
   'spirit-vessel',
-]
+] as const
+
+export type RelicId = typeof RELIC_IDS[number]
 
 export type ItemRarity = 'common' | 'spirit' | 'mystic' | 'epic' | 'legendary'
 
