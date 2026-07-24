@@ -66,8 +66,21 @@ actor = builder.build_actor({
     "masterFrameSize": [128, 160],
     "runtimeFrameSize": [64, 80],
     "anchor": {"x": 0.5, "y": 0.85},
-    "actions": {"idle": {"frames": 3, "fps": 6, "loop": True, "source": "test-actor/idle"}}
-}, source_root, output_root)
+    "quality": {
+        "maxCenterDrift": 0.08,
+        "maxScaleDrift": 0.12,
+        "minAlphaCoverage": 0.02,
+        "maxAlphaCoverage": 0.72,
+        "safePadding": 0.08,
+    },
+    "actions": {"idle": {
+        "frames": 3,
+        "fps": 6,
+        "loop": True,
+        "source": "test-actor/idle",
+        "sourceMode": "frame-sequence",
+    }}
+}, source_root, output_root, temp / "reports")
 source_manifest = temp / "animation-atlas.json"
 resource_manifest = temp / "resources-animation-atlas.json"
 builder.write_manifest([actor], source_manifest, resource_manifest)
@@ -76,6 +89,8 @@ print(json.dumps({
     "frameSize": actor["frameSize"],
     "frames": len(actor["actions"][0]["frames"]),
     "same": source_manifest.read_bytes() == resource_manifest.read_bytes(),
+    "report": (temp / "reports/test-actor-report.json").exists(),
+    "sheet": (temp / "reports/test-actor-contact-sheet.png").exists(),
 }))
 `
     const output = runPython(script, [tempRoot])
@@ -83,6 +98,8 @@ print(json.dumps({
     assert.deepEqual(parsed.frameSize, { w: 64, h: 80 })
     assert.equal(parsed.frames, 3)
     assert.equal(parsed.same, true)
+    assert.equal(parsed.report, true)
+    assert.equal(parsed.sheet, true)
     assert.ok(readFileSync(join(tempRoot, 'resources', parsed.atlas)).length > 0)
   } finally {
     rmSync(tempRoot, { recursive: true, force: true })
@@ -210,6 +227,135 @@ print("all invalid contracts rejected")
   const tempRoot = mkdtempSync(join(tmpdir(), 'vertical-slice-contract-'))
   try {
     assert.match(runPython(script, [tempRoot]), /all invalid contracts rejected/)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('builder analyzes deterministic action quality and rejects unstable frames', () => {
+  const script = String.raw`
+import importlib.util
+import json
+import sys
+from pathlib import Path
+from PIL import Image, ImageDraw
+
+root = Path(sys.argv[1])
+spec = importlib.util.spec_from_file_location("builder", root / "tools/build-vertical-slice-atlases.py")
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+
+quality = {
+    "maxCenterDrift": 0.08,
+    "maxScaleDrift": 0.12,
+    "minAlphaCoverage": 0.02,
+    "maxAlphaCoverage": 0.72,
+    "safePadding": 0.08,
+}
+
+def make_frame(bounds, size=(100, 100)):
+    frame = Image.new("RGBA", size, (0, 0, 0, 0))
+    ImageDraw.Draw(frame).rectangle(bounds, fill=(120, 210, 180, 255))
+    return frame
+
+stable = [
+    make_frame((30, 20, 69, 79)),
+    make_frame((31, 20, 70, 79)),
+    make_frame((29, 20, 68, 79)),
+]
+metrics = builder.analyze_action(stable, quality)
+assert metrics["frameCount"] == 3
+assert metrics["centerDrift"] < quality["maxCenterDrift"]
+assert metrics["scaleDrift"] == 0
+assert metrics["frames"][0]["bounds"] == [30, 20, 70, 80]
+assert metrics["frames"][0]["center"] == [0.5, 0.5]
+assert metrics["frames"][0]["scale"] == [0.4, 0.6]
+assert metrics["frames"][0]["edgeMargins"] == [0.3, 0.2, 0.3, 0.2]
+
+def expect_rejected(label, frames, expected, custom_quality=None):
+    try:
+        builder.analyze_action(frames, custom_quality or quality)
+    except ValueError as error:
+        assert expected in str(error), f"{label}: {error}"
+    else:
+        raise AssertionError(f"{label} must fail")
+
+expect_rejected("empty", [], "empty")
+expect_rejected("invisible", [Image.new("RGBA", (100, 100), (0, 0, 0, 0))], "visible")
+expect_rejected("safe edge", [make_frame((0, 20, 39, 79))], "safe edge")
+expect_rejected("center drift", [make_frame((10, 20, 39, 79)), make_frame((60, 20, 89, 79))], "center drift")
+expect_rejected("scale drift", [make_frame((30, 20, 69, 79)), make_frame((20, 10, 79, 89))], "scale drift")
+expect_rejected("low alpha", [make_frame((48, 48, 51, 51))], "alpha coverage", {**quality, "safePadding": 0.01})
+expect_rejected("high alpha", [make_frame((5, 5, 94, 94))], "alpha coverage", {**quality, "safePadding": 0.01})
+print(json.dumps(metrics, sort_keys=True))
+`
+  const output = runPython(script)
+  const metrics = JSON.parse(output)
+  assert.equal(metrics.frameCount, 3)
+})
+
+test('builder writes a candidate JSON report and openable contact sheet', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'vertical-slice-report-'))
+  try {
+    const script = String.raw`
+import importlib.util
+import json
+import sys
+from pathlib import Path
+from PIL import Image, ImageDraw
+
+root = Path(sys.argv[1])
+temp = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("builder", root / "tools/build-vertical-slice-atlases.py")
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+
+def make_frame(offset, color):
+    frame = Image.new("RGBA", (64, 80), (0, 0, 0, 0))
+    ImageDraw.Draw(frame).rectangle((18 + offset, 12, 45 + offset, 67), fill=color)
+    return frame
+
+quality = {
+    "maxCenterDrift": 0.08,
+    "maxScaleDrift": 0.12,
+    "minAlphaCoverage": 0.02,
+    "maxAlphaCoverage": 0.72,
+    "safePadding": 0.08,
+}
+action_frames = {
+    "idle": [make_frame(0, (80, 170, 220, 255)), make_frame(1, (90, 180, 230, 255))],
+    "cast": [make_frame(0, (220, 170, 80, 255)), make_frame(-1, (230, 180, 90, 255))],
+}
+action_metrics = {name: builder.analyze_action(frames, quality) for name, frames in action_frames.items()}
+report = builder.write_actor_report(
+    actor_id="test-actor",
+    source_modes={"idle": "frame-sequence", "cast": "layered-keyframes"},
+    action_frames=action_frames,
+    action_metrics=action_metrics,
+    atlas_dimensions={"idle": [128, 80], "cast": [128, 80]},
+    warnings=["review cast silhouette"],
+    report_root=temp,
+)
+report_path = temp / "test-actor-report.json"
+sheet_path = temp / "test-actor-contact-sheet.png"
+stored = json.loads(report_path.read_text(encoding="utf-8"))
+with Image.open(sheet_path) as sheet:
+    sheet_size = sheet.size
+assert report == stored
+assert stored["status"] == "candidate"
+assert stored["actorId"] == "test-actor"
+assert stored["sourceModes"]["cast"] == "layered-keyframes"
+assert stored["actions"]["idle"]["frameCount"] == 2
+assert stored["atlasDimensions"]["idle"] == [128, 80]
+assert stored["warnings"] == ["review cast silhouette"]
+assert sheet_size[0] > 0 and sheet_size[1] > 0
+print(json.dumps({"sheetSize": sheet_size, "report": stored}, sort_keys=True))
+`
+    const output = runPython(script, [tempRoot])
+    const parsed = JSON.parse(output)
+    assert.ok(parsed.sheetSize[0] > 0)
+    assert.ok(parsed.sheetSize[1] > 0)
+    assert.equal(parsed.report.status, 'candidate')
   } finally {
     rmSync(tempRoot, { recursive: true, force: true })
   }

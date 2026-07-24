@@ -3,10 +3,11 @@ import argparse
 import json
 import math
 from pathlib import Path, PurePosixPath, PureWindowsPath
+from statistics import median
 from typing import Any
 from collections import deque
 
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 
 SOURCE_MODES = {"layered-keyframes", "pose-video", "frame-sequence"}
@@ -17,6 +18,13 @@ QUALITY_KEYS = (
     "maxAlphaCoverage",
     "safePadding",
 )
+DEFAULT_QUALITY = {
+    "maxCenterDrift": 0.08,
+    "maxScaleDrift": 0.12,
+    "minAlphaCoverage": 0.02,
+    "maxAlphaCoverage": 0.72,
+    "safePadding": 0.08,
+}
 
 
 def _as_size(value: Any, label: str) -> tuple[int, int]:
@@ -110,6 +118,179 @@ def validate_subject(frame: Image.Image, padding_ratio):
     return True
 
 
+def frame_metrics(frame: Image.Image):
+    image = frame.convert("RGBA")
+    left, top, right, bottom = _bbox_or_error(image)
+    width, height = image.size
+    if width <= 0 or height <= 0:
+        raise ValueError("frame dimensions must be positive")
+    visible_width = right - left
+    visible_height = bottom - top
+    visible_pixels = sum(1 for alpha in image.getchannel("A").getdata() if alpha > 0)
+    return {
+        "bounds": [left, top, right, bottom],
+        "center": [
+            (left + right) / (2 * width),
+            (top + bottom) / (2 * height),
+        ],
+        "scale": [visible_width / width, visible_height / height],
+        "alphaCoverage": visible_pixels / (width * height),
+        "edgeMargins": [
+            left / width,
+            top / height,
+            (width - right) / width,
+            (height - bottom) / height,
+        ],
+    }
+
+
+def analyze_action(frames, quality):
+    if not frames:
+        raise ValueError("action frames must not be empty")
+    _validate_actor_quality("action", quality)
+
+    metrics = []
+    for index, frame in enumerate(frames):
+        try:
+            current = frame_metrics(frame)
+        except ValueError as error:
+            raise ValueError(f"frame {index} has no visible subject") from error
+        coverage = current["alphaCoverage"]
+        if not quality["minAlphaCoverage"] <= coverage <= quality["maxAlphaCoverage"]:
+            raise ValueError(
+                f"frame {index} alpha coverage {coverage:.6f} outside "
+                f"[{quality['minAlphaCoverage']:.6f}, {quality['maxAlphaCoverage']:.6f}]"
+            )
+        minimum_margin = min(current["edgeMargins"])
+        safe_edge = quality["safePadding"] - 0.015
+        if minimum_margin < safe_edge:
+            raise ValueError(
+                f"frame {index} violates safe edge: margin {minimum_margin:.6f} below {safe_edge:.6f}"
+            )
+        metrics.append(current)
+
+    median_center = [
+        median(frame["center"][0] for frame in metrics),
+        median(frame["center"][1] for frame in metrics),
+    ]
+    center_drift = max(
+        math.dist(frame["center"], median_center)
+        for frame in metrics
+    )
+
+    median_scale = [
+        median(frame["scale"][0] for frame in metrics),
+        median(frame["scale"][1] for frame in metrics),
+    ]
+    scale_drift = max(
+        abs(frame["scale"][axis] - median_scale[axis]) / median_scale[axis]
+        for frame in metrics
+        for axis in range(2)
+    )
+
+    if center_drift > quality["maxCenterDrift"]:
+        raise ValueError(
+            f"center drift {center_drift:.6f} exceeds {quality['maxCenterDrift']:.6f}"
+        )
+    if scale_drift > quality["maxScaleDrift"]:
+        raise ValueError(
+            f"scale drift {scale_drift:.6f} exceeds {quality['maxScaleDrift']:.6f}"
+        )
+
+    return {
+        "frameCount": len(metrics),
+        "centerDrift": center_drift,
+        "scaleDrift": scale_drift,
+        "medianCenter": median_center,
+        "medianScale": median_scale,
+        "alphaCoverage": {
+            "min": min(frame["alphaCoverage"] for frame in metrics),
+            "max": max(frame["alphaCoverage"] for frame in metrics),
+            "median": median(frame["alphaCoverage"] for frame in metrics),
+        },
+        "minimumEdgeMargin": min(min(frame["edgeMargins"]) for frame in metrics),
+        "frames": metrics,
+    }
+
+
+def _draw_checkerboard(image: Image.Image, cell_size=8):
+    draw = ImageDraw.Draw(image)
+    colors = ((54, 60, 72, 255), (76, 84, 98, 255))
+    for y in range(0, image.height, cell_size):
+        for x in range(0, image.width, cell_size):
+            color = colors[((x // cell_size) + (y // cell_size)) % 2]
+            draw.rectangle((x, y, x + cell_size - 1, y + cell_size - 1), fill=color)
+
+
+def _ascii_label(value: str, limit=14):
+    cleaned = "".join(character if 32 <= ord(character) < 127 else "?" for character in value)
+    return cleaned[:limit]
+
+
+def write_contact_sheet(action_frames, path):
+    if not action_frames:
+        raise ValueError("contact sheet requires at least one action")
+    all_frames = [frame for frames in action_frames.values() for frame in frames]
+    if not all_frames:
+        raise ValueError("contact sheet requires at least one frame")
+    frame_width = max(frame.width for frame in all_frames)
+    frame_height = max(frame.height for frame in all_frames)
+    frame_count = max(len(frames) for frames in action_frames.values())
+    label_width = 112
+    gutter = 8
+    row_height = frame_height + gutter * 2
+    width = label_width + frame_count * (frame_width + gutter) + gutter
+    height = len(action_frames) * row_height
+    sheet = Image.new("RGBA", (width, height), (0, 0, 0, 255))
+    _draw_checkerboard(sheet)
+    draw = ImageDraw.Draw(sheet)
+    font = ImageFont.load_default()
+    for row, (action_name, frames) in enumerate(action_frames.items()):
+        row_y = row * row_height
+        draw.rectangle((0, row_y, label_width - 1, row_y + row_height - 1), fill=(22, 27, 38, 235))
+        draw.text((gutter, row_y + gutter), _ascii_label(action_name), fill=(238, 242, 250, 255), font=font)
+        for column, frame in enumerate(frames):
+            x = label_width + gutter + column * (frame_width + gutter)
+            y = row_y + gutter + (frame_height - frame.height) // 2
+            sheet.alpha_composite(frame.convert("RGBA"), (x, y))
+            draw.text((x, row_y + 1), str(column), fill=(238, 242, 250, 255), font=font)
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    sheet.save(path)
+    return path
+
+
+def write_actor_report(
+    *,
+    actor_id,
+    source_modes,
+    action_frames,
+    action_metrics,
+    atlas_dimensions,
+    warnings,
+    report_root,
+):
+    report_root = Path(report_root)
+    report_root.mkdir(parents=True, exist_ok=True)
+    contact_sheet_name = f"{actor_id}-contact-sheet.png"
+    write_contact_sheet(action_frames, report_root / contact_sheet_name)
+    report = {
+        "status": "candidate",
+        "actorId": actor_id,
+        "sourceModes": source_modes,
+        "actions": action_metrics,
+        "atlasDimensions": atlas_dimensions,
+        "warnings": list(warnings),
+        "contactSheet": contact_sheet_name,
+    }
+    report_path = report_root / f"{actor_id}-report.json"
+    report_path.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return report
+
+
 def pack_action(frames, frame_size, max_texture_size=4096):
     width, height = _as_size(list(frame_size), "frame_size")
     if not frames:
@@ -145,7 +326,7 @@ def _load_action_frames(action_config, source_root: Path, frame_size, anchor):
     return frames
 
 
-def build_actor(source_config, source_root, output_root):
+def build_actor(source_config, source_root, output_root, report_root=None):
     source_root = Path(source_root)
     output_root = Path(output_root)
     actor_id = source_config["id"]
@@ -155,10 +336,19 @@ def build_actor(source_config, source_root, output_root):
     actor_dir = output_root / "Assets" / "ActorAtlases" / folder
     actor_dir.mkdir(parents=True, exist_ok=True)
 
+    quality = source_config.get("quality", DEFAULT_QUALITY)
     actions = []
+    action_frames = {}
+    action_metrics = {}
+    atlas_dimensions = {}
+    source_modes = {}
     for action_name, action_config in source_config["actions"].items():
         frames = _load_action_frames(action_config, source_root, frame_size, anchor)
+        action_frames[action_name] = frames
+        action_metrics[action_name] = analyze_action(frames, quality)
+        source_modes[action_name] = action_config.get("sourceMode", "frame-sequence")
         atlas, rects = pack_action(frames, frame_size)
+        atlas_dimensions[action_name] = [atlas.width, atlas.height]
         atlas_path = actor_dir / f"{action_name}.png"
         atlas.save(atlas_path)
         relative_atlas = f"Assets/ActorAtlases/{folder}/{action_name}.png"
@@ -171,7 +361,7 @@ def build_actor(source_config, source_root, output_root):
             "frames": rects,
         })
 
-    return {
+    actor = {
         "id": actor_id,
         "type": source_config.get("type", "monster"),
         "atlas": actions[0]["atlas"],
@@ -179,6 +369,17 @@ def build_actor(source_config, source_root, output_root):
         "anchor": source_config["anchor"],
         "actions": actions,
     }
+    if report_root is not None:
+        write_actor_report(
+            actor_id=actor_id,
+            source_modes=source_modes,
+            action_frames=action_frames,
+            action_metrics=action_metrics,
+            atlas_dimensions=atlas_dimensions,
+            warnings=[],
+            report_root=report_root,
+        )
+    return actor
 
 
 def write_manifest(actors, source_path, resource_path):
@@ -336,6 +537,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--actor", action="append", default=[])
+    parser.add_argument("--report-root")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     data = check_source_manifest(root)
@@ -345,7 +547,11 @@ def main():
     selected = args.actor or list(data["actors"].keys())
     source_root = root / data.get("sourceRoot", "art-source/vertical-slice")
     output_root = root / "assets/resources"
-    built_actors = [build_actor(data["actors"][actor_id], source_root, output_root) for actor_id in selected]
+    report_root = Path(args.report_root) if args.report_root else root / "artifacts/animation-reports"
+    built_actors = [
+        build_actor(data["actors"][actor_id], source_root, output_root, report_root)
+        for actor_id in selected
+    ]
     existing_actors = [] if not args.actor else _load_existing_runtime_actors(root / "assets/Data/animation-atlas.json")
     actors = merge_actor_manifests(existing_actors, built_actors)
     write_manifest(actors, root / "assets/Data/animation-atlas.json", root / "assets/resources/Data/animation-atlas.json")
