@@ -84,6 +84,7 @@ actor = builder.build_actor({
 source_manifest = temp / "animation-atlas.json"
 resource_manifest = temp / "resources-animation-atlas.json"
 builder.write_manifest([actor], source_manifest, resource_manifest)
+report_data = json.loads((temp / "reports/test-actor-report.json").read_text(encoding="utf-8"))
 print(json.dumps({
     "atlas": actor["atlas"],
     "frameSize": actor["frameSize"],
@@ -91,6 +92,9 @@ print(json.dumps({
     "same": source_manifest.read_bytes() == resource_manifest.read_bytes(),
     "report": (temp / "reports/test-actor-report.json").exists(),
     "sheet": (temp / "reports/test-actor-contact-sheet.png").exists(),
+    "contactSheets": len(list((temp / "reports").glob("*-contact-sheet.png"))),
+    "sourceFrames": report_data["actions"]["idle"]["sourceMetrics"]["frameCount"],
+    "runtimeFrames": report_data["actions"]["idle"]["runtimeMetrics"]["frameCount"],
 }))
 `
     const output = runPython(script, [tempRoot])
@@ -100,6 +104,9 @@ print(json.dumps({
     assert.equal(parsed.same, true)
     assert.equal(parsed.report, true)
     assert.equal(parsed.sheet, true)
+    assert.equal(parsed.contactSheets, 1)
+    assert.equal(parsed.sourceFrames, 3)
+    assert.equal(parsed.runtimeFrames, 3)
     assert.ok(readFileSync(join(tempRoot, 'resources', parsed.atlas)).length > 0)
   } finally {
     rmSync(tempRoot, { recursive: true, force: true })
@@ -180,6 +187,13 @@ cases = [
     ("actor not object", lambda data: data["actors"].update({"test-actor": []})),
     ("missing actor id", lambda data: actor(data).pop("id")),
     ("mismatched actor id", lambda data: actor(data).update(id="other-actor")),
+    ("traversal actor id", lambda data: data["actors"].update({"../escape": {**data["actors"].pop("test-actor"), "id": "../escape"}})),
+    ("backslash actor id", lambda data: data["actors"].update({"bad\\name": {**data["actors"].pop("test-actor"), "id": "bad\\name"}})),
+    ("colon actor id", lambda data: data["actors"].update({"bad:name": {**data["actors"].pop("test-actor"), "id": "bad:name"}})),
+    ("reserved con actor id", lambda data: data["actors"].update({"con": {**data["actors"].pop("test-actor"), "id": "con"}})),
+    ("reserved prn actor id", lambda data: data["actors"].update({"prn": {**data["actors"].pop("test-actor"), "id": "prn"}})),
+    ("reserved com actor id", lambda data: data["actors"].update({"com1": {**data["actors"].pop("test-actor"), "id": "com1"}})),
+    ("reserved lpt actor id", lambda data: data["actors"].update({"lpt1": {**data["actors"].pop("test-actor"), "id": "lpt1"}})),
     ("missing quality", lambda data: actor(data).pop("quality")),
     ("missing quality key", lambda data: actor(data)["quality"].pop("safePadding")),
     ("non-numeric quality", lambda data: actor(data)["quality"].update(maxCenterDrift="0.08")),
@@ -272,6 +286,13 @@ assert metrics["frames"][0]["center"] == [0.5, 0.5]
 assert metrics["frames"][0]["scale"] == [0.4, 0.6]
 assert metrics["frames"][0]["edgeMargins"] == [0.3, 0.2, 0.3, 0.2]
 
+speckled = make_frame((30, 20, 69, 79))
+speckled.putpixel((0, 0), (255, 255, 255, 1))
+speckled_metrics = builder.frame_metrics(speckled)
+assert speckled_metrics["bounds"] == [30, 20, 70, 80]
+assert speckled_metrics["edgeMargins"] == [0.3, 0.2, 0.3, 0.2]
+assert speckled_metrics["alphaCoverage"] == metrics["frames"][0]["alphaCoverage"]
+
 def expect_rejected(label, frames, expected, custom_quality=None):
     try:
         builder.analyze_action(frames, custom_quality or quality)
@@ -292,6 +313,76 @@ print(json.dumps(metrics, sort_keys=True))
   const output = runPython(script)
   const metrics = JSON.parse(output)
   assert.equal(metrics.frameCount, 3)
+})
+
+test('build_actor rejects raw source defects before normalization can hide them', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'vertical-slice-raw-quality-'))
+  try {
+    const script = String.raw`
+import importlib.util
+import sys
+from pathlib import Path
+from PIL import Image, ImageDraw
+
+root = Path(sys.argv[1])
+temp = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("builder", root / "tools/build-vertical-slice-atlases.py")
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+
+quality = {
+    "maxCenterDrift": 0.08,
+    "maxScaleDrift": 0.12,
+    "minAlphaCoverage": 0.02,
+    "maxAlphaCoverage": 0.72,
+    "safePadding": 0.08,
+}
+
+def write_frames(case_name, bounds):
+    source = temp / case_name / "source" / "test-actor" / "idle"
+    source.mkdir(parents=True, exist_ok=True)
+    for index, box in enumerate(bounds):
+        image = Image.new("RGBA", (128, 160), (0, 0, 0, 0))
+        ImageDraw.Draw(image).rectangle(box, fill=(100, 190, 150, 255))
+        image.save(source / f"{index:02d}.png")
+
+def build(case_name):
+    case = temp / case_name
+    return builder.build_actor({
+        "id": "test-actor",
+        "type": "monster",
+        "masterFrameSize": [128, 160],
+        "runtimeFrameSize": [64, 80],
+        "anchor": {"x": 0.5, "y": 0.85},
+        "quality": quality,
+        "actions": {"idle": {
+            "frames": 2,
+            "fps": 6,
+            "loop": True,
+            "source": "test-actor/idle",
+            "sourceMode": "frame-sequence",
+        }},
+    }, case / "source", case / "output", case / "reports")
+
+cases = {
+    "edge": ([(0, 30, 49, 129), (0, 30, 49, 129)], "safe edge"),
+    "position": ([(15, 30, 54, 129), (73, 30, 112, 129)], "center drift"),
+    "size": ([(42, 35, 85, 124), (25, 18, 102, 141)], "scale drift"),
+}
+for name, (bounds, expected) in cases.items():
+    write_frames(name, bounds)
+    try:
+        build(name)
+    except ValueError as error:
+        assert expected in str(error), f"{name}: {error}"
+    else:
+        raise AssertionError(f"raw {name} defect was hidden by normalization")
+print("raw source defects rejected")
+`
+    assert.match(runPython(script, [tempRoot]), /raw source defects rejected/)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
 })
 
 test('builder writes a candidate JSON report and openable contact sheet', () => {
@@ -331,7 +422,8 @@ report = builder.write_actor_report(
     actor_id="test-actor",
     source_modes={"idle": "frame-sequence", "cast": "layered-keyframes"},
     action_frames=action_frames,
-    action_metrics=action_metrics,
+    source_metrics=action_metrics,
+    runtime_metrics=action_metrics,
     atlas_dimensions={"idle": [128, 80], "cast": [128, 80]},
     warnings=["review cast silhouette"],
     report_root=temp,
@@ -345,7 +437,8 @@ assert report == stored
 assert stored["status"] == "candidate"
 assert stored["actorId"] == "test-actor"
 assert stored["sourceModes"]["cast"] == "layered-keyframes"
-assert stored["actions"]["idle"]["frameCount"] == 2
+assert stored["actions"]["idle"]["sourceMetrics"]["frameCount"] == 2
+assert stored["actions"]["idle"]["runtimeMetrics"]["frameCount"] == 2
 assert stored["atlasDimensions"]["idle"] == [128, 80]
 assert stored["warnings"] == ["review cast silhouette"]
 assert sheet_size[0] > 0 and sheet_size[1] > 0
@@ -356,6 +449,71 @@ print(json.dumps({"sheetSize": sheet_size, "report": stored}, sort_keys=True))
     assert.ok(parsed.sheetSize[0] > 0)
     assert.ok(parsed.sheetSize[1] > 0)
     assert.equal(parsed.report.status, 'candidate')
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('contact sheets bound large frames, stay deterministic, and enforce path and pixel budgets', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'vertical-slice-report-safety-'))
+  try {
+    const script = String.raw`
+import importlib.util
+import sys
+from pathlib import Path
+from PIL import Image, ImageDraw
+
+root = Path(sys.argv[1])
+temp = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("builder", root / "tools/build-vertical-slice-atlases.py")
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+
+large = Image.new("RGBA", (1000, 1250), (0, 0, 0, 0))
+ImageDraw.Draw(large).rectangle((200, 100, 799, 1149), fill=(80, 180, 220, 255))
+frames = {"idle": [large, large], "cast": [large, large]}
+first = temp / "first.png"
+second = temp / "second.png"
+builder.write_contact_sheet(frames, first)
+builder.write_contact_sheet(frames, second)
+with Image.open(first) as sheet:
+    assert sheet.size == (456, 432)
+assert first.read_bytes() == second.read_bytes()
+
+try:
+    builder._report_output_path(temp / "reports", "../escape.json")
+except ValueError as error:
+    assert "report root" in str(error)
+else:
+    raise AssertionError("resolved report output must stay inside report root")
+
+too_many = {f"action-{index}": [large] * 100 for index in range(100)}
+try:
+    builder.write_contact_sheet(too_many, temp / "too-large.png")
+except ValueError as error:
+    assert "pixel budget" in str(error)
+else:
+    raise AssertionError("oversized contact sheet layout must fail")
+
+try:
+    builder.write_actor_report(
+        actor_id="../escape",
+        source_modes={"idle": "frame-sequence"},
+        action_frames={"idle": [large]},
+        source_metrics={"idle": {}},
+        runtime_metrics={"idle": {}},
+        atlas_dimensions={"idle": [64, 80]},
+        warnings=[],
+        report_root=temp / "reports",
+    )
+except ValueError as error:
+    assert "actor id" in str(error)
+else:
+    raise AssertionError("unsafe report actor id must fail")
+assert not (temp / "escape-report.json").exists()
+print("bounded deterministic and safe")
+`
+    assert.match(runPython(script, [tempRoot]), /bounded deterministic and safe/)
   } finally {
     rmSync(tempRoot, { recursive: true, force: true })
   }

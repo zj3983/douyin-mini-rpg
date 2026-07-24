@@ -2,10 +2,11 @@
 import argparse
 import json
 import math
+import re
+from collections import deque
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from statistics import median
 from typing import Any
-from collections import deque
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -25,6 +26,18 @@ DEFAULT_QUALITY = {
     "maxAlphaCoverage": 0.72,
     "safePadding": 0.08,
 }
+ALPHA_VISIBILITY_THRESHOLD = 8
+CONTACT_THUMBNAIL_SIZE = (160, 200)
+CONTACT_SHEET_PIXEL_BUDGET = 12_000_000
+PORTABLE_ACTOR_ID = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+WINDOWS_RESERVED_NAMES = {
+    "con",
+    "prn",
+    "aux",
+    "nul",
+    *(f"com{index}" for index in range(1, 10)),
+    *(f"lpt{index}" for index in range(1, 10)),
+}
 
 
 def _as_size(value: Any, label: str) -> tuple[int, int]:
@@ -38,8 +51,14 @@ def _as_size(value: Any, label: str) -> tuple[int, int]:
     return width, height
 
 
+def _visible_alpha_mask(image: Image.Image):
+    return image.getchannel("A").point(
+        lambda alpha: 255 if alpha >= ALPHA_VISIBILITY_THRESHOLD else 0
+    )
+
+
 def _bbox_or_error(image: Image.Image) -> tuple[int, int, int, int]:
-    bbox = image.getchannel("A").getbbox()
+    bbox = _visible_alpha_mask(image).getbbox()
     if bbox is None:
         raise ValueError("frame has no visible subject")
     return bbox
@@ -112,7 +131,11 @@ def validate_subject(frame: Image.Image, padding_ratio):
     margin = min(left / width, top / height, (width - right) / width, (height - bottom) / height)
     if margin < padding_ratio - 0.015:
         raise ValueError(f"subject margin {margin:.3f} below requested padding {padding_ratio:.3f}")
-    visible = sum(1 for alpha in image.getchannel("A").getdata() if alpha > 0)
+    visible = sum(
+        1
+        for alpha in image.getchannel("A").getdata()
+        if alpha >= ALPHA_VISIBILITY_THRESHOLD
+    )
     if visible < width * height * 0.02:
         raise ValueError("subject is too small")
     return True
@@ -126,7 +149,11 @@ def frame_metrics(frame: Image.Image):
         raise ValueError("frame dimensions must be positive")
     visible_width = right - left
     visible_height = bottom - top
-    visible_pixels = sum(1 for alpha in image.getchannel("A").getdata() if alpha > 0)
+    visible_pixels = sum(
+        1
+        for alpha in image.getchannel("A").getdata()
+        if alpha >= ALPHA_VISIBILITY_THRESHOLD
+    )
     return {
         "bounds": [left, top, right, bottom],
         "center": [
@@ -227,20 +254,29 @@ def _ascii_label(value: str, limit=14):
     return cleaned[:limit]
 
 
+def _contact_thumbnail(frame: Image.Image):
+    thumbnail = frame.convert("RGBA")
+    thumbnail.thumbnail(CONTACT_THUMBNAIL_SIZE, Image.Resampling.LANCZOS)
+    return thumbnail
+
+
 def write_contact_sheet(action_frames, path):
     if not action_frames:
         raise ValueError("contact sheet requires at least one action")
-    all_frames = [frame for frames in action_frames.values() for frame in frames]
-    if not all_frames:
-        raise ValueError("contact sheet requires at least one frame")
-    frame_width = max(frame.width for frame in all_frames)
-    frame_height = max(frame.height for frame in all_frames)
+    if any(not frames for frames in action_frames.values()):
+        raise ValueError("contact sheet actions require at least one frame")
+    frame_width, frame_height = CONTACT_THUMBNAIL_SIZE
     frame_count = max(len(frames) for frames in action_frames.values())
     label_width = 112
     gutter = 8
     row_height = frame_height + gutter * 2
     width = label_width + frame_count * (frame_width + gutter) + gutter
     height = len(action_frames) * row_height
+    if width * height > CONTACT_SHEET_PIXEL_BUDGET:
+        raise ValueError(
+            f"contact sheet layout exceeds pixel budget: {width * height} > "
+            f"{CONTACT_SHEET_PIXEL_BUDGET}"
+        )
     sheet = Image.new("RGBA", (width, height), (0, 0, 0, 255))
     _draw_checkerboard(sheet)
     draw = ImageDraw.Draw(sheet)
@@ -250,14 +286,36 @@ def write_contact_sheet(action_frames, path):
         draw.rectangle((0, row_y, label_width - 1, row_y + row_height - 1), fill=(22, 27, 38, 235))
         draw.text((gutter, row_y + gutter), _ascii_label(action_name), fill=(238, 242, 250, 255), font=font)
         for column, frame in enumerate(frames):
+            thumbnail = _contact_thumbnail(frame)
             x = label_width + gutter + column * (frame_width + gutter)
-            y = row_y + gutter + (frame_height - frame.height) // 2
-            sheet.alpha_composite(frame.convert("RGBA"), (x, y))
+            x += (frame_width - thumbnail.width) // 2
+            y = row_y + gutter + (frame_height - thumbnail.height) // 2
+            sheet.alpha_composite(thumbnail, (x, y))
             draw.text((x, row_y + 1), str(column), fill=(238, 242, 250, 255), font=font)
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    sheet.save(path)
+    sheet.save(path, format="PNG", optimize=False, compress_level=9)
     return path
+
+
+def _validate_actor_id(actor_id: Any):
+    if not isinstance(actor_id, str) or not PORTABLE_ACTOR_ID.fullmatch(actor_id):
+        raise ValueError("actor id must be a portable lowercase hyphenated slug")
+    if actor_id.casefold() in WINDOWS_RESERVED_NAMES:
+        raise ValueError(f"actor id {actor_id!r} is reserved on Windows")
+    return actor_id
+
+
+def _report_output_path(report_root: Path, filename: str):
+    root = report_root.resolve()
+    output = (root / filename).resolve()
+    try:
+        output.relative_to(root)
+    except ValueError as error:
+        raise ValueError("report output must stay inside report root") from error
+    if output.parent != root:
+        raise ValueError("report output must stay directly inside report root")
+    return output
 
 
 def write_actor_report(
@@ -265,25 +323,35 @@ def write_actor_report(
     actor_id,
     source_modes,
     action_frames,
-    action_metrics,
+    source_metrics,
+    runtime_metrics,
     atlas_dimensions,
     warnings,
     report_root,
 ):
-    report_root = Path(report_root)
+    actor_id = _validate_actor_id(actor_id)
+    report_root = Path(report_root).resolve()
     report_root.mkdir(parents=True, exist_ok=True)
     contact_sheet_name = f"{actor_id}-contact-sheet.png"
-    write_contact_sheet(action_frames, report_root / contact_sheet_name)
+    contact_sheet_path = _report_output_path(report_root, contact_sheet_name)
+    write_contact_sheet(action_frames, contact_sheet_path)
+    actions = {
+        action_name: {
+            "sourceMetrics": source_metrics[action_name],
+            "runtimeMetrics": runtime_metrics[action_name],
+        }
+        for action_name in source_modes
+    }
     report = {
         "status": "candidate",
         "actorId": actor_id,
         "sourceModes": source_modes,
-        "actions": action_metrics,
+        "actions": actions,
         "atlasDimensions": atlas_dimensions,
         "warnings": list(warnings),
         "contactSheet": contact_sheet_name,
     }
-    report_path = report_root / f"{actor_id}-report.json"
+    report_path = _report_output_path(report_root, f"{actor_id}-report.json")
     report_path.write_text(
         json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -311,15 +379,23 @@ def pack_action(frames, frame_size, max_texture_size=4096):
     return atlas, rects
 
 
-def _load_action_frames(action_config, source_root: Path, frame_size, anchor):
+def _load_action_source_frames(action_config, source_root: Path):
     action_dir = source_root / action_config["source"]
     files = sorted(action_dir.glob("*.png"))
     expected_count = int(action_config["frames"])
     if len(files) != expected_count:
         raise FileNotFoundError(f"{action_dir} expected {expected_count} png frames, found {len(files)}")
+    frames = []
+    for path in files:
+        with Image.open(path) as image:
+            frames.append(image.convert("RGBA"))
+    return frames
+
+
+def _normalize_action_frames(source_frames, frame_size, anchor):
     frames = [
-        normalize_frame(Image.open(path), frame_size, 0.10, anchor)
-        for path in files
+        normalize_frame(frame, frame_size, 0.10, anchor)
+        for frame in source_frames
     ]
     for frame in frames:
         validate_subject(frame, 0.10)
@@ -329,7 +405,7 @@ def _load_action_frames(action_config, source_root: Path, frame_size, anchor):
 def build_actor(source_config, source_root, output_root, report_root=None):
     source_root = Path(source_root)
     output_root = Path(output_root)
-    actor_id = source_config["id"]
+    actor_id = _validate_actor_id(source_config["id"])
     folder = source_config.get("folder") or "".join(part.title() for part in actor_id.split("-"))
     frame_size = _as_size(source_config["runtimeFrameSize"], "runtimeFrameSize")
     anchor = source_config["anchor"]
@@ -339,13 +415,17 @@ def build_actor(source_config, source_root, output_root, report_root=None):
     quality = source_config.get("quality", DEFAULT_QUALITY)
     actions = []
     action_frames = {}
-    action_metrics = {}
+    source_metrics = {}
+    runtime_metrics = {}
     atlas_dimensions = {}
     source_modes = {}
     for action_name, action_config in source_config["actions"].items():
-        frames = _load_action_frames(action_config, source_root, frame_size, anchor)
-        action_frames[action_name] = frames
-        action_metrics[action_name] = analyze_action(frames, quality)
+        source_frames = _load_action_source_frames(action_config, source_root)
+        source_metrics[action_name] = analyze_action(source_frames, quality)
+        frames = _normalize_action_frames(source_frames, frame_size, anchor)
+        del source_frames
+        action_frames[action_name] = [_contact_thumbnail(frame) for frame in frames]
+        runtime_metrics[action_name] = analyze_action(frames, quality)
         source_modes[action_name] = action_config.get("sourceMode", "frame-sequence")
         atlas, rects = pack_action(frames, frame_size)
         atlas_dimensions[action_name] = [atlas.width, atlas.height]
@@ -374,7 +454,8 @@ def build_actor(source_config, source_root, output_root, report_root=None):
             actor_id=actor_id,
             source_modes=source_modes,
             action_frames=action_frames,
-            action_metrics=action_metrics,
+            source_metrics=source_metrics,
+            runtime_metrics=runtime_metrics,
             atlas_dimensions=atlas_dimensions,
             warnings=[],
             report_root=report_root,
@@ -515,8 +596,7 @@ def check_source_manifest(root: Path):
     if not isinstance(actors, dict) or not actors:
         raise ValueError("source manifest must define actors")
     for actor_id, actor in actors.items():
-        if not isinstance(actor_id, str) or not actor_id.strip():
-            raise ValueError("source manifest actor keys must be non-empty strings")
+        _validate_actor_id(actor_id)
         if not isinstance(actor, dict):
             raise ValueError(f"{actor_id} must be an object")
         declared_id = actor.get("id")
