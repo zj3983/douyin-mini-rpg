@@ -886,8 +886,87 @@ def _runtime_project_root(runtime_root: Path):
     return runtime_root.parent
 
 
-def _validate_promotion_journal(journal, runtime_output_root):
+def _trusted_recovery_context(
+    runtime_output_root,
+    *,
+    candidate_root,
+    source_manifest_path,
+    resource_manifest_path,
+    selected_actor_folders,
+):
     runtime_root = Path(runtime_output_root).absolute()
+    if not isinstance(selected_actor_folders, dict) or not selected_actor_folders:
+        raise ValueError("trusted selected actor folders must be a non-empty mapping")
+    trusted_actors = {}
+    seen_folders = set()
+    for actor_id, folder in selected_actor_folders.items():
+        actor_id = _validate_actor_id(actor_id)
+        folder = _validate_actor_folder(folder)
+        key = folder.casefold()
+        if key in seen_folders:
+            raise ValueError("trusted selected actor folders must be unique")
+        seen_folders.add(key)
+        trusted_actors[actor_id] = folder
+
+    project_root = _runtime_project_root(runtime_root)
+    trusted_candidate_root = None
+    if candidate_root is not None:
+        trusted_candidate_root = Path(candidate_root).absolute()
+        try:
+            trusted_candidate_root.relative_to(project_root)
+        except ValueError as error:
+            raise ValueError("trusted candidate root must stay inside project root") from error
+        _assert_no_reparse_chain(trusted_candidate_root)
+
+    if (source_manifest_path is None) != (resource_manifest_path is None):
+        raise ValueError("trusted runtime manifest paths must be supplied together")
+    trusted_manifests = []
+    if source_manifest_path is not None:
+        trusted_manifests = [
+            Path(source_manifest_path).absolute(),
+            Path(resource_manifest_path).absolute(),
+        ]
+        expected_manifests = [
+            project_root / "assets" / "Data" / "animation-atlas.json",
+            project_root / "assets" / "resources" / "Data" / "animation-atlas.json",
+        ]
+        if list(map(_path_key, trusted_manifests)) != list(map(_path_key, expected_manifests)):
+            raise ValueError("trusted runtime manifest paths do not match project layout")
+        for path in trusted_manifests:
+            _assert_no_reparse_chain(path)
+
+    allowed_targets = []
+    for actor_id, folder in trusted_actors.items():
+        allowed_targets.append(runtime_root / "Assets" / "ActorAtlases" / folder)
+        if trusted_candidate_root is not None:
+            allowed_targets.append(trusted_candidate_root / actor_id)
+    allowed_targets.extend(trusted_manifests)
+    return {
+        "runtimeRoot": runtime_root,
+        "candidateRoot": trusted_candidate_root,
+        "manifestTargets": trusted_manifests,
+        "selectedActorFolders": trusted_actors,
+        "allowedTargets": allowed_targets,
+    }
+
+
+def _validate_promotion_journal(
+    journal,
+    runtime_output_root,
+    *,
+    candidate_root,
+    source_manifest_path,
+    resource_manifest_path,
+    selected_actor_folders,
+):
+    trusted = _trusted_recovery_context(
+        runtime_output_root,
+        candidate_root=candidate_root,
+        source_manifest_path=source_manifest_path,
+        resource_manifest_path=resource_manifest_path,
+        selected_actor_folders=selected_actor_folders,
+    )
+    runtime_root = trusted["runtimeRoot"]
     if not isinstance(journal, dict) or journal.get("version") != PROMOTION_JOURNAL_VERSION:
         raise RuntimeError("invalid promotion transaction journal version")
     if _path_key(journal.get("runtimeRoot", "")) != _path_key(runtime_root):
@@ -908,24 +987,20 @@ def _validate_promotion_journal(journal, runtime_output_root):
     if len(set(map(_path_key, allowed_targets))) != len(allowed_targets):
         raise RuntimeError("promotion transaction allowed targets must be unique")
 
-    project_root = _runtime_project_root(runtime_root)
     candidate_value = journal.get("candidateRoot")
-    candidate_root = None
-    if candidate_value is not None:
-        candidate_root = Path(candidate_value).absolute()
-        try:
-            candidate_root.relative_to(project_root)
-        except ValueError as error:
-            raise RuntimeError("promotion candidate root must stay inside project root") from error
-        _assert_no_reparse_chain(candidate_root)
-
-    expected_manifest_targets = {
-        _path_key(project_root / "assets" / "Data" / "animation-atlas.json"),
-        _path_key(project_root / "assets" / "resources" / "Data" / "animation-atlas.json"),
-    }
-    manifest_keys = set(map(_path_key, manifest_targets))
-    if manifest_keys and manifest_keys != expected_manifest_targets:
-        raise RuntimeError("promotion manifest target whitelist is invalid")
+    trusted_candidate = trusted["candidateRoot"]
+    if (None if candidate_value is None else _path_key(candidate_value)) != (
+        None if trusted_candidate is None else _path_key(trusted_candidate)
+    ):
+        raise RuntimeError("promotion candidateRoot does not match trusted caller root")
+    if journal.get("selectedActorFolders") != trusted["selectedActorFolders"]:
+        raise RuntimeError("promotion selected actor folders do not match trusted caller ownership")
+    if list(map(_path_key, manifest_targets)) != list(map(_path_key, trusted["manifestTargets"])):
+        raise RuntimeError("promotion manifest targets do not match trusted caller paths")
+    trusted_allowed_keys = list(map(_path_key, trusted["allowedTargets"]))
+    if list(map(_path_key, allowed_targets)) != trusted_allowed_keys:
+        raise RuntimeError("promotion allowedTargets do not match trusted caller targets")
+    manifest_keys = set(map(_path_key, trusted["manifestTargets"]))
 
     entry_target_keys = []
     runtime_actor_root = runtime_root / "Assets" / "ActorAtlases"
@@ -954,8 +1029,8 @@ def _validate_promotion_journal(journal, runtime_output_root):
         is_manifest = target_key in manifest_keys
         is_runtime_actor = target.parent == runtime_actor_root and bool(PORTABLE_FOLDER.fullmatch(target.name))
         is_candidate = (
-            candidate_root is not None
-            and target.parent == candidate_root
+            trusted_candidate is not None
+            and target.parent == trusted_candidate
             and bool(PORTABLE_ACTOR_ID.fullmatch(target.name))
         )
         if sum((is_manifest, is_runtime_actor, is_candidate)) != 1:
@@ -974,12 +1049,27 @@ def _validate_promotion_journal(journal, runtime_output_root):
     return journal
 
 
-def _read_promotion_journal(path: Path, runtime_output_root):
+def _read_promotion_journal(
+    path: Path,
+    runtime_output_root,
+    *,
+    candidate_root,
+    source_manifest_path,
+    resource_manifest_path,
+    selected_actor_folders,
+):
     try:
         journal = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise RuntimeError(f"cannot read promotion transaction journal: {path}") from error
-    return _validate_promotion_journal(journal, runtime_output_root)
+    return _validate_promotion_journal(
+        journal,
+        runtime_output_root,
+        candidate_root=candidate_root,
+        source_manifest_path=source_manifest_path,
+        resource_manifest_path=resource_manifest_path,
+        selected_actor_folders=selected_actor_folders,
+    )
 
 
 def _cleanup_committed_journal(journal_path: Path, journal):
@@ -998,11 +1088,25 @@ def _cleanup_committed_journal(journal_path: Path, journal):
     Path(journal_path).unlink(missing_ok=True)
 
 
-def recover_incomplete_promotion(runtime_output_root):
+def recover_incomplete_promotion(
+    runtime_output_root,
+    *,
+    candidate_root,
+    source_manifest_path,
+    resource_manifest_path,
+    selected_actor_folders,
+):
     journal_path = _promotion_journal_path(runtime_output_root)
     if not journal_path.exists():
         return False
-    journal = _read_promotion_journal(journal_path, runtime_output_root)
+    journal = _read_promotion_journal(
+        journal_path,
+        runtime_output_root,
+        candidate_root=candidate_root,
+        source_manifest_path=source_manifest_path,
+        resource_manifest_path=resource_manifest_path,
+        selected_actor_folders=selected_actor_folders,
+    )
     if journal.get("state") in ("committed", "cleanup-failed"):
         _cleanup_committed_journal(journal_path, journal)
         return True
@@ -1056,12 +1160,20 @@ def _commit_journaled_replacements(
     replacements,
     runtime_output_root,
     *,
-    candidate_root=None,
-    manifest_targets=(),
+    candidate_root,
+    source_manifest_path,
+    resource_manifest_path,
+    selected_actor_folders,
     fault_after_replacement=None,
     simulate_interruption=False,
 ):
-    recover_incomplete_promotion(runtime_output_root)
+    recover_incomplete_promotion(
+        runtime_output_root,
+        candidate_root=candidate_root,
+        source_manifest_path=source_manifest_path,
+        resource_manifest_path=resource_manifest_path,
+        selected_actor_folders=selected_actor_folders,
+    )
     token = secrets.token_hex(8)
     journal_path = _promotion_journal_path(runtime_output_root)
     entries = []
@@ -1077,13 +1189,25 @@ def _commit_journaled_replacements(
         "state": "prepared",
         "runtimeRoot": str(Path(runtime_output_root).absolute()),
         "candidateRoot": None if candidate_root is None else str(Path(candidate_root).absolute()),
-        "manifestTargets": [str(Path(target).absolute()) for target in manifest_targets],
+        "manifestTargets": [
+            str(Path(target).absolute())
+            for target in (source_manifest_path, resource_manifest_path)
+            if target is not None
+        ],
         "allowedTargets": [entry["target"] for entry in entries],
+        "selectedActorFolders": dict(selected_actor_folders),
         "token": token,
         "entries": entries,
     }
     try:
-        _validate_promotion_journal(journal, runtime_output_root)
+        _validate_promotion_journal(
+            journal,
+            runtime_output_root,
+            candidate_root=candidate_root,
+            source_manifest_path=source_manifest_path,
+            resource_manifest_path=resource_manifest_path,
+            selected_actor_folders=selected_actor_folders,
+        )
         _write_journal(journal_path, journal)
     except Exception:
         for entry in entries:
@@ -1119,7 +1243,13 @@ def _commit_journaled_replacements(
         _write_journal(journal_path, journal)
     except Exception as error:
         try:
-            recover_incomplete_promotion(runtime_output_root)
+            recover_incomplete_promotion(
+                runtime_output_root,
+                candidate_root=candidate_root,
+                source_manifest_path=source_manifest_path,
+                resource_manifest_path=resource_manifest_path,
+                selected_actor_folders=selected_actor_folders,
+            )
         except Exception as recovery_error:
             raise RuntimeError(f"{error}; rollback failed: {recovery_error}") from error
         raise
@@ -1315,16 +1445,26 @@ def promote_selected_actors(
     fault_after_replacement=None,
     simulate_interruption=False,
 ):
-    recover_incomplete_promotion(runtime_output_root)
     selected = select_actor_ids(data, selected_actor_ids)
     source_manifest_path = Path(source_manifest_path)
     resource_manifest_path = Path(resource_manifest_path)
     runtime_output_root = Path(runtime_output_root)
+    candidate_root = Path(candidate_root).absolute()
+    selected_actor_folders = {
+        actor_id: _actor_folder(actor_id, data["actors"][actor_id])
+        for actor_id in selected
+    }
+    recover_incomplete_promotion(
+        runtime_output_root,
+        candidate_root=candidate_root,
+        source_manifest_path=source_manifest_path,
+        resource_manifest_path=resource_manifest_path,
+        selected_actor_folders=selected_actor_folders,
+    )
     runtime_manifest, ownership = _load_authoritative_runtime_manifests(
         source_manifest_path,
         resource_manifest_path,
     )
-    candidate_root = Path(candidate_root).resolve()
     verified_candidates = {}
     for actor_id in selected:
         verified = _verify_candidate_bundle(data, actor_id, candidate_root)
@@ -1388,7 +1528,9 @@ def promote_selected_actors(
             replacements,
             runtime_output_root,
             candidate_root=candidate_root,
-            manifest_targets=(source_manifest_path, resource_manifest_path),
+            source_manifest_path=source_manifest_path,
+            resource_manifest_path=resource_manifest_path,
+            selected_actor_folders=selected_actor_folders,
             fault_after_replacement=fault_after_replacement,
             simulate_interruption=simulate_interruption,
         )

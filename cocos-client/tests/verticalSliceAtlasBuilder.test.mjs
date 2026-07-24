@@ -1072,7 +1072,13 @@ else:
     raise AssertionError("simulated process interruption did not occur")
 journal = builder._promotion_journal_path(runtime)
 assert journal.exists()
-builder.recover_incomplete_promotion(runtime)
+builder.recover_incomplete_promotion(
+    runtime,
+    candidate_root=candidates,
+    source_manifest_path=source_manifest,
+    resource_manifest_path=resource_manifest,
+    selected_actor_folders={"alpha": "Alpha"},
+)
 assert [tree_hash(path) for path in watched] == before
 assert not journal.exists()
 print("journal recovery complete")
@@ -1331,7 +1337,13 @@ def fail_one_backup_cleanup(path):
 builder._remove_path = fail_one_backup_cleanup
 try:
     try:
-        builder._commit_journaled_replacements(replacements, runtime)
+        builder._commit_journaled_replacements(
+            replacements, runtime,
+            candidate_root=None,
+            source_manifest_path=None,
+            resource_manifest_path=None,
+            selected_actor_folders={"alpha": "Alpha", "beta": "Beta"},
+        )
     except RuntimeError as error:
         assert "cleanup" in str(error).lower(), error
     else:
@@ -1344,7 +1356,13 @@ for name in ("Alpha", "Beta"):
 journal_path = builder._promotion_journal_path(runtime)
 journal = json.loads(journal_path.read_text(encoding="utf-8"))
 assert journal["state"] == "cleanup-failed"
-builder.recover_incomplete_promotion(runtime)
+builder.recover_incomplete_promotion(
+    runtime,
+    candidate_root=None,
+    source_manifest_path=None,
+    resource_manifest_path=None,
+    selected_actor_folders={"alpha": "Alpha", "beta": "Beta"},
+)
 assert not journal_path.exists()
 for name in ("Alpha", "Beta"):
     assert (runtime / "Assets/ActorAtlases" / name / "idle.png").read_bytes() == f"new-{name}".encode()
@@ -1386,6 +1404,10 @@ for name in ("Alpha", "Beta"):
 try:
     builder._commit_journaled_replacements(
         replacements, runtime,
+        candidate_root=None,
+        source_manifest_path=None,
+        resource_manifest_path=None,
+        selected_actor_folders={"alpha": "Alpha", "beta": "Beta"},
         fault_after_replacement=2,
         simulate_interruption=True,
     )
@@ -1404,7 +1426,13 @@ def fail_one_restore(source, target, *args, **kwargs):
 builder.shutil.copytree = fail_one_restore
 try:
     try:
-        builder.recover_incomplete_promotion(runtime)
+        builder.recover_incomplete_promotion(
+            runtime,
+            candidate_root=None,
+            source_manifest_path=None,
+            resource_manifest_path=None,
+            selected_actor_folders={"alpha": "Alpha", "beta": "Beta"},
+        )
     except RuntimeError as error:
         assert "transient restore failure" in str(error), error
     else:
@@ -1416,7 +1444,13 @@ journal_path = builder._promotion_journal_path(runtime)
 journal = json.loads(journal_path.read_text(encoding="utf-8"))
 assert journal["state"] == "recovery-failed"
 assert any(entry["state"] == "rolled-back" for entry in journal["entries"])
-builder.recover_incomplete_promotion(runtime)
+builder.recover_incomplete_promotion(
+    runtime,
+    candidate_root=None,
+    source_manifest_path=None,
+    resource_manifest_path=None,
+    selected_actor_folders={"alpha": "Alpha", "beta": "Beta"},
+)
 assert not journal_path.exists()
 for name in ("Alpha", "Beta"):
     assert (runtime / "Assets/ActorAtlases" / name / "idle.png").read_bytes() == f"old-{name}".encode()
@@ -1454,6 +1488,10 @@ target.mkdir(parents=True)
 try:
     builder._commit_journaled_replacements(
         [(source, target)], runtime,
+        candidate_root=None,
+        source_manifest_path=None,
+        resource_manifest_path=None,
+        selected_actor_folders={"alpha": "Alpha"},
         fault_after_replacement=1,
         simulate_interruption=True,
     )
@@ -1486,7 +1524,13 @@ for tamper in tamperers:
     tamper(data)
     journal_path.write_text(json.dumps(data), encoding="utf-8")
     try:
-        builder.recover_incomplete_promotion(runtime)
+        builder.recover_incomplete_promotion(
+            runtime,
+            candidate_root=None,
+            source_manifest_path=None,
+            resource_manifest_path=None,
+            selected_actor_folders={"alpha": "Alpha"},
+        )
     except (RuntimeError, ValueError):
         pass
     else:
@@ -1495,7 +1539,13 @@ for tamper in tamperers:
     assert target.exists()
 
 journal_path.write_text(json.dumps(valid), encoding="utf-8")
-builder.recover_incomplete_promotion(runtime)
+builder.recover_incomplete_promotion(
+    runtime,
+    candidate_root=None,
+    source_manifest_path=None,
+    resource_manifest_path=None,
+    selected_actor_folders={"alpha": "Alpha"},
+)
 assert (target / "idle.png").read_bytes() == b"old"
 print("journal trust boundary enforced")
 `
@@ -1561,7 +1611,13 @@ def fail_initial_journal(path, journal):
 builder._write_journal = fail_initial_journal
 try:
     try:
-        builder._commit_journaled_replacements(replacements, runtime)
+        builder._commit_journaled_replacements(
+            replacements, runtime,
+            candidate_root=None,
+            source_manifest_path=None,
+            resource_manifest_path=None,
+            selected_actor_folders={"alpha": "Alpha", "beta": "Beta"},
+        )
     except OSError as error:
         assert "journal write failure" in str(error), error
     else:
@@ -1577,6 +1633,120 @@ for name in ("Alpha", "Beta"):
 print("staging failures cleaned")
 `
     assert.match(runPython(script, [tempRoot]), /staging failures cleaned/)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('recovery anchors candidate and allowed targets to trusted caller roots', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'vertical-slice-trusted-recovery-'))
+  try {
+    const script = String.raw`
+import copy
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+temp = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("builder", root / "tools/build-vertical-slice-atlases.py")
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+
+runtime = temp / "runtime"
+candidate_root = temp / "candidates"
+source_manifest = temp / "assets/Data/animation-atlas.json"
+resource_manifest = temp / "assets/resources/Data/animation-atlas.json"
+runtime_source = temp / "sources/runtime-alpha"
+candidate_source = temp / "sources/candidate-alpha"
+manifest_source = temp / "sources/source.json"
+resource_source = temp / "sources/resource.json"
+for directory, payload in ((runtime_source, b"new-runtime"), (candidate_source, b"new-candidate")):
+    directory.mkdir(parents=True)
+    (directory / "idle.png").write_bytes(payload)
+manifest_source.parent.mkdir(parents=True, exist_ok=True)
+manifest_source.write_bytes(b"new-source-manifest")
+resource_source.write_bytes(b"new-resource-manifest")
+
+runtime_target = runtime / "Assets/ActorAtlases/Alpha"
+candidate_target = candidate_root / "alpha"
+for directory, payload in ((runtime_target, b"old-runtime"), (candidate_target, b"old-candidate")):
+    directory.mkdir(parents=True)
+    (directory / "idle.png").write_bytes(payload)
+for path, payload in ((source_manifest, b"old-source-manifest"), (resource_manifest, b"old-resource-manifest")):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(payload)
+
+replacements = [
+    (runtime_source, runtime_target),
+    (candidate_source, candidate_target),
+    (manifest_source, source_manifest),
+    (resource_source, resource_manifest),
+]
+try:
+    builder._commit_journaled_replacements(
+        replacements,
+        runtime,
+        candidate_root=candidate_root,
+        source_manifest_path=source_manifest,
+        resource_manifest_path=resource_manifest,
+        selected_actor_folders={"alpha": "Alpha"},
+        fault_after_replacement=1,
+        simulate_interruption=True,
+    )
+except BaseException:
+    pass
+else:
+    raise AssertionError("trusted-root transaction was not interrupted")
+
+journal_path = builder._promotion_journal_path(runtime)
+valid = json.loads(journal_path.read_text(encoding="utf-8"))
+victim_root = temp / "victim"
+victim = victim_root / "alpha"
+victim.mkdir(parents=True)
+(victim / "secret.txt").write_bytes(b"never-touch")
+tampered = copy.deepcopy(valid)
+tampered["candidateRoot"] = str(victim_root)
+candidate_entry = next(entry for entry in tampered["entries"] if Path(entry["target"]).parent == candidate_root)
+old_target = candidate_entry["target"]
+candidate_entry["target"] = str(victim)
+candidate_entry["staged"] = str(builder._staging_path_for_target(victim, tampered["token"]))
+candidate_entry["backup"] = str(builder._backup_path_for_target(victim, tampered["token"]))
+tampered["allowedTargets"] = [str(victim) if value == old_target else value for value in tampered["allowedTargets"]]
+journal_path.write_text(json.dumps(tampered), encoding="utf-8")
+
+try:
+    builder.recover_incomplete_promotion(
+        runtime,
+        candidate_root=candidate_root,
+        source_manifest_path=source_manifest,
+        resource_manifest_path=resource_manifest,
+        selected_actor_folders={"alpha": "Alpha"},
+    )
+except (RuntimeError, ValueError):
+    pass
+else:
+    raise AssertionError("journal-provided candidate root was trusted")
+assert (victim / "secret.txt").read_bytes() == b"never-touch"
+assert not builder._staging_path_for_target(victim, tampered["token"]).exists()
+assert not builder._backup_path_for_target(victim, tampered["token"]).exists()
+
+journal_path.write_text(json.dumps(valid), encoding="utf-8")
+builder.recover_incomplete_promotion(
+    runtime,
+    candidate_root=candidate_root,
+    source_manifest_path=source_manifest,
+    resource_manifest_path=resource_manifest,
+    selected_actor_folders={"alpha": "Alpha"},
+)
+assert (runtime_target / "idle.png").read_bytes() == b"old-runtime"
+assert (candidate_target / "idle.png").read_bytes() == b"old-candidate"
+assert source_manifest.read_bytes() == b"old-source-manifest"
+assert resource_manifest.read_bytes() == b"old-resource-manifest"
+print("trusted recovery roots enforced")
+`
+    assert.match(runPython(script, [tempRoot]), /trusted recovery roots enforced/)
   } finally {
     rmSync(tempRoot, { recursive: true, force: true })
   }
