@@ -747,20 +747,20 @@ test('soul orbs magnet to the player and publish pickup amount before recycling'
   assert.match(source, /Math\.min\(distance, this\.magnetSpeed \* deltaTime\)/)
 })
 
-test('stage clear panel is compact, click-driven, auto-continues clear, and has one-line rewards', () => {
+test('stage clear panel is compact, waits for an explicit settlement click, and has one-line rewards', () => {
   const source = read('assets/Scripts/Game/StageClearPanelController.ts')
   const bootstrap = read('assets/Scripts/Game/PortraitBattleBootstrap.ts')
+  const handleContinueBody = source.match(/private handleContinue\(\) \{([\s\S]*?)\n  \}/)?.[1] ?? ''
 
   assert.match(source, /rewardLabel\.string = \[/)
   assert.match(source, /\.join\('   '\)/)
   assert.match(source, /nextStageButton\?\.node\.on\(Button\.EventType\.CLICK/)
-  assert.match(source, /@property\s+autoContinueSeconds = 3/)
-  assert.match(source, /private scheduleAutoContinue\(\)/)
-  assert.match(source, /this\.scheduleOnce\(this\.handleAutoContinue, this\.autoContinueSeconds\)/)
-  assert.match(source, /this\.unschedule\(this\.handleAutoContinue\)/)
-  assert.match(source, /this\.scheduleAutoContinue\(\)/)
-  assert.match(source, /private handleAutoContinue\(\)[\s\S]*this\.handleContinue\(\)/)
-  assert.match(source, /private handleContinue\(\)[\s\S]*this\.unschedule\(this\.handleAutoContinue\)/)
+  assert.match(source, /onDestroy\(\) \{[\s\S]*nextStageButton\?\.node\.off\(Button\.EventType\.CLICK, this\.handleContinue, this\)/)
+  assert.match(source, /bindContinueButton\(button: Button\) \{[\s\S]*nextStageButton\?\.node\.off\(Button\.EventType\.CLICK, this\.handleContinue, this\)[\s\S]*button\.node\.on\(Button\.EventType\.CLICK, this\.handleContinue, this\)/)
+  assert.doesNotMatch(source, /autoContinueSeconds|scheduleAutoContinue|handleAutoContinue/)
+  assert.doesNotMatch(source, /\bscheduleOnce\s*\(|\bunschedule\s*\(/)
+  assert.match(handleContinueBody, /if \(this\.mode === 'defeat'\) \{[\s\S]*nextStageButton\.interactable = false[\s\S]*this\.onRetry\?\.\(\)/)
+  assert.match(handleContinueBody, /if \(this\.mode !== 'clear' \|\| !this\.result\) return[\s\S]*nextStageButton\.interactable = false[\s\S]*this\.onContinue\?\.\(this\.result\.nextStageId\)/)
   assert.match(bootstrap, /createNode\('StageClearPanel', parent, 472, 214\)/)
   assert.doesNotMatch(bootstrap, /createNode\('StageClearPanel', parent, 520, 258\)/)
 })
