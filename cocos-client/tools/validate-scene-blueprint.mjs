@@ -34,6 +34,17 @@ const requiredFlyingSwordBindings = [
   'sword',
 ]
 
+const controllerBindingContracts = [
+  {
+    component: 'DualModeGameController',
+    required: ['worldRoot', 'dungeonRoot', 'dungeonRun'],
+  },
+  {
+    component: 'DungeonRunController',
+    required: ['profileData', 'roomLabel'],
+  },
+]
+
 export function validateSceneBlueprint(blueprint) {
   const errors = []
   const nodes = Array.isArray(blueprint?.nodes) ? blueprint.nodes : []
@@ -58,6 +69,18 @@ export function validateSceneBlueprint(blueprint) {
   const flyingSwordBindings = flyingSwordNode?.bindings ?? {}
   for (const binding of requiredFlyingSwordBindings) {
     if (!flyingSwordBindings[binding]) errors.push(`missing FlyingSwordSkill binding: ${binding}`)
+  }
+
+  for (const contract of controllerBindingContracts) {
+    const node = nodes.find((candidate) => candidate.components?.includes(contract.component))
+    const bindings = node?.bindings ?? {}
+    const allowed = new Set(contract.required)
+    for (const binding of contract.required) {
+      if (!bindings[binding]) errors.push(`missing ${contract.component} binding: ${binding}`)
+    }
+    for (const binding of Object.keys(bindings)) {
+      if (!allowed.has(binding)) errors.push(`unknown ${contract.component} binding: ${binding}`)
+    }
   }
 
   return { ok: errors.length === 0, errors }

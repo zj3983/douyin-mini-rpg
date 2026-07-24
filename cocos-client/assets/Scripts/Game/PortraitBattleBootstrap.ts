@@ -434,37 +434,16 @@ export class PortraitBattleBootstrap extends Component {
 
   private interactWithDungeon() {
     const dungeonRun = this.dungeonRunController
-    const snapshot = dungeonRun?.getRunSnapshot()
-    if (!dungeonRun || !snapshot) {
+    if (!dungeonRun) {
       this.refreshDungeonPresentation('No active dungeon run')
       return
     }
-    const room = snapshot.profile.rooms.find((candidate) => candidate.id === snapshot.currentRoomId)
-    if (!room) {
-      this.refreshDungeonPresentation('Room data unavailable')
-      return
-    }
-    if (room.kind === 'extraction') {
-      if (!dungeonRun.extract()) this.refreshDungeonPresentation('Extraction rejected')
-      return
-    }
-    if (snapshot.searchedRoomIds.indexOf(room.id) < 0) {
-      const loot = dungeonRun.searchCurrentRoom()
-      if (room.kind !== 'entry') dungeonRun.grantDoorCurrency(1)
-      this.refreshDungeonPresentation(loot.length > 0 ? `Found ${loot.length} loot stack(s)` : 'Room searched')
-      return
-    }
-    const route: Readonly<Record<string, string>> = {
-      'f1-entry': 'f1-combat',
-      'f1-combat': 'f1-store',
-      'f1-store': 'f2-alchemy',
-      'f2-alchemy': 'f2-elite',
-      'f2-elite': 'f3-boss',
-      'f3-boss': 'f3-gate',
-    }
-    const nextRoomId = route[room.id]
-    if (!nextRoomId || !dungeonRun.moveTo(nextRoomId)) {
-      this.refreshDungeonPresentation('Door is still locked')
+    const result = dungeonRun.interact()
+    if (!result) this.refreshDungeonPresentation('No active dungeon run')
+    else if (result.type === 'searched') {
+      this.refreshDungeonPresentation(result.loot.length > 0 ? `Found ${result.loot.length} loot stack(s)` : 'Room searched')
+    } else if (result.type === 'blocked') {
+      this.refreshDungeonPresentation(result.reason === 'door-cost' ? 'Door is still locked' : 'Interaction unavailable')
     }
   }
 

@@ -34,6 +34,7 @@ function cloneRoom(room: DungeonRoom): DungeonRoom {
     exits: room.exits.map(cloneExit),
   }
   if (room.loot) cloned.loot = room.loot.map(cloneLoot)
+  if (room.doorCurrency !== undefined) cloned.doorCurrency = room.doorCurrency
   return cloned
 }
 
@@ -51,7 +52,7 @@ function roomById(profile: DungeonProfile, id: string): DungeonRoom | undefined 
 }
 
 function invalidInteger(value: number, allowZero: boolean): boolean {
-  return !Number.isFinite(value) || !Number.isInteger(value) || (allowZero ? value < 0 : value <= 0)
+  return !Number.isSafeInteger(value) || (allowZero ? value < 0 : value <= 0)
 }
 
 export function validateDungeonProfile(profile: DungeonProfile): void {
@@ -100,6 +101,9 @@ export function validateDungeonProfile(profile: DungeonProfile): void {
         throw new Error(`Invalid loot ID in ${room.id}.`)
       }
       if (invalidInteger(item.amount, false)) throw new Error(`Invalid loot amount in ${room.id}.`)
+    }
+    if (room.doorCurrency !== undefined && invalidInteger(room.doorCurrency, false)) {
+      throw new Error(`Invalid door currency reward in ${room.id}.`)
     }
   }
 
@@ -171,14 +175,28 @@ export function enterRoom(run: DungeonRun, targetId: string) {
 }
 
 export function searchRoom(run: DungeonRun) {
-  if (run.phase !== 'exploring') return { loot: [] as RunLoot[] }
+  const failed = (reason: 'inactive' | 'missing-room' | 'already-searched' | 'invalid-currency') => ({
+    ok: false as const,
+    reason,
+    loot: [] as RunLoot[],
+    doorCurrencyGranted: 0,
+  })
+  if (run.phase !== 'exploring') return failed('inactive')
   const room = roomById(run.profile, run.currentRoomId)
-  if (!room || run.searchedRoomIds.indexOf(room.id) >= 0) return { loot: [] as RunLoot[] }
+  if (!room) return failed('missing-room')
+  if (run.searchedRoomIds.indexOf(room.id) >= 0) return failed('already-searched')
 
-  run.searchedRoomIds.push(room.id)
+  const doorCurrencyGranted = room.doorCurrency ?? 0
+  const nextDoorCurrency = run.doorCurrency + doorCurrencyGranted
+  if (invalidInteger(run.doorCurrency, true) || !Number.isSafeInteger(nextDoorCurrency)) {
+    return failed('invalid-currency')
+  }
+
   const loot = (room.loot || []).map(cloneLoot)
+  run.searchedRoomIds.push(room.id)
   for (const item of loot) run.carriedLoot.push(cloneLoot(item))
-  return { loot }
+  run.doorCurrency = nextDoorCurrency
+  return { ok: true as const, loot, doorCurrencyGranted }
 }
 
 export function extractRun(run: DungeonRun) {

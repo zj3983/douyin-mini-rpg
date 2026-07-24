@@ -8,6 +8,7 @@ import {
   searchRoom,
   validateDungeonProfile,
 } from '../assets/Scripts/Core/Dungeon/DungeonSession.ts'
+import { interactDungeonRun } from '../assets/Scripts/Core/Dungeon/DungeonInteraction.ts'
 
 function makeProfile() {
   return {
@@ -30,6 +31,7 @@ function makeProfile() {
         kind: 'treasure',
         exits: [{ to: 'f3-gate', cost: 0 }],
         loot: [{ itemId: 'flying-sword', amount: 1 }],
+        doorCurrency: 2,
       },
       {
         id: 'f2-alchemy',
@@ -112,13 +114,73 @@ test('sessions and searched loot are deeply isolated and rooms can be searched o
 
   searched.loot[0].amount = 50
   assert.deepEqual(first.carriedLoot, [{ itemId: 'flying-sword', amount: 1 }])
-  assert.deepEqual(searchRoom(first), { loot: [] })
+  assert.deepEqual(searchRoom(first), { ok: false, reason: 'already-searched', loot: [], doorCurrencyGranted: 0 })
 
   first.currentRoomId = 'missing-room'
-  assert.deepEqual(searchRoom(first), { loot: [] })
+  assert.deepEqual(searchRoom(first), { ok: false, reason: 'missing-room', loot: [], doorCurrencyGranted: 0 })
   first.phase = 'defeated'
   first.currentRoomId = 'f1-entry'
-  assert.deepEqual(searchRoom(first), { loot: [] })
+  assert.deepEqual(searchRoom(first), { ok: false, reason: 'inactive', loot: [], doorCurrencyGranted: 0 })
+})
+
+test('room search grants configured door currency and loot exactly once', () => {
+  const run = createDungeonSession(makeProfile(), 11)
+  run.doorCurrency = 2
+  assert.equal(enterRoom(run, 'f1-store').ok, true)
+
+  assert.deepEqual(searchRoom(run), {
+    ok: true,
+    loot: [{ itemId: 'flying-sword', amount: 1 }],
+    doorCurrencyGranted: 2,
+  })
+  assert.equal(run.doorCurrency, 2)
+  assert.deepEqual(searchRoom(run), {
+    ok: false,
+    reason: 'already-searched',
+    loot: [],
+    doorCurrencyGranted: 0,
+  })
+  assert.equal(run.doorCurrency, 2)
+  assert.deepEqual(run.carriedLoot, [{ itemId: 'flying-sword', amount: 1 }])
+})
+
+test('room search rejects unsafe currency totals atomically', () => {
+  const run = createDungeonSession(makeProfile(), 12)
+  run.doorCurrency = 2
+  assert.equal(enterRoom(run, 'f1-store').ok, true)
+  run.doorCurrency = Number.MAX_SAFE_INTEGER
+  const before = structuredClone(run)
+
+  assert.deepEqual(searchRoom(run), {
+    ok: false,
+    reason: 'invalid-currency',
+    loot: [],
+    doorCurrencyGranted: 0,
+  })
+  assert.deepEqual(run, before)
+})
+
+test('profile validation accepts positive safe room currency and rejects invalid rewards', () => {
+  assert.doesNotThrow(() => validateDungeonProfile(makeProfile()))
+  for (const reward of [0, -1, 1.5, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1]) {
+    const profile = makeProfile()
+    profile.rooms[1].doorCurrency = reward
+    assert.throws(() => validateDungeonProfile(profile), /door currency/i)
+  }
+})
+
+test('Core interaction searches, follows the first affordable exit, and requests extraction', () => {
+  const run = createDungeonSession(makeProfile(), 13)
+  assert.equal(interactDungeonRun(run).type, 'searched')
+  assert.deepEqual(interactDungeonRun(run), {
+    type: 'moved',
+    fromRoomId: 'f1-entry',
+    roomId: 'f2-alchemy',
+  })
+  assert.equal(interactDungeonRun(run).type, 'searched')
+  assert.equal(interactDungeonRun(run).type, 'moved')
+  assert.deepEqual(interactDungeonRun(run), { type: 'extraction-requested', runId: run.id })
+  assert.equal(run.phase, 'exploring')
 })
 
 test('extraction only succeeds at the gate while exploring and returns cloned loot', () => {
@@ -129,7 +191,11 @@ test('extraction only succeeds at the gate while exploring and returns cloned lo
 
   run.doorCurrency = 2
   assert.deepEqual(enterRoom(run, 'f1-store'), { ok: true })
-  assert.deepEqual(searchRoom(run), { loot: [{ itemId: 'flying-sword', amount: 1 }] })
+  assert.deepEqual(searchRoom(run), {
+    ok: true,
+    loot: [{ itemId: 'flying-sword', amount: 1 }],
+    doorCurrencyGranted: 2,
+  })
   assert.deepEqual(enterRoom(run, 'f3-gate'), { ok: true })
   const extracted = extractRun(run)
   assert.deepEqual(extracted, { ok: true, loot: [{ itemId: 'flying-sword', amount: 1 }] })
@@ -236,5 +302,8 @@ test('the real dungeon profile parses, validates, and spans all three floors', a
   assert.deepEqual([...new Set(profile.rooms.map((room) => room.floor))].sort(), [1, 2, 3])
   for (const id of ['f1-entry', 'f1-store', 'f2-alchemy', 'f2-elite', 'f3-boss', 'f3-gate']) {
     assert.ok(profile.rooms.some((room) => room.id === id), `missing room ${id}`)
+  }
+  for (const id of ['f1-combat', 'f1-store', 'f2-alchemy', 'f2-elite', 'f3-boss']) {
+    assert.equal(profile.rooms.find((room) => room.id === id).doorCurrency, 1, `missing Core door reward in ${id}`)
   }
 })

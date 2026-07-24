@@ -25,12 +25,17 @@ test('build readiness passes when editor and every required imported runtime ass
     'assets/resources/Data/dual-mode-slice.json',
     'assets/resources/Data/dual-mode-slice.json.meta',
     'assets/Scripts/Core/Dungeon.meta',
+    'assets/Scripts/Core/Dungeon/DungeonInteraction.ts',
+    'assets/Scripts/Core/Dungeon/DungeonInteraction.ts.meta',
     'assets/Scripts/Core/Dungeon/DungeonSession.ts',
     'assets/Scripts/Core/Dungeon/DungeonSession.ts.meta',
     'assets/Scripts/Core/Dungeon/DungeonTypes.ts',
     'assets/Scripts/Core/Dungeon/DungeonTypes.ts.meta',
     'assets/Scripts/Core/GameContent.ts',
     'assets/Scripts/Core/GameContent.ts.meta',
+    'assets/Scripts/Core/Loadout.meta',
+    'assets/Scripts/Core/Loadout/LoadoutRules.ts',
+    'assets/Scripts/Core/Loadout/LoadoutRules.ts.meta',
     'assets/Scripts/Core/Progression.meta',
     'assets/Scripts/Core/Progression/BestEffortNotification.ts',
     'assets/Scripts/Core/Progression/BestEffortNotification.ts.meta',
@@ -76,6 +81,8 @@ test('build readiness names missing dual-mode scripts, data, scenes, and meta im
   assert.equal(report.ready, false)
   assert.equal(report.blockers.some((blocker) => blocker.includes('dual-mode-slice.json.meta')), true)
   assert.equal(report.blockers.some((blocker) => blocker.includes('DungeonSession.ts.meta')), true)
+  assert.equal(report.blockers.some((blocker) => blocker.includes('DungeonInteraction.ts.meta')), true)
+  assert.equal(report.blockers.some((blocker) => blocker.includes('LoadoutRules.ts.meta')), true)
   assert.equal(report.blockers.some((blocker) => blocker.includes('GameContent.ts.meta')), true)
   assert.equal(report.blockers.some((blocker) => blocker.includes('BestEffortNotification.ts.meta')), true)
   assert.equal(report.blockers.some((blocker) => blocker.includes('WorldRewards.ts.meta')), true)

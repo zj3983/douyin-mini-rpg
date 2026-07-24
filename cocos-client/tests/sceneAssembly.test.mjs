@@ -113,7 +113,6 @@ test('scene blueprint documents runtime-owned dual-mode dungeon assembly', () =>
     worldRoot: 'Canvas/WorldRoot',
     dungeonRoot: 'Canvas/DungeonRoot',
     dungeonRun: 'Canvas/DungeonRoot/DungeonRunController',
-    profileData: 'resources/Data/dual-mode-slice.json',
   })
 })
 

@@ -97,3 +97,18 @@ test('scene blueprint declares portrait bootstrap component bindings', () => {
     assert.equal(componentNames.has(component), true, `missing portrait component: ${component}`)
   }
 })
+
+test('scene blueprint keeps dungeon profile data on DungeonRunController', () => {
+  const blueprint = JSON.parse(readFileSync(resolve('assets/Data/scene-blueprint.json'), 'utf8'))
+  const nodes = new Map(blueprint.nodes.map((node) => [node.path, node]))
+
+  assert.deepEqual(nodes.get('Canvas/DualModeGameController').bindings, {
+    worldRoot: 'Canvas/WorldRoot',
+    dungeonRoot: 'Canvas/DungeonRoot',
+    dungeonRun: 'Canvas/DungeonRoot/DungeonRunController',
+  })
+  assert.deepEqual(nodes.get('Canvas/DungeonRoot/DungeonRunController').bindings, {
+    profileData: 'resources/Data/dual-mode-slice.json',
+    roomLabel: 'Canvas/DungeonRoot/DungeonRoomLabel',
+  })
+})

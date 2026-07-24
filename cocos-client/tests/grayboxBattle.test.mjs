@@ -1,8 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { createDungeonSession, enterRoom, extractRun, searchRoom } from '../assets/Scripts/Core/Dungeon/DungeonSession.ts'
+import { createDungeonSession, extractRun } from '../assets/Scripts/Core/Dungeon/DungeonSession.ts'
+import { interactDungeonRun } from '../assets/Scripts/Core/Dungeon/DungeonInteraction.ts'
 import { createDualModeRuntime } from '../assets/Scripts/Core/Progression/DualModeRuntime.ts'
 import { createDefaultSave } from '../assets/Scripts/Core/Progression/PlayerSave.ts'
 
@@ -50,10 +51,7 @@ test('portrait bootstrap assembles and wires the dungeon graybox through real Bu
   assert.match(source, /dungeonEntryNode\.on\(Button\.EventType\.CLICK,\s*this\.enterDungeonFromWorld,\s*this\)/)
   assert.match(source, /dungeonInteractNode\.on\(Button\.EventType\.CLICK,\s*this\.interactWithDungeon,\s*this\)/)
   assert.match(source, /dualModeController\?\.enterDungeon\(\)/)
-  assert.match(source, /dungeonRun\.searchCurrentRoom\(\)/)
-  assert.match(source, /dungeonRun\.grantDoorCurrency\(1\)/)
-  assert.match(source, /dungeonRun\.moveTo\(nextRoomId\)/)
-  assert.match(source, /dungeonRun\.extract\(\)/)
+  assert.match(source, /dungeonRun\.interact\(\)/)
   assert.match(source, /getRunSnapshot\(\)/)
   assert.match(source, /graphics\.clear\(\)/)
   assert.match(source, /graphics\.rect\(-WIDTH \/ 2, -visibleHeight \/ 2, WIDTH, visibleHeight\)/)
@@ -64,7 +62,15 @@ test('portrait bootstrap assembles and wires the dungeon graybox through real Bu
   assert.match(source, /visibleHeight/)
   assert.doesNotMatch(source, /document\.|window\.|querySelector|createElement/)
   assert.doesNotMatch(source, /applyWorldBossClear|consumeDungeonPass|applyExtractionLoot/)
-  assert.doesNotMatch(source, /dungeonPasses\s*[+\-]=|carriedLoot\.push|inventory\.[a-zA-Z]+\s*[+\-]=/)
+  assert.doesNotMatch(source, /grantDoorCurrency|searchCurrentRoom|\.moveTo\(|doorCurrency\s*[+\-*/]?=|dungeonPasses\s*[+\-]=|carriedLoot\.push|inventory\.[a-zA-Z]+\s*[+\-]=/)
+})
+
+test('dungeon interaction authority exists in Core', () => {
+  assert.equal(existsSync(resolve('assets/Scripts/Core/Dungeon/DungeonInteraction.ts')), true)
+  const controller = read('assets/Scripts/Game/DungeonRunController.ts')
+  assert.match(controller, /Core\/Dungeon\/DungeonInteraction/)
+  assert.match(controller, /interactDungeonRun\(this\.run\)/)
+  assert.doesNotMatch(controller, /grantDoorCurrency|doorCurrency\s*[+\-*/]?=/)
 })
 
 test('dual and dungeon adapters stay isolated from legacy battle and new combat modules', () => {
@@ -109,15 +115,15 @@ test('world boss pass supports a searched three-floor extraction persisted exact
 
   assert.equal(runtime.handleWorldCleared({ stage: 1, rewardId: 'world-boss-loop' }).ok, true)
   assert.equal(runtime.enterDungeon(88).ok, true)
-  const route = ['f1-combat', 'f1-store', 'f2-alchemy', 'f2-elite', 'f3-boss', 'f3-gate']
-  for (const roomId of route) {
-    const searched = searchRoom(run)
-    assert.ok(Array.isArray(searched.loot))
-    run.doorCurrency += 1
-    assert.equal(enterRoom(run, roomId).ok, true, `should enter ${roomId}`)
+  const visited = [run.currentRoomId]
+  for (let click = 0; click < 20; click += 1) {
+    const result = interactDungeonRun(run)
+    assert.notEqual(result.type, 'blocked')
+    if (result.type === 'moved') visited.push(result.roomId)
+    if (result.type === 'extraction-requested') break
   }
-  const finalSearch = searchRoom(run)
-  assert.deepEqual(finalSearch, { loot: [] })
+  assert.deepEqual(visited, ['f1-entry', 'f1-combat', 'f1-store', 'f2-alchemy', 'f2-elite', 'f3-boss', 'f3-gate'])
+  assert.equal(interactDungeonRun(run).type, 'extraction-requested')
   const extraction = extractRun(run)
   assert.equal(extraction.ok, true)
   const accepted = runtime.handleDungeonExtracted({ runId: run.id, loot: extraction.loot })

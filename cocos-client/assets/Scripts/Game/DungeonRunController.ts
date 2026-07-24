@@ -1,10 +1,10 @@
 import { _decorator, Component, JsonAsset, Label } from 'cc'
 import {
   createDungeonSession,
-  enterRoom,
   extractRun,
-  searchRoom,
 } from '../Core/Dungeon/DungeonSession.ts'
+import { interactDungeonRun } from '../Core/Dungeon/DungeonInteraction.ts'
+import type { DungeonInteractionResult } from '../Core/Dungeon/DungeonInteraction.ts'
 import type {
   DungeonExtractionEvent,
   DungeonProfile,
@@ -26,6 +26,7 @@ function cloneRun(run: DungeonRun): DungeonRun {
         kind: room.kind,
         exits: room.exits.map((exit) => ({ ...exit })),
         ...(room.loot ? { loot: room.loot.map((item) => ({ ...item })) } : {}),
+        ...(room.doorCurrency !== undefined ? { doorCurrency: room.doorCurrency } : {}),
       })),
     },
     phase: run.phase,
@@ -100,30 +101,20 @@ export class DungeonRunController extends Component {
     return this.run?.id === runId && this.run.phase === 'extracted'
   }
 
-  grantDoorCurrency(amount: number) {
-    if (!this.run || !Number.isSafeInteger(amount) || amount <= 0) return false
-    const nextTotal = this.run.doorCurrency + amount
-    if (!Number.isSafeInteger(nextTotal)) return false
-    this.run.doorCurrency = nextTotal
-    return true
-  }
-
-  moveTo(roomId: string) {
-    if (!this.run) return false
-    const result = enterRoom(this.run, roomId)
-    if (!result.ok) return false
-    this.refreshRoomLabel()
-    this.node.emit('dungeon-room-changed', { roomId: this.run.currentRoomId })
-    return true
-  }
-
-  searchCurrentRoom() {
-    if (!this.run) return []
-    const result = searchRoom(this.run)
-    if (result.loot.length > 0) {
-      this.node.emit('dungeon-loot-found', result.loot.map((item) => ({ ...item })))
+  interact(): DungeonInteractionResult | null {
+    if (!this.run) return null
+    const result = interactDungeonRun(this.run)
+    if (result.type === 'searched') {
+      if (result.loot.length > 0) {
+        this.node.emit('dungeon-loot-found', result.loot.map((item) => ({ ...item })))
+      }
+    } else if (result.type === 'moved') {
+      this.refreshRoomLabel()
+      this.node.emit('dungeon-room-changed', { roomId: result.roomId })
+    } else if (result.type === 'extraction-requested') {
+      this.extract()
     }
-    return result.loot
+    return result
   }
 
   extract() {

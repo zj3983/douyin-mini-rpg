@@ -18,6 +18,7 @@ export interface DungeonRoom {
   kind: DungeonRoomKind
   exits: DungeonExit[]
   loot?: RunLoot[]
+  doorCurrency?: number
 }
 
 export interface DungeonProfile {
