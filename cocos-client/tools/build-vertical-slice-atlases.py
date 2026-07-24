@@ -237,7 +237,15 @@ def _exceeds_quality_limit(value, limit):
     return value > limit + QUALITY_COMPARISON_TOLERANCE
 
 
-def analyze_action(frames, quality, *, validation="source", context="action", sample_keys=None):
+def analyze_action(
+    frames,
+    quality,
+    *,
+    validation="source",
+    context="action",
+    sample_keys=None,
+    enforce_motion_limits=True,
+):
     if not frames:
         raise ValueError(f"{context} frames must not be empty")
     if validation not in ("source", "runtime"):
@@ -315,11 +323,19 @@ def analyze_action(frames, quality, *, validation="source", context="action", sa
         if axis not in intentional_scale_axes
     ) if len(intentional_scale_axes) < 2 else 0
 
-    if validation == "source" and _exceeds_quality_limit(center_drift, quality["maxCenterDrift"]):
+    if (
+        validation == "source"
+        and enforce_motion_limits
+        and _exceeds_quality_limit(center_drift, quality["maxCenterDrift"])
+    ):
         raise ValueError(
             f"{context} center drift {center_drift:.6f} exceeds {quality['maxCenterDrift']:.6f}"
         )
-    if validation == "source" and _exceeds_quality_limit(scale_drift, quality["maxScaleDrift"]):
+    if (
+        validation == "source"
+        and enforce_motion_limits
+        and _exceeds_quality_limit(scale_drift, quality["maxScaleDrift"])
+    ):
         raise ValueError(
             f"{context} scale drift {scale_drift:.6f} exceeds {quality['maxScaleDrift']:.6f}"
         )
@@ -491,6 +507,7 @@ def write_actor_report(
     status="candidate",
     effective_qualities=None,
     playback_orders=None,
+    packed_source_quality_metrics=None,
 ):
     actor_id = _validate_actor_id(actor_id)
     report_root = Path(report_root).resolve()
@@ -505,9 +522,11 @@ def write_actor_report(
     effective_qualities = effective_qualities or {
         action_name: dict(DEFAULT_QUALITY) for action_name in source_modes
     }
+    packed_source_quality_metrics = packed_source_quality_metrics or source_metrics
     actions = {
         action_name: {
             "sourceMetrics": source_metrics[action_name],
+            "packedSourceQualityMetrics": packed_source_quality_metrics[action_name],
             "runtimeMetrics": runtime_metrics[action_name],
             "effectiveQuality": effective_qualities[action_name],
             "playbackOrder": playback_orders[action_name],
@@ -596,6 +615,7 @@ def build_actor(source_config, source_root, output_root, report_root=None, repor
     actions = []
     action_frames = {}
     source_metrics = {}
+    packed_source_quality_metrics = {}
     runtime_metrics = {}
     atlas_dimensions = {}
     source_modes = {}
@@ -611,6 +631,12 @@ def build_actor(source_config, source_root, output_root, report_root=None, repor
             raise type(error)(f"{context}: {error}") from error
         playback_order = _playback_order(action_config)
         playback_orders[action_name] = playback_order
+        packed_source_quality_metrics[action_name] = analyze_action(
+            source_frames,
+            action_quality,
+            validation="source",
+            context=f"{context} packed source",
+        )
         source_playback_frames = [source_frames[index] for index in playback_order]
         source_metrics[action_name] = analyze_action(
             source_playback_frames,
@@ -618,6 +644,7 @@ def build_actor(source_config, source_root, output_root, report_root=None, repor
             validation="source",
             context=context,
             sample_keys=playback_order,
+            enforce_motion_limits=False,
         )
         try:
             frames = _normalize_action_frames(source_frames, frame_size, anchor)
@@ -669,6 +696,7 @@ def build_actor(source_config, source_root, output_root, report_root=None, repor
             source_modes=source_modes,
             action_frames=action_frames,
             source_metrics=source_metrics,
+            packed_source_quality_metrics=packed_source_quality_metrics,
             runtime_metrics=runtime_metrics,
             effective_qualities=effective_qualities,
             playback_orders=playback_orders,

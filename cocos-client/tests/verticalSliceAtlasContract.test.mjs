@@ -96,8 +96,8 @@ test('vertical slice source manifest locks actor frame sizes anchors and action 
     maxCenterDrift: 0.14,
   })
   assert.deepEqual(source.actors['qinglan-sword-cultivator'].actions.hand_seal.order, [0, 0, 1, 1, 7, 7, 7, 9, 9, 9])
-  assert.deepEqual(source.actors['qinglan-sword-cultivator'].actions.cast.order, [0, 0, 1, 1, 5, 5, 6, 6, 8, 9, 10, 11])
-  assert.deepEqual(source.actors['moss-wolf'].actions.death.order, [0, 1, 2, 3, 4, 4, 5, 5])
+  assert.deepEqual(source.actors['qinglan-sword-cultivator'].actions.cast.order, [0, 0, 1, 1, 5, 5, 6, 6, 9, 9, 10, 11])
+  assert.deepEqual(source.actors['moss-wolf'].actions.death.order, [0, 1, 2, 3, 3, 3, 3, 3])
 
   const overrides = []
   for (const [actorId, actor] of Object.entries(source.actors)) {

@@ -98,6 +98,7 @@ print(json.dumps({
     "contactSheets": len(list((temp / "reports").glob("*-contact-sheet.png"))),
     "sourceFrames": report_data["actions"]["idle"]["sourceMetrics"]["frameCount"],
     "sourceUniqueFrames": report_data["actions"]["idle"]["sourceMetrics"]["uniqueFrameCount"],
+    "packedSourceFrames": report_data["actions"]["idle"]["packedSourceQualityMetrics"]["frameCount"],
     "runtimeFrames": report_data["actions"]["idle"]["runtimeMetrics"]["frameCount"],
     "reportOrder": report_data["actions"]["idle"]["playbackOrder"],
 }))
@@ -114,6 +115,7 @@ print(json.dumps({
     assert.equal(parsed.contactSheets, 1)
     assert.equal(parsed.sourceFrames, 4)
     assert.equal(parsed.sourceUniqueFrames, 3)
+    assert.equal(parsed.packedSourceFrames, 3)
     assert.equal(parsed.runtimeFrames, 4)
     assert.deepEqual(parsed.reportOrder, [0, 0, 2, 1])
     assert.ok(readFileSync(join(tempRoot, 'resources', parsed.atlas)).length > 0)

@@ -21,7 +21,7 @@
         "idle": { "frames": 8, "fps": 6, "loop": true, "source": "qinglan/idle", "sourceMode": "layered-keyframes" },
         "sword_ride": { "frames": 10, "fps": 8, "loop": true, "source": "qinglan/sword_ride", "sourceMode": "layered-keyframes" },
         "hand_seal": { "frames": 10, "fps": 10, "loop": false, "source": "qinglan/hand_seal", "sourceMode": "layered-keyframes", "order": [0, 0, 1, 1, 7, 7, 7, 9, 9, 9], "events": [{ "name": "seal-formed", "time": 0.6 }] },
-        "cast": { "frames": 12, "fps": 12, "loop": false, "source": "qinglan/cast", "sourceMode": "layered-keyframes", "order": [0, 0, 1, 1, 5, 5, 6, 6, 8, 9, 10, 11], "quality": { "maxScaleDrift": 0.17 }, "events": [{ "name": "sword-release", "time": 0.42 }] },
+        "cast": { "frames": 12, "fps": 12, "loop": false, "source": "qinglan/cast", "sourceMode": "layered-keyframes", "order": [0, 0, 1, 1, 5, 5, 6, 6, 9, 9, 10, 11], "quality": { "maxScaleDrift": 0.17 }, "events": [{ "name": "sword-release", "time": 0.42 }] },
         "hurt": { "frames": 6, "fps": 10, "loop": false, "source": "qinglan/hurt", "sourceMode": "layered-keyframes" },
         "death": { "frames": 10, "fps": 8, "loop": false, "source": "qinglan/death", "sourceMode": "layered-keyframes" }
       }
@@ -46,7 +46,7 @@
         "telegraph": { "frames": 4, "fps": 8, "loop": false, "source": "moss-wolf/telegraph", "sourceMode": "pose-video" },
         "attack": { "frames": 8, "fps": 12, "loop": false, "source": "moss-wolf/attack", "sourceMode": "pose-video", "quality": { "maxScaleDrift": 0.20 } },
         "hurt": { "frames": 4, "fps": 10, "loop": false, "source": "moss-wolf/hurt", "sourceMode": "frame-sequence" },
-        "death": { "frames": 8, "fps": 8, "loop": false, "source": "moss-wolf/death", "sourceMode": "frame-sequence", "order": [0, 1, 2, 3, 4, 4, 5, 5], "quality": { "maxCenterDrift": 0.14 } }
+        "death": { "frames": 8, "fps": 8, "loop": false, "source": "moss-wolf/death", "sourceMode": "frame-sequence", "order": [0, 1, 2, 3, 3, 3, 3, 3], "quality": { "maxCenterDrift": 0.14 } }
       }
     },
     "green-wing-moth": {
