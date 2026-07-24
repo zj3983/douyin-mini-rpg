@@ -30,6 +30,7 @@ ALPHA_VISIBILITY_THRESHOLD = 8
 CONTACT_THUMBNAIL_SIZE = (160, 200)
 CONTACT_SHEET_PIXEL_BUDGET = 12_000_000
 PORTABLE_ACTOR_ID = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+PORTABLE_FOLDER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 WINDOWS_RESERVED_NAMES = {
     "con",
     "prn",
@@ -306,6 +307,32 @@ def _validate_actor_id(actor_id: Any):
     return actor_id
 
 
+def _validate_actor_folder(folder: Any):
+    if not isinstance(folder, str) or not PORTABLE_FOLDER.fullmatch(folder):
+        raise ValueError("actor folder must be one portable path component")
+    if folder.casefold() in WINDOWS_RESERVED_NAMES:
+        raise ValueError(f"actor folder {folder!r} is reserved on Windows")
+    return folder
+
+
+def _resolve_actor_output_directory(output_root: Path, folder: str):
+    resolved_output_root = Path(output_root).resolve()
+    actor_root = (resolved_output_root / "Assets" / "ActorAtlases").resolve()
+    try:
+        actor_root.relative_to(resolved_output_root)
+    except ValueError as error:
+        raise ValueError("actor atlas root must stay inside output root") from error
+
+    actor_dir = (actor_root / folder).resolve()
+    try:
+        actor_dir.relative_to(actor_root)
+    except ValueError as error:
+        raise ValueError("actor folder must stay inside actor atlas root") from error
+    if actor_dir.parent != actor_root:
+        raise ValueError("actor folder must be one direct actor atlas component")
+    return actor_dir
+
+
 def _report_output_path(report_root: Path, filename: str):
     root = report_root.resolve()
     output = (root / filename).resolve()
@@ -406,10 +433,15 @@ def build_actor(source_config, source_root, output_root, report_root=None):
     source_root = Path(source_root)
     output_root = Path(output_root)
     actor_id = _validate_actor_id(source_config["id"])
-    folder = source_config.get("folder") or "".join(part.title() for part in actor_id.split("-"))
+    configured_folder = source_config.get("folder")
+    folder = _validate_actor_folder(
+        "".join(part.title() for part in actor_id.split("-"))
+        if configured_folder is None
+        else configured_folder
+    )
     frame_size = _as_size(source_config["runtimeFrameSize"], "runtimeFrameSize")
     anchor = source_config["anchor"]
-    actor_dir = output_root / "Assets" / "ActorAtlases" / folder
+    actor_dir = _resolve_actor_output_directory(output_root, folder)
     actor_dir.mkdir(parents=True, exist_ok=True)
 
     quality = source_config.get("quality", DEFAULT_QUALITY)
@@ -602,6 +634,8 @@ def check_source_manifest(root: Path):
         declared_id = actor.get("id")
         if not isinstance(declared_id, str) or not declared_id.strip() or declared_id != actor_id:
             raise ValueError(f"{actor_id}.id must be non-empty and match its actor key")
+        if actor.get("folder") is not None:
+            _validate_actor_folder(actor["folder"])
         _as_size(actor.get("masterFrameSize"), f"{actor_id}.masterFrameSize")
         _as_size(actor.get("runtimeFrameSize"), f"{actor_id}.runtimeFrameSize")
         _validate_anchor(actor_id, actor.get("anchor"))

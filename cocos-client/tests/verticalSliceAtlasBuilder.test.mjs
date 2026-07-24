@@ -140,8 +140,9 @@ base = {
     "version": 2,
     "actors": {
         "test-actor": {
-            "id": "test-actor",
-            "masterFrameSize": [128, 160],
+        "id": "test-actor",
+        "folder": "TestActor",
+        "masterFrameSize": [128, 160],
             "runtimeFrameSize": [64, 80],
             "anchor": {"x": 0.5, "y": 0.85},
             "quality": {
@@ -187,6 +188,22 @@ cases = [
     ("actor not object", lambda data: data["actors"].update({"test-actor": []})),
     ("missing actor id", lambda data: actor(data).pop("id")),
     ("mismatched actor id", lambda data: actor(data).update(id="other-actor")),
+    ("empty folder", lambda data: actor(data).update(folder="")),
+    ("non-string folder", lambda data: actor(data).update(folder=123)),
+    ("traversal folder", lambda data: actor(data).update(folder="../escape")),
+    ("dot folder", lambda data: actor(data).update(folder=".")),
+    ("dot-dot folder", lambda data: actor(data).update(folder="..")),
+    ("absolute folder", lambda data: actor(data).update(folder="/absolute")),
+    ("windows absolute folder", lambda data: actor(data).update(folder="C:/absolute")),
+    ("slash folder", lambda data: actor(data).update(folder="Nested/Actor")),
+    ("backslash folder", lambda data: actor(data).update(folder="Nested\\Actor")),
+    ("colon folder", lambda data: actor(data).update(folder="Actor:Alt")),
+    ("reserved con folder", lambda data: actor(data).update(folder="CON")),
+    ("reserved prn folder", lambda data: actor(data).update(folder="prn")),
+    ("reserved aux folder", lambda data: actor(data).update(folder="AUX")),
+    ("reserved nul folder", lambda data: actor(data).update(folder="nul")),
+    ("reserved com folder", lambda data: actor(data).update(folder="COM1")),
+    ("reserved lpt folder", lambda data: actor(data).update(folder="LPT1")),
     ("traversal actor id", lambda data: data["actors"].update({"../escape": {**data["actors"].pop("test-actor"), "id": "../escape"}})),
     ("backslash actor id", lambda data: data["actors"].update({"bad\\name": {**data["actors"].pop("test-actor"), "id": "bad\\name"}})),
     ("colon actor id", lambda data: data["actors"].update({"bad:name": {**data["actors"].pop("test-actor"), "id": "bad:name"}})),
@@ -241,6 +258,73 @@ print("all invalid contracts rejected")
   const tempRoot = mkdtempSync(join(tmpdir(), 'vertical-slice-contract-'))
   try {
     assert.match(runPython(script, [tempRoot]), /all invalid contracts rejected/)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('build_actor contains configured folders beneath the actor atlas root', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'vertical-slice-folder-safety-'))
+  try {
+    const script = String.raw`
+import copy
+import importlib.util
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+temp = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("builder", root / "tools/build-vertical-slice-atlases.py")
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+
+base = {
+    "id": "test-actor",
+    "type": "monster",
+    "folder": "TestActor",
+    "masterFrameSize": [128, 160],
+    "runtimeFrameSize": [64, 80],
+    "anchor": {"x": 0.5, "y": 0.85},
+    "quality": {
+        "maxCenterDrift": 0.08,
+        "maxScaleDrift": 0.12,
+        "minAlphaCoverage": 0.02,
+        "maxAlphaCoverage": 0.72,
+        "safePadding": 0.08,
+    },
+    "actions": {"idle": {
+        "frames": 1,
+        "fps": 6,
+        "loop": True,
+        "source": "test-actor/idle",
+        "sourceMode": "frame-sequence",
+    }},
+}
+
+unsafe = [
+    "", 123, "../escape", ".", "..", "/absolute", "C:/absolute",
+    "Nested/Actor", "Nested\\Actor", "Actor:Alt",
+    "CON", "prn", "AUX", "nul", "COM1", "LPT1",
+]
+output_root = temp / "runtime"
+for folder in unsafe:
+    config = copy.deepcopy(base)
+    config["folder"] = folder
+    try:
+        builder.build_actor(config, temp / "missing-source", output_root)
+    except ValueError as error:
+        assert "folder" in str(error), f"{folder}: {error}"
+    else:
+        raise AssertionError(f"unsafe folder accepted: {folder}")
+
+actor_root = (output_root / "Assets/ActorAtlases").resolve()
+outside = (output_root / "Assets/escape").resolve()
+assert not outside.exists()
+if actor_root.exists():
+    assert list(actor_root.iterdir()) == []
+print("unsafe actor folders contained")
+`
+    assert.match(runPython(script, [tempRoot]), /unsafe actor folders contained/)
   } finally {
     rmSync(tempRoot, { recursive: true, force: true })
   }
