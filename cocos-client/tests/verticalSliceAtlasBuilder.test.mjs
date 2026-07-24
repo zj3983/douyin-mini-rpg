@@ -769,3 +769,91 @@ print("atomic candidate promotion ok")
     rmSync(tempRoot, { recursive: true, force: true })
   }
 })
+
+test('folder collisions are rejected with both actor ids before promotion mutates runtime', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'vertical-slice-folder-collision-'))
+  try {
+    const script = String.raw`
+import hashlib
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+temp = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("builder", root / "tools/build-vertical-slice-atlases.py")
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+
+def actor(actor_id, folder):
+    return {
+        "id": actor_id,
+        "folder": folder,
+        "type": "monster",
+        "masterFrameSize": [128, 160],
+        "runtimeFrameSize": [64, 80],
+        "anchor": {"x": 0.5, "y": 0.85},
+        "quality": builder.DEFAULT_QUALITY,
+        "actions": {"idle": {
+            "frames": 1,
+            "fps": 6,
+            "loop": True,
+            "source": f"{actor_id}/idle",
+            "sourceMode": "frame-sequence",
+        }},
+    }
+
+data = {
+    "version": 2,
+    "actors": {
+        "alpha": actor("alpha", "Shared"),
+        "beta": actor("beta", "shared"),
+    },
+}
+source_contract = temp / "contract/assets/Data/vertical-slice-animation-sources.json"
+source_contract.parent.mkdir(parents=True)
+source_contract.write_text(json.dumps(data), encoding="utf-8")
+try:
+    builder.check_source_manifest(temp / "contract")
+except ValueError as error:
+    message = str(error)
+    assert "alpha" in message and "beta" in message, message
+    assert "Shared" in message and "shared" in message, message
+else:
+    raise AssertionError("case-insensitive folder collision must fail source validation")
+
+runtime = temp / "runtime"
+runtime_png = runtime / "Assets/ActorAtlases/Shared/idle.png"
+source_manifest = temp / "assets/Data/animation-atlas.json"
+resource_manifest = temp / "assets/resources/Data/animation-atlas.json"
+candidate_sentinel = temp / "candidates/alpha/reports/alpha-report.json"
+for path, payload in (
+    (runtime_png, b"runtime-sentinel"),
+    (source_manifest, b'{"version":2,"framePacking":"vertical-slice-action-atlases","actors":[]}\n'),
+    (resource_manifest, b'{"version":2,"framePacking":"vertical-slice-action-atlases","actors":[]}\n'),
+    (candidate_sentinel, b"candidate-sentinel"),
+):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(payload)
+watched = [runtime_png, source_manifest, resource_manifest, candidate_sentinel]
+before = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in watched}
+try:
+    builder.promote_selected_actors(
+        data, ["alpha"], temp / "missing-source", temp / "candidates",
+        runtime, source_manifest, resource_manifest,
+    )
+except ValueError as error:
+    message = str(error)
+    assert "alpha" in message and "beta" in message, message
+else:
+    raise AssertionError("selection pipeline must reject global folder collisions")
+after = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in watched}
+assert after == before
+print("folder collision contained")
+`
+    assert.match(runPython(script, [tempRoot]), /folder collision contained/)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})

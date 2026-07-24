@@ -318,6 +318,32 @@ def _validate_actor_folder(folder: Any):
     return folder
 
 
+def _actor_folder(actor_id: str, actor: Any):
+    if not isinstance(actor, dict):
+        raise ValueError(f"{actor_id} must be an object")
+    configured = actor.get("folder")
+    generated = "".join(part.title() for part in actor_id.split("-"))
+    return _validate_actor_folder(generated if configured is None else configured)
+
+
+def _validate_actor_folder_collisions(actors: Any):
+    if not isinstance(actors, dict):
+        raise ValueError("source manifest actors must be an object")
+    owners = {}
+    for actor_id, actor in actors.items():
+        folder = _actor_folder(actor_id, actor)
+        windows_key = folder.casefold()
+        previous = owners.get(windows_key)
+        if previous is not None:
+            previous_id, previous_folder = previous
+            raise ValueError(
+                "actor atlas folder collision: "
+                f"{previous_id} ({previous_folder!r}) and {actor_id} ({folder!r}) "
+                "resolve to the same Windows directory"
+            )
+        owners[windows_key] = (actor_id, folder)
+
+
 def _resolve_actor_output_directory(output_root: Path, folder: str):
     resolved_output_root = Path(output_root).resolve()
     actor_root = (resolved_output_root / "Assets" / "ActorAtlases").resolve()
@@ -441,12 +467,7 @@ def build_actor(source_config, source_root, output_root, report_root=None, repor
     source_root = Path(source_root)
     output_root = Path(output_root)
     actor_id = _validate_actor_id(source_config["id"])
-    configured_folder = source_config.get("folder")
-    folder = _validate_actor_folder(
-        "".join(part.title() for part in actor_id.split("-"))
-        if configured_folder is None
-        else configured_folder
-    )
+    folder = _actor_folder(actor_id, source_config)
     frame_size = _as_size(source_config["runtimeFrameSize"], "runtimeFrameSize")
     anchor = source_config["anchor"]
     actor_dir = _resolve_actor_output_directory(output_root, folder)
@@ -556,6 +577,7 @@ def select_actor_ids(data, requested):
     actors = data.get("actors", {})
     if not isinstance(actors, dict) or not actors:
         raise ValueError("source manifest must define actors")
+    _validate_actor_folder_collisions(actors)
     if not requested:
         return list(actors.keys())
     if any(not isinstance(actor_id, str) or not actor_id.strip() for actor_id in requested):
@@ -705,7 +727,7 @@ def promote_selected_actors(
         runtime_stage = transaction / "runtime"
         for actor_id in selected:
             config = data["actors"][actor_id]
-            folder = _validate_actor_folder(config.get("folder") or "".join(part.title() for part in actor_id.split("-")))
+            folder = _actor_folder(actor_id, config)
             candidate_actor = transaction / "candidates" / actor_id
             source_actor_dir = _resolve_actor_output_directory(candidate_actor, folder)
             staged_actor_dir = runtime_stage / folder
@@ -836,6 +858,7 @@ def check_source_manifest(root: Path):
             raise ValueError(f"{actor_id} must define actions")
         for action_name, action in actor["actions"].items():
             _validate_action(actor_id, action_name, action)
+    _validate_actor_folder_collisions(actors)
     return data
 
 
