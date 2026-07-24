@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 import argparse
+import hashlib
 import json
 import math
 import os
 import re
 import shutil
+import stat
 import tempfile
 from collections import deque
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -42,6 +44,11 @@ WINDOWS_RESERVED_NAMES = {
     *(f"com{index}" for index in range(1, 10)),
     *(f"lpt{index}" for index in range(1, 10)),
 }
+PROMOTION_JOURNAL_NAME = ".animation-promotion-transaction.json"
+
+
+class PromotionInterrupted(BaseException):
+    pass
 
 
 def _as_size(value: Any, label: str) -> tuple[int, int]:
@@ -573,6 +580,125 @@ def _load_existing_runtime_actors(path: Path):
     return actors
 
 
+def _runtime_atlas_folder(path: Any, label: str):
+    if not isinstance(path, str) or "\\" in path:
+        raise ValueError(f"{label} atlas must be a POSIX runtime path")
+    pure = PurePosixPath(path)
+    parts = pure.parts
+    if len(parts) < 4 or parts[:2] != ("Assets", "ActorAtlases"):
+        raise ValueError(f"{label} atlas must be under Assets/ActorAtlases/<folder>")
+    if any(part in ("", ".", "..") for part in parts):
+        raise ValueError(f"{label} atlas path is unsafe")
+    return _validate_actor_folder(parts[2])
+
+
+def _validate_runtime_manifest(data: Any, label: str):
+    if not isinstance(data, dict):
+        raise ValueError(f"{label} runtime manifest must be an object")
+    if data.get("version") != 2:
+        raise ValueError(f"{label} runtime manifest version must be 2")
+    if data.get("framePacking") != "vertical-slice-action-atlases":
+        raise ValueError(f"{label} runtime manifest framePacking is invalid")
+    actors = data.get("actors")
+    if not isinstance(actors, list):
+        raise ValueError(f"{label} runtime manifest actors must be an array")
+    ids = set()
+    folder_owners = {}
+    actor_folders = {}
+    for index, actor in enumerate(actors):
+        actor_label = f"{label}.actors[{index}]"
+        if not isinstance(actor, dict):
+            raise ValueError(f"{actor_label} must be an object")
+        actor_id = actor.get("id")
+        _validate_actor_id(actor_id)
+        if actor_id in ids:
+            raise ValueError(f"{label} runtime manifest has duplicate actor id {actor_id}")
+        ids.add(actor_id)
+        paths = [actor.get("atlas")]
+        actions = actor.get("actions")
+        if not isinstance(actions, list):
+            raise ValueError(f"{actor_label}.actions must be an array")
+        for action_index, action in enumerate(actions):
+            if not isinstance(action, dict):
+                raise ValueError(f"{actor_label}.actions[{action_index}] must be an object")
+            paths.append(action.get("atlas"))
+        folders = {
+            _runtime_atlas_folder(path, actor_label)
+            for path in paths
+        }
+        if len(folders) != 1:
+            raise ValueError(f"{actor_id} runtime actor spans multiple atlas folders")
+        folder = folders.pop()
+        key = folder.casefold()
+        previous = folder_owners.get(key)
+        if previous is not None:
+            raise ValueError(
+                f"runtime atlas folder collision: {previous} and {actor_id} own {folder!r}"
+            )
+        folder_owners[key] = actor_id
+        actor_folders[actor_id] = folder
+    return {"folderOwners": folder_owners, "actorFolders": actor_folders}
+
+
+def _load_authoritative_runtime_manifests(source_path: Path, resource_path: Path):
+    source_path = Path(source_path)
+    resource_path = Path(resource_path)
+    _assert_no_reparse_chain(source_path)
+    _assert_no_reparse_chain(resource_path)
+    if not source_path.is_file() or not resource_path.is_file():
+        raise FileNotFoundError("both authoritative runtime animation manifests must exist")
+    source_bytes = source_path.read_bytes()
+    resource_bytes = resource_path.read_bytes()
+    if source_bytes != resource_bytes:
+        raise ValueError("authoritative runtime animation manifests must be byte-identical")
+    try:
+        data = json.loads(source_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("authoritative runtime animation manifest is invalid JSON") from error
+    ownership = _validate_runtime_manifest(data, "authoritative")
+    return data, ownership
+
+
+def _stat_has_windows_reparse(stat_result):
+    attributes = getattr(stat_result, "st_file_attributes", 0)
+    return bool(attributes & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400))
+
+
+def _path_is_reparse(path: Path):
+    path = Path(path)
+    try:
+        result = path.lstat()
+    except FileNotFoundError:
+        return False
+    return path.is_symlink() or _stat_has_windows_reparse(result)
+
+
+def _assert_no_reparse_chain(path: Path):
+    path = Path(path).absolute()
+    current = Path(path.anchor)
+    for part in path.parts[1:]:
+        current = current / part
+        if (current.exists() or current.is_symlink()) and _path_is_reparse(current):
+            raise ValueError(f"target path contains a symlink or reparse point: {current}")
+
+
+def _assert_safe_runtime_actor_target(runtime_output_root: Path, folder: str):
+    folder = _validate_actor_folder(folder)
+    runtime_root = Path(runtime_output_root).absolute()
+    actor_root = runtime_root / "Assets" / "ActorAtlases"
+    target = actor_root / folder
+    _assert_no_reparse_chain(target)
+    resolved_root = actor_root.resolve(strict=False)
+    resolved_target = target.resolve(strict=False)
+    try:
+        resolved_target.relative_to(resolved_root)
+    except ValueError as error:
+        raise ValueError("runtime actor target must stay inside ActorAtlases") from error
+    if resolved_target.parent != resolved_root:
+        raise ValueError("runtime actor target must be one direct ActorAtlases folder")
+    return target
+
+
 def select_actor_ids(data, requested):
     actors = data.get("actors", {})
     if not isinstance(actors, dict) or not actors:
@@ -654,6 +780,211 @@ def _replace_paths_atomically(replacements):
                 backup.unlink()
 
 
+def _remove_path(path: Path):
+    path = Path(path)
+    if not path.exists() and not path.is_symlink():
+        return
+    if path.is_dir() and not path.is_symlink():
+        shutil.rmtree(path)
+    else:
+        path.unlink()
+
+
+def _promotion_journal_path(runtime_output_root):
+    runtime_root = Path(runtime_output_root).resolve()
+    runtime_root.parent.mkdir(parents=True, exist_ok=True)
+    return runtime_root.parent / PROMOTION_JOURNAL_NAME
+
+
+def _write_journal(path: Path, journal):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.write-{next(tempfile._get_candidate_names())}")
+    temporary.write_text(
+        json.dumps(journal, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    os.replace(temporary, path)
+
+
+def _staging_path_for_target(target: Path, token: str):
+    target = Path(target)
+    return target.with_name(f".{target.name}.promotion-stage-{token}")
+
+
+def _backup_path_for_target(target: Path, token: str):
+    target = Path(target)
+    return target.with_name(f".{target.name}.promotion-backup-{token}")
+
+
+def _volume_id(path: Path):
+    path = Path(path)
+    existing = path
+    while not existing.exists() and existing != existing.parent:
+        existing = existing.parent
+    if not existing.exists():
+        raise ValueError(f"cannot determine filesystem volume for {path}")
+    return os.stat(existing).st_dev
+
+
+def _assert_same_replace_volume(source: Path, target: Path):
+    if _volume_id(source) != _volume_id(target.parent):
+        raise ValueError(
+            f"atomic replacement paths must share a volume: {source} -> {target}"
+        )
+
+
+def _stage_replacement(source: Path, target: Path, token: str):
+    source = Path(source)
+    target = Path(target)
+    _assert_no_reparse_chain(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    staged = _staging_path_for_target(target, token)
+    backup = _backup_path_for_target(target, token)
+    _remove_path(staged)
+    _remove_path(backup)
+    if source.is_dir():
+        shutil.copytree(source, staged)
+        kind = "directory"
+    elif source.is_file():
+        shutil.copy2(source, staged)
+        kind = "file"
+    else:
+        raise FileNotFoundError(f"replacement source missing: {source}")
+    _assert_same_replace_volume(staged, target)
+    return {
+        "target": str(target.resolve()),
+        "staged": str(staged.resolve()),
+        "backup": str(backup.resolve()),
+        "kind": kind,
+        "targetExisted": target.exists() or target.is_symlink(),
+        "state": "prepared",
+    }
+
+
+def _read_promotion_journal(path: Path):
+    try:
+        journal = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise RuntimeError(f"cannot read promotion transaction journal: {path}") from error
+    if not isinstance(journal, dict) or not isinstance(journal.get("entries"), list):
+        raise RuntimeError(f"invalid promotion transaction journal: {path}")
+    return journal
+
+
+def _cleanup_committed_journal(journal_path: Path, journal):
+    errors = []
+    for entry in journal["entries"]:
+        for key in ("staged", "backup"):
+            try:
+                _remove_path(Path(entry[key]))
+            except Exception as error:
+                errors.append(f"{key} {entry[key]}: {error}")
+    if errors:
+        journal["state"] = "cleanup-failed"
+        journal["recoveryErrors"] = errors
+        _write_journal(journal_path, journal)
+        raise RuntimeError("promotion cleanup incomplete: " + "; ".join(errors))
+    Path(journal_path).unlink(missing_ok=True)
+
+
+def recover_incomplete_promotion(runtime_output_root):
+    journal_path = _promotion_journal_path(runtime_output_root)
+    if not journal_path.exists():
+        return False
+    journal = _read_promotion_journal(journal_path)
+    if journal.get("state") == "committed":
+        _cleanup_committed_journal(journal_path, journal)
+        return True
+
+    errors = []
+    for entry in reversed(journal["entries"]):
+        target = Path(entry["target"])
+        staged = Path(entry["staged"])
+        backup = Path(entry["backup"])
+        try:
+            if backup.exists() or backup.is_symlink():
+                _remove_path(target)
+                _assert_same_replace_volume(backup, target)
+                os.replace(backup, target)
+            elif entry.get("targetExisted"):
+                if entry.get("state") not in ("prepared", "backing-up") or not target.exists():
+                    raise RuntimeError(f"missing backup for mutated target {target}")
+            elif entry.get("state") not in ("prepared", "backing-up"):
+                _remove_path(target)
+            _remove_path(staged)
+        except Exception as error:
+            errors.append(f"{target}: {error}")
+    if errors:
+        journal["state"] = "recovery-failed"
+        journal["recoveryErrors"] = errors
+        _write_journal(journal_path, journal)
+        raise RuntimeError("promotion recovery incomplete: " + "; ".join(errors))
+    journal_path.unlink(missing_ok=True)
+    return True
+
+
+def _commit_journaled_replacements(
+    replacements,
+    runtime_output_root,
+    *,
+    fault_after_replacement=None,
+    simulate_interruption=False,
+):
+    recover_incomplete_promotion(runtime_output_root)
+    token = next(tempfile._get_candidate_names())
+    journal_path = _promotion_journal_path(runtime_output_root)
+    entries = []
+    try:
+        for source, target in replacements:
+            entries.append(_stage_replacement(source, target, token))
+    except Exception:
+        for entry in entries:
+            _remove_path(Path(entry["staged"]))
+        raise
+    journal = {
+        "version": 1,
+        "state": "prepared",
+        "runtimeRoot": str(Path(runtime_output_root).resolve()),
+        "entries": entries,
+    }
+    _write_journal(journal_path, journal)
+    installed_count = 0
+    try:
+        for entry in entries:
+            target = Path(entry["target"])
+            staged = Path(entry["staged"])
+            backup = Path(entry["backup"])
+            if entry["targetExisted"]:
+                entry["state"] = "backing-up"
+                _write_journal(journal_path, journal)
+                _assert_same_replace_volume(target, backup)
+                os.replace(target, backup)
+                entry["state"] = "backed-up"
+                _write_journal(journal_path, journal)
+            entry["state"] = "installing"
+            _write_journal(journal_path, journal)
+            _assert_same_replace_volume(staged, target)
+            os.replace(staged, target)
+            entry["state"] = "installed"
+            installed_count += 1
+            _write_journal(journal_path, journal)
+            if fault_after_replacement == installed_count:
+                message = f"injected interrupted transaction after replacement {installed_count}"
+                if simulate_interruption:
+                    raise PromotionInterrupted(message)
+                raise RuntimeError(message)
+        journal["state"] = "committed"
+        _write_journal(journal_path, journal)
+        _cleanup_committed_journal(journal_path, journal)
+    except Exception as error:
+        try:
+            recover_incomplete_promotion(runtime_output_root)
+        except Exception as recovery_error:
+            raise RuntimeError(f"{error}; rollback failed: {recovery_error}") from error
+        raise
+
+
 def build_candidate_actors(data, selected_actor_ids, source_root, candidate_root):
     selected = select_actor_ids(data, selected_actor_ids)
     candidate_root = Path(candidate_root)
@@ -664,6 +995,7 @@ def build_candidate_actors(data, selected_actor_ids, source_root, candidate_root
         stage = Path(tempfile.mkdtemp(prefix=f".{actor_id}-", dir=candidate_root))
         try:
             actor = _build_actor_candidate(data["actors"][actor_id], source_root, stage)
+            _write_candidate_package(data, actor_id, stage, actor)
             _replace_paths_atomically([(stage, target)])
             built.append(actor)
         except Exception:
@@ -681,6 +1013,155 @@ def _manifest_payload(actors):
     }, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
 
 
+def _canonical_fingerprint(value):
+    payload = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _file_sha256(path: Path):
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _bundle_relative_path(root: Path, relative: Any):
+    if not isinstance(relative, str) or not relative or "\\" in relative:
+        raise ValueError("candidate file path must be a non-empty POSIX relative path")
+    pure = PurePosixPath(relative)
+    if pure.is_absolute() or any(part in ("", ".", "..") for part in pure.parts):
+        raise ValueError(f"unsafe candidate file path: {relative!r}")
+    target = (Path(root).resolve() / Path(*pure.parts)).resolve()
+    try:
+        target.relative_to(Path(root).resolve())
+    except ValueError as error:
+        raise ValueError(f"candidate file escapes bundle: {relative!r}") from error
+    return target
+
+
+def _candidate_files(actor_root: Path):
+    root = Path(actor_root).resolve()
+    files = []
+    for path in sorted(root.rglob("*"), key=lambda item: item.as_posix()):
+        if path.name == "candidate-package.json":
+            continue
+        if path.is_symlink():
+            raise ValueError(f"candidate bundle contains symlink: {path}")
+        if path.is_file():
+            files.append({
+                "path": path.relative_to(root).as_posix(),
+                "sha256": _file_sha256(path),
+            })
+    return files
+
+
+def _write_candidate_package(data, actor_id, actor_root, runtime_actor, status="candidate"):
+    actor_root = Path(actor_root)
+    folder = _actor_folder(actor_id, data["actors"][actor_id])
+    report_relative = f"reports/{actor_id}-report.json"
+    package = {
+        "version": 1,
+        "status": status,
+        "actorId": actor_id,
+        "folder": folder,
+        "actor": runtime_actor,
+        "sourceManifestFingerprint": _canonical_fingerprint(data),
+        "actorConfigFingerprint": _canonical_fingerprint(data["actors"][actor_id]),
+        "report": {"path": report_relative, "status": status},
+        "files": _candidate_files(actor_root),
+    }
+    (actor_root / "candidate-package.json").write_text(
+        json.dumps(package, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return package
+
+
+def _verify_candidate_bundle(data, actor_id, candidate_root):
+    actor_root = _candidate_actor_root(candidate_root, actor_id)
+    package_path = actor_root / "candidate-package.json"
+    if not package_path.is_file() or package_path.is_symlink():
+        raise FileNotFoundError(f"verified candidate package missing for {actor_id}")
+    try:
+        package = json.loads(package_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"invalid candidate package for {actor_id}") from error
+    if not isinstance(package, dict) or package.get("version") != 1:
+        raise ValueError(f"invalid candidate package version for {actor_id}")
+    if package.get("status") != "candidate":
+        raise ValueError(f"candidate {actor_id} is not awaiting review")
+    if package.get("actorId") != actor_id:
+        raise ValueError(f"candidate actor id mismatch for {actor_id}")
+    expected_folder = _actor_folder(actor_id, data["actors"][actor_id])
+    if package.get("folder") != expected_folder:
+        raise ValueError(f"candidate folder mismatch for {actor_id}")
+    if package.get("sourceManifestFingerprint") != _canonical_fingerprint(data):
+        raise ValueError(f"candidate source manifest fingerprint mismatch for {actor_id}")
+    if package.get("actorConfigFingerprint") != _canonical_fingerprint(data["actors"][actor_id]):
+        raise ValueError(f"candidate actor config fingerprint mismatch for {actor_id}")
+
+    entries = package.get("files")
+    if not isinstance(entries, list) or not entries:
+        raise ValueError(f"candidate file list missing for {actor_id}")
+    listed_paths = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise ValueError(f"invalid candidate file entry for {actor_id}")
+        relative = entry.get("path")
+        path = _bundle_relative_path(actor_root, relative)
+        if relative in listed_paths:
+            raise ValueError(f"duplicate candidate file path for {actor_id}: {relative}")
+        listed_paths.append(relative)
+        if not path.is_file() or path.is_symlink():
+            raise ValueError(f"candidate file missing for {actor_id}: {relative}")
+        if entry.get("sha256") != _file_sha256(path):
+            raise ValueError(f"candidate file hash mismatch for {actor_id}: {relative}")
+    actual_paths = [entry["path"] for entry in _candidate_files(actor_root)]
+    if sorted(listed_paths) != sorted(actual_paths):
+        raise ValueError(f"candidate generated file list mismatch for {actor_id}")
+
+    report_metadata = package.get("report")
+    if not isinstance(report_metadata, dict) or report_metadata.get("status") != "candidate":
+        raise ValueError(f"candidate report metadata is not candidate for {actor_id}")
+    report_path = _bundle_relative_path(actor_root, report_metadata.get("path"))
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"invalid candidate report for {actor_id}") from error
+    if report.get("actorId") != actor_id or report.get("status") != "candidate":
+        raise ValueError(f"candidate report identity/status mismatch for {actor_id}")
+    if report.get("warnings"):
+        raise ValueError(f"{actor_id} candidate report contains warnings")
+    runtime_actor = package.get("actor")
+    if not isinstance(runtime_actor, dict) or runtime_actor.get("id") != actor_id:
+        raise ValueError(f"candidate runtime actor mismatch for {actor_id}")
+    expected_prefix = f"Assets/ActorAtlases/{expected_folder}/"
+    atlas_paths = [runtime_actor.get("atlas")] + [
+        action.get("atlas") for action in runtime_actor.get("actions", [])
+        if isinstance(action, dict)
+    ]
+    if not atlas_paths or any(not isinstance(path, str) or not path.startswith(expected_prefix) for path in atlas_paths):
+        raise ValueError(f"candidate runtime atlas folder mismatch for {actor_id}")
+    return {"root": actor_root, "package": package, "actor": runtime_actor, "report": report}
+
+
+def _approve_candidate_copy(data, actor_id, actor_root, runtime_actor):
+    report_path = Path(actor_root) / "reports" / f"{actor_id}-report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["status"] = "approved"
+    report_path.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return _write_candidate_package(data, actor_id, actor_root, runtime_actor, status="approved")
+
+
 def promote_selected_actors(
     data,
     selected_actor_ids,
@@ -689,32 +1170,51 @@ def promote_selected_actors(
     runtime_output_root,
     source_manifest_path,
     resource_manifest_path,
+    *,
+    fault_after_replacement=None,
+    simulate_interruption=False,
 ):
+    recover_incomplete_promotion(runtime_output_root)
     selected = select_actor_ids(data, selected_actor_ids)
-    candidate_root = Path(candidate_root).resolve()
-    candidate_root.parent.mkdir(parents=True, exist_ok=True)
-    transaction = Path(tempfile.mkdtemp(prefix=".animation-promotion-", dir=candidate_root.parent))
     source_manifest_path = Path(source_manifest_path)
     resource_manifest_path = Path(resource_manifest_path)
     runtime_output_root = Path(runtime_output_root)
+    runtime_manifest, ownership = _load_authoritative_runtime_manifests(
+        source_manifest_path,
+        resource_manifest_path,
+    )
+    candidate_root = Path(candidate_root).resolve()
+    verified_candidates = {}
+    for actor_id in selected:
+        verified = _verify_candidate_bundle(data, actor_id, candidate_root)
+        folder = verified["package"]["folder"]
+        existing_folder = ownership["actorFolders"].get(actor_id)
+        if existing_folder is not None and existing_folder.casefold() != folder.casefold():
+            raise ValueError(
+                f"selected actor {actor_id} cannot change runtime folder "
+                f"from {existing_folder!r} to {folder!r}"
+            )
+        owner = ownership["folderOwners"].get(folder.casefold())
+        if owner is not None and owner != actor_id and owner not in selected:
+            raise ValueError(
+                f"selected actor {actor_id} cannot claim folder {folder!r} owned by unselected actor {owner}"
+            )
+        verified_candidates[actor_id] = verified
+
+    candidate_root.parent.mkdir(parents=True, exist_ok=True)
+    transaction = Path(tempfile.mkdtemp(prefix=".animation-promotion-", dir=candidate_root.parent))
     replacements = []
     try:
         built = []
         for actor_id in selected:
+            verified = verified_candidates[actor_id]
             actor_root = transaction / "candidates" / actor_id
-            actor = _build_actor_candidate(data["actors"][actor_id], source_root, actor_root)
-            report_path = actor_root / "reports" / f"{actor_id}-report.json"
-            report = json.loads(report_path.read_text(encoding="utf-8"))
-            if report.get("warnings"):
-                raise ValueError(f"{actor_id} candidate report contains warnings")
-            report["status"] = "approved"
-            report_path.write_text(
-                json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
+            shutil.copytree(verified["root"], actor_root)
+            actor = verified["actor"]
+            _approve_candidate_copy(data, actor_id, actor_root, actor)
             built.append(actor)
 
-        existing_actors = _load_existing_runtime_actors(source_manifest_path)
+        existing_actors = runtime_manifest["actors"]
         merged_actors = merge_actor_manifests(existing_actors, built)
         payload = _manifest_payload(merged_actors)
         manifest_stage = transaction / "manifests"
@@ -732,7 +1232,7 @@ def promote_selected_actors(
             source_actor_dir = _resolve_actor_output_directory(candidate_actor, folder)
             staged_actor_dir = runtime_stage / folder
             shutil.copytree(source_actor_dir, staged_actor_dir)
-            runtime_actor_dir = _resolve_actor_output_directory(runtime_output_root, folder)
+            runtime_actor_dir = _assert_safe_runtime_actor_target(runtime_output_root, folder)
             replacements.append((staged_actor_dir, runtime_actor_dir))
 
             staged_candidate = transaction / "approved" / actor_id
@@ -743,7 +1243,12 @@ def promote_selected_actors(
             (staged_source_manifest, source_manifest_path),
             (staged_resource_manifest, resource_manifest_path),
         ])
-        _replace_paths_atomically(replacements)
+        _commit_journaled_replacements(
+            replacements,
+            runtime_output_root,
+            fault_after_replacement=fault_after_replacement,
+            simulate_interruption=simulate_interruption,
+        )
         return built
     finally:
         if transaction.exists():

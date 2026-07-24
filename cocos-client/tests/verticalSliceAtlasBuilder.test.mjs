@@ -709,8 +709,8 @@ existing = {
     "version": 2,
     "framePacking": "vertical-slice-action-atlases",
     "actors": [
-        {"id": "alpha", "type": "monster", "atlas": "old-alpha", "frameSize": {"w": 1, "h": 1}, "actions": []},
-        {"id": "legacy", "type": "monster", "atlas": "legacy", "frameSize": {"w": 1, "h": 1}, "actions": []},
+        {"id": "alpha", "type": "monster", "atlas": "Assets/ActorAtlases/Alpha/idle.png", "frameSize": {"w": 1, "h": 1}, "actions": []},
+        {"id": "legacy", "type": "monster", "atlas": "Assets/ActorAtlases/Legacy/idle.png", "frameSize": {"w": 1, "h": 1}, "actions": []},
     ],
 }
 payload = (json.dumps(existing, ensure_ascii=False, indent=2) + "\n").encode()
@@ -853,6 +853,440 @@ assert after == before
 print("folder collision contained")
 `
     assert.match(runPython(script, [tempRoot]), /folder collision contained/)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('promotion consumes a hashed reviewed candidate without rebuilding source frames', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'vertical-slice-verified-candidate-'))
+  try {
+    const script = String.raw`
+import copy
+import hashlib
+import importlib.util
+import json
+import sys
+from pathlib import Path
+from PIL import Image, ImageDraw
+
+root = Path(sys.argv[1])
+temp = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("builder", root / "tools/build-vertical-slice-atlases.py")
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+
+def write_frame(color):
+    path = temp / "source/alpha/idle/00.png"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    image = Image.new("RGBA", (128, 160), (0, 0, 0, 0))
+    ImageDraw.Draw(image).rectangle((38, 24, 89, 139), fill=color)
+    image.save(path)
+
+actor = {
+    "id": "alpha", "folder": "Alpha", "type": "monster",
+    "masterFrameSize": [128, 160], "runtimeFrameSize": [64, 80],
+    "anchor": {"x": 0.5, "y": 0.85}, "quality": builder.DEFAULT_QUALITY,
+    "actions": {"idle": {
+        "frames": 1, "fps": 6, "loop": True,
+        "source": "alpha/idle", "sourceMode": "frame-sequence",
+        "events": [{"name": "ready", "time": 0.5}],
+    }},
+}
+data = {"version": 2, "sourceRoot": "source", "actors": {"alpha": actor}}
+candidate_root = temp / "candidates"
+runtime = temp / "runtime"
+source_manifest = temp / "assets/Data/animation-atlas.json"
+resource_manifest = temp / "assets/resources/Data/animation-atlas.json"
+manifest = {
+    "version": 2, "framePacking": "vertical-slice-action-atlases",
+    "actors": [{"id": "legacy", "type": "monster", "atlas": "Assets/ActorAtlases/Legacy/idle.png", "frameSize": {"w": 1, "h": 1}, "actions": []}],
+}
+payload = (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode()
+for path in (source_manifest, resource_manifest):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(payload)
+
+write_frame((50, 120, 220, 255))
+builder.build_candidate_actors(data, ["alpha"], temp / "source", candidate_root)
+package_path = candidate_root / "alpha/candidate-package.json"
+package = json.loads(package_path.read_text(encoding="utf-8"))
+candidate_png = candidate_root / "alpha/Assets/ActorAtlases/Alpha/idle.png"
+candidate_bytes = candidate_png.read_bytes()
+assert package["actorId"] == "alpha"
+assert package["folder"] == "Alpha"
+assert package["status"] == "candidate"
+assert package["report"]["path"] == "reports/alpha-report.json"
+assert package["report"]["status"] == "candidate"
+assert package["actor"]["id"] == "alpha"
+assert package["sourceManifestFingerprint"]
+assert package["actorConfigFingerprint"]
+listed = {entry["path"]: entry["sha256"] for entry in package["files"]}
+assert listed["Assets/ActorAtlases/Alpha/idle.png"] == hashlib.sha256(candidate_bytes).hexdigest()
+assert listed["reports/alpha-report.json"] == hashlib.sha256((candidate_root / "alpha/reports/alpha-report.json").read_bytes()).hexdigest()
+
+write_frame((230, 60, 50, 255))
+builder.promote_selected_actors(
+    data, ["alpha"], temp / "source", candidate_root,
+    runtime, source_manifest, resource_manifest,
+)
+runtime_png = runtime / "Assets/ActorAtlases/Alpha/idle.png"
+assert runtime_png.read_bytes() == candidate_bytes, "promote rebuilt changed source instead of consuming candidate"
+approved_package = json.loads(package_path.read_text(encoding="utf-8"))
+approved_report = json.loads((candidate_root / "alpha/reports/alpha-report.json").read_text(encoding="utf-8"))
+assert approved_package["status"] == "approved"
+assert approved_package["report"]["status"] == "approved"
+assert approved_report["status"] == "approved"
+
+write_frame((50, 120, 220, 255))
+builder.build_candidate_actors(data, ["alpha"], temp / "source", candidate_root)
+candidate_png.write_bytes(candidate_png.read_bytes() + b"tampered")
+watched = [runtime_png, source_manifest, resource_manifest]
+before = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in watched}
+try:
+    builder.promote_selected_actors(data, ["alpha"], temp / "source", candidate_root, runtime, source_manifest, resource_manifest)
+except ValueError as error:
+    assert "hash" in str(error).lower(), error
+else:
+    raise AssertionError("tampered candidate must be rejected")
+assert before == {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in watched}
+
+builder.build_candidate_actors(data, ["alpha"], temp / "source", candidate_root)
+changed = copy.deepcopy(data)
+changed["actors"]["alpha"]["actions"]["idle"]["fps"] = 7
+try:
+    builder.promote_selected_actors(changed, ["alpha"], temp / "source", candidate_root, runtime, source_manifest, resource_manifest)
+except ValueError as error:
+    assert "fingerprint" in str(error).lower(), error
+else:
+    raise AssertionError("stale candidate config must be rejected")
+assert before == {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in watched}
+print("verified candidate consumed")
+`
+    assert.match(runPython(script, [tempRoot]), /verified candidate consumed/)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('journaled promotion rolls back every injected failure and recovers interrupted commits', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'vertical-slice-journal-recovery-'))
+  try {
+    const script = String.raw`
+import hashlib
+import importlib.util
+import json
+import sys
+from pathlib import Path
+from PIL import Image, ImageDraw
+
+root = Path(sys.argv[1])
+temp = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("builder", root / "tools/build-vertical-slice-atlases.py")
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+
+actor = {
+    "id": "alpha", "folder": "Alpha", "type": "monster",
+    "masterFrameSize": [128, 160], "runtimeFrameSize": [64, 80],
+    "anchor": {"x": 0.5, "y": 0.85}, "quality": builder.DEFAULT_QUALITY,
+    "actions": {"idle": {
+        "frames": 1, "fps": 6, "loop": True,
+        "source": "alpha/idle", "sourceMode": "frame-sequence",
+    }},
+}
+data = {"version": 2, "actors": {"alpha": actor}}
+
+def tree_hash(path):
+    path = Path(path)
+    if not path.exists():
+        return None
+    if path.is_file():
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    digest = hashlib.sha256()
+    for item in sorted(path.rglob("*"), key=lambda value: value.as_posix()):
+        if item.is_file():
+            digest.update(item.relative_to(path).as_posix().encode())
+            digest.update(item.read_bytes())
+    return digest.hexdigest()
+
+def setup(case):
+    source_frame = case / "source/alpha/idle/00.png"
+    source_frame.parent.mkdir(parents=True)
+    image = Image.new("RGBA", (128, 160), (0, 0, 0, 0))
+    ImageDraw.Draw(image).rectangle((38, 24, 89, 139), fill=(60, 130, 220, 255))
+    image.save(source_frame)
+    candidate_root = case / "candidates"
+    builder.build_candidate_actors(data, ["alpha"], case / "source", candidate_root)
+    runtime = case / "runtime"
+    runtime_png = runtime / "Assets/ActorAtlases/Alpha/idle.png"
+    runtime_png.parent.mkdir(parents=True)
+    runtime_png.write_bytes(b"old-runtime")
+    source_manifest = case / "assets/Data/animation-atlas.json"
+    resource_manifest = case / "assets/resources/Data/animation-atlas.json"
+    manifest = {
+        "version": 2, "framePacking": "vertical-slice-action-atlases",
+        "actors": [{
+            "id": "alpha", "type": "monster",
+            "atlas": "Assets/ActorAtlases/Alpha/idle.png",
+            "frameSize": {"w": 1, "h": 1}, "actions": [],
+        }],
+    }
+    payload = (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode()
+    for path in (source_manifest, resource_manifest):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+    watched = [runtime / "Assets/ActorAtlases/Alpha", candidate_root / "alpha", source_manifest, resource_manifest]
+    return runtime, candidate_root, source_manifest, resource_manifest, watched
+
+for failure_index in range(1, 5):
+    case = temp / f"failure-{failure_index}"
+    runtime, candidates, source_manifest, resource_manifest, watched = setup(case)
+    before = [tree_hash(path) for path in watched]
+    try:
+        builder.promote_selected_actors(
+            data, ["alpha"], case / "source", candidates, runtime,
+            source_manifest, resource_manifest,
+            fault_after_replacement=failure_index,
+        )
+    except RuntimeError as error:
+        assert "injected" in str(error).lower(), error
+    else:
+        raise AssertionError(f"fault {failure_index} did not interrupt promotion")
+    assert [tree_hash(path) for path in watched] == before, failure_index
+    assert not builder._promotion_journal_path(runtime).exists(), failure_index
+
+case = temp / "interrupted"
+runtime, candidates, source_manifest, resource_manifest, watched = setup(case)
+before = [tree_hash(path) for path in watched]
+try:
+    builder.promote_selected_actors(
+        data, ["alpha"], case / "source", candidates, runtime,
+        source_manifest, resource_manifest,
+        fault_after_replacement=2,
+        simulate_interruption=True,
+    )
+except BaseException as error:
+    assert "interrupted" in str(error).lower(), error
+else:
+    raise AssertionError("simulated process interruption did not occur")
+journal = builder._promotion_journal_path(runtime)
+assert journal.exists()
+builder.recover_incomplete_promotion(runtime)
+assert [tree_hash(path) for path in watched] == before
+assert not journal.exists()
+print("journal recovery complete")
+`
+    assert.match(runPython(script, [tempRoot]), /journal recovery complete/)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('normal promotion requires identical authoritative runtime manifests', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'vertical-slice-dual-manifest-'))
+  try {
+    const script = String.raw`
+import hashlib
+import importlib.util
+import json
+import sys
+from pathlib import Path
+from PIL import Image, ImageDraw
+
+root = Path(sys.argv[1])
+temp = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("builder", root / "tools/build-vertical-slice-atlases.py")
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+
+actor = {
+    "id": "alpha", "folder": "Alpha", "type": "monster",
+    "masterFrameSize": [128, 160], "runtimeFrameSize": [64, 80],
+    "anchor": {"x": 0.5, "y": 0.85}, "quality": builder.DEFAULT_QUALITY,
+    "actions": {"idle": {"frames": 1, "fps": 6, "loop": True, "source": "alpha/idle", "sourceMode": "frame-sequence"}},
+}
+data = {"version": 2, "actors": {"alpha": actor}}
+
+def valid_manifest(actors=None):
+    return {
+        "version": 2, "framePacking": "vertical-slice-action-atlases",
+        "actors": actors if actors is not None else [{
+            "id": "legacy", "type": "monster", "atlas": "Assets/ActorAtlases/Legacy/idle.png",
+            "frameSize": {"w": 1, "h": 1}, "actions": [],
+        }],
+    }
+
+def digest_tree(path):
+    path = Path(path)
+    digest = hashlib.sha256()
+    if not path.exists():
+        return "missing"
+    for item in sorted(path.rglob("*"), key=lambda value: value.as_posix()):
+        if item.is_file():
+            digest.update(item.relative_to(path).as_posix().encode())
+            digest.update(item.read_bytes())
+    return digest.hexdigest()
+
+def setup(case):
+    frame = case / "source/alpha/idle/00.png"
+    frame.parent.mkdir(parents=True)
+    image = Image.new("RGBA", (128, 160), (0, 0, 0, 0))
+    ImageDraw.Draw(image).rectangle((38, 24, 89, 139), fill=(60, 130, 220, 255))
+    image.save(frame)
+    candidates = case / "candidates"
+    builder.build_candidate_actors(data, ["alpha"], case / "source", candidates)
+    runtime = case / "runtime"
+    sentinel = runtime / "Assets/ActorAtlases/Legacy/idle.png"
+    sentinel.parent.mkdir(parents=True)
+    sentinel.write_bytes(b"legacy-runtime")
+    source_manifest = case / "assets/Data/animation-atlas.json"
+    resource_manifest = case / "assets/resources/Data/animation-atlas.json"
+    return candidates, runtime, source_manifest, resource_manifest
+
+cases = ("missing", "divergent", "duplicate", "schema")
+for name in cases:
+    case = temp / name
+    candidates, runtime, source_manifest, resource_manifest = setup(case)
+    source_manifest.parent.mkdir(parents=True)
+    resource_manifest.parent.mkdir(parents=True)
+    source_data = valid_manifest()
+    resource_data = valid_manifest()
+    if name == "missing":
+        source_manifest.write_text(json.dumps(source_data), encoding="utf-8")
+    elif name == "divergent":
+        source_manifest.write_text(json.dumps(source_data), encoding="utf-8")
+        resource_data["actors"][0]["type"] = "character"
+        resource_manifest.write_text(json.dumps(resource_data), encoding="utf-8")
+    elif name == "duplicate":
+        duplicate = source_data["actors"][0].copy()
+        source_data["actors"].append(duplicate)
+        payload = json.dumps(source_data)
+        source_manifest.write_text(payload, encoding="utf-8")
+        resource_manifest.write_text(payload, encoding="utf-8")
+    else:
+        source_data["framePacking"] = "wrong"
+        payload = json.dumps(source_data)
+        source_manifest.write_text(payload, encoding="utf-8")
+        resource_manifest.write_text(payload, encoding="utf-8")
+    before = digest_tree(case)
+    try:
+        builder.promote_selected_actors(data, ["alpha"], case / "source", candidates, runtime, source_manifest, resource_manifest)
+    except (FileNotFoundError, ValueError) as error:
+        assert name in ("missing", "divergent", "duplicate", "schema")
+    else:
+        raise AssertionError(f"invalid dual manifest case accepted: {name}")
+    assert digest_tree(case) == before, name
+print("dual manifest authority enforced")
+`
+    assert.match(runPython(script, [tempRoot]), /dual manifest authority enforced/)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('runtime ownership reparse checks and target-local staging protect actor folders', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'vertical-slice-runtime-ownership-'))
+  try {
+    const script = String.raw`
+import hashlib
+import importlib.util
+import json
+import os
+import sys
+from pathlib import Path
+from PIL import Image, ImageDraw
+
+root = Path(sys.argv[1])
+temp = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("builder", root / "tools/build-vertical-slice-atlases.py")
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+
+class WindowsReparseStat:
+    st_file_attributes = 0x400
+assert builder._stat_has_windows_reparse(WindowsReparseStat())
+
+target = temp / "runtime-volume/Assets/ActorAtlases/Alpha"
+staged = builder._staging_path_for_target(target, "unit")
+assert staged.parent == target.parent
+assert staged.name.startswith(".Alpha.promotion-stage-")
+
+copy_source = temp / "candidate-volume/source.txt"
+copy_source.parent.mkdir(parents=True)
+copy_source.write_bytes(b"candidate")
+entry = builder._stage_replacement(copy_source, target.parent / "file.txt", "local")
+assert Path(entry["staged"]).parent == (target.parent).resolve()
+builder._remove_path(Path(entry["staged"]))
+
+original_volume_id = builder._volume_id
+try:
+    builder._volume_id = lambda path: 1 if "source-volume" in str(path) else 2
+    try:
+        builder._assert_same_replace_volume(temp / "source-volume/file", temp / "target-volume/file")
+    except ValueError as error:
+        assert "volume" in str(error).lower(), error
+    else:
+        raise AssertionError("cross-volume replace validation did not fail")
+finally:
+    builder._volume_id = original_volume_id
+
+actor = {
+    "id": "alpha", "folder": "Shared", "type": "monster",
+    "masterFrameSize": [128, 160], "runtimeFrameSize": [64, 80],
+    "anchor": {"x": 0.5, "y": 0.85}, "quality": builder.DEFAULT_QUALITY,
+    "actions": {"idle": {"frames": 1, "fps": 6, "loop": True, "source": "alpha/idle", "sourceMode": "frame-sequence"}},
+}
+data = {"version": 2, "actors": {"alpha": actor}}
+frame = temp / "ownership/source/alpha/idle/00.png"
+frame.parent.mkdir(parents=True)
+image = Image.new("RGBA", (128, 160), (0, 0, 0, 0))
+ImageDraw.Draw(image).rectangle((38, 24, 89, 139), fill=(60, 130, 220, 255))
+image.save(frame)
+candidates = temp / "ownership/candidates"
+builder.build_candidate_actors(data, ["alpha"], temp / "ownership/source", candidates)
+runtime = temp / "ownership/runtime"
+runtime_png = runtime / "Assets/ActorAtlases/Shared/idle.png"
+runtime_png.parent.mkdir(parents=True)
+runtime_png.write_bytes(b"beta-owned")
+source_manifest = temp / "ownership/assets/Data/animation-atlas.json"
+resource_manifest = temp / "ownership/assets/resources/Data/animation-atlas.json"
+manifest = {
+    "version": 2, "framePacking": "vertical-slice-action-atlases",
+    "actors": [{"id": "beta", "type": "monster", "atlas": "Assets/ActorAtlases/Shared/idle.png", "frameSize": {"w": 1, "h": 1}, "actions": []}],
+}
+payload = (json.dumps(manifest, indent=2) + "\n").encode()
+for path in (source_manifest, resource_manifest):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(payload)
+before = [hashlib.sha256(path.read_bytes()).hexdigest() for path in (runtime_png, source_manifest, resource_manifest)]
+try:
+    builder.promote_selected_actors(data, ["alpha"], temp / "ownership/source", candidates, runtime, source_manifest, resource_manifest)
+except ValueError as error:
+    assert "beta" in str(error) and "alpha" in str(error), error
+else:
+    raise AssertionError("selected actor stole an unselected actor folder")
+assert before == [hashlib.sha256(path.read_bytes()).hexdigest() for path in (runtime_png, source_manifest, resource_manifest)]
+
+link_case = temp / "symlink"
+outside = link_case / "outside"
+outside.mkdir(parents=True)
+link = link_case / "runtime/Assets/ActorAtlases/Alpha"
+link.parent.mkdir(parents=True)
+try:
+    os.symlink(outside, link, target_is_directory=True)
+except OSError:
+    pass
+else:
+    try:
+        builder._assert_safe_runtime_actor_target(link_case / "runtime", "Alpha")
+    except ValueError as error:
+        assert "reparse" in str(error).lower() or "link" in str(error).lower(), error
+    else:
+        raise AssertionError("runtime symlink target was accepted")
+print("runtime folder boundaries enforced")
+`
+    assert.match(runPython(script, [tempRoot]), /runtime folder boundaries enforced/)
   } finally {
     rmSync(tempRoot, { recursive: true, force: true })
   }
