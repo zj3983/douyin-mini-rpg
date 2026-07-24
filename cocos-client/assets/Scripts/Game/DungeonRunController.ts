@@ -43,8 +43,6 @@ export class DungeonRunController extends Component {
   private run: DungeonRun | null = null
 
   begin(seed: number) {
-    this.run = null
-    this.refreshRoomLabel()
     if (!this.profileData) return false
 
     try {

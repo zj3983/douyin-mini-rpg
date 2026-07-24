@@ -29,6 +29,36 @@ function readSource(file) {
   return existsSync(path) ? readFileSync(path, 'utf8') : ''
 }
 
+function extractBlock(source, marker) {
+  const markerIndex = source.indexOf(marker)
+  assert.notEqual(markerIndex, -1, `missing source marker: ${marker}`)
+  const openIndex = marker.endsWith('{')
+    ? markerIndex + marker.length - 1
+    : source.indexOf('{', markerIndex + marker.length)
+  assert.notEqual(openIndex, -1, `missing block after source marker: ${marker}`)
+
+  let depth = 0
+  for (let index = openIndex; index < source.length; index += 1) {
+    if (source[index] === '{') depth += 1
+    if (source[index] === '}') depth -= 1
+    if (depth === 0) return source.slice(openIndex + 1, index)
+  }
+  assert.fail(`unterminated block after source marker: ${marker}`)
+}
+
+function countOccurrences(source, marker) {
+  return source.split(marker).length - 1
+}
+
+function assertStatementOrder(source, markers) {
+  let previousIndex = -1
+  for (const marker of markers) {
+    const index = source.indexOf(marker)
+    assert.ok(index > previousIndex, `${marker} should occur after the previous statement`)
+    previousIndex = index
+  }
+}
+
 test('Cocos game layer has dedicated battle-loop components', () => {
   for (const [file, marker] of requiredComponents) {
     const source = readFileSync(resolve(file), 'utf8')
@@ -96,8 +126,48 @@ test('dual-mode Cocos controllers delegate progression and dungeon rules to Core
   assert.match(world, /rewardId:\s*`world-\$\{this\.stageNumber\}-generation-\$\{this\.stageGeneration\}`/)
 })
 
+test('dungeon begin validates a candidate before replacing the active run', () => {
+  const source = readSource('assets/Scripts/Game/DungeonRunController.ts')
+  const begin = extractBlock(source, 'begin(seed: number)')
+
+  assert.doesNotMatch(begin, /this\.run = null/)
+  assert.equal(countOccurrences(begin, 'this.run = nextRun'), 1)
+  assertStatementOrder(begin, [
+    'if (!this.profileData) return false',
+    'const nextRun = createDungeonSession',
+    'this.run = nextRun',
+    'this.refreshRoomLabel()',
+    "this.node.emit('dungeon-run-began'",
+  ])
+})
+
+test('world clear emits exactly once inside the successful claimed-result branch', () => {
+  const source = readSource('assets/Scripts/Game/BattleRuntimeController.ts')
+  const finishStage = extractBlock(source, 'private finishStage()')
+  const acceptedClaim = extractBlock(finishStage, 'if (result?.ok && result.result)')
+
+  assert.equal(countOccurrences(source, "emit('world-stage-cleared'"), 1)
+  assert.equal(countOccurrences(finishStage, "emit('world-stage-cleared'"), 1)
+  assert.equal(countOccurrences(acceptedClaim, "emit('world-stage-cleared'"), 1)
+  assert.match(acceptedClaim, /stageClearPanel\?\.showResult\(result\.result\)/)
+  assertStatementOrder(finishStage, [
+    'markBattleAttemptCleared(this.attemptState)',
+    'claimStageClearRuntime(this.runtime)',
+    'if (result?.ok && result.result)',
+  ])
+  assertStatementOrder(acceptedClaim, [
+    'this.stageClearPanel?.showResult(result.result)',
+    "this.node.emit('world-stage-cleared'",
+  ])
+})
+
 test('dual-mode bootstrap wires live events, roots, data, and listener cleanup', () => {
   const source = readSource('assets/Scripts/Game/PortraitBattleBootstrap.ts')
+  const onDestroy = extractBlock(source, 'onDestroy()')
+  const runtimeSetupStart = source.indexOf("const runtimeNode = this.createNode('Runtime', parent)")
+  const runtimeSetupEnd = source.indexOf("const designPath = 'Data/cultivation-design'", runtimeSetupStart)
+  assert.ok(runtimeSetupStart >= 0 && runtimeSetupEnd > runtimeSetupStart)
+  const runtimeSetup = source.slice(runtimeSetupStart, runtimeSetupEnd)
 
   assert.match(source, /DualModeGameController/)
   assert.match(source, /DungeonRunController/)
@@ -105,21 +175,43 @@ test('dual-mode bootstrap wires live events, roots, data, and listener cleanup',
   assert.match(source, /createNode\('DungeonRoot'/)
   assert.match(source, /dungeonRoot\.active = false/)
   assert.match(source, /Data\/dual-mode-slice/)
-  assert.match(source, /runtimeNode\.on\('world-stage-cleared',\s*dualMode\.handleWorldCleared,\s*dualMode\)/)
+  assert.match(runtimeSetup, /runtimeNode\.on\('battle-stage-changed',\s*this\.onStageChanged,\s*this\)/)
+  assert.match(runtimeSetup, /runtimeNode\.on\('world-stage-cleared',\s*dualMode\.handleWorldCleared,\s*dualMode\)/)
   assert.match(source, /dungeonNode\.on\('dungeon-extracted',\s*dualMode\.handleDungeonExtracted,\s*dualMode\)/)
-  assert.match(source, /runtimeNode\?\.off\('world-stage-cleared',\s*this\.dualModeController\?\.handleWorldCleared,\s*this\.dualModeController\)/)
-  assert.match(source, /dungeonNode\?\.off\('dungeon-extracted',\s*this\.dualModeController\?\.handleDungeonExtracted,\s*this\.dualModeController\)/)
+  assert.match(onDestroy, /runtimeNode\?\.off\('battle-stage-changed',\s*this\.onStageChanged,\s*this\)/)
+  assert.match(onDestroy, /runtimeNode\?\.off\('world-stage-cleared',\s*this\.dualModeController\?\.handleWorldCleared,\s*this\.dualModeController\)/)
+  assert.match(onDestroy, /dungeonNode\?\.off\('dungeon-extracted',\s*this\.dualModeController\?\.handleDungeonExtracted,\s*this\.dualModeController\)/)
 })
 
 test('dual-mode persistence only follows newly accepted reducer rewards', () => {
   const source = readSource('assets/Scripts/Game/DualModeGameController.ts')
-  const worldHandler = source.match(/handleWorldCleared[\s\S]*?\n  }/)?.[0] ?? ''
-  const extractionHandler = source.match(/handleDungeonExtracted[\s\S]*?\n  }/)?.[0] ?? ''
+  const worldHandler = extractBlock(source, 'handleWorldCleared(payload: { stage: number; rewardId: string }) {')
+  const enterDungeon = extractBlock(source, 'enterDungeon(seed = DEFAULT_DUNGEON_SEED)')
+  const extractionHandler = extractBlock(source, 'handleDungeonExtracted(payload: { runId: string; loot: RunLoot[] }) {')
+  const saveSnapshot = extractBlock(source, 'getSaveSnapshot()')
 
   assert.match(worldHandler, /if \(!this\.didAcceptReward\([^)]+\)\) return/)
   assert.match(worldHandler, /this\.persistSave\(/)
   assert.match(extractionHandler, /if \(!this\.didAcceptReward\([^)]+\)\) return/)
   assert.match(extractionHandler, /this\.persistSave\(/)
+  assert.doesNotMatch(enterDungeon, /this\.save\s*=/)
+  assertStatementOrder(enterDungeon, [
+    'const passResult = consumeDungeonPass(this.save)',
+    'if (!this.dungeonRun.begin(seed))',
+    'this.persistSave(passResult.save)',
+    'this.worldRoot.active = false',
+    'this.dungeonRoot.active = true',
+    "this.node.emit('dungeon-entry-accepted'",
+  ])
+  assertStatementOrder(extractionHandler, [
+    'applyExtractionLoot(previous, payload.runId, payload.loot)',
+    'if (!this.didAcceptReward(previous, next)) return false',
+    'this.persistSave(next)',
+    'this.dungeonRoot.active = false',
+    'this.worldRoot.active = true',
+  ])
+  assert.equal(countOccurrences(saveSnapshot, 'migratePlayerSave(this.save)'), 1)
+  assert.doesNotMatch(saveSnapshot, /return this\.save\b/)
 })
 
 test('enemy spawner only maps runtime spawns to pooled nodes', () => {
