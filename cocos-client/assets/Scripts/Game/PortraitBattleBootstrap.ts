@@ -656,7 +656,7 @@ export class PortraitBattleBootstrap extends Component {
 
     const bottomNavigation = this.createNode('BottomNavigation', parent, WIDTH, NAV_HEIGHT)
     this.bottomNavigation = bottomNavigation
-    const dungeonEntryLayout = computeDungeonEntryNavLayout(layout.navigationTop)
+    const dungeonEntryLayout = computeDungeonEntryNavLayout(layout.navigationTop, NAV_HEIGHT)
     bottomNavigation.setPosition(0, dungeonEntryLayout.navigation.centerY, 0)
     this.drawBand(bottomNavigation, WIDTH, NAV_HEIGHT, new Color(12, 22, 25, 238))
     const navLabels = ['战斗', '副本', '抽卡', '装备', '背包', '法宝']

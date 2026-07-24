@@ -144,6 +144,11 @@ test('dual-mode Cocos controllers delegate progression and dungeon rules to Core
   assert.match(world, /rewardId:\s*worldRewardId\(this\.stageNumber, this\.rewardSessionId, this\.stageGeneration\)/)
 })
 
+test('new dungeon entry layout does not depend on the frozen Combat layer', () => {
+  const source = readSource('assets/Scripts/Game/DungeonEntryLayout.ts')
+  assert.doesNotMatch(source, /Scripts\/Combat|\.\.\/Combat\//)
+})
+
 test('dungeon begin commits before best-effort observer notification', () => {
   const source = readSource('assets/Scripts/Game/DungeonRunController.ts')
   const begin = extractBlock(source, 'begin(seed: number)')

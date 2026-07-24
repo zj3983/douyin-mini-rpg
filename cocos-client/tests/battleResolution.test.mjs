@@ -33,7 +33,7 @@ test('dungeon entry label and status use nonoverlapping tracks entirely inside t
       topInsetPx: 0,
       ...viewport,
     })
-    const entry = computeDungeonEntryNavLayout(layout.navigationTop)
+    const entry = computeDungeonEntryNavLayout(layout.navigationTop, battleLayout.BATTLE_NAVIGATION_HEIGHT)
     const visibleBottom = -layout.visibleHeight / 2
 
     assert.equal(entry.navigation.maxY, layout.navigationTop)

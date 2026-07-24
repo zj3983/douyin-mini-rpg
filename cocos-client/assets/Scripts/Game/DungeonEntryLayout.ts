@@ -1,5 +1,3 @@
-import { BATTLE_NAVIGATION_HEIGHT } from '../Combat/BattleLayout.ts'
-
 export interface DungeonEntryNavLayout {
   readonly navigation: Readonly<{ centerY: number; minY: number; maxY: number }>
   readonly label: Readonly<{ centerY: number; minY: number; maxY: number; height: number }>
@@ -10,11 +8,17 @@ const LABEL_HEIGHT = 44
 const STATUS_HEIGHT = 24
 const TRACK_PADDING = 8
 
-export function computeDungeonEntryNavLayout(navigationTop: number): Readonly<DungeonEntryNavLayout> {
+export function computeDungeonEntryNavLayout(
+  navigationTop: number,
+  navigationHeight: number,
+): Readonly<DungeonEntryNavLayout> {
   const safeNavigationTop = Number.isFinite(navigationTop) ? navigationTop : 0
+  const safeNavigationHeight = Number.isFinite(navigationHeight) && navigationHeight > 0
+    ? navigationHeight
+    : 0
   const navigation = Object.freeze({
-    centerY: safeNavigationTop - BATTLE_NAVIGATION_HEIGHT / 2,
-    minY: safeNavigationTop - BATTLE_NAVIGATION_HEIGHT,
+    centerY: safeNavigationTop - safeNavigationHeight / 2,
+    minY: safeNavigationTop - safeNavigationHeight,
     maxY: safeNavigationTop,
   })
   const labelMinY = navigation.minY + TRACK_PADDING

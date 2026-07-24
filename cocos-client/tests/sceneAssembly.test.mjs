@@ -135,7 +135,7 @@ test('portrait bootstrap fills the visible height without stretching the whole s
   assert.match(source, /createNode\('Canvas', this\.node, WIDTH, visibleHeight\)/)
   assert.match(source, /configureInputLayer\(inputLayer, layout\)/)
   assert.match(source, /topHud\.setPosition\(0, this\.topHudY\(layout\), 0\)/)
-  assert.match(source, /const dungeonEntryLayout = computeDungeonEntryNavLayout\(layout\.navigationTop\)/)
+  assert.match(source, /const dungeonEntryLayout = computeDungeonEntryNavLayout\(layout\.navigationTop, NAV_HEIGHT\)/)
   assert.match(source, /bottomNavigation\.setPosition\(0, dungeonEntryLayout\.navigation\.centerY, 0\)/)
   assert.doesNotMatch(source, /setScale\([^,]+,\s*visibleHeight \/ HEIGHT/)
 })
