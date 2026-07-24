@@ -1362,7 +1362,7 @@ copy_source = temp / "candidate-volume/source.txt"
 copy_source.parent.mkdir(parents=True)
 copy_source.write_bytes(b"candidate")
 entry = builder._stage_replacement(copy_source, target.parent / "file.txt", "local")
-assert Path(entry["staged"]).parent == (target.parent).resolve()
+assert builder._path_key(Path(entry["staged"]).parent) == builder._path_key(target.parent)
 builder._remove_path(Path(entry["staged"]))
 
 original_volume_id = builder._volume_id

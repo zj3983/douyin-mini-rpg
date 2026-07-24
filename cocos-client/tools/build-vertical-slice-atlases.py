@@ -1042,7 +1042,7 @@ def _stage_replacement(source: Path, target: Path, token: str):
 
 
 def _path_key(path: Path):
-    return os.path.normcase(str(Path(path).absolute()))
+    return os.path.normcase(str(Path(path).resolve(strict=False)))
 
 
 def _runtime_project_root(runtime_root: Path):
@@ -1189,14 +1189,17 @@ def _validate_promotion_journal(
             raise RuntimeError("promotion staged path does not match target/token")
         if _path_key(backup) != _path_key(_backup_path_for_target(target, token)):
             raise RuntimeError("promotion backup path does not match target/token")
-        if staged.parent != target.parent or backup.parent != target.parent:
+        target_parent_key = _path_key(target.parent)
+        if _path_key(staged.parent) != target_parent_key or _path_key(backup.parent) != target_parent_key:
             raise RuntimeError("promotion staging and backup must share target parent")
 
         is_manifest = target_key in manifest_keys
-        is_runtime_actor = target.parent == runtime_actor_root and bool(PORTABLE_FOLDER.fullmatch(target.name))
+        is_runtime_actor = target_parent_key == _path_key(runtime_actor_root) and bool(
+            PORTABLE_FOLDER.fullmatch(target.name)
+        )
         is_candidate = (
             trusted_candidate is not None
-            and target.parent == trusted_candidate
+            and target_parent_key == _path_key(trusted_candidate)
             and bool(PORTABLE_ACTOR_ID.fullmatch(target.name))
         )
         if sum((is_manifest, is_runtime_actor, is_candidate)) != 1:
