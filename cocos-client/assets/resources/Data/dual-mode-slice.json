@@ -1,0 +1,81 @@
+{
+  "id": "mist-vault",
+  "entryRoomId": "f1-entry",
+  "extractionRoomId": "f3-gate",
+  "rooms": [
+    {
+      "id": "f1-entry",
+      "floor": 1,
+      "kind": "entry",
+      "exits": [
+        { "to": "f1-combat", "cost": 0 },
+        { "to": "f1-store", "cost": 2 }
+      ]
+    },
+    {
+      "id": "f1-combat",
+      "floor": 1,
+      "kind": "combat",
+      "exits": [
+        { "to": "f1-store", "cost": 0 },
+        { "to": "f2-alchemy", "cost": 0 }
+      ],
+      "loot": [
+        { "itemId": "spirit-ore", "amount": 2 }
+      ]
+    },
+    {
+      "id": "f1-store",
+      "floor": 1,
+      "kind": "treasure",
+      "exits": [
+        { "to": "f2-alchemy", "cost": 0 }
+      ],
+      "loot": [
+        { "itemId": "flying-sword", "amount": 1 },
+        { "itemId": "spirit-stone", "amount": 3 }
+      ]
+    },
+    {
+      "id": "f2-alchemy",
+      "floor": 2,
+      "kind": "alchemy",
+      "exits": [
+        { "to": "f2-elite", "cost": 1 }
+      ],
+      "loot": [
+        { "itemId": "mist-herb", "amount": 2 },
+        { "itemId": "jade-elixir", "amount": 1 }
+      ]
+    },
+    {
+      "id": "f2-elite",
+      "floor": 2,
+      "kind": "elite",
+      "exits": [
+        { "to": "f3-boss", "cost": 0 }
+      ],
+      "loot": [
+        { "itemId": "refined-spirit-ore", "amount": 1 }
+      ]
+    },
+    {
+      "id": "f3-boss",
+      "floor": 3,
+      "kind": "boss",
+      "exits": [
+        { "to": "f3-gate", "cost": 0 }
+      ],
+      "loot": [
+        { "itemId": "mist-core", "amount": 1 },
+        { "itemId": "heavenly-sword-shard", "amount": 1 }
+      ]
+    },
+    {
+      "id": "f3-gate",
+      "floor": 3,
+      "kind": "extraction",
+      "exits": []
+    }
+  ]
+}

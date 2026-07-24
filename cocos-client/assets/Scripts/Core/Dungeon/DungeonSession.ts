@@ -1,0 +1,132 @@
+import type { DungeonExit, DungeonProfile, DungeonRoom, DungeonRun, RunLoot } from './DungeonTypes.ts'
+
+function cloneLoot(item: RunLoot): RunLoot {
+  return { itemId: item.itemId, amount: item.amount }
+}
+
+function cloneExit(exit: DungeonExit): DungeonExit {
+  return { to: exit.to, cost: exit.cost }
+}
+
+function cloneRoom(room: DungeonRoom): DungeonRoom {
+  const cloned: DungeonRoom = {
+    id: room.id,
+    floor: room.floor,
+    kind: room.kind,
+    exits: room.exits.map(cloneExit),
+  }
+  if (room.loot) cloned.loot = room.loot.map(cloneLoot)
+  return cloned
+}
+
+function cloneProfile(profile: DungeonProfile): DungeonProfile {
+  return {
+    id: profile.id,
+    entryRoomId: profile.entryRoomId,
+    extractionRoomId: profile.extractionRoomId,
+    rooms: profile.rooms.map(cloneRoom),
+  }
+}
+
+function roomById(profile: DungeonProfile, id: string): DungeonRoom | undefined {
+  return profile.rooms.find((room) => room.id === id)
+}
+
+function invalidInteger(value: number, allowZero: boolean): boolean {
+  return !Number.isFinite(value) || !Number.isInteger(value) || (allowZero ? value < 0 : value <= 0)
+}
+
+export function validateDungeonProfile(profile: DungeonProfile): void {
+  if (!profile || !Array.isArray(profile.rooms)) throw new Error('Dungeon rooms are missing.')
+
+  const ids = new Set<string>()
+  for (const room of profile.rooms) {
+    if (ids.has(room.id)) throw new Error('Dungeon room IDs must be unique.')
+    ids.add(room.id)
+  }
+
+  if (!ids.has(profile.entryRoomId)) throw new Error('Dungeon entry room is missing.')
+  if (!ids.has(profile.extractionRoomId)) throw new Error('Dungeon extraction room is missing.')
+
+  for (const room of profile.rooms) {
+    if (invalidInteger(room.floor, false)) throw new Error(`Invalid floor in ${room.id}.`)
+    if (!Array.isArray(room.exits)) throw new Error(`Dungeon exits are missing in ${room.id}.`)
+
+    for (const exit of room.exits) {
+      if (!exit || typeof exit.to !== 'string' || exit.to.trim().length === 0 || !ids.has(exit.to)) {
+        throw new Error(`Broken dungeon exit: ${room.id} -> ${exit && exit.to}`)
+      }
+      if (invalidInteger(exit.cost, true)) throw new Error(`Invalid door cost in ${room.id}.`)
+    }
+
+    if (room.loot !== undefined && !Array.isArray(room.loot)) throw new Error(`Invalid loot in ${room.id}.`)
+    for (const item of room.loot || []) {
+      if (!item || typeof item.itemId !== 'string' || item.itemId.trim().length === 0) {
+        throw new Error(`Invalid loot ID in ${room.id}.`)
+      }
+      if (invalidInteger(item.amount, false)) throw new Error(`Invalid loot amount in ${room.id}.`)
+    }
+  }
+
+  const visited = new Set<string>()
+  const pending: string[] = [profile.entryRoomId]
+  while (pending.length > 0) {
+    const roomId = pending.shift() as string
+    if (visited.has(roomId)) continue
+    visited.add(roomId)
+    const room = roomById(profile, roomId) as DungeonRoom
+    for (const exit of room.exits) {
+      if (!visited.has(exit.to)) pending.push(exit.to)
+    }
+  }
+  if (!visited.has(profile.extractionRoomId)) {
+    throw new Error('Dungeon extraction room is unreachable from the entry room.')
+  }
+}
+
+export function createDungeonSession(profile: DungeonProfile, seed: number): DungeonRun {
+  validateDungeonProfile(profile)
+  const isolatedProfile = cloneProfile(profile)
+  return {
+    id: `${isolatedProfile.id}-${seed}`,
+    profile: isolatedProfile,
+    phase: 'exploring',
+    currentRoomId: isolatedProfile.entryRoomId,
+    doorCurrency: 0,
+    searchedRoomIds: [],
+    carriedLoot: [],
+  }
+}
+
+export function enterRoom(run: DungeonRun, targetId: string) {
+  if (run.phase !== 'exploring') return { ok: false as const, reason: 'inactive' as const }
+  const current = roomById(run.profile, run.currentRoomId)
+  if (!current) return { ok: false as const, reason: 'not-connected' as const }
+  const exit = current.exits.find((candidate) => candidate.to === targetId)
+  if (!exit) return { ok: false as const, reason: 'not-connected' as const }
+  if (run.doorCurrency < exit.cost) return { ok: false as const, reason: 'door-cost' as const }
+
+  run.doorCurrency -= exit.cost
+  run.currentRoomId = targetId
+  return { ok: true as const }
+}
+
+export function searchRoom(run: DungeonRun) {
+  if (run.phase !== 'exploring') return { loot: [] as RunLoot[] }
+  const room = roomById(run.profile, run.currentRoomId)
+  if (!room || run.searchedRoomIds.indexOf(room.id) >= 0) return { loot: [] as RunLoot[] }
+
+  run.searchedRoomIds.push(room.id)
+  const loot = (room.loot || []).map(cloneLoot)
+  for (const item of loot) run.carriedLoot.push(cloneLoot(item))
+  return { loot }
+}
+
+export function extractRun(run: DungeonRun) {
+  if (run.phase !== 'exploring' || run.currentRoomId !== run.profile.extractionRoomId) {
+    return { ok: false as const, loot: [] as RunLoot[] }
+  }
+
+  run.phase = 'extracted'
+  return { ok: true as const, loot: run.carriedLoot.map(cloneLoot) }
+}
