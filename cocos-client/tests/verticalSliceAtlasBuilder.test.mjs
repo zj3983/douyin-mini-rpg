@@ -377,9 +377,9 @@ assert speckled_metrics["bounds"] == [30, 20, 70, 80]
 assert speckled_metrics["edgeMargins"] == [0.3, 0.2, 0.3, 0.2]
 assert speckled_metrics["alphaCoverage"] == metrics["frames"][0]["alphaCoverage"]
 
-def expect_rejected(label, frames, expected, custom_quality=None):
+def expect_rejected(label, frames, expected, custom_quality=None, validation="source"):
     try:
-        builder.analyze_action(frames, custom_quality or quality)
+        builder.analyze_action(frames, custom_quality or quality, validation=validation)
     except ValueError as error:
         assert expected in str(error), f"{label}: {error}"
     else:
@@ -387,9 +387,16 @@ def expect_rejected(label, frames, expected, custom_quality=None):
 
 expect_rejected("empty", [], "empty")
 expect_rejected("invisible", [Image.new("RGBA", (100, 100), (0, 0, 0, 0))], "visible")
-expect_rejected("safe edge", [make_frame((0, 20, 39, 79))], "safe edge")
+expect_rejected("safe edge", [make_frame((0, 20, 39, 79))], "safe edge", validation="runtime")
 expect_rejected("center drift", [make_frame((10, 20, 39, 79)), make_frame((60, 20, 89, 79))], "center drift")
 expect_rejected("scale drift", [make_frame((30, 20, 69, 79)), make_frame((20, 10, 79, 89))], "scale drift")
+intentional_motion = [
+    make_frame((15 + index * 2, 35 - index * 2, 84 - index * 2, 64 + index * 2))
+    for index in range(8)
+]
+intentional_metrics = builder.analyze_action(intentional_motion, quality, validation="source")
+assert intentional_metrics["scaleDrift"] == 0
+assert intentional_metrics["intentionalScaleAxes"] == [0, 1]
 expect_rejected("low alpha", [make_frame((48, 48, 51, 51))], "alpha coverage", {**quality, "safePadding": 0.01})
 expect_rejected("high alpha", [make_frame((5, 5, 94, 94))], "alpha coverage", {**quality, "safePadding": 0.01})
 print(json.dumps(metrics, sort_keys=True))
@@ -397,6 +404,119 @@ print(json.dumps(metrics, sort_keys=True))
   const output = runPython(script)
   const metrics = JSON.parse(output)
   assert.equal(metrics.frameCount, 3)
+})
+
+test('source crop validation tolerates antialiased edge hairs but rejects substantive clipping', () => {
+  const script = String.raw`
+import importlib.util
+import json
+from pathlib import Path
+from PIL import Image, ImageDraw
+
+root = Path.cwd()
+spec = importlib.util.spec_from_file_location("builder", root / "tools/build-vertical-slice-atlases.py")
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+quality = dict(builder.DEFAULT_QUALITY)
+
+def base_frame():
+    frame = Image.new("RGBA", (200, 200), (0, 0, 0, 0))
+    ImageDraw.Draw(frame).rectangle((55, 35, 144, 174), fill=(120, 200, 160, 255))
+    return frame
+
+hair = base_frame()
+for point in ((0, 90), (0, 91), (199, 112)):
+    hair.putpixel(point, (120, 200, 160, 8))
+# A short antialiased fur fringe may occupy several pixels while remaining a
+# negligible fraction of the subject and less than ten percent of the edge.
+for y in range(92, 108):
+    hair.putpixel((0, y), (120, 200, 160, 8))
+metrics = builder.analyze_action([hair], quality, validation="source", context="qinglan/idle")
+assert metrics["frames"][0]["borderContact"]["visibleRatio"] < builder.SOURCE_BORDER_VISIBLE_RATIO_LIMIT
+
+clipped = base_frame()
+ImageDraw.Draw(clipped).rectangle((0, 60, 30, 139), fill=(120, 200, 160, 255))
+try:
+    builder.analyze_action([clipped], quality, validation="source", context="moss-wolf/attack")
+except ValueError as error:
+    message = str(error)
+    assert "moss-wolf/attack frame 0" in message
+    assert "source border contact" in message
+else:
+    raise AssertionError("substantive source clipping must fail")
+
+try:
+    builder.analyze_action([clipped], quality, validation="runtime", context="moss-wolf/attack")
+except ValueError as error:
+    assert "safe edge" in str(error)
+else:
+    raise AssertionError("runtime frames must keep full safe padding validation")
+print(json.dumps(metrics["frames"][0]["borderContact"], sort_keys=True))
+`
+  const result = JSON.parse(runPython(script))
+  assert.equal(result.visiblePixels, 19)
+})
+
+test('action quality overrides are restricted merged and reported', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'vertical-slice-action-quality-'))
+  try {
+    const script = String.raw`
+import importlib.util
+import json
+import sys
+from pathlib import Path
+from PIL import Image, ImageDraw
+
+root = Path(sys.argv[1])
+temp = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("builder", root / "tools/build-vertical-slice-atlases.py")
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+
+def actor(override):
+    return {
+        "id": "test-actor", "type": "monster", "masterFrameSize": [128, 160],
+        "runtimeFrameSize": [64, 80], "anchor": {"x": 0.5, "y": 0.85},
+        "quality": dict(builder.DEFAULT_QUALITY),
+        "actions": {"attack": {
+            "frames": 2, "fps": 8, "loop": False, "source": "test-actor/attack",
+            "sourceMode": "frame-sequence", "quality": override,
+        }},
+    }
+
+for override, expected in (
+    ({"safePadding": 0.01}, "only override"),
+    ({"maxScaleDrift": "0.2"}, "numeric"),
+    ({"maxCenterDrift": -0.1}, "[0, 1]"),
+    ({"maxScaleDrift": 1.1}, "[0, 1]"),
+):
+    try:
+        builder._validate_action("test-actor", "attack", actor(override)["actions"]["attack"])
+    except ValueError as error:
+        assert expected in str(error), error
+    else:
+        raise AssertionError(f"invalid override accepted: {override}")
+
+source = temp / "source/test-actor/attack"
+source.mkdir(parents=True)
+for index, box in enumerate(((35, 30, 84, 129), (27, 22, 92, 137))):
+    image = Image.new("RGBA", (128, 160), (0, 0, 0, 0))
+    ImageDraw.Draw(image).rectangle(box, fill=(120, 200, 160, 255))
+    image.save(source / f"{index:02d}.png")
+
+config = actor({"maxScaleDrift": 0.40})
+builder.build_actor(config, temp / "source", temp / "output", temp / "reports")
+report = json.loads((temp / "reports/test-actor-report.json").read_text(encoding="utf-8"))
+effective = report["actions"]["attack"]["effectiveQuality"]
+assert effective == {**builder.DEFAULT_QUALITY, "maxScaleDrift": 0.40}
+print(json.dumps(effective, sort_keys=True))
+`
+    const result = JSON.parse(runPython(script, [tempRoot]))
+    assert.equal(result.maxScaleDrift, 0.4)
+    assert.equal(result.safePadding, 0.08)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
 })
 
 test('build_actor rejects raw source defects before normalization can hide them', () => {
@@ -449,7 +569,7 @@ def build(case_name):
     }, case / "source", case / "output", case / "reports")
 
 cases = {
-    "edge": ([(0, 30, 49, 129), (0, 30, 49, 129)], "safe edge"),
+    "edge": ([(0, 30, 49, 129), (0, 30, 49, 129)], "source border contact"),
     "position": ([(15, 30, 54, 129), (73, 30, 112, 129)], "center drift"),
     "size": ([(42, 35, 85, 124), (25, 18, 102, 141)], "scale drift"),
 }

@@ -33,6 +33,15 @@ DEFAULT_QUALITY = {
     "safePadding": 0.08,
 }
 ALPHA_VISIBILITY_THRESHOLD = 8
+# Source frames may contain a handful of antialiased hair or fur pixels at an edge.
+# Treat clipping as substantive when edge pixels exceed 0.5% of the subject.
+# A long edge span is also suspicious, but only once contact exceeds 0.3%; this
+# keeps thin antialiased fur fringes measurable without treating them as a crop.
+SOURCE_BORDER_VISIBLE_RATIO_LIMIT = 0.005
+SOURCE_BORDER_SPAN_LIMIT = 0.10
+SOURCE_BORDER_SPAN_RATIO_LIMIT = 0.003
+SOURCE_BORDER_MIN_SPAN_PIXELS = 4
+ACTION_QUALITY_OVERRIDE_KEYS = {"maxCenterDrift", "maxScaleDrift"}
 CONTACT_THUMBNAIL_SIZE = (160, 200)
 CONTACT_SHEET_PIXEL_BUDGET = 12_000_000
 PORTABLE_ACTOR_ID = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -147,7 +156,7 @@ def validate_subject(frame: Image.Image, padding_ratio):
         raise ValueError(f"subject margin {margin:.3f} below requested padding {padding_ratio:.3f}")
     visible = sum(
         1
-        for alpha in image.getchannel("A").getdata()
+        for alpha in image.getchannel("A").tobytes()
         if alpha >= ALPHA_VISIBILITY_THRESHOLD
     )
     if visible < width * height * 0.02:
@@ -163,11 +172,29 @@ def frame_metrics(frame: Image.Image):
         raise ValueError("frame dimensions must be positive")
     visible_width = right - left
     visible_height = bottom - top
-    visible_pixels = sum(
-        1
-        for alpha in image.getchannel("A").getdata()
-        if alpha >= ALPHA_VISIBILITY_THRESHOLD
-    )
+    alpha = image.getchannel("A")
+    alpha_pixels = alpha.load()
+    visible_pixels = sum(1 for value in alpha.tobytes() if value >= ALPHA_VISIBILITY_THRESHOLD)
+    edge_coordinates = {
+        "left": [y for y in range(height) if alpha_pixels[0, y] >= ALPHA_VISIBILITY_THRESHOLD],
+        "top": [x for x in range(width) if alpha_pixels[x, 0] >= ALPHA_VISIBILITY_THRESHOLD],
+        "right": [y for y in range(height) if alpha_pixels[width - 1, y] >= ALPHA_VISIBILITY_THRESHOLD],
+        "bottom": [x for x in range(width) if alpha_pixels[x, height - 1] >= ALPHA_VISIBILITY_THRESHOLD],
+    }
+    border_points = {
+        (0, y) for y in edge_coordinates["left"]
+    } | {
+        (width - 1, y) for y in edge_coordinates["right"]
+    } | {
+        (x, 0) for x in edge_coordinates["top"]
+    } | {
+        (x, height - 1) for x in edge_coordinates["bottom"]
+    }
+    edge_spans = {}
+    for edge, coordinates in edge_coordinates.items():
+        dimension = height if edge in ("left", "right") else width
+        edge_spans[edge] = 0 if not coordinates else (max(coordinates) - min(coordinates) + 1) / dimension
+    border_visible_pixels = len(border_points)
     return {
         "bounds": [left, top, right, bottom],
         "center": [
@@ -182,12 +209,34 @@ def frame_metrics(frame: Image.Image):
             (width - right) / width,
             (height - bottom) / height,
         ],
+        "borderContact": {
+            "visiblePixels": border_visible_pixels,
+            "visibleRatio": border_visible_pixels / visible_pixels,
+            "edgePixelCounts": {edge: len(values) for edge, values in edge_coordinates.items()},
+            "edgeSpans": edge_spans,
+        },
     }
 
 
-def analyze_action(frames, quality):
+def _is_intentional_scale_trend(values):
+    if len(values) < 4:
+        return False
+    deltas = [current - previous for previous, current in zip(values, values[1:])]
+    directions = [1 if delta > 1e-9 else -1 if delta < -1e-9 else 0 for delta in deltas]
+    directions = [direction for direction in directions if direction]
+    turns = sum(current != previous for previous, current in zip(directions, directions[1:]))
+    largest_step = max(
+        abs(current - previous) / previous
+        for previous, current in zip(values, values[1:])
+    )
+    return turns <= 1 and largest_step <= 0.20
+
+
+def analyze_action(frames, quality, *, validation="source", context="action"):
     if not frames:
-        raise ValueError("action frames must not be empty")
+        raise ValueError(f"{context} frames must not be empty")
+    if validation not in ("source", "runtime"):
+        raise ValueError(f"{context} validation must be source or runtime")
     _validate_actor_quality("action", quality)
 
     metrics = []
@@ -195,19 +244,34 @@ def analyze_action(frames, quality):
         try:
             current = frame_metrics(frame)
         except ValueError as error:
-            raise ValueError(f"frame {index} has no visible subject") from error
+            raise ValueError(f"{context} frame {index} has no visible subject") from error
         coverage = current["alphaCoverage"]
         if not quality["minAlphaCoverage"] <= coverage <= quality["maxAlphaCoverage"]:
             raise ValueError(
-                f"frame {index} alpha coverage {coverage:.6f} outside "
+                f"{context} frame {index} alpha coverage {coverage:.6f} outside "
                 f"[{quality['minAlphaCoverage']:.6f}, {quality['maxAlphaCoverage']:.6f}]"
             )
-        minimum_margin = min(current["edgeMargins"])
-        safe_edge = quality["safePadding"] - 0.015
-        if minimum_margin < safe_edge:
-            raise ValueError(
-                f"frame {index} violates safe edge: margin {minimum_margin:.6f} below {safe_edge:.6f}"
-            )
+        if validation == "runtime":
+            minimum_margin = min(current["edgeMargins"])
+            safe_edge = quality["safePadding"] - 0.015
+            if minimum_margin < safe_edge:
+                raise ValueError(
+                    f"{context} frame {index} violates safe edge: "
+                    f"margin {minimum_margin:.6f} below {safe_edge:.6f}"
+                )
+        else:
+            contact = current["borderContact"]
+            span_violation = any(
+                contact["edgePixelCounts"][edge] >= SOURCE_BORDER_MIN_SPAN_PIXELS
+                and span > SOURCE_BORDER_SPAN_LIMIT
+                for edge, span in contact["edgeSpans"].items()
+            ) and contact["visibleRatio"] > SOURCE_BORDER_SPAN_RATIO_LIMIT
+            if contact["visibleRatio"] > SOURCE_BORDER_VISIBLE_RATIO_LIMIT or span_violation:
+                raise ValueError(
+                    f"{context} frame {index} has substantive source border contact: "
+                    f"{contact['visiblePixels']} pixels, ratio {contact['visibleRatio']:.6f}, "
+                    f"max span {max(contact['edgeSpans'].values()):.6f}"
+                )
         metrics.append(current)
 
     median_center = [
@@ -223,25 +287,32 @@ def analyze_action(frames, quality):
         median(frame["scale"][0] for frame in metrics),
         median(frame["scale"][1] for frame in metrics),
     ]
+    intentional_scale_axes = [
+        axis
+        for axis in range(2)
+        if _is_intentional_scale_trend([frame["scale"][axis] for frame in metrics])
+    ]
     scale_drift = max(
         abs(frame["scale"][axis] - median_scale[axis]) / median_scale[axis]
         for frame in metrics
         for axis in range(2)
-    )
+        if axis not in intentional_scale_axes
+    ) if len(intentional_scale_axes) < 2 else 0
 
-    if center_drift > quality["maxCenterDrift"]:
+    if validation == "source" and center_drift > quality["maxCenterDrift"]:
         raise ValueError(
-            f"center drift {center_drift:.6f} exceeds {quality['maxCenterDrift']:.6f}"
+            f"{context} center drift {center_drift:.6f} exceeds {quality['maxCenterDrift']:.6f}"
         )
-    if scale_drift > quality["maxScaleDrift"]:
+    if validation == "source" and scale_drift > quality["maxScaleDrift"]:
         raise ValueError(
-            f"scale drift {scale_drift:.6f} exceeds {quality['maxScaleDrift']:.6f}"
+            f"{context} scale drift {scale_drift:.6f} exceeds {quality['maxScaleDrift']:.6f}"
         )
 
     return {
         "frameCount": len(metrics),
         "centerDrift": center_drift,
         "scaleDrift": scale_drift,
+        "intentionalScaleAxes": intentional_scale_axes,
         "medianCenter": median_center,
         "medianScale": median_scale,
         "alphaCoverage": {
@@ -395,6 +466,7 @@ def write_actor_report(
     warnings,
     report_root,
     status="candidate",
+    effective_qualities=None,
 ):
     actor_id = _validate_actor_id(actor_id)
     report_root = Path(report_root).resolve()
@@ -402,10 +474,14 @@ def write_actor_report(
     contact_sheet_name = f"{actor_id}-contact-sheet.png"
     contact_sheet_path = _report_output_path(report_root, contact_sheet_name)
     write_contact_sheet(action_frames, contact_sheet_path)
+    effective_qualities = effective_qualities or {
+        action_name: dict(DEFAULT_QUALITY) for action_name in source_modes
+    }
     actions = {
         action_name: {
             "sourceMetrics": source_metrics[action_name],
             "runtimeMetrics": runtime_metrics[action_name],
+            "effectiveQuality": effective_qualities[action_name],
         }
         for action_name in source_modes
     }
@@ -490,13 +566,27 @@ def build_actor(source_config, source_root, output_root, report_root=None, repor
     runtime_metrics = {}
     atlas_dimensions = {}
     source_modes = {}
+    effective_qualities = {}
     for action_name, action_config in source_config["actions"].items():
-        source_frames = _load_action_source_frames(action_config, source_root)
-        source_metrics[action_name] = analyze_action(source_frames, quality)
-        frames = _normalize_action_frames(source_frames, frame_size, anchor)
+        context = f"{actor_id}/{action_name}"
+        action_quality = _merge_action_quality(quality, action_config.get("quality"), context)
+        effective_qualities[action_name] = action_quality
+        try:
+            source_frames = _load_action_source_frames(action_config, source_root)
+        except (FileNotFoundError, OSError, ValueError) as error:
+            raise type(error)(f"{context}: {error}") from error
+        source_metrics[action_name] = analyze_action(
+            source_frames, action_quality, validation="source", context=context
+        )
+        try:
+            frames = _normalize_action_frames(source_frames, frame_size, anchor)
+        except ValueError as error:
+            raise ValueError(f"{context}: normalization failed: {error}") from error
         del source_frames
         action_frames[action_name] = [_contact_thumbnail(frame) for frame in frames]
-        runtime_metrics[action_name] = analyze_action(frames, quality)
+        runtime_metrics[action_name] = analyze_action(
+            frames, action_quality, validation="runtime", context=context
+        )
         source_modes[action_name] = action_config.get("sourceMode", "frame-sequence")
         atlas, rects = pack_action(frames, frame_size)
         atlas_dimensions[action_name] = [atlas.width, atlas.height]
@@ -534,6 +624,7 @@ def build_actor(source_config, source_root, output_root, report_root=None, repor
             action_frames=action_frames,
             source_metrics=source_metrics,
             runtime_metrics=runtime_metrics,
+            effective_qualities=effective_qualities,
             atlas_dimensions=atlas_dimensions,
             warnings=[],
             report_root=report_root,
@@ -1564,6 +1655,29 @@ def _validate_actor_quality(actor_id: str, quality: Any):
         raise ValueError(f"{actor_id}.quality alpha coverage minimum must be below maximum")
 
 
+def _validate_action_quality(label: str, override: Any):
+    if override is None:
+        return
+    if not isinstance(override, dict):
+        raise ValueError(f"{label} quality must be an object")
+    unknown = sorted(set(override) - ACTION_QUALITY_OVERRIDE_KEYS)
+    if unknown:
+        raise ValueError(
+            f"{label} quality may only override {sorted(ACTION_QUALITY_OVERRIDE_KEYS)}; "
+            f"found {unknown}"
+        )
+    for key, value in override.items():
+        if not _is_number(value):
+            raise ValueError(f"{label} quality.{key} must be numeric")
+        if not 0 <= value <= 1:
+            raise ValueError(f"{label} quality.{key} must be in [0, 1]")
+
+
+def _merge_action_quality(actor_quality: dict, override: Any, label: str):
+    _validate_action_quality(label, override)
+    return {**actor_quality, **(override or {})}
+
+
 def _validate_anchor(actor_id: str, anchor: Any):
     if not isinstance(anchor, dict):
         raise ValueError(f"{actor_id}.anchor must be an object")
@@ -1605,6 +1719,8 @@ def _validate_action(actor_id: str, action_name: str, action: Any):
 
     if type(action.get("loop")) is not bool:
         raise ValueError(f"{label} loop must be boolean")
+
+    _validate_action_quality(label, action.get("quality"))
 
     events = action.get("events", [])
     if not isinstance(events, list):

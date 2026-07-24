@@ -86,6 +86,27 @@ test('vertical slice source manifest locks actor frame sizes anchors and action 
   assert.deepEqual(source.actors['qinglan-sword-cultivator'].actions.cast.events, [
     { name: 'sword-release', time: 0.42 },
   ])
+  assert.deepEqual(source.actors['qinglan-sword-cultivator'].actions.cast.quality, {
+    maxScaleDrift: 0.17,
+  })
+  assert.deepEqual(source.actors['moss-wolf'].actions.attack.quality, {
+    maxScaleDrift: 0.20,
+  })
+  assert.deepEqual(source.actors['moss-wolf'].actions.death.quality, {
+    maxCenterDrift: 0.14,
+  })
+
+  const overrides = []
+  for (const [actorId, actor] of Object.entries(source.actors)) {
+    for (const [actionName, action] of Object.entries(actor.actions)) {
+      if (action.quality) overrides.push(`${actorId}/${actionName}`)
+    }
+  }
+  assert.deepEqual(overrides.sort(), [
+    'moss-wolf/attack',
+    'moss-wolf/death',
+    'qinglan-sword-cultivator/cast',
+  ])
 })
 
 test('stage-one runtime manifest is ready for the four production actor packs', () => {
