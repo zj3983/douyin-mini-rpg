@@ -1,6 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { frameIndexAtTime, shouldAdvanceAnimation, resourcePathForPng } from '../tools/strip-animation-runtime.mjs'
+import {
+  consumeAnimationTime,
+  frameIndexAtTime,
+  shouldAdvanceAnimation,
+  resourcePathForPng,
+} from '../tools/strip-animation-runtime.mjs'
 
 test('strip animation frame index loops by elapsed time and fps', () => {
   assert.equal(frameIndexAtTime({ elapsed: 0, framesPerSecond: 8, frameCount: 4, loop: true }), 0)
@@ -17,6 +22,17 @@ test('animation update can be culled or throttled for performance', () => {
   assert.equal(shouldAdvanceAnimation({ visible: true, distanceToCamera: 900, maxActiveDistance: 600, accumulatedTime: 1, updateInterval: 0.1 }), false)
   assert.equal(shouldAdvanceAnimation({ visible: true, distanceToCamera: 100, maxActiveDistance: 600, accumulatedTime: 0.05, updateInterval: 0.1 }), false)
   assert.equal(shouldAdvanceAnimation({ visible: true, distanceToCamera: 100, maxActiveDistance: 600, accumulatedTime: 0.12, updateInterval: 0.1 }), true)
+})
+
+test('throttled animation consumes every accumulated frame delta', () => {
+  assert.deepEqual(
+    consumeAnimationTime({ accumulatedTime: 0.034, updateInterval: 0.033 }),
+    { shouldAdvance: true, elapsedDelta: 0.034 },
+  )
+  assert.deepEqual(
+    consumeAnimationTime({ accumulatedTime: 0.016, updateInterval: 0.033 }),
+    { shouldAdvance: false, elapsedDelta: 0 },
+  )
 })
 
 test('atlas png path maps to its Cocos Texture2D subresource', () => {

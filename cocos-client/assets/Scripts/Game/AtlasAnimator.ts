@@ -1,6 +1,11 @@
 import { _decorator, Component, JsonAsset, Rect, Sprite, SpriteFrame, Texture2D, resources } from 'cc'
 import { AtlasAction, AnimationAtlasManifest, findActorAtlas, findAtlasAction } from '../Core/AnimationAtlas'
-import { frameIndexAtTime, resourcePathForPng, shouldAdvanceAnimation } from '../Core/StripAnimationRuntime'
+import {
+  consumeAnimationTime,
+  frameIndexAtTime,
+  resourcePathForPng,
+  shouldAdvanceAnimation,
+} from '../Core/StripAnimationRuntime'
 import {
   acceptAnimationLoad,
   beginAnimationLoad,
@@ -32,7 +37,7 @@ export class AtlasAnimator extends Component {
   maxActiveDistance = 900
 
   @property
-  updateInterval = 0.033
+  updateInterval = 1 / 60
 
   private action: AtlasAction | null = null
   private texture: Texture2D | null = null
@@ -115,6 +120,15 @@ export class AtlasAnimator extends Component {
     this.frameIndex = 0
     this.playing = false
 
+    const cacheKey = this.frameCacheKey(this.actorId, action.atlas, action.name)
+    const cachedFrames = this.frameCache.get(cacheKey)
+    if (cachedFrames) {
+      this.frames = cachedFrames
+      this.playing = cachedFrames.length > 0
+      this.applyFrame()
+      return
+    }
+
     resources.load(resourcePathForPng(action.atlas), Texture2D, (error, texture) => {
       if (
         error
@@ -146,15 +160,23 @@ export class AtlasAnimator extends Component {
       return
     }
 
-    this.elapsed += deltaTime
+    const timing = consumeAnimationTime({
+      accumulatedTime: this.accumulatedTime,
+      updateInterval: this.updateInterval,
+    })
+    if (!timing.shouldAdvance) return
+
+    this.elapsed += timing.elapsedDelta
     this.accumulatedTime = 0
-    this.frameIndex = frameIndexAtTime({
+    const nextFrameIndex = frameIndexAtTime({
       elapsed: this.elapsed,
       framesPerSecond: this.action.fps,
       frameCount: this.action.order.length,
       loop: this.action.loop,
     })
-    if (!this.action.loop && this.frameIndex >= this.action.order.length - 1) this.playing = false
+    if (nextFrameIndex === this.frameIndex) return
+    this.frameIndex = nextFrameIndex
+    if (!this.action.loop && nextFrameIndex >= this.action.order.length - 1) this.playing = false
     this.applyFrame()
   }
 
