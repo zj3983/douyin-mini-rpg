@@ -1,11 +1,22 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import math
 from pathlib import Path
 from typing import Any
 from collections import deque
 
 from PIL import Image
+
+
+SOURCE_MODES = {"layered-keyframes", "pose-video", "frame-sequence"}
+QUALITY_KEYS = (
+    "maxCenterDrift",
+    "maxScaleDrift",
+    "minAlphaCoverage",
+    "maxAlphaCoverage",
+    "safePadding",
+)
 
 
 def _as_size(value: Any, label: str) -> tuple[int, int]:
@@ -214,21 +225,67 @@ def _load_source_manifest(root: Path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def _validate_actor_quality(actor_id: str, quality: Any):
+    if not isinstance(quality, dict):
+        raise ValueError(f"{actor_id}.quality must be an object")
+    for key in QUALITY_KEYS:
+        if key not in quality or not _is_number(quality[key]):
+            raise ValueError(f"{actor_id}.quality.{key} must be numeric")
+
+
+def _validate_action(actor_id: str, action_name: str, action: Any):
+    label = f"{actor_id}/{action_name}"
+    if not isinstance(action, dict):
+        raise ValueError(f"{label} must be an object")
+
+    frames = action.get("frames")
+    if not isinstance(frames, int) or isinstance(frames, bool) or not 1 <= frames <= 16:
+        raise ValueError(f"{label} frames must be an integer in [1, 16]")
+
+    fps = action.get("fps")
+    if not _is_number(fps) or not 1 <= fps <= 24:
+        raise ValueError(f"{label} fps must be numeric and in [1, 24]")
+
+    if action.get("sourceMode") not in SOURCE_MODES:
+        raise ValueError(f"{label} sourceMode must be one of {sorted(SOURCE_MODES)}")
+
+    events = action.get("events", [])
+    if not isinstance(events, list):
+        raise ValueError(f"{label} events must be an array")
+    previous_time = None
+    for event in events:
+        if not isinstance(event, dict):
+            raise ValueError(f"{label} event must be an object")
+        name = event.get("name")
+        time = event.get("time")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError(f"{label} event name must be non-empty")
+        if not _is_number(time) or not 0 < time < 1:
+            raise ValueError(f"{label} event time must be strictly between 0 and 1")
+        if previous_time is not None and time <= previous_time:
+            raise ValueError(f"{label} event times must be strictly increasing")
+        previous_time = time
+
+
 def check_source_manifest(root: Path):
     data = _load_source_manifest(root)
-    if data.get("version") != 1:
-        raise ValueError("source manifest version must be 1")
+    if data.get("version") != 2:
+        raise ValueError("source manifest version must be 2")
     actors = data.get("actors")
     if not isinstance(actors, dict) or not actors:
         raise ValueError("source manifest must define actors")
     for actor_id, actor in actors.items():
         _as_size(actor.get("masterFrameSize"), f"{actor_id}.masterFrameSize")
         _as_size(actor.get("runtimeFrameSize"), f"{actor_id}.runtimeFrameSize")
+        _validate_actor_quality(actor_id, actor.get("quality"))
         if not isinstance(actor.get("actions"), dict) or not actor["actions"]:
             raise ValueError(f"{actor_id} must define actions")
         for action_name, action in actor["actions"].items():
-            if int(action.get("frames", 0)) <= 0:
-                raise ValueError(f"{actor_id}/{action_name} must define positive frames")
+            _validate_action(actor_id, action_name, action)
     return data
 
 

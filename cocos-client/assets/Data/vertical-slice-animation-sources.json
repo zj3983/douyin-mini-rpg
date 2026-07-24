@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "sourceRoot": "art-source/vertical-slice",
   "runtimeRoot": "Assets/ActorAtlases",
   "actors": {
@@ -10,13 +10,20 @@
       "masterFrameSize": [512, 640],
       "runtimeFrameSize": [256, 320],
       "anchor": { "x": 0.5, "y": 0.88 },
+      "quality": {
+        "maxCenterDrift": 0.08,
+        "maxScaleDrift": 0.12,
+        "minAlphaCoverage": 0.02,
+        "maxAlphaCoverage": 0.72,
+        "safePadding": 0.08
+      },
       "actions": {
-        "idle": { "frames": 8, "fps": 6, "loop": true, "source": "qinglan/idle" },
-        "sword_ride": { "frames": 10, "fps": 8, "loop": true, "source": "qinglan/sword_ride" },
-        "hand_seal": { "frames": 10, "fps": 10, "loop": false, "source": "qinglan/hand_seal" },
-        "cast": { "frames": 12, "fps": 12, "loop": false, "source": "qinglan/cast" },
-        "hurt": { "frames": 6, "fps": 10, "loop": false, "source": "qinglan/hurt" },
-        "death": { "frames": 10, "fps": 8, "loop": false, "source": "qinglan/death" }
+        "idle": { "frames": 8, "fps": 6, "loop": true, "source": "qinglan/idle", "sourceMode": "layered-keyframes" },
+        "sword_ride": { "frames": 10, "fps": 8, "loop": true, "source": "qinglan/sword_ride", "sourceMode": "layered-keyframes" },
+        "hand_seal": { "frames": 10, "fps": 10, "loop": false, "source": "qinglan/hand_seal", "sourceMode": "layered-keyframes", "events": [{ "name": "seal-formed", "time": 0.6 }] },
+        "cast": { "frames": 12, "fps": 12, "loop": false, "source": "qinglan/cast", "sourceMode": "layered-keyframes", "events": [{ "name": "sword-release", "time": 0.42 }] },
+        "hurt": { "frames": 6, "fps": 10, "loop": false, "source": "qinglan/hurt", "sourceMode": "layered-keyframes" },
+        "death": { "frames": 10, "fps": 8, "loop": false, "source": "qinglan/death", "sourceMode": "layered-keyframes" }
       }
     },
     "moss-wolf": {
@@ -26,13 +33,20 @@
       "masterFrameSize": [384, 480],
       "runtimeFrameSize": [256, 320],
       "anchor": { "x": 0.5, "y": 0.82 },
+      "quality": {
+        "maxCenterDrift": 0.08,
+        "maxScaleDrift": 0.12,
+        "minAlphaCoverage": 0.02,
+        "maxAlphaCoverage": 0.72,
+        "safePadding": 0.08
+      },
       "actions": {
-        "idle": { "frames": 6, "fps": 6, "loop": true, "source": "moss-wolf/idle" },
-        "move": { "frames": 8, "fps": 10, "loop": true, "source": "moss-wolf/move" },
-        "telegraph": { "frames": 4, "fps": 8, "loop": false, "source": "moss-wolf/telegraph" },
-        "attack": { "frames": 8, "fps": 12, "loop": false, "source": "moss-wolf/attack" },
-        "hurt": { "frames": 4, "fps": 10, "loop": false, "source": "moss-wolf/hurt" },
-        "death": { "frames": 8, "fps": 8, "loop": false, "source": "moss-wolf/death" }
+        "idle": { "frames": 6, "fps": 6, "loop": true, "source": "moss-wolf/idle", "sourceMode": "pose-video" },
+        "move": { "frames": 8, "fps": 10, "loop": true, "source": "moss-wolf/move", "sourceMode": "pose-video" },
+        "telegraph": { "frames": 4, "fps": 8, "loop": false, "source": "moss-wolf/telegraph", "sourceMode": "pose-video" },
+        "attack": { "frames": 8, "fps": 12, "loop": false, "source": "moss-wolf/attack", "sourceMode": "pose-video" },
+        "hurt": { "frames": 4, "fps": 10, "loop": false, "source": "moss-wolf/hurt", "sourceMode": "frame-sequence" },
+        "death": { "frames": 8, "fps": 8, "loop": false, "source": "moss-wolf/death", "sourceMode": "frame-sequence" }
       }
     },
     "green-wing-moth": {
@@ -42,13 +56,20 @@
       "masterFrameSize": [384, 480],
       "runtimeFrameSize": [256, 320],
       "anchor": { "x": 0.5, "y": 0.58 },
+      "quality": {
+        "maxCenterDrift": 0.08,
+        "maxScaleDrift": 0.12,
+        "minAlphaCoverage": 0.02,
+        "maxAlphaCoverage": 0.72,
+        "safePadding": 0.08
+      },
       "actions": {
-        "idle": { "frames": 6, "fps": 6, "loop": true, "source": "green-wing-moth/idle" },
-        "move": { "frames": 8, "fps": 10, "loop": true, "source": "green-wing-moth/move" },
-        "dive": { "frames": 8, "fps": 12, "loop": false, "source": "green-wing-moth/dive" },
-        "cast": { "frames": 8, "fps": 10, "loop": false, "source": "green-wing-moth/cast" },
-        "hurt": { "frames": 4, "fps": 10, "loop": false, "source": "green-wing-moth/hurt" },
-        "death": { "frames": 8, "fps": 8, "loop": false, "source": "green-wing-moth/death" }
+        "idle": { "frames": 6, "fps": 6, "loop": true, "source": "green-wing-moth/idle", "sourceMode": "frame-sequence" },
+        "move": { "frames": 8, "fps": 10, "loop": true, "source": "green-wing-moth/move", "sourceMode": "frame-sequence" },
+        "dive": { "frames": 8, "fps": 12, "loop": false, "source": "green-wing-moth/dive", "sourceMode": "frame-sequence" },
+        "cast": { "frames": 8, "fps": 10, "loop": false, "source": "green-wing-moth/cast", "sourceMode": "frame-sequence" },
+        "hurt": { "frames": 4, "fps": 10, "loop": false, "source": "green-wing-moth/hurt", "sourceMode": "frame-sequence" },
+        "death": { "frames": 8, "fps": 8, "loop": false, "source": "green-wing-moth/death", "sourceMode": "frame-sequence" }
       }
     },
     "bamboo-warden": {
@@ -58,14 +79,21 @@
       "masterFrameSize": [768, 960],
       "runtimeFrameSize": [384, 480],
       "anchor": { "x": 0.5, "y": 0.84 },
+      "quality": {
+        "maxCenterDrift": 0.08,
+        "maxScaleDrift": 0.12,
+        "minAlphaCoverage": 0.02,
+        "maxAlphaCoverage": 0.72,
+        "safePadding": 0.08
+      },
       "actions": {
-        "idle": { "frames": 8, "fps": 6, "loop": true, "source": "bamboo-warden/idle" },
-        "move": { "frames": 10, "fps": 8, "loop": true, "source": "bamboo-warden/move" },
-        "sweep": { "frames": 12, "fps": 12, "loop": false, "source": "bamboo-warden/sweep" },
-        "spikes": { "frames": 12, "fps": 12, "loop": false, "source": "bamboo-warden/spikes" },
-        "roar": { "frames": 12, "fps": 12, "loop": false, "source": "bamboo-warden/roar" },
-        "hurt": { "frames": 6, "fps": 10, "loop": false, "source": "bamboo-warden/hurt" },
-        "death": { "frames": 12, "fps": 8, "loop": false, "source": "bamboo-warden/death" }
+        "idle": { "frames": 8, "fps": 6, "loop": true, "source": "bamboo-warden/idle", "sourceMode": "frame-sequence" },
+        "move": { "frames": 10, "fps": 8, "loop": true, "source": "bamboo-warden/move", "sourceMode": "frame-sequence" },
+        "sweep": { "frames": 12, "fps": 12, "loop": false, "source": "bamboo-warden/sweep", "sourceMode": "frame-sequence" },
+        "spikes": { "frames": 12, "fps": 12, "loop": false, "source": "bamboo-warden/spikes", "sourceMode": "frame-sequence" },
+        "roar": { "frames": 12, "fps": 12, "loop": false, "source": "bamboo-warden/roar", "sourceMode": "frame-sequence" },
+        "hurt": { "frames": 6, "fps": 10, "loop": false, "source": "bamboo-warden/hurt", "sourceMode": "frame-sequence" },
+        "death": { "frames": 12, "fps": 8, "loop": false, "source": "bamboo-warden/death", "sourceMode": "frame-sequence" }
       }
     }
   }

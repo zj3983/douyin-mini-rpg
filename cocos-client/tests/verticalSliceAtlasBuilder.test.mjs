@@ -97,3 +97,92 @@ test('builder command line check validates the checked-in source manifest', () =
   assert.equal(result.status, 0, result.stdout || result.stderr)
   assert.match(result.stdout, /vertical slice atlas source manifest ok/)
 })
+
+test('builder rejects invalid production source contracts', () => {
+  const script = String.raw`
+import copy
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+repo = Path(sys.argv[1])
+temp = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("builder", repo / "tools/build-vertical-slice-atlases.py")
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+
+base = {
+    "version": 2,
+    "actors": {
+        "test-actor": {
+            "masterFrameSize": [128, 160],
+            "runtimeFrameSize": [64, 80],
+            "quality": {
+                "maxCenterDrift": 0.08,
+                "maxScaleDrift": 0.12,
+                "minAlphaCoverage": 0.02,
+                "maxAlphaCoverage": 0.72,
+                "safePadding": 0.08,
+            },
+            "actions": {
+                "idle": {
+                    "frames": 3,
+                    "fps": 6,
+                    "loop": True,
+                    "source": "test-actor/idle",
+                    "sourceMode": "frame-sequence",
+                    "events": [{"name": "ready", "time": 0.5}],
+                }
+            },
+        }
+    },
+}
+
+manifest_path = temp / "assets" / "Data" / "vertical-slice-animation-sources.json"
+manifest_path.parent.mkdir(parents=True, exist_ok=True)
+
+def rejected(mutator):
+    data = copy.deepcopy(base)
+    mutator(data)
+    manifest_path.write_text(json.dumps(data), encoding="utf-8")
+    try:
+        builder.check_source_manifest(temp)
+    except ValueError:
+        return True
+    return False
+
+actor = lambda data: data["actors"]["test-actor"]
+action = lambda data: actor(data)["actions"]["idle"]
+cases = [
+    ("wrong version", lambda data: data.update(version=1)),
+    ("missing quality", lambda data: actor(data).pop("quality")),
+    ("missing quality key", lambda data: actor(data)["quality"].pop("safePadding")),
+    ("non-numeric quality", lambda data: actor(data)["quality"].update(maxCenterDrift="0.08")),
+    ("unsupported source mode", lambda data: action(data).update(sourceMode="sprite-sheet")),
+    ("zero frames", lambda data: action(data).update(frames=0)),
+    ("too many frames", lambda data: action(data).update(frames=17)),
+    ("zero fps", lambda data: action(data).update(fps=0)),
+    ("too much fps", lambda data: action(data).update(fps=25)),
+    ("empty event name", lambda data: action(data).update(events=[{"name": "", "time": 0.5}])),
+    ("unsorted events", lambda data: action(data).update(events=[{"name": "late", "time": 0.7}, {"name": "early", "time": 0.2}])),
+    ("duplicate event times", lambda data: action(data).update(events=[{"name": "one", "time": 0.4}, {"name": "two", "time": 0.4}])),
+    ("event at zero", lambda data: action(data).update(events=[{"name": "zero", "time": 0}])),
+    ("event at one", lambda data: action(data).update(events=[{"name": "one", "time": 1}])),
+]
+
+failed = [label for label, mutate in cases if not rejected(mutate)]
+if failed:
+    raise AssertionError(f"builder accepted invalid contracts: {failed}")
+
+manifest_path.write_text(json.dumps(base), encoding="utf-8")
+builder.check_source_manifest(temp)
+print("all invalid contracts rejected")
+`
+  const tempRoot = mkdtempSync(join(tmpdir(), 'vertical-slice-contract-'))
+  try {
+    assert.match(runPython(script, [tempRoot]), /all invalid contracts rejected/)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
