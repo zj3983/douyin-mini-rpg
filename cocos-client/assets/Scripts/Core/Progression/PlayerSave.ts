@@ -42,9 +42,9 @@ function nonnegativeFinite(value: unknown, fallback = 0): number {
 }
 
 function nonnegativeInteger(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0
-    ? Math.floor(value)
-    : null
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return null
+  const integer = Math.floor(value)
+  return Number.isSafeInteger(integer) ? integer : null
 }
 
 function numberRecord(
@@ -154,7 +154,12 @@ export function consumeDungeonPass(
   current: PlayerSaveV3,
 ): { ok: true; save: PlayerSaveV3 } | { ok: false; save: PlayerSaveV3 } {
   const save = migratePlayerSave(current)
-  if (save.inventory.dungeonPasses <= 0) return { ok: false, save }
+  if (
+    !Number.isSafeInteger(current.inventory.dungeonPasses)
+    || current.inventory.dungeonPasses <= 0
+  ) {
+    return { ok: false, save }
+  }
 
   save.inventory.dungeonPasses -= 1
   return { ok: true, save }

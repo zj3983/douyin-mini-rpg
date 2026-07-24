@@ -73,6 +73,27 @@ test('dungeon pass consumption rejects zero and always returns an isolated save'
   assertDeeplyIsolated(accepted.save, initial)
 })
 
+test('dungeon pass consumption rejects non-safe-integer counts without decrementing', () => {
+  const cases = [
+    [1.5, 1],
+    [Number.MAX_SAFE_INTEGER + 1, 0],
+  ]
+
+  for (const [dungeonPasses, migratedPasses] of cases) {
+    const initial = createDefaultSave()
+    initial.inventory.dungeonPasses = dungeonPasses
+    initial.inventory.materials['mist-herb'] = 2
+    const snapshot = clone(initial)
+
+    const result = consumeDungeonPass(initial)
+
+    assert.equal(result.ok, false, String(dungeonPasses))
+    assert.equal(result.save.inventory.dungeonPasses, migratedPasses, String(dungeonPasses))
+    assert.deepEqual(initial, snapshot, String(dungeonPasses))
+    assertDeeplyIsolated(result.save, initial)
+  }
+})
+
 test('extraction classifies every known artifact and relic and canonicalizes item IDs', () => {
   const initial = createDefaultSave()
   const loot = [
