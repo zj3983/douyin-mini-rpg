@@ -16,6 +16,10 @@ export const requiredDualModeAssets = [
   'assets/Scenes/MainBattle.scene.meta',
   'assets/Data/scene-blueprint.json',
   'assets/Data/scene-blueprint.json.meta',
+  'assets/Data/cultivation-design.json',
+  'assets/Data/cultivation-design.json.meta',
+  'assets/resources/Data/cultivation-design.json',
+  'assets/resources/Data/cultivation-design.json.meta',
   'assets/resources/Data/dual-mode-slice.json',
   'assets/resources/Data/dual-mode-slice.json.meta',
   'assets/Scripts/Core/Dungeon.meta',
@@ -40,6 +44,8 @@ export const requiredDualModeAssets = [
   'assets/Scripts/Core/Progression/SaveRepository.ts',
   'assets/Scripts/Core/Progression/SaveRepository.ts.meta',
   'assets/Scripts/Core/World.meta',
+  'assets/Scripts/Core/World/WorldRegion.ts',
+  'assets/Scripts/Core/World/WorldRegion.ts.meta',
   'assets/Scripts/Core/World/WorldRewards.ts',
   'assets/Scripts/Core/World/WorldRewards.ts.meta',
   'assets/Scripts/Game/DungeonRunController.ts',
@@ -48,8 +54,22 @@ export const requiredDualModeAssets = [
   'assets/Scripts/Game/DualModeGameController.ts.meta',
   'assets/Scripts/Game/WorldStageSelectLayout.ts',
   'assets/Scripts/Game/WorldStageSelectLayout.ts.meta',
+  'assets/Scripts/Game/WorldStageSelectController.ts',
+  'assets/Scripts/Game/WorldStageSelectController.ts.meta',
   'assets/Scripts/Game/WorldStageSelectPageAssembler.ts',
   'assets/Scripts/Game/WorldStageSelectPageAssembler.ts.meta',
+  'assets/Scripts/Game/WorldStageSelectionViewModel.ts',
+  'assets/Scripts/Game/WorldStageSelectionViewModel.ts.meta',
+  'assets/resources/Assets/World/MysticSpring.meta',
+  'assets/resources/Assets/World/MysticSpring/far.png',
+  'assets/resources/Assets/World/MysticSpring/far.png.meta',
+  'assets/resources/Assets/World/MysticSpring/mid.png',
+  'assets/resources/Assets/World/MysticSpring/mid.png.meta',
+  'assets/resources/Assets/World/MistHeaven.meta',
+  'assets/resources/Assets/World/MistHeaven/far.png',
+  'assets/resources/Assets/World/MistHeaven/far.png.meta',
+  'assets/resources/Assets/World/MistHeaven/mid.png',
+  'assets/resources/Assets/World/MistHeaven/mid.png.meta',
 ]
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -70,6 +90,7 @@ const REQUIRED_STRUCTURED_ASSETS = [
 ]
 
 function metaConvention(path) {
+  if (path.endsWith('.png.meta')) return null
   if (path.endsWith('.scene.meta')) return { importer: 'scene', ver: '1.1.50' }
   if (path.endsWith('.json.meta')) return { importer: 'json', ver: '2.0.1' }
   if (path.endsWith('.ts.meta')) return { importer: 'typescript', ver: '4.0.24' }
@@ -133,7 +154,7 @@ export function checkCocosBuildReadiness(options = {}) {
     }
     if (requiredMetaPaths.has(asset)) {
       const expected = metaConvention(asset)
-      if (parsed.importer !== expected.importer || parsed.ver !== expected.ver) {
+      if (expected && (parsed.importer !== expected.importer || parsed.ver !== expected.ver)) {
         blockers.push(`${asset} must use importer ${expected.importer} version ${expected.ver}.`)
       }
     }

@@ -61,16 +61,16 @@
         "vertices": {
           "rawPosition": [
             -470.5,
-            -836.0,
+            -836,
             0,
             470.5,
-            -836.0,
+            -836,
             0,
             -470.5,
-            836.0,
+            836,
             0,
             470.5,
-            836.0,
+            836,
             0
           ],
           "indexes": [
@@ -103,19 +103,19 @@
           ],
           "minPos": [
             -470.5,
-            -836.0,
+            -836,
             0
           ],
           "maxPos": [
             470.5,
-            836.0,
+            836,
             0
           ]
         },
         "isUuid": true,
         "imageUuidOrDatabaseUri": "e3de32db-078f-46dd-a31d-84b01236db10@6c48a",
         "atlasUuid": "",
-        "trimType": "auto"
+        "trimType": "none"
       },
       "ver": "1.0.12",
       "imported": true,

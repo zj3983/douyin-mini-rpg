@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { requiredDualModeAssets } from '../tools/check-cocos-build-readiness.mjs'
 
 const requiredComponents = [
   ['assets/Scripts/Game/StageDirector.ts', 'class StageDirector'],
@@ -22,6 +23,36 @@ const requiredComponents = [
   ['assets/Scripts/Game/StageClearPanelController.ts', 'class StageClearPanelController'],
   ['assets/Scripts/Game/BattleHudController.ts', 'class BattleHudController'],
   ['assets/Scripts/Game/PortraitBattleBootstrap.ts', 'class PortraitBattleBootstrap'],
+]
+
+const requiredWorldRegionAssets = [
+  'assets/Data/cultivation-design.json',
+  'assets/Data/cultivation-design.json.meta',
+  'assets/resources/Data/cultivation-design.json',
+  'assets/resources/Data/cultivation-design.json.meta',
+  'assets/Scripts/Core/World/WorldRegion.ts',
+  'assets/Scripts/Core/World/WorldRegion.ts.meta',
+  'assets/Scripts/Game/WorldStageSelectController.ts',
+  'assets/Scripts/Game/WorldStageSelectController.ts.meta',
+  'assets/Scripts/Game/WorldStageSelectionViewModel.ts',
+  'assets/Scripts/Game/WorldStageSelectionViewModel.ts.meta',
+  'assets/resources/Assets/World/MysticSpring.meta',
+  'assets/resources/Assets/World/MysticSpring/far.png',
+  'assets/resources/Assets/World/MysticSpring/far.png.meta',
+  'assets/resources/Assets/World/MysticSpring/mid.png',
+  'assets/resources/Assets/World/MysticSpring/mid.png.meta',
+  'assets/resources/Assets/World/MistHeaven.meta',
+  'assets/resources/Assets/World/MistHeaven/far.png',
+  'assets/resources/Assets/World/MistHeaven/far.png.meta',
+  'assets/resources/Assets/World/MistHeaven/mid.png',
+  'assets/resources/Assets/World/MistHeaven/mid.png.meta',
+]
+
+const worldRegionGameModules = [
+  'assets/Scripts/Game/WorldStageSelectController.ts',
+  'assets/Scripts/Game/WorldStageSelectionViewModel.ts',
+  'assets/Scripts/Game/WorldStageSelectLayout.ts',
+  'assets/Scripts/Game/WorldStageSelectPageAssembler.ts',
 ]
 
 function readSource(file) {
@@ -63,6 +94,48 @@ test('Cocos game layer has dedicated battle-loop components', () => {
   for (const [file, marker] of requiredComponents) {
     const source = readFileSync(resolve(file), 'utf8')
     assert.equal(source.includes(marker), true, `${file} should define ${marker}`)
+  }
+})
+
+test('complete ten-stage world region is part of the Cocos import contract', () => {
+  for (const asset of requiredWorldRegionAssets) {
+    assert.equal(requiredDualModeAssets.includes(asset), true, `${asset} should be build-readiness required`)
+    assert.equal(existsSync(resolve(asset)), true, `${asset} should exist`)
+  }
+
+  const sourceDesign = JSON.parse(readSource('assets/Data/cultivation-design.json'))
+  const resourceDesign = JSON.parse(readSource('assets/resources/Data/cultivation-design.json'))
+  assert.deepEqual(resourceDesign.worldStages, sourceDesign.worldStages)
+  assert.deepEqual(
+    sourceDesign.worldStages.slice(8).map(({ id, encounter, background }) => ({ id, encounter, background })),
+    [
+      { id: 9, encounter: 'normal', background: 'mystic-spring-stone-forest' },
+      { id: 10, encounter: 'region-boss', background: 'mist-sea-heaven-palace' },
+    ],
+  )
+
+  for (const asset of requiredWorldRegionAssets.filter((path) => path.endsWith('.png.meta'))) {
+    const meta = JSON.parse(readSource(asset))
+    assert.equal(meta.importer, 'image', `${asset} should use the image importer`)
+    assert.equal(meta.ver, '1.0.27', `${asset} should use the Creator 3.8 image meta version`)
+    assert.equal(
+      Object.values(meta.subMetas ?? {}).some((entry) => entry.importer === 'sprite-frame'),
+      true,
+      `${asset} should expose a sprite-frame resource`,
+    )
+    if (asset.endsWith('/mid.png.meta')) {
+      assert.equal(
+        meta.subMetas['f9941'].userData.trimType,
+        'none',
+        `${asset} should preserve the full parallax canvas`,
+      )
+    }
+  }
+})
+
+test('world-region Game modules do not import legacy Combat rules', () => {
+  for (const file of worldRegionGameModules) {
+    assert.doesNotMatch(readSource(file), /from\s+['"]\.\.\/Combat\//, file)
   }
 })
 
