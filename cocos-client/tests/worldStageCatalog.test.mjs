@@ -43,6 +43,14 @@ test('stages nine and ten reuse existing actors with complete combat roles', () 
     { id: stage10.id, name: stage10.name, theme: stage10.theme, background: stage10.background },
     { id: 10, name: '雾海天阙', theme: 'cloud-gate', background: 'mist-sea-heaven-palace' },
   )
+  assert.deepEqual(
+    stage9.enemies.map(({ id }) => id),
+    ['moss-wolf', 'green-wing-moth', 'mist-deer-king'],
+  )
+  assert.deepEqual(
+    stage10.enemies.map(({ id }) => id),
+    ['star-armored-beast', 'void-wing-spirit', 'meteor-guardian'],
+  )
 
   for (const stage of [stage9, stage10]) {
     assert.deepEqual(stage.enemies.map(({ role }) => role), ['ground', 'flying', 'boss'])

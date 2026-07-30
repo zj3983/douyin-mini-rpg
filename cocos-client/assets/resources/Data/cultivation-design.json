@@ -446,14 +446,14 @@
       "encounter": "normal",
       "enemies": [
         {
-          "id": "fog-spider",
-          "name": "玄泉石蛛",
+          "id": "moss-wolf",
+          "name": "玄泉苔纹狼",
           "role": "ground",
           "theme": "mist-bamboo"
         },
         {
-          "id": "lantern-wraith",
-          "name": "泉雾灯灵",
+          "id": "green-wing-moth",
+          "name": "石林青翼蛾",
           "role": "flying",
           "theme": "mist-bamboo"
         },
