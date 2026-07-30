@@ -1,3 +1,5 @@
+export const WORLD_STAGE_COUNT = 10
+
 const monsterAtlasPaths = Object.freeze({
   'moss-wolf': Object.freeze([
     'Assets/ActorAtlases/MossWolf/idle/texture',

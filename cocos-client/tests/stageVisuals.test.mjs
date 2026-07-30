@@ -151,17 +151,24 @@ test('stages 9 and 10 load their complete background and actor resource plans', 
   }
 })
 
-test('TypeScript and ESM stage resource plans stay behaviorally identical', async () => {
+test('TypeScript and ESM stage catalogs stay behaviorally identical', async () => {
   const source = readFileSync(join(root, 'assets', 'Scripts', 'Core', 'StageVisualCatalog.ts'), 'utf8')
   const javascript = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
   }).outputText
   const typescriptCatalog = await import(`data:text/javascript;base64,${Buffer.from(javascript).toString('base64')}`)
+  const esmCatalog = await import('../tools/stage-visual-catalog.mjs')
 
   assert.deepEqual(
-    stageIds.map(typescriptCatalog.stageResourcePlanFor),
-    stageIds.map(stageResourcePlanFor),
+    stageIds.map(typescriptCatalog.stageVisualFor),
+    stageIds.map(esmCatalog.stageVisualFor),
   )
+  assert.deepEqual(
+    stageIds.map(typescriptCatalog.stageResourcePlanFor),
+    stageIds.map(esmCatalog.stageResourcePlanFor),
+  )
+  assert.equal(typescriptCatalog.WORLD_STAGE_COUNT, 10)
+  assert.equal(esmCatalog.WORLD_STAGE_COUNT, typescriptCatalog.WORLD_STAGE_COUNT)
 })
 
 test('release plan frees every previous stage asset after a successful swap', () => {
@@ -234,31 +241,59 @@ test('stage backgrounds contain distinct artwork instead of duplicate files', ()
 test('final region PNG layers satisfy the portrait and transparency contracts', () => {
   const farHashes = []
 
-  for (const folder of ['MysticSpring', 'MistHeaven']) {
-    const paths = Object.fromEntries(['far', 'mid'].map((layer) => [
-      layer,
-      join(root, 'assets', 'resources', 'Assets', 'World', folder, `${layer}.png`),
-    ]))
-    assert.equal(existsSync(paths.far), true)
-    assert.equal(existsSync(paths.mid), true)
+  for (const stageId of [9, 10]) {
+    const visual = stageVisualFor(stageId)
+    const descriptors = [visual.farPath, visual.midPath]
+    const dimensions = []
 
-    const farBytes = readFileSync(paths.far)
-    const midBytes = readFileSync(paths.mid)
-    const width = farBytes.readUInt32BE(16)
-    const height = farBytes.readUInt32BE(20)
-    assert.equal(width / height > 0.54 && width / height < 0.59, true, `${folder} should be near 9:16`)
-    assert.equal(midBytes.readUInt32BE(16), width)
-    assert.equal(midBytes.readUInt32BE(20), height)
-    assert.equal(farBytes[25], 2, `${folder}/far.png should be opaque RGB`)
-    assert.equal(midBytes[25], 6, `${folder}/mid.png should retain RGBA`)
+    for (const descriptor of descriptors) {
+      assert.equal(typeof descriptor, 'string')
+      const resourcePath = descriptor.replace(/\/spriteFrame$/, '.png')
+      assert.notEqual(resourcePath, descriptor)
+      const pngPath = join(root, 'assets', 'resources', ...resourcePath.split('/'))
+      const metaPath = `${pngPath}.meta`
+      assert.equal(existsSync(pngPath), true, `missing ${resourcePath}`)
+      assert.equal(existsSync(metaPath), true, `missing ${resourcePath}.meta`)
 
-    const mid = readPngRgba(paths.mid)
-    let transparentPixels = 0
-    for (let offset = 3; offset < mid.data.length; offset += 4) {
-      if (mid.data[offset] === 0) transparentPixels += 1
+      const bytes = readFileSync(pngPath)
+      const meta = JSON.parse(readFileSync(metaPath, 'utf8'))
+      const width = bytes.readUInt32BE(16)
+      const height = bytes.readUInt32BE(20)
+      const isMid = descriptor === visual.midPath
+      dimensions.push({ width, height })
+
+      assert.equal(width / height > 0.54 && width / height < 0.59, true, `${resourcePath} should be near 9:16`)
+      assert.equal(bytes[25], isMid ? 6 : 2, `${resourcePath} should use the expected PNG color type`)
+      assert.equal(meta.importer, 'image')
+      assert.equal(meta.files.includes('.png'), true)
+      assert.equal(meta.subMetas['6c48a'].uuid, `${meta.uuid}@6c48a`)
+      assert.equal(meta.subMetas['f9941'].uuid, `${meta.uuid}@f9941`)
+      assert.equal(meta.subMetas['6c48a'].userData.imageUuidOrDatabaseUri, meta.uuid)
+      assert.equal(meta.subMetas['f9941'].userData.imageUuidOrDatabaseUri, `${meta.uuid}@6c48a`)
+      assert.equal(meta.subMetas['f9941'].userData.width, width)
+      assert.equal(meta.subMetas['f9941'].userData.height, height)
+      assert.equal(meta.subMetas['f9941'].userData.rawWidth, width)
+      assert.equal(meta.subMetas['f9941'].userData.rawHeight, height)
+      assert.equal(meta.userData.redirect, `${meta.uuid}@6c48a`)
+      assert.equal(meta.userData.hasAlpha, isMid)
+
+      if (isMid) {
+        const image = readPngRgba(pngPath)
+        let transparentPixels = 0
+        let visiblePixels = 0
+        for (let offset = 3; offset < image.data.length; offset += 4) {
+          if (image.data[offset] === 0) transparentPixels += 1
+          else visiblePixels += 1
+        }
+        const pixelCount = image.width * image.height
+        assert.equal(transparentPixels / pixelCount >= 0.6, true)
+        assert.equal(visiblePixels / pixelCount >= 0.05, true)
+      } else {
+        farHashes.push(createHash('sha256').update(bytes).digest('hex'))
+      }
     }
-    assert.equal(transparentPixels / (mid.width * mid.height) >= 0.6, true)
-    farHashes.push(createHash('sha256').update(farBytes).digest('hex'))
+
+    assert.deepEqual(dimensions[0], dimensions[1])
   }
 
   assert.equal(new Set(farHashes).size, farHashes.length)

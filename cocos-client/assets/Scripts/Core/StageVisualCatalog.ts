@@ -1,5 +1,7 @@
 import type { StageResourcePlan } from './StageResourceRuntime'
 
+export const WORLD_STAGE_COUNT = 10
+
 export interface StageVisual {
   readonly stageId: number
   readonly backgroundId: string

@@ -1,6 +1,6 @@
 import { Asset, resources, SpriteFrame, Texture2D } from 'cc'
 import { StageResourceRuntime } from '../Core/StageResourceRuntime'
-import { stageResourcePlanFor } from '../Core/StageVisualCatalog'
+import { stageResourcePlanFor, WORLD_STAGE_COUNT } from '../Core/StageVisualCatalog'
 import { StageBackgroundController } from './StageBackgroundController'
 
 export class StageResourceController {
@@ -35,7 +35,7 @@ export class StageResourceController {
   }
 
   prefetchNext(stageId: number) {
-    if (stageId < 1 || stageId >= 8) return false
+    if (stageId < 1 || stageId >= WORLD_STAGE_COUNT) return false
     return this.runtime.prefetch(stageResourcePlanFor(stageId + 1))
   }
 
