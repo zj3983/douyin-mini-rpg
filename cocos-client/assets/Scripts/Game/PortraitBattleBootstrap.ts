@@ -34,7 +34,6 @@ import {
   computeBattleViewportState,
 } from '../Combat/BattleLayout.ts'
 import { computeDungeonEntryNavLayout } from './DungeonEntryLayout.ts'
-import { computeWorldStageSelectLayout } from './WorldStageSelectLayout.ts'
 import type { BattleLayout, BattleResolutionMode } from '../Combat/BattleLayout.ts'
 import type { WorldEncounterKind } from '../Core/World/WorldRegion.ts'
 import { BOSS_HAZARD_POOL_CAPACITY } from '../Combat/BossBrain.ts'
@@ -64,7 +63,8 @@ import { StageBackgroundController } from './StageBackgroundController'
 import { StageResourceController } from './StageResourceController'
 import { createDefaultViewportMetricsProvider } from './ViewportMetrics.ts'
 import type { ViewportMetrics, ViewportMetricsProvider } from './ViewportMetrics.ts'
-import { WorldStageSelectController } from './WorldStageSelectController'
+import { buildWorldStageSelectPage } from './WorldStageSelectPageAssembler'
+import type { WorldStageSelectPage } from './WorldStageSelectPageAssembler'
 
 const { ccclass } = _decorator
 const WIDTH = BATTLE_DESIGN_WIDTH
@@ -136,27 +136,15 @@ export class PortraitBattleBootstrap extends Component {
   private battleOperational = false
   private resolutionMode: BattleResolutionMode | null = null
   private appliedLayout: BattleLayout | null = null
-  private worldStageSelectRoot: Node | null = null
-  private worldStageHeader: Node | null = null
-  private worldStageGrid: Node | null = null
-  private worldStageCloseNode: Node | null = null
   private worldStageEntryNode: Node | null = null
-  private worldStageStatusLabel: Label | null = null
-  private worldStageController: WorldStageSelectController | null = null
+  private worldStageSelectPage: WorldStageSelectPage | null = null
   private worldStageData: readonly WorldStageDesignEntry[] = []
-  private worldStageItemNodes: Node[] = []
-  private worldStageButtons: Button[] = []
-  private worldStageItemLabels: Label[] = []
-  private worldStageBadgeLabels: Label[] = []
-  private worldStageLockLabels: Label[] = []
-  private worldStageItemClickHandlers: Array<() => void> = []
-  private worldStageSelectorListenersBound = false
 
   onLoad() {
     this.viewportMetricsProvider = createDefaultViewportMetricsProvider(() => view.getFrameSize())
     const initialMetrics = this.viewportMetricsProvider.read()
     const initialLayout = this.applyViewportMetrics(initialMetrics)
-    this.assembleScene(initialLayout)
+    this.assembleScene(initialLayout, initialMetrics)
     this.viewportMetricsCleanup = this.viewportMetricsProvider.subscribe((metrics) => this.relayoutVisibleArea(metrics))
     view.on('canvas-resize', this.onCanvasResize, this)
   }
@@ -166,7 +154,8 @@ export class PortraitBattleBootstrap extends Component {
     this.stopRuntimeBinding()
     this.runtimeNode?.off('battle-stage-changed', this.onStageChanged, this)
     this.runtimeNode?.off('world-stage-cleared', this.dualModeController?.handleWorldCleared, this.dualModeController)
-    this.unbindWorldStageSelectorEvents()
+    this.worldStageEntryNode?.off(Button.EventType.CLICK, this.openWorldStageSelect, this)
+    this.worldStageSelectPage?.destroy()
     this.dungeonEntryNode?.off(Button.EventType.CLICK, this.enterDungeonFromWorld, this)
     this.dungeonInteractNode?.off(Button.EventType.CLICK, this.interactWithDungeon, this)
     this.dualModeController?.node.off('dungeon-entry-rejected', this.onDungeonEntryRejected, this)
@@ -192,7 +181,7 @@ export class PortraitBattleBootstrap extends Component {
     this.stageBackgroundController?.update(deltaTime)
   }
 
-  private assembleScene(layout: BattleLayout) {
+  private assembleScene(layout: BattleLayout, metrics: Readonly<ViewportMetrics>) {
     if (this.assembled) return
     this.assembled = true
 
@@ -258,7 +247,14 @@ export class PortraitBattleBootstrap extends Component {
     const bossTelegraphPresenter = effectLayer.addComponent(BossTelegraphPresenter)
     bossTelegraphPresenter.telegraphPool = bossEffectPool
     const hudParts = this.createHud(hudLayer, layout)
-    this.createWorldStageSelect(worldRoot, layout)
+    this.worldStageSelectPage = buildWorldStageSelectPage({
+      parent: worldRoot,
+      battleRoot,
+      metrics,
+      getHighestClearedWorldStage: () => this.dualModeController?.getHighestClearedWorldStage() ?? 0,
+      advanceToStage: (stageId) => this.battleRuntimeController?.advanceToStage(stageId),
+    })
+    this.worldStageEntryNode?.on(Button.EventType.CLICK, this.openWorldStageSelect, this)
     const battleInput = this.createInput(inputLayer, controller, layout, this.movementCoordinateSpace)
     const runtime = this.loadRuntime(battleRoot, {
       enemySpawner,
@@ -291,7 +287,7 @@ export class PortraitBattleBootstrap extends Component {
     this.bossHud?.setPosition(0, this.bossHudY(layout), 0)
     this.bottomNavigation?.setPosition(0, layout.navigationTop - NAV_HEIGHT / 2, 0)
     this.configureDungeonLayout(layout)
-    this.configureWorldStageSelectLayout(layout)
+    this.worldStageSelectPage?.relayout(metrics)
     this.playerController?.configureBounds(layout.movement)
     if (this.movementCoordinateSpace) this.battleInput?.configure(layout.movement, this.movementCoordinateSpace)
   }
@@ -586,7 +582,7 @@ export class PortraitBattleBootstrap extends Component {
       this.battleRuntimeController = runtime
       const design = asset.json as { worldStages?: readonly WorldStageDesignEntry[] }
       this.worldStageData = Array.isArray(design.worldStages) ? design.worldStages : []
-      this.refreshWorldStageSelection()
+      this.worldStageSelectPage?.bind(this.worldStageData)
       runtime.initialize()
       state = { status: 'ready', runtime }
     })
@@ -764,209 +760,8 @@ export class PortraitBattleBootstrap extends Component {
     return { hud, stageClearPanel }
   }
 
-  private createWorldStageSelect(parent: Node, layout: BattleLayout) {
-    const root = this.createNode('WorldStageSelectRoot', parent, WIDTH, layout.visibleHeight)
-    this.worldStageSelectRoot = root
-    this.fullHeightNodes.push(root)
-    this.worldStageController = root.addComponent(WorldStageSelectController)
-
-    const header = this.createNode('WorldStageHeader', root)
-    this.worldStageHeader = header
-    const title = this.createLabel('WorldStageTitle', header, '云卷路引', 30, 220, 48)
-    title.node.setPosition(-210, 10, 0)
-    title.horizontalAlign = HorizontalTextAlignment.LEFT
-    title.color = new Color(226, 215, 174, 255)
-    const subtitle = this.createLabel('WorldStageSubtitle', header, '十境行程', 17, 180, 34)
-    subtitle.node.setPosition(-230, -26, 0)
-    subtitle.horizontalAlign = HorizontalTextAlignment.LEFT
-    subtitle.color = new Color(125, 158, 151, 255)
-
-    const closeNode = this.createNode('WorldStageCloseButton', header, 64, 64)
-    this.worldStageCloseNode = closeNode
-    this.drawRoundedPanel(
-      closeNode,
-      64,
-      64,
-      new Color(17, 38, 39, 255),
-      new Color(67, 96, 91, 255),
-      6,
-    )
-    this.createLabel('WorldStageCloseIcon', closeNode, '×', 34, 58, 58).color = new Color(201, 214, 207, 255)
-    closeNode.addComponent(Button)
-
-    const grid = this.createNode('WorldStageGrid', root)
-    this.worldStageGrid = grid
-    for (let stageId = 1; stageId <= 10; stageId += 1) {
-      const item = this.createNode(`WorldStageItem${stageId}`, grid)
-      const button = item.addComponent(Button)
-      button.interactable = false
-      const label = this.createLabel(`WorldStageItem${stageId}Label`, item, '', 25, 198, 76)
-      label.node.setPosition(-48, 0, 0)
-      label.horizontalAlign = HorizontalTextAlignment.LEFT
-      const badge = this.createLabel(`WorldStageItem${stageId}Badge`, item, '', 17, 76, 30)
-      badge.node.setPosition(111, 28, 0)
-      const lock = this.createLabel(`WorldStageItem${stageId}Lock`, item, '', 16, 76, 30)
-      lock.node.setPosition(111, -29, 0)
-      lock.color = new Color(131, 148, 141, 255)
-      this.worldStageItemNodes.push(item)
-      this.worldStageButtons.push(button)
-      this.worldStageItemLabels.push(label)
-      this.worldStageBadgeLabels.push(badge)
-      this.worldStageLockLabels.push(lock)
-    }
-
-    this.worldStageStatusLabel = this.createLabel('WorldStageStatusLabel', root, '', 18, 678, 40)
-    this.worldStageStatusLabel.color = new Color(213, 164, 91, 255)
-    this.configureWorldStageSelectLayout(layout)
-    root.active = false
-    this.bindWorldStageSelectorEvents()
-  }
-
-  private configureWorldStageSelectLayout(layout: BattleLayout) {
-    const root = this.worldStageSelectRoot
-    const header = this.worldStageHeader
-    const grid = this.worldStageGrid
-    if (!root || !header || !grid) return
-    const page = computeWorldStageSelectLayout(WIDTH, layout.visibleHeight)
-    root.getComponent(UITransform)?.setContentSize(page.width, page.height)
-    this.drawRoundedPanel(root, page.width, page.height, new Color(8, 21, 23, 255), new Color(8, 21, 23, 255), 0)
-    header.getComponent(UITransform)?.setContentSize(page.header.width, page.header.height)
-    header.setPosition(page.header.centerX, page.header.centerY, 0)
-    this.drawRoundedPanel(
-      header,
-      page.header.width,
-      page.header.height,
-      new Color(13, 31, 32, 255),
-      new Color(45, 70, 67, 255),
-      6,
-    )
-    this.worldStageCloseNode?.setPosition(
-      page.closeButton.centerX - page.header.centerX,
-      page.closeButton.centerY - page.header.centerY,
-      0,
-    )
-    grid.getComponent(UITransform)?.setContentSize(page.grid.width, page.grid.height)
-    grid.setPosition(page.grid.centerX, page.grid.centerY, 0)
-    page.items.forEach((itemLayout, index) => {
-      const item = this.worldStageItemNodes[index]
-      item?.getComponent(UITransform)?.setContentSize(itemLayout.width, itemLayout.height)
-      item?.setPosition(
-        itemLayout.centerX - page.grid.centerX,
-        itemLayout.centerY - page.grid.centerY,
-        0,
-      )
-    })
-    this.worldStageStatusLabel?.node.setPosition(page.status.centerX, page.status.centerY, 0)
-    this.styleWorldStageItems()
-  }
-
-  private refreshWorldStageSelection() {
-    this.worldStageController?.bind(
-      this.worldStageData,
-      this.dualModeController?.getHighestClearedWorldStage() ?? 0,
-      this.worldStageButtons,
-      this.worldStageItemLabels,
-      this.worldStageBadgeLabels,
-      this.worldStageLockLabels,
-    )
-    this.styleWorldStageItems()
-  }
-
-  private styleWorldStageItems() {
-    this.worldStageItemNodes.forEach((node, index) => {
-      const stage = this.worldStageData[index]
-      const interactable = this.worldStageButtons[index]?.interactable === true
-      const encounter = stage?.encounter ?? 'normal'
-      const fill = interactable ? new Color(20, 43, 44, 255) : new Color(13, 29, 30, 255)
-      const border = encounter === 'region-boss'
-        ? new Color(190, 151, 70, interactable ? 255 : 140)
-        : encounter === 'elite'
-          ? new Color(104, 157, 143, interactable ? 255 : 140)
-          : new Color(55, 82, 78, interactable ? 255 : 125)
-      const transform = node.getComponent(UITransform)
-      this.drawRoundedPanel(node, transform?.width ?? 330, transform?.height ?? 132, fill, border, 6)
-      const label = this.worldStageItemLabels[index]
-      if (label) label.color = interactable
-        ? new Color(224, 232, 224, 255)
-        : new Color(111, 129, 124, 255)
-      const badge = this.worldStageBadgeLabels[index]
-      if (badge) {
-        badge.color = encounter === 'region-boss'
-          ? new Color(238, 202, 114, interactable ? 255 : 150)
-          : new Color(150, 203, 188, interactable ? 255 : 150)
-        if (encounter === 'normal') {
-          badge.node.getComponent(Graphics)?.clear()
-        } else {
-          this.drawRoundedPanel(badge.node, 76, 30, new Color(15, 34, 34, 210), border, 5)
-        }
-      }
-    })
-  }
-
-  private openWorldStageSelect() {
-    this.refreshWorldStageSelection()
-    if (this.worldStageStatusLabel) {
-      this.worldStageStatusLabel.string = this.worldStageData.length === 10 ? '' : '路引载入中'
-    }
-    if (this.battleRoot) this.battleRoot.active = false
-    if (this.worldStageSelectRoot) this.worldStageSelectRoot.active = true
-  }
-
-  private closeWorldStageSelect() {
-    if (this.worldStageSelectRoot) this.worldStageSelectRoot.active = false
-    if (this.battleRoot) this.battleRoot.active = true
-  }
-
-  private onWorldStageSelected(payload: unknown) {
-    const stageId = (payload as { stageId?: unknown } | null)?.stageId
-    if (typeof stageId !== 'number' || !Number.isInteger(stageId)) {
-      if (this.worldStageStatusLabel) this.worldStageStatusLabel.string = '关卡信息无效'
-      return
-    }
-    const result = this.battleRuntimeController?.advanceToStage(stageId)
-    if (result?.ok) {
-      this.closeWorldStageSelect()
-      return
-    }
-    if (this.worldStageStatusLabel) this.worldStageStatusLabel.string = '当前关卡暂不可进入'
-  }
-
-  private onWorldStageSelectionRejected(payload: unknown) {
-    const reason = (payload as { reason?: unknown } | null)?.reason
-    if (this.worldStageStatusLabel) {
-      this.worldStageStatusLabel.string = reason === 'locked-stage' ? '此关尚未解锁' : '关卡信息无效'
-    }
-  }
-
-  private bindWorldStageSelectorEvents() {
-    this.unbindWorldStageSelectorEvents()
-    const root = this.worldStageSelectRoot
-    if (!root) return
-    root.on('world-stage-selected', this.onWorldStageSelected, this)
-    root.on('world-stage-selection-rejected', this.onWorldStageSelectionRejected, this)
-    this.worldStageCloseNode?.on(Button.EventType.CLICK, this.closeWorldStageSelect, this)
-    this.worldStageEntryNode?.on(Button.EventType.CLICK, this.openWorldStageSelect, this)
-    this.worldStageItemClickHandlers = this.worldStageItemNodes.map((_node, index) => () => {
-      if (this.worldStageButtons[index]?.interactable !== true) return
-      this.worldStageController?.select(index + 1)
-    })
-    this.worldStageItemNodes.forEach((node, index) => {
-      node.on(Button.EventType.CLICK, this.worldStageItemClickHandlers[index], this)
-    })
-    this.worldStageSelectorListenersBound = true
-  }
-
-  private unbindWorldStageSelectorEvents() {
-    if (!this.worldStageSelectorListenersBound) return
-    this.worldStageSelectRoot?.off('world-stage-selected', this.onWorldStageSelected, this)
-    this.worldStageSelectRoot?.off('world-stage-selection-rejected', this.onWorldStageSelectionRejected, this)
-    this.worldStageCloseNode?.off(Button.EventType.CLICK, this.closeWorldStageSelect, this)
-    this.worldStageEntryNode?.off(Button.EventType.CLICK, this.openWorldStageSelect, this)
-    this.worldStageItemNodes.forEach((node, index) => {
-      node.off(Button.EventType.CLICK, this.worldStageItemClickHandlers[index], this)
-    })
-    this.worldStageItemClickHandlers = []
-    this.worldStageSelectorListenersBound = false
+  private openWorldStageSelect = () => {
+    this.worldStageSelectPage?.open()
   }
 
   private createRuntimePool(

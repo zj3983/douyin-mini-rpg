@@ -48,6 +48,8 @@ export const requiredDualModeAssets = [
   'assets/Scripts/Game/DualModeGameController.ts.meta',
   'assets/Scripts/Game/WorldStageSelectLayout.ts',
   'assets/Scripts/Game/WorldStageSelectLayout.ts.meta',
+  'assets/Scripts/Game/WorldStageSelectPageAssembler.ts',
+  'assets/Scripts/Game/WorldStageSelectPageAssembler.ts.meta',
 ]
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i

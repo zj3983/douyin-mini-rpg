@@ -3,6 +3,8 @@ export interface ViewportMetrics {
   readonly cssHeight: number
   readonly topInsetPx: number
   readonly bottomInsetPx: number
+  readonly leftInsetPx: number
+  readonly rightInsetPx: number
   readonly viewportSizeValid: boolean
   readonly source: 'douyin' | 'browser' | 'cocos'
 }
@@ -16,6 +18,7 @@ interface VisualViewportLike extends EventTargetLike {
   width: number
   height: number
   offsetTop: number
+  offsetLeft?: number
 }
 
 interface BrowserWindowLike extends EventTargetLike {
@@ -27,7 +30,7 @@ interface BrowserWindowLike extends EventTargetLike {
 interface DouyinSystemInfo {
   windowWidth?: number
   windowHeight?: number
-  safeArea?: { top?: number; bottom?: number } | null
+  safeArea?: { top?: number; bottom?: number; left?: number; right?: number } | null
 }
 
 interface DouyinApiLike {
@@ -39,7 +42,7 @@ interface DouyinApiLike {
 export interface ViewportMetricsEnvironment {
   readonly tt?: DouyinApiLike | null
   readonly browserWindow?: BrowserWindowLike | null
-  readonly probeBrowserSafeArea?: () => { top: number; bottom: number }
+  readonly probeBrowserSafeArea?: () => { top: number; bottom: number; left?: number; right?: number }
   readonly getFrameSize: () => { width: number; height: number }
 }
 
@@ -71,12 +74,25 @@ function freezeMetrics(
   cssHeight: number,
   topInsetPx: number,
   bottomInsetPx: number,
+  leftInsetPx: number,
+  rightInsetPx: number,
   viewportSizeValid: boolean,
   source: ViewportMetrics['source'],
 ): Readonly<ViewportMetrics> {
   const top = clamp(finiteNonNegative(topInsetPx), 0, cssHeight)
   const bottom = clamp(finiteNonNegative(bottomInsetPx), 0, cssHeight - top)
-  return Object.freeze({ cssWidth, cssHeight, topInsetPx: top, bottomInsetPx: bottom, viewportSizeValid, source })
+  const left = clamp(finiteNonNegative(leftInsetPx), 0, cssWidth)
+  const right = clamp(finiteNonNegative(rightInsetPx), 0, cssWidth - left)
+  return Object.freeze({
+    cssWidth,
+    cssHeight,
+    topInsetPx: top,
+    bottomInsetPx: bottom,
+    leftInsetPx: left,
+    rightInsetPx: right,
+    viewportSizeValid,
+    source,
+  })
 }
 
 function readDouyinMetrics(tt: DouyinApiLike | null | undefined): Readonly<ViewportMetrics> | null {
@@ -93,7 +109,12 @@ function readDouyinMetrics(tt: DouyinApiLike | null | undefined): Readonly<Viewp
   const bottom = typeof safeBottom === 'number' && Number.isFinite(safeBottom)
     ? info.windowHeight - safeBottom
     : 0
-  return freezeMetrics(info.windowWidth, info.windowHeight, top, bottom, true, 'douyin')
+  const left = finiteNonNegative(info.safeArea?.left)
+  const safeRight = info.safeArea?.right
+  const right = typeof safeRight === 'number' && Number.isFinite(safeRight)
+    ? info.windowWidth - safeRight
+    : 0
+  return freezeMetrics(info.windowWidth, info.windowHeight, top, bottom, left, right, true, 'douyin')
 }
 
 function readBrowserMetrics(environment: ViewportMetricsEnvironment): Readonly<ViewportMetrics> | null {
@@ -103,16 +124,22 @@ function readBrowserMetrics(environment: ViewportMetricsEnvironment): Readonly<V
   const cssWidth = isDimension(browserWindow.innerWidth) ? browserWindow.innerWidth : viewport?.width
   const cssHeight = isDimension(browserWindow.innerHeight) ? browserWindow.innerHeight : viewport?.height
   if (!isDimension(cssWidth) || !isDimension(cssHeight)) return null
-  const probe = environment.probeBrowserSafeArea?.() ?? { top: 0, bottom: 0 }
+  const probe = environment.probeBrowserSafeArea?.() ?? { top: 0, bottom: 0, left: 0, right: 0 }
   const offsetTop = finiteNonNegative(viewport?.offsetTop)
+  const offsetLeft = finiteNonNegative(viewport?.offsetLeft)
   const layoutHeight = isDimension(browserWindow.innerHeight) ? browserWindow.innerHeight : cssHeight + offsetTop
   const visualHeight = isDimension(viewport?.height) ? viewport.height : layoutHeight - offsetTop
   const occludedBottom = viewport ? Math.max(0, layoutHeight - offsetTop - visualHeight) : 0
+  const layoutWidth = isDimension(browserWindow.innerWidth) ? browserWindow.innerWidth : cssWidth + offsetLeft
+  const visualWidth = isDimension(viewport?.width) ? viewport.width : layoutWidth - offsetLeft
+  const occludedRight = viewport ? Math.max(0, layoutWidth - offsetLeft - visualWidth) : 0
   return freezeMetrics(
     cssWidth,
     cssHeight,
     finiteNonNegative(probe.top) + offsetTop,
     finiteNonNegative(probe.bottom) + occludedBottom,
+    finiteNonNegative(probe.left) + offsetLeft,
+    finiteNonNegative(probe.right) + occludedRight,
     true,
     'browser',
   )
@@ -123,7 +150,7 @@ function readCocosMetrics(getFrameSize: ViewportMetricsEnvironment['getFrameSize
   const viewportSizeValid = isDimension(frame?.width) && isDimension(frame?.height)
   const width = viewportSizeValid ? frame.width : 750
   const height = viewportSizeValid ? frame.height : 1334
-  return freezeMetrics(width, height, 0, 0, viewportSizeValid, 'cocos')
+  return freezeMetrics(width, height, 0, 0, 0, 0, viewportSizeValid, 'cocos')
 }
 
 class RuntimeViewportMetricsProvider implements ViewportMetricsProvider {
@@ -197,7 +224,7 @@ export function createViewportMetricsProvider(environment: ViewportMetricsEnviro
   return new RuntimeViewportMetricsProvider(environment)
 }
 
-function probeCssSafeArea(): { top: number; bottom: number } {
+function probeCssSafeArea(): { top: number; bottom: number; left: number; right: number } {
   const globalObject = globalThis as typeof globalThis & {
     document?: {
       body?: { appendChild(node: unknown): void }
@@ -207,14 +234,21 @@ function probeCssSafeArea(): { top: number; bottom: number } {
         remove(): void
       }
     }
-    getComputedStyle?: (node: unknown) => { paddingTop?: string; paddingBottom?: string }
+    getComputedStyle?: (node: unknown) => {
+      paddingTop?: string
+      paddingBottom?: string
+      paddingLeft?: string
+      paddingRight?: string
+    }
   }
   const document = globalObject.document
   const parent = document?.body ?? document?.documentElement
-  if (!document || !parent || typeof globalObject.getComputedStyle !== 'function') return { top: 0, bottom: 0 }
+  if (!document || !parent || typeof globalObject.getComputedStyle !== 'function') {
+    return { top: 0, bottom: 0, left: 0, right: 0 }
+  }
   let probe: ReturnType<typeof document.createElement> | null = null
   let failed = false
-  let result = { top: 0, bottom: 0 }
+  let result = { top: 0, bottom: 0, left: 0, right: 0 }
   try {
     probe = document.createElement('div')
     probe.style.cssText = [
@@ -223,12 +257,16 @@ function probeCssSafeArea(): { top: number; bottom: number } {
       'pointer-events:none',
       'padding-top:env(safe-area-inset-top)',
       'padding-bottom:env(safe-area-inset-bottom)',
+      'padding-left:env(safe-area-inset-left)',
+      'padding-right:env(safe-area-inset-right)',
     ].join(';')
     parent.appendChild(probe)
     const style = globalObject.getComputedStyle(probe)
     result = {
       top: finiteNonNegative(Number.parseFloat(style.paddingTop ?? '0')),
       bottom: finiteNonNegative(Number.parseFloat(style.paddingBottom ?? '0')),
+      left: finiteNonNegative(Number.parseFloat(style.paddingLeft ?? '0')),
+      right: finiteNonNegative(Number.parseFloat(style.paddingRight ?? '0')),
     }
   } catch {
     failed = true
@@ -239,7 +277,7 @@ function probeCssSafeArea(): { top: number; bottom: number } {
       failed = true
     }
   }
-  return failed ? { top: 0, bottom: 0 } : result
+  return failed ? { top: 0, bottom: 0, left: 0, right: 0 } : result
 }
 
 export function createDefaultViewportMetricsProvider(

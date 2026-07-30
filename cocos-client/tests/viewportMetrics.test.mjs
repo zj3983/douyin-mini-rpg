@@ -54,13 +54,13 @@ test('Douyin system info has priority and converts safe area edges to insets', (
       getSystemInfoSync: () => ({
         windowWidth: 390,
         windowHeight: 844,
-        safeArea: { top: 47, bottom: 810 },
+        safeArea: { top: 47, bottom: 810, left: 8, right: 382 },
       }),
     },
     browserWindow: createEventTarget({ innerWidth: 999, innerHeight: 999, visualViewport: null }),
     probeBrowserSafeArea: () => {
       browserProbeCalls += 1
-      return { top: 10, bottom: 10 }
+      return { top: 10, bottom: 10, left: 10, right: 10 }
     },
     getFrameSize: () => ({ width: 360, height: 780 }),
   })
@@ -70,6 +70,8 @@ test('Douyin system info has priority and converts safe area edges to insets', (
     cssHeight: 844,
     topInsetPx: 47,
     bottomInsetPx: 34,
+    leftInsetPx: 8,
+    rightInsetPx: 8,
     viewportSizeValid: true,
     source: 'douyin',
   })
@@ -94,18 +96,20 @@ test('Douyin safe area values are finite-clamped without rejecting valid dimensi
     cssHeight: 932,
     topInsetPx: 0,
     bottomInsetPx: 0,
+    leftInsetPx: 0,
+    rightInsetPx: 0,
     viewportSizeValid: true,
     source: 'douyin',
   })
 })
 
 test('browser metrics reserve visual viewport occlusion once against layout viewport dimensions', () => {
-  const visualViewport = createEventTarget({ width: 390, height: 700, offsetTop: 20 })
+  const visualViewport = createEventTarget({ width: 350, height: 700, offsetTop: 20, offsetLeft: 12 })
   const browserWindow = createEventTarget({ innerWidth: 390, innerHeight: 844, visualViewport })
   const provider = createViewportMetricsProvider({
     tt: null,
     browserWindow,
-    probeBrowserSafeArea: () => ({ top: 10, bottom: 12 }),
+    probeBrowserSafeArea: () => ({ top: 10, bottom: 12, left: 5, right: 7 }),
     getFrameSize: () => ({ width: 360, height: 780 }),
   })
 
@@ -115,6 +119,8 @@ test('browser metrics reserve visual viewport occlusion once against layout view
     cssHeight: 844,
     topInsetPx: 30,
     bottomInsetPx: 136,
+    leftInsetPx: 17,
+    rightInsetPx: 35,
     viewportSizeValid: true,
     source: 'browser',
   })
@@ -137,6 +143,8 @@ test('invalid platform and browser dimensions fall back to Cocos frame with zero
     cssHeight: 780,
     topInsetPx: 0,
     bottomInsetPx: 0,
+    leftInsetPx: 0,
+    rightInsetPx: 0,
     viewportSizeValid: true,
     source: 'cocos',
   })
