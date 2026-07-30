@@ -139,10 +139,25 @@ test('scene blueprint documents the runtime-owned world stage selection page', (
   assert.equal(byPath.get('Canvas/WorldRoot/BattleRoot/HudLayer/BottomNavigation/WorldStageEntryButton').components.includes('Button'), true)
 
   for (let stageId = 1; stageId <= 10; stageId += 1) {
-    const item = byPath.get(`Canvas/WorldRoot/WorldStageSelectRoot/WorldStageScrollView/WorldStageViewport/WorldStageContent/WorldStageGrid/WorldStageItem${stageId}`)
+    const itemPath = `Canvas/WorldRoot/WorldStageSelectRoot/WorldStageScrollView/WorldStageViewport/WorldStageContent/WorldStageGrid/WorldStageItem${stageId}`
+    const item = byPath.get(itemPath)
+    const badgeRoot = byPath.get(`${itemPath}/WorldStageItem${stageId}BadgeRoot`)
+    const badgeLabel = byPath.get(`${itemPath}/WorldStageItem${stageId}BadgeRoot/WorldStageItem${stageId}BadgeLabel`)
     assert.equal(item.components.includes('Button'), true)
     assert.equal(item.size, 'computed from physical viewport scale')
     assert.ok(item.cornerRadius <= 8)
+    assert.equal(item.children.includes(`WorldStageItem${stageId}BadgeRoot`), true)
+    assert.deepEqual(badgeRoot.components, ['UITransform', 'Graphics'])
+    assert.deepEqual(badgeRoot.children, [`WorldStageItem${stageId}BadgeLabel`])
+    assert.deepEqual(badgeLabel.components, ['UITransform', 'Label'])
+  }
+
+  const renderableComponents = new Set(['Graphics', 'Label', 'Mask', 'Sprite'])
+  for (const node of blueprint.nodes) {
+    assert.ok(
+      node.components.filter((component) => renderableComponents.has(component)).length <= 1,
+      `${node.path} must not contain more than one renderable component`,
+    )
   }
 
   const serializedNames = new Set(

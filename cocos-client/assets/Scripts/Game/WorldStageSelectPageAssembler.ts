@@ -48,9 +48,11 @@ interface ItemParts {
   readonly root: Node
   readonly button: Button
   readonly title: Label
+  readonly badgeRoot: Node
   readonly badge: Label
   readonly lock: Label
   readonly click: () => void
+  selectable: boolean
 }
 
 function createNode(name: string, parent: Node, width = 0, height = 0): Node {
@@ -125,7 +127,7 @@ class RuntimeWorldStageSelectPage implements WorldStageSelectPage {
     scrollView.inertia = true
     this.viewport = createNode('WorldStageViewport', this.scrollNode)
     const mask = this.viewport.addComponent(Mask)
-    mask.type = Mask.Type.RECT
+    mask.type = Mask.Type.GRAPHICS_RECT
     this.content = createNode('WorldStageContent', this.viewport)
     this.grid = createNode('WorldStageGrid', this.content)
     scrollView.content = this.content
@@ -137,17 +139,15 @@ class RuntimeWorldStageSelectPage implements WorldStageSelectPage {
       button.interactable = false
       const title = createLabel(`WorldStageItem${stageId}Label`, root)
       title.horizontalAlign = HorizontalTextAlignment.LEFT
-      const badge = createLabel(`WorldStageItem${stageId}Badge`, root)
+      const badgeRoot = createNode(`WorldStageItem${stageId}BadgeRoot`, root)
+      badgeRoot.addComponent(Graphics)
+      const badge = createLabel(`WorldStageItem${stageId}BadgeLabel`, badgeRoot)
       const lock = createLabel(`WorldStageItem${stageId}Lock`, root)
       const click = () => {
-        if (button.interactable !== true) {
-          this.status.string = '此关尚未解锁'
-          return
-        }
         this.controller.select(stageId)
       }
       root.on(Button.EventType.CLICK, click, this)
-      return { root, button, title, badge, lock, click }
+      return { root, button, title, badgeRoot, badge, lock, click, selectable: false }
     })
     this.status = createLabel('WorldStageStatusLabel', this.root)
     this.status.color = new Color(213, 164, 91, 255)
@@ -170,6 +170,10 @@ class RuntimeWorldStageSelectPage implements WorldStageSelectPage {
       this.items.map((item) => item.badge),
       this.items.map((item) => item.lock),
     )
+    this.items.forEach((item, index) => {
+      item.selectable = item.button.interactable === true
+      item.button.interactable = stages[index] !== undefined
+    })
     this.styleItems()
   }
 
@@ -240,8 +244,10 @@ class RuntimeWorldStageSelectPage implements WorldStageSelectPage {
       const badgeCenterX = itemLayout.width / 2 - px(10) - page.badgeWidth / 2
       this.configureLabel(item.title, page.itemTitleWidth, px(42), px(18))
       item.title.node.setPosition(titleCenterX, 0, 0)
+      item.badgeRoot.getComponent(UITransform)?.setContentSize(page.badgeWidth, px(24))
+      item.badgeRoot.setPosition(badgeCenterX, px(16), 0)
       this.configureLabel(item.badge, page.badgeWidth, px(24), px(13))
-      item.badge.node.setPosition(badgeCenterX, px(16), 0)
+      item.badge.node.setPosition(0, 0, 0)
       this.configureLabel(item.lock, page.badgeWidth, px(22), px(12))
       item.lock.node.setPosition(badgeCenterX, -px(17), 0)
       item.lock.color = new Color(131, 148, 141, 255)
@@ -270,7 +276,7 @@ class RuntimeWorldStageSelectPage implements WorldStageSelectPage {
     const page = this.layout
     this.items.forEach((item, index) => {
       const stage = this.stages[index]
-      const interactable = item.button.interactable === true
+      const interactable = item.selectable
       const encounter = stage?.encounter ?? 'normal'
       const fill = interactable ? new Color(20, 43, 44, 255) : new Color(13, 29, 30, 255)
       const border = encounter === 'region-boss'
@@ -284,10 +290,10 @@ class RuntimeWorldStageSelectPage implements WorldStageSelectPage {
       item.badge.color = encounter === 'region-boss'
         ? new Color(238, 202, 114, interactable ? 255 : 150)
         : new Color(150, 203, 188, interactable ? 255 : 150)
-      const badgeTransform = item.badge.node.getComponent(UITransform)
-      if (encounter === 'normal') item.badge.node.getComponent(Graphics)?.clear()
+      const badgeTransform = item.badgeRoot.getComponent(UITransform)
+      if (encounter === 'normal') item.badgeRoot.getComponent(Graphics)?.clear()
       else drawPanel(
-        item.badge.node,
+        item.badgeRoot,
         badgeTransform?.width ?? page.badgeWidth,
         badgeTransform?.height ?? 0,
         new Color(15, 34, 34, 210),

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import ts from 'typescript'
 
@@ -8,11 +8,18 @@ const moduleUrl = (source) => `data:text/javascript;base64,${Buffer.from(source)
 
 async function loadAssemblerHarness() {
   const ccUrl = moduleUrl(`
+    export class Renderable2D {}
     export class Node {
       constructor(name = '') { this.name = name; this.active = true; this.layer = 0; this.listeners = new Map(); this.children = []; this.components = []; this._parent = null; this.position = { x: 0, y: 0, z: 0 } }
       set parent(value) { if (this._parent === value) return; if (this._parent) this._parent.children = this._parent.children.filter((child) => child !== this); this._parent = value; if (value && !value.children.includes(this)) value.children.push(this) }
       get parent() { return this._parent }
-      addComponent(Type) { const component = new Type(); component.node = this; this.components.push(component); return component }
+      addComponent(Type) {
+        const component = new Type()
+        if (component instanceof Renderable2D && this.components.some((entry) => entry instanceof Renderable2D)) throw new Error("Can't add renderable component")
+        component.node = this
+        this.components.push(component)
+        return component
+      }
       getComponent(Type) { return this.components.find((component) => component instanceof Type) ?? null }
       getChildByName(name) { return this.children.find((child) => child.name === name) ?? null }
       setPosition(x, y, z = 0) { this.position = { x, y, z } }
@@ -22,12 +29,19 @@ async function loadAssemblerHarness() {
       listenerCount(eventName) { return (this.listeners.get(eventName) ?? []).length }
     }
     export class Component { constructor() { this.node = null } }
-    export class Button { static EventType = { CLICK: 'click' }; constructor() { this.interactable = true } }
-    export class Label { static Overflow = { SHRINK: 2 }; constructor() { this.string = ''; this.fontSize = 0; this.lineHeight = 0; this.color = null } }
+    export class Button {
+      static EventType = { CLICK: 'click' }
+      constructor() { this.interactable = true; this.node = null }
+      click() { if (!this.interactable) return false; this.node.emit(Button.EventType.CLICK); return true }
+    }
+    export class Label extends Renderable2D { static Overflow = { SHRINK: 2 }; constructor() { super(); this.string = ''; this.fontSize = 0; this.lineHeight = 0; this.color = null } }
     export class Color { constructor(r, g, b, a) { Object.assign(this, { r, g, b, a }) } }
-    export class Graphics { clear() {} roundRect() {} fill() {} stroke() {} rect() {} circle() {} }
+    export class Graphics extends Renderable2D { clear() {} roundRect() {} fill() {} stroke() {} rect() {} circle() {} }
     export class UITransform { constructor() { this.width = 0; this.height = 0; this.anchorX = 0.5; this.anchorY = 0.5 } setContentSize(width, height) { this.width = width; this.height = height } setAnchorPoint(x, y) { this.anchorX = x; this.anchorY = y } }
-    export class Mask { static Type = { RECT: 0 }; constructor() { this.type = Mask.Type.RECT } }
+    export class Mask extends Renderable2D {
+      static Type = { GRAPHICS_RECT: 0, GRAPHICS_ELLIPSE: 1, GRAPHICS_STENCIL: 2, SPRITE_STENCIL: 3 }
+      constructor() { super(); this.type = Mask.Type.GRAPHICS_RECT }
+    }
     export class ScrollView { constructor() { this.content = null; this.horizontal = true; this.vertical = true; this.elastic = true; this.inertia = true } }
     export const HorizontalTextAlignment = { LEFT: 0, CENTER: 1 }
     export const Layers = { Enum: { UI_2D: 1 } }
@@ -39,12 +53,13 @@ async function loadAssemblerHarness() {
       bind(stages, highest, buttons, labels, badges, locks) {
         this.buttons = buttons
         buttons.forEach((button, index) => { button.interactable = index <= highest })
+        this.selectable = buttons.map((button) => button.interactable)
         labels.forEach((label, index) => { label.string = stages[index] ? '第' + stages[index].id + '关 ' + stages[index].name : '' })
         badges.forEach((badge, index) => { badge.string = stages[index]?.encounter === 'elite' ? '精英' : stages[index]?.encounter === 'region-boss' ? '区域Boss' : '' })
         locks.forEach((lock, index) => { lock.string = buttons[index]?.interactable ? '' : '锁定' })
       }
       select(stageId) {
-        if (!this.buttons?.[stageId - 1]?.interactable) { this.node.emit('world-stage-selection-rejected', { stageId, reason: 'locked-stage' }); return false }
+        if (!this.selectable?.[stageId - 1]) { this.node.emit('world-stage-selection-rejected', { stageId, reason: 'locked-stage' }); return false }
         this.node.emit('world-stage-selected', { stageId }); return true
       }
     }
@@ -58,8 +73,41 @@ async function loadAssemblerHarness() {
   return { ...await import(moduleUrl(javascript)), ...await import(ccUrl) }
 }
 
+function creatorSemanticDiagnostics() {
+  const assemblerPath = resolve('assets/Scripts/Game/WorldStageSelectPageAssembler.ts')
+  const creatorCcPath = 'D:/CocosCreator/3.8.8/resources/resources/3d/engine/bin/.declarations/cc.d.ts'
+  assert.equal(existsSync(creatorCcPath), true, 'Creator 3.8.8 cc.d.ts must exist for the semantic gate')
+  const options = {
+    allowImportingTsExtensions: true,
+    experimentalDecorators: true,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    noEmit: true,
+    skipLibCheck: true,
+    strict: false,
+    strictNullChecks: false,
+    target: ts.ScriptTarget.ES2022,
+  }
+  const host = ts.createCompilerHost(options)
+  host.resolveModuleNames = (moduleNames, containingFile) => moduleNames.map((moduleName) => {
+    if (moduleName === 'cc') return { resolvedFileName: creatorCcPath, extension: ts.Extension.Dts }
+    return ts.resolveModuleName(moduleName, containingFile, options, host).resolvedModule
+  })
+  const program = ts.createProgram([assemblerPath], options, host)
+  return ts.getPreEmitDiagnostics(program).map((diagnostic) => {
+    const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')
+    if (!diagnostic.file || diagnostic.start === undefined) return message
+    const position = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start)
+    return `${diagnostic.file.fileName}:${position.line + 1}:${position.character + 1} ${message}`
+  })
+}
+
+test('world stage assembler passes Creator 3.8.8 semantic compilation', () => {
+  assert.deepEqual(creatorSemanticDiagnostics(), [])
+})
+
 test('real world stage assembler builds scroll hierarchy and routes selection safely', async () => {
-  const { Button, Label, Layers, Mask, Node, ScrollView, UITransform, buildWorldStageSelectPage } = await loadAssemblerHarness()
+  const { Button, Label, Layers, Mask, Node, Renderable2D, ScrollView, UITransform, buildWorldStageSelectPage } = await loadAssemblerHarness()
   const parent = new Node('WorldRoot')
   const battle = new Node('BattleRoot')
   battle.parent = parent
@@ -102,6 +150,10 @@ test('real world stage assembler builds scroll hierarchy and routes selection sa
     true,
     'root and every recursively assembled child must be visible to the UI camera',
   )
+  assert.equal(
+    assembledNodes.every((node) => node.components.filter((component) => component instanceof Renderable2D).length <= 1),
+    true,
+  )
   assert.ok(scrollNode.getComponent(ScrollView))
   assert.ok(viewport.getComponent(Mask))
   assert.equal(scrollNode.getComponent(ScrollView).content, content)
@@ -109,12 +161,26 @@ test('real world stage assembler builds scroll hierarchy and routes selection sa
   assert.equal(scrollNode.getComponent(ScrollView).vertical, true)
   assert.equal(items.every(Boolean), true)
   assert.equal(items[4].getChildByName('WorldStageItem5Lock').getComponent(Label).string, '锁定')
+  assert.equal(items[4].getComponent(Button).interactable, true, 'locked item must accept a tap for rejection feedback')
+  const eliteBadgeRoot = items[3].getChildByName('WorldStageItem4BadgeRoot')
+  const eliteBadgeLabel = eliteBadgeRoot?.getChildByName('WorldStageItem4BadgeLabel')
+  assert.ok(eliteBadgeRoot)
+  assert.ok(eliteBadgeLabel?.getComponent(Label))
+  assert.equal(eliteBadgeRoot.getComponent(Label), null)
   assert.equal(close.listenerCount(Button.EventType.CLICK), 1)
   assert.equal(root.listenerCount('world-stage-selected'), 1)
   assert.equal(items.every((item) => item.listenerCount(Button.EventType.CLICK) === 1), true)
 
+  const disabledProbe = new Node('DisabledButtonProbe')
+  const disabledButton = disabledProbe.addComponent(Button)
+  let disabledClicks = 0
+  disabledProbe.on(Button.EventType.CLICK, () => { disabledClicks += 1 })
+  disabledButton.interactable = false
+  assert.equal(disabledButton.click(), false)
+  assert.equal(disabledClicks, 0)
+
   page.open()
-  items[3].emit(Button.EventType.CLICK)
+  assert.equal(items[3].getComponent(Button).click(), true)
   assert.deepEqual(selected, [4])
   assert.deepEqual(visualStages, [4])
   assert.equal(root.active, false)
@@ -122,13 +188,13 @@ test('real world stage assembler builds scroll hierarchy and routes selection sa
 
   page.open()
   nextResult = { ok: false, stageNumber: 3 }
-  items[2].emit(Button.EventType.CLICK)
+  assert.equal(items[2].getComponent(Button).click(), true)
   assert.deepEqual(selected, [4, 3])
   assert.deepEqual(visualStages, [4])
   assert.equal(root.active, true)
   assert.notEqual(status.string, '')
 
-  items[4].emit(Button.EventType.CLICK)
+  assert.equal(items[4].getComponent(Button).click(), true)
   assert.deepEqual(selected, [4, 3])
   assert.match(status.string, /未解锁/)
 
@@ -137,7 +203,7 @@ test('real world stage assembler builds scroll hierarchy and routes selection sa
   assert.ok(Math.abs(root.getComponent(UITransform).width * scale - 844) < 0.001)
   assert.ok(content.getComponent(UITransform).height > viewport.getComponent(UITransform).height)
 
-  close.emit(Button.EventType.CLICK)
+  assert.equal(close.getComponent(Button).click(), true)
   assert.equal(root.active, false)
   assert.equal(battle.active, true)
   page.destroy()
