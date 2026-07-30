@@ -62,9 +62,18 @@ test('stage profile input normalization preserves existing fallback behavior', a
   const { stageProfileFromDesign } = await loadCultivationRuntime()
 
   assert.equal(stageProfileFromDesign(sourceDesign, 2.9).id, 2)
-  for (const stageNumber of [Number.NaN, Number.POSITIVE_INFINITY, 0, -3]) {
+  for (const stageNumber of [Number.NaN, 0, -3, 0.25, 0.9]) {
     assert.equal(stageProfileFromDesign(sourceDesign, stageNumber).id, 1)
   }
+})
+
+test('stage profile rejects infinite stage numbers explicitly', async () => {
+  const { stageProfileFromDesign } = await loadCultivationRuntime()
+
+  assert.throws(
+    () => stageProfileFromDesign(sourceDesign, Number.POSITIVE_INFINITY),
+    /Unknown world stage: Infinity/,
+  )
 })
 
 test('stage profile copies enemies without exposing source design objects', async () => {

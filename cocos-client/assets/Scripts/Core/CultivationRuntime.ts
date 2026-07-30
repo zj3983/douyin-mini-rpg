@@ -16,7 +16,7 @@ export interface CultivationDesignData {
 }
 
 export function stageProfileFromDesign(design: CultivationDesignData, stageNumber: number): StageProfile {
-  const safeStage = Number.isFinite(stageNumber) && stageNumber > 0 ? Math.floor(stageNumber) : 1
+  const safeStage = Math.max(1, Math.floor(stageNumber || 1))
   const stage = design.worldStages.find((item) => item.id === safeStage)
   if (!stage) {
     throw new Error(`Unknown world stage: ${safeStage}`)
