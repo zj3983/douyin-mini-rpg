@@ -19,6 +19,7 @@ function validStages() {
     const id = index + 1
     return {
       id,
+      name: `Stage ${id}`,
       encounter: id === 10 ? 'region-boss' : [4, 7].includes(id) ? 'elite' : 'normal',
     }
   })
@@ -205,10 +206,14 @@ test('controller bind and select execute against Core with exact event payloads'
   controller.node = { emit: (eventName, payload) => emitted.push({ eventName, payload }) }
   const buttons = Array.from({ length: 10 }, () => new Button())
   const labels = Array.from({ length: 10 }, () => new Label())
+  const badges = Array.from({ length: 10 }, () => new Label())
+  const locks = Array.from({ length: 10 }, () => new Label())
 
-  controller.bind(validStages(), 3, buttons, labels)
+  controller.bind(validStages(), 3, buttons, labels, badges, locks)
   assert.deepEqual(buttons.map((button) => button.interactable), [true, true, true, true, false, false, false, false, false, false])
-  assert.equal(labels.every((label, index) => label.string.includes(`第${index + 1}关`)), true)
+  assert.equal(labels.every((label, index) => label.string === `第${index + 1}关  Stage ${index + 1}`), true)
+  assert.deepEqual(badges.map((label) => label.string), ['', '', '', '精英', '', '', '精英', '', '', '区域Boss'])
+  assert.deepEqual(locks.map((label) => label.string), ['', '', '', '', '锁定', '锁定', '锁定', '锁定', '锁定', '锁定'])
   assert.equal(controller.select(4), true)
   assert.equal(controller.select(5), false)
   assert.equal(controller.select(11), false)

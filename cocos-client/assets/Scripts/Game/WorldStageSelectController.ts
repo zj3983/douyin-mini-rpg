@@ -19,15 +19,21 @@ interface WorldStageSelectionContext {
   readonly progress: number
 }
 
+interface DisplayWorldStage extends WorldRegionStage {
+  readonly name?: string
+}
+
 @ccclass('WorldStageSelectController')
 export class WorldStageSelectController extends Component {
   private selectionContext: WorldStageSelectionContext | null = null
 
   bind(
-    stages: readonly WorldRegionStage[],
+    stages: readonly DisplayWorldStage[],
     highestClearedStage: number,
     buttons: readonly (Button | null | undefined)[],
     labels: readonly (Label | null | undefined)[],
+    badges: readonly (Label | null | undefined)[] = [],
+    locks: readonly (Label | null | undefined)[] = [],
   ) {
     let region: WorldRegion | null = null
     try {
@@ -39,6 +45,19 @@ export class WorldStageSelectController extends Component {
     this.selectionContext = region ? { region, progress: highestClearedStage } : null
     const viewModel = region ? createWorldStageSelectionViewModel(region, highestClearedStage) : []
     renderWorldStageSelectionViewModel(viewModel, buttons, labels)
+    const bindingCount = Math.max(stages.length, labels.length, badges.length, locks.length)
+    for (let index = 0; index < bindingCount; index += 1) {
+      const stage = region ? stages[index] : undefined
+      const item = viewModel[index]
+      const label = labels[index]
+      const badge = badges[index]
+      const lock = locks[index]
+      if (label) label.string = stage && item ? `第${stage.id}关  ${stage.name?.trim() || `未命名关卡`}` : ''
+      if (badge) badge.string = item?.encounter === 'elite'
+        ? '精英'
+        : item?.encounter === 'region-boss' ? '区域Boss' : ''
+      if (lock) lock.string = item && !item.interactable ? '锁定' : ''
+    }
   }
 
   select(stageId: number): boolean {

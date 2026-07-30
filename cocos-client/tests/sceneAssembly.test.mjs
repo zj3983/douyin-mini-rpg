@@ -116,6 +116,36 @@ test('scene blueprint documents runtime-owned dual-mode dungeon assembly', () =>
   })
 })
 
+test('scene blueprint documents the runtime-owned world stage selection page', () => {
+  const blueprint = JSON.parse(readFileSync(resolve('assets/Data/scene-blueprint.json'), 'utf8'))
+  const byPath = new Map(blueprint.nodes.map((node) => [node.path, node]))
+  const root = byPath.get('Canvas/WorldRoot/WorldStageSelectRoot')
+  const header = byPath.get('Canvas/WorldRoot/WorldStageSelectRoot/WorldStageHeader')
+  const grid = byPath.get('Canvas/WorldRoot/WorldStageSelectRoot/WorldStageGrid')
+
+  assert.equal(root.active, false)
+  assert.equal(root.runtimeGenerated, true)
+  assert.deepEqual(root.children, ['WorldStageHeader', 'WorldStageGrid', 'WorldStageStatusLabel'])
+  assert.equal(header.children.includes('WorldStageCloseButton'), true)
+  assert.deepEqual(grid.children, Array.from({ length: 10 }, (_, index) => `WorldStageItem${index + 1}`))
+  assert.equal(byPath.get('Canvas/WorldRoot/BattleRoot/HudLayer/BottomNavigation/WorldStageEntryButton').components.includes('Button'), true)
+
+  for (let stageId = 1; stageId <= 10; stageId += 1) {
+    const item = byPath.get(`Canvas/WorldRoot/WorldStageSelectRoot/WorldStageGrid/WorldStageItem${stageId}`)
+    assert.equal(item.components.includes('Button'), true)
+    assert.equal(item.size.height, 132)
+    assert.ok(item.cornerRadius <= 8)
+  }
+
+  const serializedNames = new Set(
+    JSON.parse(readFileSync(resolve('assets/Scenes/MainBattle.scene'), 'utf8'))
+      .filter((entry) => entry?.__type__ === 'cc.Node')
+      .map((entry) => entry._name),
+  )
+  assert.equal(serializedNames.has('WorldStageSelectRoot'), false)
+  assert.match(blueprint.scene.notes, /WorldStageSelectRoot.*runtime-generated/)
+})
+
 test('resources Data copies deep-equal their authority JSON files', () => {
   for (const file of ['cultivation-design.json', 'animation-atlas.json']) {
     const authority = JSON.parse(readFileSync(resolve('assets/Data', file), 'utf8'))
