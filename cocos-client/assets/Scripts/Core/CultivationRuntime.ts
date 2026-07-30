@@ -16,9 +16,14 @@ export interface CultivationDesignData {
 }
 
 export function stageProfileFromDesign(design: CultivationDesignData, stageNumber: number): StageProfile {
-  const safeStage = Math.max(1, Math.floor(stageNumber || 1))
-  const stage = design.worldStages[(safeStage - 1) % design.worldStages.length]
-  const boss = stage.enemies.find((enemy) => enemy.role === 'boss')
+  const safeStage = Number.isFinite(stageNumber) && stageNumber > 0 ? Math.floor(stageNumber) : 1
+  const stage = design.worldStages.find((item) => item.id === safeStage)
+  if (!stage) {
+    throw new Error(`Unknown world stage: ${safeStage}`)
+  }
+
+  const enemies = stage.enemies.map((enemy) => ({ ...enemy }))
+  const boss = enemies.find((enemy) => enemy.role === 'boss')
 
   if (!boss) {
     throw new Error(`Stage ${stage.name} is missing a boss enemy.`)
@@ -26,7 +31,7 @@ export function stageProfileFromDesign(design: CultivationDesignData, stageNumbe
 
   return {
     ...stage,
-    id: safeStage,
+    enemies,
     boss: boss as EnemyProfile,
   }
 }

@@ -227,6 +227,7 @@
       "name": "青苔丘陵",
       "theme": "mist-bamboo",
       "background": "green-hill-bamboo-rain",
+      "encounter": "normal",
       "enemies": [
         {
           "id": "moss-wolf",
@@ -253,6 +254,7 @@
       "name": "雾灯林道",
       "theme": "mist-bamboo",
       "background": "mist-lantern-forest",
+      "encounter": "normal",
       "enemies": [
         {
           "id": "fog-spider",
@@ -279,6 +281,7 @@
       "name": "赤焰裂谷",
       "theme": "flame-cave",
       "background": "red-flame-ravine",
+      "encounter": "normal",
       "enemies": [
         {
           "id": "lava-lizard",
@@ -305,6 +308,7 @@
       "name": "星陨古道",
       "theme": "starlight-ruin",
       "background": "fallen-star-ancient-road",
+      "encounter": "elite",
       "enemies": [
         {
           "id": "star-armored-beast",
@@ -331,6 +335,7 @@
       "name": "云海天门",
       "theme": "cloud-gate",
       "background": "cloud-sea-heaven-gate",
+      "encounter": "normal",
       "enemies": [
         {
           "id": "star-armored-beast",
@@ -357,6 +362,7 @@
       "name": "幽灯冥林",
       "theme": "soul-valley",
       "background": "nether-lantern-forest",
+      "encounter": "normal",
       "enemies": [
         {
           "id": "fog-spider",
@@ -383,6 +389,7 @@
       "name": "赤炎深渊",
       "theme": "flame-cave",
       "background": "deep-flame-ravine",
+      "encounter": "elite",
       "enemies": [
         {
           "id": "lava-lizard",
@@ -409,6 +416,7 @@
       "name": "星陨上道",
       "theme": "starlight-ruin",
       "background": "upper-fallen-star-road",
+      "encounter": "normal",
       "enemies": [
         {
           "id": "star-armored-beast",
@@ -427,6 +435,60 @@
           "name": "星陨道将",
           "role": "boss",
           "theme": "starlight-ruin"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "name": "玄泉石林",
+      "theme": "mist-bamboo",
+      "background": "mystic-spring-stone-forest",
+      "encounter": "normal",
+      "enemies": [
+        {
+          "id": "fog-spider",
+          "name": "玄泉石蛛",
+          "role": "ground",
+          "theme": "mist-bamboo"
+        },
+        {
+          "id": "lantern-wraith",
+          "name": "泉雾灯灵",
+          "role": "flying",
+          "theme": "mist-bamboo"
+        },
+        {
+          "id": "mist-deer-king",
+          "name": "石林玄鹿王",
+          "role": "boss",
+          "theme": "mist-bamboo"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "name": "雾海天阙",
+      "theme": "cloud-gate",
+      "background": "mist-sea-heaven-palace",
+      "encounter": "region-boss",
+      "enemies": [
+        {
+          "id": "star-armored-beast",
+          "name": "天阙星甲兽",
+          "role": "ground",
+          "theme": "cloud-gate"
+        },
+        {
+          "id": "void-wing-spirit",
+          "name": "雾海虚翼灵",
+          "role": "flying",
+          "theme": "cloud-gate"
+        },
+        {
+          "id": "meteor-guardian",
+          "name": "云门天阙守",
+          "role": "boss",
+          "theme": "cloud-gate"
         }
       ]
     }
