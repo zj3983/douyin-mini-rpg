@@ -55,6 +55,12 @@ test('createWorldRegion rejects encounter kinds outside the world contract', () 
   assert.throws(() => createWorldRegion('mist-frontier', stages), /unknown world encounter/i)
 })
 
+test('createWorldRegion rejects empty and whitespace-only IDs', () => {
+  for (const id of ['', '   ', '\t\r\n']) {
+    assert.throws(() => createWorldRegion(id, validStages()), /world region ID is required/i)
+  }
+})
+
 test('highestSelectableStage unlocks one next stage and caps at stage ten', () => {
   const region = createWorldRegion('mist-frontier', validStages())
 
@@ -72,6 +78,19 @@ test('selectWorldStage allows cleared stages and only the next uncleared stage',
   assert.deepEqual(selectWorldStage(region, 4, 5), { ok: true, stageId: 5 })
   assert.deepEqual(selectWorldStage(region, 4, 6), { ok: false, reason: 'locked-stage' })
   assert.deepEqual(selectWorldStage(region, 10, 11), { ok: false, reason: 'unknown-stage' })
+})
+
+test('selectWorldStage returns immutable success and failure results', () => {
+  const region = createWorldRegion('mist-frontier', validStages())
+  const success = selectWorldStage(region, 4, 5)
+  const failure = selectWorldStage(region, 4, 6)
+
+  assert.equal(Object.isFrozen(success), true)
+  assert.equal(Object.isFrozen(failure), true)
+  assert.throws(() => { success.stageId = 10 }, TypeError)
+  assert.throws(() => { failure.reason = 'unknown-stage' }, TypeError)
+  assert.deepEqual(success, { ok: true, stageId: 5 })
+  assert.deepEqual(failure, { ok: false, reason: 'locked-stage' })
 })
 
 test('invalid numeric inputs cannot bypass stage locking', () => {
