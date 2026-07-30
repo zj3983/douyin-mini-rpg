@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { checkCocosBuildReadiness, requiredDualModeAssets } from '../tools/check-cocos-build-readiness.mjs'
 
 function metaConvention(path) {
+  if (path.endsWith('.png.meta')) return { importer: 'image', ver: '1.0.27' }
   if (path.endsWith('.scene.meta')) return { importer: 'scene', ver: '1.1.50' }
   if (path.endsWith('.json.meta')) return { importer: 'json', ver: '2.0.1' }
   if (path.endsWith('.ts.meta')) return { importer: 'typescript', ver: '4.0.24' }
@@ -19,6 +20,9 @@ function validRequiredContents() {
         ...convention,
         imported: true,
         uuid: `00000000-0000-4000-8000-${String(uuidIndex).padStart(12, '0')}`,
+        ...(path.endsWith('.png.meta')
+          ? { subMetas: { f9941: { importer: 'sprite-frame', name: 'spriteFrame' } } }
+          : {}),
       }))
       uuidIndex += 1
     }
@@ -227,6 +231,40 @@ test('build readiness blocks missing or wrong meta importer and version fields',
   })
   assert.ok(report.blockers.some((blocker) => blocker.includes(`${wrongImporter} must use importer typescript version 4.0.24`)))
   assert.ok(report.blockers.some((blocker) => blocker.includes(`${missingImporter} must use importer directory version 1.2.0`)))
+})
+
+test('build readiness blocks malformed required PNG metadata', () => {
+  const pngPath = 'assets/resources/Assets/World/MysticSpring/far.png.meta'
+  const cases = [
+    [
+      'wrong importer',
+      (meta) => ({ ...meta, importer: 'directory' }),
+      `${pngPath} must use importer image version 1.0.27`,
+    ],
+    [
+      'wrong version',
+      (meta) => ({ ...meta, ver: '1.0.26' }),
+      `${pngPath} must use importer image version 1.0.27`,
+    ],
+    [
+      'missing sprite frame',
+      (meta) => ({ ...meta, subMetas: { texture: { importer: 'texture' } } }),
+      `${pngPath} must contain at least one sprite-frame subMeta`,
+    ],
+  ]
+
+  for (const [name, mutate, expectedBlocker] of cases) {
+    const contents = validRequiredContents()
+    contents.set(pngPath, JSON.stringify(mutate(JSON.parse(contents.get(pngPath)))))
+    const report = checkCocosBuildReadiness({
+      projectRoot: process.cwd(),
+      creatorCommand: 'D:/CocosCreator/3.8.8/CocosCreator.exe',
+      files: new Set([...requiredDualModeAssets, 'settings/v2/packages/builder.json', 'build/web-mobile/index.html']),
+      readFile: (path) => contents.get(path),
+    })
+
+    assert.ok(report.blockers.some((blocker) => blocker.includes(expectedBlocker)), name)
+  }
 })
 
 test('build readiness blocks parseable but structurally invalid scene, blueprint, and dungeon profile', () => {

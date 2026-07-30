@@ -103,7 +103,7 @@ const REQUIRED_STRUCTURED_ASSETS = [
 ]
 
 function metaConvention(path) {
-  if (path.endsWith('.png.meta')) return null
+  if (path.endsWith('.png.meta')) return { importer: 'image', ver: '1.0.27' }
   if (path.endsWith('.scene.meta')) return { importer: 'scene', ver: '1.1.50' }
   if (path.endsWith('.json.meta')) return { importer: 'json', ver: '2.0.1' }
   if (path.endsWith('.ts.meta')) return { importer: 'typescript', ver: '4.0.24' }
@@ -167,8 +167,16 @@ export function checkCocosBuildReadiness(options = {}) {
     }
     if (requiredMetaPaths.has(asset)) {
       const expected = metaConvention(asset)
-      if (expected && (parsed.importer !== expected.importer || parsed.ver !== expected.ver)) {
+      if (parsed.importer !== expected.importer || parsed.ver !== expected.ver) {
         blockers.push(`${asset} must use importer ${expected.importer} version ${expected.ver}.`)
+      }
+      if (asset.endsWith('.png.meta')) {
+        const subMetas = parsed.subMetas && typeof parsed.subMetas === 'object'
+          ? Object.values(parsed.subMetas)
+          : []
+        if (!subMetas.some((subMeta) => subMeta?.importer === 'sprite-frame')) {
+          blockers.push(`${asset} must contain at least one sprite-frame subMeta.`)
+        }
       }
     }
   }

@@ -15,6 +15,7 @@ import {
   selectWorldStage,
 } from '../assets/Scripts/Core/World/WorldRegion.ts'
 import { applyWorldBossClear } from '../assets/Scripts/Core/World/WorldRewards.ts'
+import { worldRewardId } from '../assets/Scripts/Core/World/WorldRewardId.ts'
 
 const moduleUrl = (source) => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
 
@@ -374,13 +375,22 @@ test('complete region mobile smoke preserves authored parallax, exact unlocks, a
     }
   }
 
-  const firstClear = applyWorldBossClear(createDefaultSave(), { stage: 4, rewardId: 'world-4-run-1' })
-  const revisit = applyWorldBossClear(firstClear.save, { stage: 2, rewardId: 'world-4-run-1' })
+  const firstRewardId = worldRewardId(4, 'mobile-smoke-first', 1)
+  const revisitRewardId = worldRewardId(2, 'mobile-smoke-revisit', 2)
+  const firstClear = applyWorldBossClear(createDefaultSave(), { stage: 4, rewardId: firstRewardId })
+  firstClear.save.world.claimedFirstClears.push(4)
+  const revisit = applyWorldBossClear(firstClear.save, { stage: 2, rewardId: revisitRewardId })
+
+  assert.deepEqual(firstClear.granted, { dungeonPasses: 1, spiritStones: 80 })
   assert.equal(revisit.save.world.highestClearedStage, 4)
-  assert.deepEqual(revisit.granted, { dungeonPasses: 0, spiritStones: 0 })
-  assert.equal(revisit.save.rewardLedger.filter((rewardId) => rewardId === 'world-4-run-1').length, 1)
-  assert.equal(revisit.save.inventory.dungeonPasses, firstClear.save.inventory.dungeonPasses)
-  assert.equal(revisit.save.spiritStones, firstClear.save.spiritStones)
+  assert.deepEqual(revisit.save.world.claimedFirstClears, [4])
+  assert.equal(revisit.save.world.claimedFirstClears.filter((stageId) => stageId === 4).length, 1)
+  assert.equal(revisit.save.rewardLedger.filter((rewardId) => rewardId === firstRewardId).length, 1)
+
+  assert.deepEqual(revisit.granted, { dungeonPasses: 1, spiritStones: 80 })
+  assert.deepEqual(revisit.save.rewardLedger, [firstRewardId, revisitRewardId])
+  assert.equal(revisit.save.inventory.dungeonPasses, firstClear.save.inventory.dungeonPasses + 1)
+  assert.equal(revisit.save.spiritStones, firstClear.save.spiritStones + 80)
 })
 
 test('world stage assembler targets the same UI layer rendered by the bootstrap camera', () => {
