@@ -30,6 +30,7 @@ export interface WorldStageSelectDisplayEntry {
 export interface WorldStageSelectPageOptions {
   readonly parent: Node
   readonly battleRoot: Node
+  readonly entryNode: Node
   readonly metrics: WorldStageSelectLayoutInput
   readonly getHighestClearedWorldStage: () => number
   readonly advanceToStage: (stageId: number) => { readonly ok?: boolean } | null | undefined
@@ -154,6 +155,7 @@ class RuntimeWorldStageSelectPage implements WorldStageSelectPage {
 
     this.root.on('world-stage-selected', this.onSelected, this)
     this.root.on('world-stage-selection-rejected', this.onRejected, this)
+    options.entryNode.on(Button.EventType.CLICK, this.open, this)
     this.closeNode.on(Button.EventType.CLICK, this.close, this)
     this.relayout(options.metrics)
     this.root.active = false
@@ -261,6 +263,7 @@ class RuntimeWorldStageSelectPage implements WorldStageSelectPage {
     if (this.destroyed) return
     this.root.off('world-stage-selected', this.onSelected, this)
     this.root.off('world-stage-selection-rejected', this.onRejected, this)
+    this.options.entryNode.off(Button.EventType.CLICK, this.open, this)
     this.closeNode.off(Button.EventType.CLICK, this.close, this)
     this.items.forEach((item) => item.root.off(Button.EventType.CLICK, item.click, this))
     this.destroyed = true

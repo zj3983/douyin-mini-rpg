@@ -154,7 +154,6 @@ export class PortraitBattleBootstrap extends Component {
     this.stopRuntimeBinding()
     this.runtimeNode?.off('battle-stage-changed', this.onStageChanged, this)
     this.runtimeNode?.off('world-stage-cleared', this.dualModeController?.handleWorldCleared, this.dualModeController)
-    this.worldStageEntryNode?.off(Button.EventType.CLICK, this.openWorldStageSelect, this)
     this.worldStageSelectPage?.destroy()
     this.dungeonEntryNode?.off(Button.EventType.CLICK, this.enterDungeonFromWorld, this)
     this.dungeonInteractNode?.off(Button.EventType.CLICK, this.interactWithDungeon, this)
@@ -247,14 +246,15 @@ export class PortraitBattleBootstrap extends Component {
     const bossTelegraphPresenter = effectLayer.addComponent(BossTelegraphPresenter)
     bossTelegraphPresenter.telegraphPool = bossEffectPool
     const hudParts = this.createHud(hudLayer, layout)
+    if (!this.worldStageEntryNode) throw new Error('World stage entry button was not assembled.')
     this.worldStageSelectPage = buildWorldStageSelectPage({
       parent: worldRoot,
       battleRoot,
+      entryNode: this.worldStageEntryNode,
       metrics,
       getHighestClearedWorldStage: () => this.dualModeController?.getHighestClearedWorldStage() ?? 0,
       advanceToStage: (stageId) => this.battleRuntimeController?.advanceToStage(stageId),
     })
-    this.worldStageEntryNode?.on(Button.EventType.CLICK, this.openWorldStageSelect, this)
     const battleInput = this.createInput(inputLayer, controller, layout, this.movementCoordinateSpace)
     const runtime = this.loadRuntime(battleRoot, {
       enemySpawner,
@@ -758,10 +758,6 @@ export class PortraitBattleBootstrap extends Component {
     hud.updateSoul(0, 12)
     hud.hideBoss()
     return { hud, stageClearPanel }
-  }
-
-  private openWorldStageSelect = () => {
-    this.worldStageSelectPage?.open()
   }
 
   private createRuntimePool(
