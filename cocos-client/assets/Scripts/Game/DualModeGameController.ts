@@ -104,6 +104,11 @@ export class DualModeGameController extends Component {
     return this.runtime?.getSaveSnapshot() ?? createDefaultSave()
   }
 
+  getHighestClearedWorldStage(): number {
+    const save = this.runtime?.getSaveSnapshot() ?? createDefaultSave()
+    return save.world.highestClearedStage
+  }
+
   private createDungeonPort(): DungeonSessionPort {
     return {
       hasRun: () => this.dungeonRun?.hasRun() ?? false,
