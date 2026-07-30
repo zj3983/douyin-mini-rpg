@@ -96,6 +96,8 @@ export class BattleRuntimeController extends Component {
   @property playerDefeatPanelDelay = 0.35
   @property playerHurtDuration = 0.18
 
+  canAdvanceToStage: ((stageId: number) => boolean) | null = null
+
   private runtime: BattleRuntime | null = null
   private enemyNodes = new Map<number, Node>()
   private enemyByNode = new Map<Node, BattleEnemy>()
@@ -118,14 +120,21 @@ export class BattleRuntimeController extends Component {
 
   initialize() {
     if (this.initialized || !this.designData) return false
+    const stage = this.resolveStageProfile(this.stageNumber)
+    if (!stage) return false
     this.initialized = true
-    this.rebuildRuntime(this.stageNumber)
+    this.rebuildRuntime(stage)
     return true
   }
 
   advanceToStage(stageNumber: number) {
+    const stage = this.resolveStageProfile(stageNumber)
+    if (!stage) return { ok: false, stageNumber: this.stageNumber, reason: 'unknown-stage' as const }
+    if (this.canAdvanceToStage && !this.canAdvanceToStage(stage.id)) {
+      return { ok: false, stageNumber: this.stageNumber, reason: 'locked-stage' as const }
+    }
     this.recycleAllEnemies()
-    this.rebuildRuntime(stageNumber)
+    this.rebuildRuntime(stage)
     return { ok: Boolean(this.runtime), stageNumber: this.stageNumber }
   }
 
@@ -136,7 +145,10 @@ export class BattleRuntimeController extends Component {
   advanceToNextStageFromPanel() {
     const result = this.stageClearPanel?.takeResult()
     if (!result) return { ok: false, stageNumber: this.stageNumber }
-    return this.advanceToStage(result.nextStageId)
+    if (result.action.kind === 'region-complete') {
+      return { ok: false, stageNumber: this.stageNumber, reason: 'region-complete' as const }
+    }
+    return this.advanceToStage(result.action.stageId)
   }
 
   update(deltaTime: number) {
@@ -243,21 +255,28 @@ export class BattleRuntimeController extends Component {
     return this.isBattleFrozen()
   }
 
-  private rebuildRuntime(stageNumber: number) {
-    if (!this.designData) return
+  private resolveStageProfile(stageNumber: number) {
+    if (!this.designData || !Number.isSafeInteger(stageNumber) || stageNumber < 1) return null
+    try {
+      return stageProfileFromDesign(this.designData.json as CultivationDesignData, stageNumber)
+    } catch {
+      return null
+    }
+  }
+
+  private rebuildRuntime(stage: ReturnType<typeof stageProfileFromDesign>) {
     this.unscheduleAllCallbacks()
     this.playerHurtToken = null
     this.bossTelegraphPresenter?.hideAll()
     this.bossSkillEffectPool?.despawnAll()
     this.soulOrbPool?.despawnAll()
-    this.stageNumber = Math.max(1, Math.floor(stageNumber || 1))
+    this.stageNumber = stage.id
     this.attemptState = beginBattleAttempt(this.attemptState, this.stageNumber)
     this.stageGeneration = this.attemptState.generation
     resetEnemyCombatResolverAdapter(this.enemyCombatResolver, this.stageGeneration)
     this.bossTelegraphPresenter?.resetGeneration(this.stageGeneration)
     this.setEnemyControllersPaused(false)
     this.stageSettlement = createStageSettlementState(this.stageGeneration)
-    const stage = stageProfileFromDesign(this.designData.json as CultivationDesignData, this.stageNumber)
     this.runtime = createBattleRuntime(stage, this.heroAttack)
     this.stageFlow = createStageFlow(this.runtime.defeatTarget, this.stageGeneration)
     this.damageGate = createContactDamageGate({

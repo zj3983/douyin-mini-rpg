@@ -43,10 +43,14 @@ export interface StageClearReward {
   dungeonPasses: number
 }
 
+export type StageClearAction =
+  | { readonly kind: 'continue'; readonly stageId: number }
+  | { readonly kind: 'region-complete' }
+
 export interface StageClearResult {
   title: string
   stageId: number
-  nextStageId: number
+  action: StageClearAction
   reward: StageClearReward
 }
 
@@ -340,7 +344,9 @@ export function claimStageClear(
     result: {
       title: `第${stageId}关突破`,
       stageId,
-      nextStageId: stageId + 1,
+      action: stageId === 10
+        ? { kind: 'region-complete' }
+        : { kind: 'continue', stageId: stageId + 1 },
       reward: {
         spiritStones: 80,
         dungeonPasses: 1,

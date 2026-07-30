@@ -128,7 +128,9 @@ export function claimStageClear(runtime) {
     result: {
       title: `第${stageId}关突破`,
       stageId,
-      nextStageId: stageId + 1,
+      action: stageId === 10
+        ? { kind: 'region-complete' }
+        : { kind: 'continue', stageId: stageId + 1 },
       reward: {
         spiritStones: 80,
         dungeonPasses: 1,

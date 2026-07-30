@@ -385,12 +385,27 @@ test('stage clear reward can only be claimed once after boss defeat', () => {
 
   assert.equal(first.ok, true)
   assert.equal(first.result.stageId, 4)
-  assert.equal(first.result.nextStageId, 5)
+  assert.deepEqual(first.result.action, { kind: 'continue', stageId: 5 })
   assert.equal(first.result.reward.spiritStones, 80)
   assert.equal(first.result.reward.dungeonPasses, 1)
   assert.equal('artifactEssence' in first.result.reward, false)
   assert.equal(second.ok, false)
   assert.equal(second.reason, 'already-claimed')
+})
+
+test('stage ten clear is terminal and never advertises an eleventh stage', () => {
+  const runtime = createBattleRuntime({ stageId: 10, heroAttack: 520 })
+  defeatOrdinaryEnemies(runtime)
+  spawnBoss(runtime)
+  applyFlyingSwordHit(runtime, { pierce: 1, damageScale: 1 })
+
+  const claim = claimStageClear(runtime)
+
+  assert.equal(claim.ok, true)
+  assert.equal(claim.result.stageId, 10)
+  assert.deepEqual(claim.result.action, { kind: 'region-complete' })
+  assert.equal('nextStageId' in claim.result, false)
+  assert.doesNotMatch(JSON.stringify(claim.result), /11/)
 })
 
 test('first-stage contact damage is limited but sustained boss pressure can still defeat the player', () => {

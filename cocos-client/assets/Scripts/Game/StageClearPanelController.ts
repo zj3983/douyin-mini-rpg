@@ -22,11 +22,11 @@ export class StageClearPanelController extends Component {
   @property(Button)
   nextStageButton: Button | null = null
 
-  nextStageTarget = 1
+  nextStageTarget: number | null = 1
 
   private result: StageClearResult | null = null
   private mode: ResultPanelMode = 'hidden'
-  onContinue: ((nextStageId: number) => void) | null = null
+  onContinue: ((result: StageClearResult) => boolean) | null = null
   onRetry: (() => void) | null = null
 
   onLoad() {
@@ -47,7 +47,7 @@ export class StageClearPanelController extends Component {
   showResult(result: StageClearResult) {
     this.result = result
     this.mode = 'clear'
-    this.nextStageTarget = result.nextStageId
+    this.nextStageTarget = result.action.kind === 'continue' ? result.action.stageId : null
     const root = this.panelRoot ?? this.node
     root.active = true
 
@@ -58,7 +58,11 @@ export class StageClearPanelController extends Component {
         `副本卷 x${result.reward.dungeonPasses}`,
       ].join('   ')
     }
-    if (this.nextStageLabel) this.nextStageLabel.string = `前往第${result.nextStageId}关`
+    if (this.nextStageLabel) {
+      this.nextStageLabel.string = result.action.kind === 'continue'
+        ? `前往第${result.action.stageId}关`
+        : '区域完成'
+    }
     if (this.nextStageButton) this.nextStageButton.interactable = true
   }
 
@@ -93,6 +97,7 @@ export class StageClearPanelController extends Component {
     }
     if (this.mode !== 'clear' || !this.result) return
     if (this.nextStageButton) this.nextStageButton.interactable = false
-    this.onContinue?.(this.result.nextStageId)
+    const accepted = this.onContinue?.(this.result) ?? false
+    if (!accepted && this.nextStageButton) this.nextStageButton.interactable = true
   }
 }

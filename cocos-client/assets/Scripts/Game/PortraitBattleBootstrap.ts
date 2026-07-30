@@ -35,6 +35,7 @@ import {
 } from '../Combat/BattleLayout.ts'
 import { computeDungeonEntryNavLayout } from './DungeonEntryLayout.ts'
 import type { BattleLayout, BattleResolutionMode } from '../Combat/BattleLayout.ts'
+import { createWorldRegion, selectWorldStage } from '../Core/World/WorldRegion.ts'
 import type { WorldEncounterKind } from '../Core/World/WorldRegion.ts'
 import { BOSS_HAZARD_POOL_CAPACITY } from '../Combat/BossBrain.ts'
 import type { PlayerActionToken } from '../Combat/PlayerMotor.ts'
@@ -577,11 +578,24 @@ export class PortraitBattleBootstrap extends Component {
       runtime.hud = bindings.hud
       runtime.stageClearPanel = bindings.stageClearPanel
       runtime.battleInput = bindings.battleInput
-      bindings.stageClearPanel.onContinue = (nextStageId) => runtime.advanceToStage(nextStageId)
-      bindings.stageClearPanel.onRetry = () => runtime.retryCurrentStage()
-      this.battleRuntimeController = runtime
       const design = asset.json as { worldStages?: readonly WorldStageDesignEntry[] }
       this.worldStageData = Array.isArray(design.worldStages) ? design.worldStages : []
+      const region = createWorldRegion('mist-frontier', this.worldStageData)
+      runtime.canAdvanceToStage = (stageId) => selectWorldStage(
+        region,
+        dualMode.getHighestClearedWorldStage(),
+        stageId,
+      ).ok
+      bindings.stageClearPanel.onContinue = (result) => {
+        if (result.action.kind === 'region-complete') {
+          if (dualMode.getHighestClearedWorldStage() < result.stageId) return false
+          bindings.stageClearPanel.hide()
+          return true
+        }
+        return runtime.advanceToStage(result.action.stageId).ok
+      }
+      bindings.stageClearPanel.onRetry = () => runtime.retryCurrentStage()
+      this.battleRuntimeController = runtime
       this.worldStageSelectPage?.bind(this.worldStageData)
       runtime.initialize()
       state = { status: 'ready', runtime }
