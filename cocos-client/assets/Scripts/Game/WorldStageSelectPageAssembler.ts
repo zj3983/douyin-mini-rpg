@@ -4,6 +4,7 @@ import {
   Graphics,
   HorizontalTextAlignment,
   Label,
+  Layers,
   Mask,
   Node,
   ScrollView,
@@ -17,6 +18,8 @@ import {
   type WorldStageSelectLayoutInput,
 } from './WorldStageSelectLayout.ts'
 import type { WorldEncounterKind } from '../Core/World/WorldRegion.ts'
+
+const UI_LAYER = Layers.Enum.UI_2D
 
 export interface WorldStageSelectDisplayEntry {
   readonly id: number
@@ -52,6 +55,7 @@ interface ItemParts {
 
 function createNode(name: string, parent: Node, width = 0, height = 0): Node {
   const node = new Node(name)
+  node.layer = UI_LAYER
   node.parent = parent
   const transform = node.addComponent(UITransform)
   transform.setContentSize(width, height)

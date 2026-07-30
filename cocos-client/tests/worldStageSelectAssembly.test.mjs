@@ -9,7 +9,7 @@ const moduleUrl = (source) => `data:text/javascript;base64,${Buffer.from(source)
 async function loadAssemblerHarness() {
   const ccUrl = moduleUrl(`
     export class Node {
-      constructor(name = '') { this.name = name; this.active = true; this.listeners = new Map(); this.children = []; this.components = []; this._parent = null; this.position = { x: 0, y: 0, z: 0 } }
+      constructor(name = '') { this.name = name; this.active = true; this.layer = 0; this.listeners = new Map(); this.children = []; this.components = []; this._parent = null; this.position = { x: 0, y: 0, z: 0 } }
       set parent(value) { if (this._parent === value) return; if (this._parent) this._parent.children = this._parent.children.filter((child) => child !== this); this._parent = value; if (value && !value.children.includes(this)) value.children.push(this) }
       get parent() { return this._parent }
       addComponent(Type) { const component = new Type(); component.node = this; this.components.push(component); return component }
@@ -30,6 +30,7 @@ async function loadAssemblerHarness() {
     export class Mask { static Type = { RECT: 0 }; constructor() { this.type = Mask.Type.RECT } }
     export class ScrollView { constructor() { this.content = null; this.horizontal = true; this.vertical = true; this.elastic = true; this.inertia = true } }
     export const HorizontalTextAlignment = { LEFT: 0, CENTER: 1 }
+    export const Layers = { Enum: { UI_2D: 1 } }
     export const VerticalTextAlignment = { CENTER: 0 }
   `)
   const controllerUrl = moduleUrl(`
@@ -58,7 +59,7 @@ async function loadAssemblerHarness() {
 }
 
 test('real world stage assembler builds scroll hierarchy and routes selection safely', async () => {
-  const { Button, Label, Mask, Node, ScrollView, UITransform, buildWorldStageSelectPage } = await loadAssemblerHarness()
+  const { Button, Label, Layers, Mask, Node, ScrollView, UITransform, buildWorldStageSelectPage } = await loadAssemblerHarness()
   const parent = new Node('WorldRoot')
   const battle = new Node('BattleRoot')
   battle.parent = parent
@@ -89,6 +90,18 @@ test('real world stage assembler builds scroll hierarchy and routes selection sa
   const status = root.getChildByName('WorldStageStatusLabel').getComponent(Label)
 
   assert.equal(root.active, false)
+  const assembledNodes = []
+  const visit = (node) => {
+    assembledNodes.push(node)
+    node.children.forEach(visit)
+  }
+  visit(root)
+  assert.ok(assembledNodes.length > 40)
+  assert.equal(
+    assembledNodes.every((node) => node.layer === Layers.Enum.UI_2D),
+    true,
+    'root and every recursively assembled child must be visible to the UI camera',
+  )
   assert.ok(scrollNode.getComponent(ScrollView))
   assert.ok(viewport.getComponent(Mask))
   assert.equal(scrollNode.getComponent(ScrollView).content, content)
@@ -131,4 +144,14 @@ test('real world stage assembler builds scroll hierarchy and routes selection sa
   assert.equal(close.listenerCount(Button.EventType.CLICK), 0)
   assert.equal(root.listenerCount('world-stage-selected'), 0)
   assert.equal(items.every((item) => item.listenerCount(Button.EventType.CLICK) === 0), true)
+})
+
+test('world stage assembler targets the same UI layer rendered by the bootstrap camera', () => {
+  const assembler = readFileSync(resolve('assets/Scripts/Game/WorldStageSelectPageAssembler.ts'), 'utf8')
+  const bootstrap = readFileSync(resolve('assets/Scripts/Game/PortraitBattleBootstrap.ts'), 'utf8')
+
+  assert.match(assembler, /const UI_LAYER = Layers\.Enum\.UI_2D/)
+  assert.match(assembler, /function createNode[\s\S]*node\.layer = UI_LAYER[\s\S]*return node/)
+  assert.match(bootstrap, /const UI_LAYER = Layers\.Enum\.UI_2D/)
+  assert.match(bootstrap, /camera\.visibility = UI_LAYER/)
 })
