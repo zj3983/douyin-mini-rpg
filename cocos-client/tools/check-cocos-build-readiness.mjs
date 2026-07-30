@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { join, relative, resolve, sep } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import { validateDungeonProfile } from '../assets/Scripts/Core/Dungeon/DungeonSession.ts'
 import { validateSceneBlueprint } from './validate-scene-blueprint.mjs'
 
@@ -212,6 +212,18 @@ function discoverAssetMetaPaths(projectRoot, files) {
 }
 
 export function findCreatorCommand(candidates = defaultCreatorCandidates) {
+  return candidates.find((candidate) => existsSync(candidate)) ?? null
+}
+
+export function findCreatorTypeDeclarations(creatorCommand) {
+  if (typeof creatorCommand !== 'string' || creatorCommand.trim() === '') return null
+  const executableDirectory = dirname(resolve(creatorCommand))
+  const relativeDeclarationPath = ['3d', 'engine', 'bin', '.declarations', 'cc.d.ts']
+  const candidates = [
+    join(executableDirectory, 'resources', 'resources', ...relativeDeclarationPath),
+    join(executableDirectory, 'resources', ...relativeDeclarationPath),
+    join(executableDirectory, '..', 'Resources', 'resources', ...relativeDeclarationPath),
+  ]
   return candidates.find((candidate) => existsSync(candidate)) ?? null
 }
 

@@ -1,8 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 import ts from 'typescript'
+import {
+  findCreatorCommand,
+  findCreatorTypeDeclarations,
+} from '../tools/check-cocos-build-readiness.mjs'
 
 const moduleUrl = (source) => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
 
@@ -73,10 +78,8 @@ async function loadAssemblerHarness() {
   return { ...await import(moduleUrl(javascript)), ...await import(ccUrl) }
 }
 
-function creatorSemanticDiagnostics() {
+function creatorSemanticDiagnostics(creatorCcPath) {
   const assemblerPath = resolve('assets/Scripts/Game/WorldStageSelectPageAssembler.ts')
-  const creatorCcPath = 'D:/CocosCreator/3.8.8/resources/resources/3d/engine/bin/.declarations/cc.d.ts'
-  assert.equal(existsSync(creatorCcPath), true, 'Creator 3.8.8 cc.d.ts must exist for the semantic gate')
   const options = {
     allowImportingTsExtensions: true,
     experimentalDecorators: true,
@@ -102,8 +105,30 @@ function creatorSemanticDiagnostics() {
   })
 }
 
-test('world stage assembler passes Creator 3.8.8 semantic compilation', () => {
-  assert.deepEqual(creatorSemanticDiagnostics(), [])
+test('Creator declarations are derived from a discovered non-default installation', () => {
+  const root = mkdtempSync(join(tmpdir(), 'creator-custom-install-'))
+  try {
+    const creatorCommand = join(root, 'custom', 'Creator', 'CocosCreator.exe')
+    const declarationPath = join(root, 'custom', 'Creator', 'resources', 'resources', '3d', 'engine', 'bin', '.declarations', 'cc.d.ts')
+    mkdirSync(dirname(creatorCommand), { recursive: true })
+    mkdirSync(dirname(declarationPath), { recursive: true })
+    writeFileSync(creatorCommand, '')
+    writeFileSync(declarationPath, 'export declare const version: string')
+
+    assert.equal(findCreatorCommand([creatorCommand]), creatorCommand)
+    assert.equal(findCreatorTypeDeclarations(creatorCommand), declarationPath)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+const creatorCommand = process.env.COCOS_CREATOR_PATH ?? findCreatorCommand()
+const creatorCcPath = findCreatorTypeDeclarations(creatorCommand)
+
+test('world stage assembler passes Creator 3.8.8 semantic compilation', {
+  skip: creatorCcPath ? false : 'Cocos Creator declarations are not installed',
+}, () => {
+  assert.deepEqual(creatorSemanticDiagnostics(creatorCcPath), [])
 })
 
 test('real world stage assembler builds scroll hierarchy and routes selection safely', async () => {
