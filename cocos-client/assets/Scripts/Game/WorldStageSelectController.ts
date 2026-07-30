@@ -42,9 +42,12 @@ export class WorldStageSelectController extends Component {
   }
 
   select(stageId: number): boolean {
-    const selection: WorldStageSelection = this.selectionContext
-      ? selectWorldStage(this.selectionContext.region, this.selectionContext.progress, stageId)
-      : { ok: false, reason: 'unknown-stage' }
+    if (!this.selectionContext) return false
+    const selection: WorldStageSelection = selectWorldStage(
+      this.selectionContext.region,
+      this.selectionContext.progress,
+      stageId,
+    )
     const notification = createWorldStageSelectionNotification(selection, stageId)
     this.node.emit(notification.eventName, notification.payload)
     return notification.accepted

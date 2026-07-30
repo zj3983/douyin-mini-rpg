@@ -63,16 +63,16 @@ export function createWorldStageSelectionNotification(
   selection: WorldStageSelection,
   requestedStageId: number,
 ): WorldStageSelectionNotification {
-  if (selection.ok) {
+  if ('reason' in selection) {
     return Object.freeze({
-      eventName: 'world-stage-selected',
-      payload: Object.freeze({ stageId: selection.stageId }),
-      accepted: true,
+      eventName: 'world-stage-selection-rejected',
+      payload: Object.freeze({ stageId: requestedStageId, reason: selection.reason }),
+      accepted: false,
     })
   }
   return Object.freeze({
-    eventName: 'world-stage-selection-rejected',
-    payload: Object.freeze({ stageId: requestedStageId, reason: selection.reason }),
-    accepted: false,
+    eventName: 'world-stage-selected',
+    payload: Object.freeze({ stageId: selection.stageId }),
+    accepted: true,
   })
 }
