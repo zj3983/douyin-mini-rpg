@@ -55,6 +55,22 @@ const worldRegionGameModules = [
   'assets/Scripts/Game/WorldStageSelectPageAssembler.ts',
 ]
 
+const requiredBossTalismanAssets = [
+  'assets/Scripts/Core/BossTelegraphVisualProfile.ts',
+  'assets/Scripts/Core/BossTelegraphVisualProfile.ts.meta',
+  'assets/Scripts/Game/BossTelegraphPresenter.ts',
+  'assets/Scripts/Game/BossTelegraphPresenter.ts.meta',
+  'assets/Scripts/Game/BossHazardVisualController.ts',
+  'assets/Scripts/Game/BossHazardVisualController.ts.meta',
+  'assets/resources/Assets/Skills/BossDomain.meta',
+  'assets/resources/Assets/Skills/BossDomain/talisman_sweep.png',
+  'assets/resources/Assets/Skills/BossDomain/talisman_sweep.png.meta',
+  'assets/resources/Assets/Skills/BossDomain/talisman_spike.png',
+  'assets/resources/Assets/Skills/BossDomain/talisman_spike.png.meta',
+  'assets/resources/Assets/Skills/BossDomain/talisman_roar.png',
+  'assets/resources/Assets/Skills/BossDomain/talisman_roar.png.meta',
+]
+
 function readSource(file) {
   const path = resolve(file)
   return existsSync(path) ? readFileSync(path, 'utf8') : ''
@@ -137,6 +153,19 @@ test('world-region Game modules do not import legacy Combat rules', () => {
   for (const file of worldRegionGameModules) {
     assert.doesNotMatch(readSource(file), /from\s+['"]\.\.\/Combat\//, file)
   }
+})
+
+test('build readiness requires the compiled boss telegraph and talisman resource closure', () => {
+  for (const asset of requiredBossTalismanAssets) {
+    assert.equal(requiredDualModeAssets.includes(asset), true, `${asset} should be build-readiness required`)
+    assert.equal(existsSync(resolve(asset)), true, `${asset} should exist`)
+  }
+
+  const bootstrap = readSource('assets/Scripts/Game/PortraitBattleBootstrap.ts')
+  const presenter = readSource('assets/Scripts/Game/BossTelegraphPresenter.ts')
+  assert.match(bootstrap, /import \{ BossTelegraphPresenter \} from '\.\/BossTelegraphPresenter'/)
+  assert.match(bootstrap, /import \{ BossHazardVisualController \} from '\.\/BossHazardVisualController'/)
+  assert.match(presenter, /from '\.\.\/Core\/BossTelegraphVisualProfile\.ts'/)
 })
 
 test('battle runtime controller exposes boss stage hooks', () => {

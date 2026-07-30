@@ -29,6 +29,8 @@ export const requiredDualModeAssets = [
   'assets/Scripts/Core/Dungeon/DungeonSession.ts.meta',
   'assets/Scripts/Core/Dungeon/DungeonTypes.ts',
   'assets/Scripts/Core/Dungeon/DungeonTypes.ts.meta',
+  'assets/Scripts/Core/BossTelegraphVisualProfile.ts',
+  'assets/Scripts/Core/BossTelegraphVisualProfile.ts.meta',
   'assets/Scripts/Core/GameContent.ts',
   'assets/Scripts/Core/GameContent.ts.meta',
   'assets/Scripts/Core/Loadout.meta',
@@ -52,6 +54,10 @@ export const requiredDualModeAssets = [
   'assets/Scripts/Game/DungeonRunController.ts.meta',
   'assets/Scripts/Game/DualModeGameController.ts',
   'assets/Scripts/Game/DualModeGameController.ts.meta',
+  'assets/Scripts/Game/BossHazardVisualController.ts',
+  'assets/Scripts/Game/BossHazardVisualController.ts.meta',
+  'assets/Scripts/Game/BossTelegraphPresenter.ts',
+  'assets/Scripts/Game/BossTelegraphPresenter.ts.meta',
   'assets/Scripts/Game/WorldStageSelectLayout.ts',
   'assets/Scripts/Game/WorldStageSelectLayout.ts.meta',
   'assets/Scripts/Game/WorldStageSelectController.ts',
@@ -70,6 +76,13 @@ export const requiredDualModeAssets = [
   'assets/resources/Assets/World/MistHeaven/far.png.meta',
   'assets/resources/Assets/World/MistHeaven/mid.png',
   'assets/resources/Assets/World/MistHeaven/mid.png.meta',
+  'assets/resources/Assets/Skills/BossDomain.meta',
+  'assets/resources/Assets/Skills/BossDomain/talisman_sweep.png',
+  'assets/resources/Assets/Skills/BossDomain/talisman_sweep.png.meta',
+  'assets/resources/Assets/Skills/BossDomain/talisman_spike.png',
+  'assets/resources/Assets/Skills/BossDomain/talisman_spike.png.meta',
+  'assets/resources/Assets/Skills/BossDomain/talisman_roar.png',
+  'assets/resources/Assets/Skills/BossDomain/talisman_roar.png.meta',
 ]
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
