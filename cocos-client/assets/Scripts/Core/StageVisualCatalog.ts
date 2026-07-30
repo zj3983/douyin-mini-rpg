@@ -111,6 +111,22 @@ const STAGE_VISUALS: Readonly<Record<number, StageVisual>> = Object.freeze({
     midPath: 'Assets/World/UpperStarRoad/mid/spriteFrame',
     monsterActorIds: Object.freeze(['star-armored-beast', 'void-wing-spirit', 'meteor-guardian']),
   }),
+  9: Object.freeze({
+    stageId: 9,
+    backgroundId: 'mystic-spring-stone-forest',
+    theme: 'mist-bamboo',
+    farPath: 'Assets/World/MysticSpring/far/spriteFrame',
+    midPath: 'Assets/World/MysticSpring/mid/spriteFrame',
+    monsterActorIds: Object.freeze(['moss-wolf', 'green-wing-moth', 'mist-deer-king']),
+  }),
+  10: Object.freeze({
+    stageId: 10,
+    backgroundId: 'mist-sea-heaven-palace',
+    theme: 'cloud-gate',
+    farPath: 'Assets/World/MistHeaven/far/spriteFrame',
+    midPath: 'Assets/World/MistHeaven/mid/spriteFrame',
+    monsterActorIds: Object.freeze(['star-armored-beast', 'void-wing-spirit', 'meteor-guardian']),
+  }),
 })
 
 export function stageVisualFor(stageId: number): StageVisual {

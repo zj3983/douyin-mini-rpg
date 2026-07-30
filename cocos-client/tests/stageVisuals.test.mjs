@@ -11,13 +11,14 @@ import {
   stageResourcePlanFor,
   stageVisualFor,
 } from '../tools/stage-visual-catalog.mjs'
+import { readPngRgba } from '../tools/png-alpha-runtime.mjs'
 import { resourcePathForPng } from '../tools/strip-animation-runtime.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 
-const stageIds = [1, 2, 3, 4, 5, 6, 7, 8]
+const stageIds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
-test('stages 1-8 resolve distinct Cocos background resources', () => {
+test('stages 1-10 resolve distinct Cocos background resources', () => {
   const visuals = stageIds.map(stageVisualFor)
 
   assert.equal(new Set(visuals.map((visual) => visual.farPath)).size, visuals.length)
@@ -32,11 +33,15 @@ test('stages 1-8 resolve distinct Cocos background resources', () => {
       'Assets/World/NetherLantern/far/spriteFrame',
       'Assets/World/DeepFlameRavine/far/spriteFrame',
       'Assets/World/UpperStarRoad/far/spriteFrame',
+      'Assets/World/MysticSpring/far/spriteFrame',
+      'Assets/World/MistHeaven/far/spriteFrame',
     ],
   )
   assert.equal(visuals[0].midPath, 'Assets/World/MistBamboo/mid/spriteFrame')
   assert.equal(visuals.slice(1, 4).every((visual) => visual.midPath === null), true)
   assert.equal(visuals.slice(4).every((visual) => visual.midPath?.endsWith('/mid/spriteFrame')), true)
+  assert.equal(visuals[8].midPath, 'Assets/World/MysticSpring/mid/spriteFrame')
+  assert.equal(visuals[9].midPath, 'Assets/World/MistHeaven/mid/spriteFrame')
 })
 
 test('stage visual catalog exposes background and theme metadata', () => {
@@ -54,10 +59,12 @@ test('stage visual catalog exposes background and theme metadata', () => {
       { backgroundId: 'nether-lantern-forest', theme: 'soul-valley' },
       { backgroundId: 'deep-flame-ravine', theme: 'flame-cave' },
       { backgroundId: 'upper-fallen-star-road', theme: 'starlight-ruin' },
+      { backgroundId: 'mystic-spring-stone-forest', theme: 'mist-bamboo' },
+      { backgroundId: 'mist-sea-heaven-palace', theme: 'cloud-gate' },
     ],
   )
   assert.throws(() => stageVisualFor(0), /Unknown stage visual: 0/)
-  assert.throws(() => stageVisualFor(9), /Unknown stage visual: 9/)
+  assert.throws(() => stageVisualFor(11), /Unknown stage visual: 11/)
   assert.equal(Object.isFrozen(stageVisualFor(1)), true)
   assert.throws(() => {
     stageVisualFor(1).farPath = 'mutated'
@@ -79,6 +86,8 @@ test('stage resource plans map catalog backgrounds and manifest monster atlases 
     ['star-armored-beast', 'void-wing-spirit', 'meteor-guardian'],
     ['fog-spider', 'lantern-wraith', 'mist-deer-king'],
     ['lava-lizard', 'ember-crow', 'flame-ogre'],
+    ['star-armored-beast', 'void-wing-spirit', 'meteor-guardian'],
+    ['moss-wolf', 'green-wing-moth', 'mist-deer-king'],
     ['star-armored-beast', 'void-wing-spirit', 'meteor-guardian'],
   ]
 
@@ -102,7 +111,44 @@ test('stage resource plans map catalog backgrounds and manifest monster atlases 
     assert.equal(resourcePlan.assets.some(({ path }) => /character|skill|artifact|Generated/i.test(path)), false)
   }
 
-  assert.throws(() => stageResourcePlanFor(9), /Unknown stage visual: 9/)
+  assert.throws(() => stageResourcePlanFor(11), /Unknown stage visual: 11/)
+})
+
+test('stages 9 and 10 load their complete background and actor resource plans', () => {
+  const expected = [
+    {
+      stageId: 9,
+      farPath: 'Assets/World/MysticSpring/far/spriteFrame',
+      midPath: 'Assets/World/MysticSpring/mid/spriteFrame',
+      monsterActorIds: ['moss-wolf', 'green-wing-moth', 'mist-deer-king'],
+    },
+    {
+      stageId: 10,
+      farPath: 'Assets/World/MistHeaven/far/spriteFrame',
+      midPath: 'Assets/World/MistHeaven/mid/spriteFrame',
+      monsterActorIds: ['star-armored-beast', 'void-wing-spirit', 'meteor-guardian'],
+    },
+  ]
+
+  for (const expectation of expected) {
+    const visual = stageVisualFor(expectation.stageId)
+    const plan = stageResourcePlanFor(expectation.stageId)
+    assert.deepEqual(
+      {
+        stageId: visual.stageId,
+        farPath: visual.farPath,
+        midPath: visual.midPath,
+        monsterActorIds: visual.monsterActorIds,
+      },
+      expectation,
+    )
+    assert.deepEqual(plan.assets.slice(0, 2), [
+      { path: expectation.farPath, kind: 'spriteFrame' },
+      { path: expectation.midPath, kind: 'spriteFrame' },
+    ])
+    assert.equal(plan.assets.slice(2).every(({ kind }) => kind === 'texture'), true)
+    assert.equal(plan.assets.slice(2).length > 0, true)
+  }
 })
 
 test('TypeScript and ESM stage resource plans stay behaviorally identical', async () => {
@@ -183,6 +229,39 @@ test('stage backgrounds contain distinct artwork instead of duplicate files', ()
   })
 
   assert.equal(new Set(hashes).size, folders.length)
+})
+
+test('final region PNG layers satisfy the portrait and transparency contracts', () => {
+  const farHashes = []
+
+  for (const folder of ['MysticSpring', 'MistHeaven']) {
+    const paths = Object.fromEntries(['far', 'mid'].map((layer) => [
+      layer,
+      join(root, 'assets', 'resources', 'Assets', 'World', folder, `${layer}.png`),
+    ]))
+    assert.equal(existsSync(paths.far), true)
+    assert.equal(existsSync(paths.mid), true)
+
+    const farBytes = readFileSync(paths.far)
+    const midBytes = readFileSync(paths.mid)
+    const width = farBytes.readUInt32BE(16)
+    const height = farBytes.readUInt32BE(20)
+    assert.equal(width / height > 0.54 && width / height < 0.59, true, `${folder} should be near 9:16`)
+    assert.equal(midBytes.readUInt32BE(16), width)
+    assert.equal(midBytes.readUInt32BE(20), height)
+    assert.equal(farBytes[25], 2, `${folder}/far.png should be opaque RGB`)
+    assert.equal(midBytes[25], 6, `${folder}/mid.png should retain RGBA`)
+
+    const mid = readPngRgba(paths.mid)
+    let transparentPixels = 0
+    for (let offset = 3; offset < mid.data.length; offset += 4) {
+      if (mid.data[offset] === 0) transparentPixels += 1
+    }
+    assert.equal(transparentPixels / (mid.width * mid.height) >= 0.6, true)
+    farHashes.push(createHash('sha256').update(farBytes).digest('hex'))
+  }
+
+  assert.equal(new Set(farHashes).size, farHashes.length)
 })
 
 test('battle runtime announces rebuilt stage visual metadata', () => {
