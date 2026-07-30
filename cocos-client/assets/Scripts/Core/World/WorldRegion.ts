@@ -29,7 +29,9 @@ export function createWorldRegion(id: string, stages: readonly WorldRegionStage[
   if (!safeId) throw new Error('World region ID is required.')
   if (stages.length !== 10) throw new Error('A world region must contain exactly ten stages.')
 
-  const copy = stages.map((stage, index) => {
+  const copy = Array.from({ length: 10 }, (_, index) => {
+    const stage = stages[index]
+    if (!stage) throw new Error(`Missing world region stage: ${index + 1}.`)
     if (stage.id !== index + 1) {
       throw new Error('World region stages must be ordered from one to ten.')
     }

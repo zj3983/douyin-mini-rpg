@@ -29,6 +29,15 @@ test('createWorldRegion accepts exactly ten stages ordered from one to ten', () 
   assert.throws(() => createWorldRegion('mist-frontier', outOfOrder), /ordered from one to ten/i)
 })
 
+test('createWorldRegion rejects sparse ten-slot stage arrays', () => {
+  const sparseStages = new Array(10)
+  sparseStages[3] = { id: 4, encounter: 'elite' }
+  sparseStages[6] = { id: 7, encounter: 'elite' }
+  sparseStages[9] = { id: 10, encounter: 'region-boss' }
+
+  assert.throws(() => createWorldRegion('mist-frontier', sparseStages), /missing world region stage: 1/i)
+})
+
 test('createWorldRegion requires exactly two elites and the only regional Boss at stage ten', () => {
   const oneElite = validStages()
   oneElite[6] = { id: 7, encounter: 'normal' }
