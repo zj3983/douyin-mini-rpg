@@ -34,6 +34,7 @@ function assertDeeplyIsolated(actual, expected) {
   assert.notEqual(actual.loadout.active, expected.loadout.active)
   assert.notEqual(actual.loadout.relics, expected.loadout.relics)
   assert.notEqual(actual.rewardLedger, expected.rewardLedger)
+  assert.notEqual(actual.dungeon, expected.dungeon)
 }
 
 test('world Boss clear, pass consumption, and extraction persist dungeon loot once', () => {

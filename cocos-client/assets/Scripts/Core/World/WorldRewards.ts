@@ -1,7 +1,7 @@
-import { migratePlayerSave, type PlayerSaveV3 } from '../Progression/PlayerSave.ts'
+import { migratePlayerSave, type PlayerSaveV4 } from '../Progression/PlayerSave.ts'
 
 export interface WorldBossClearResult {
-  save: PlayerSaveV3
+  save: PlayerSaveV4
   granted: {
     dungeonPasses: number
     spiritStones: number
@@ -19,7 +19,7 @@ function canonicalRewardId(rewardId: string): string | null {
 }
 
 export function applyWorldBossClear(
-  current: PlayerSaveV3,
+  current: PlayerSaveV4,
   input: { stage: number; rewardId: string },
 ): WorldBossClearResult {
   const save = migratePlayerSave(current)

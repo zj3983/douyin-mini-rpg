@@ -6,28 +6,48 @@ import {
   type RelicId,
 } from '../GameContent.ts'
 import type { RunLoot } from '../Dungeon/DungeonTypes.ts'
+import {
+  validateDungeonCheckpointShape,
+  type DungeonRunCheckpoint,
+} from '../Dungeon/DungeonSession.ts'
 import { validateLoadout } from '../Loadout/LoadoutRules.ts'
 
-export interface PlayerSaveV3 {
-  version: 3
+export interface PlayerCharacterSave {
+  id: 'qinglan'
+  realm: 'qi-refining'
+  innateSkillId: 'flying-sword-art'
+}
+
+export interface PlayerWorldSave {
+  highestClearedStage: number
+  claimedFirstClears: number[]
+}
+
+export interface PlayerInventorySave {
+  dungeonPasses: number
+  artifacts: Partial<Record<ArtifactId, number>>
+  relics: Partial<Record<RelicId, number>>
+  materials: Record<string, number>
+}
+
+export interface ActiveDungeonSave {
+  payment: 'free' | 'pass'
+  checkpoint: DungeonRunCheckpoint
+}
+
+export interface PlayerSaveV4 {
+  version: 4
   spiritStones: number
-  character: {
-    id: 'qinglan'
-    realm: 'qi-refining'
-    innateSkillId: 'flying-sword-art'
-  }
-  world: {
-    highestClearedStage: number
-    claimedFirstClears: number[]
-  }
-  inventory: {
-    dungeonPasses: number
-    artifacts: Partial<Record<ArtifactId, number>>
-    relics: Partial<Record<RelicId, number>>
-    materials: Record<string, number>
-  }
+  character: PlayerCharacterSave
+  world: PlayerWorldSave
+  inventory: PlayerInventorySave
   loadout: PlayerLoadout
   rewardLedger: string[]
+  dungeon: {
+    dayKey: string
+    freeEntriesUsed: number
+    activeRun: ActiveDungeonSave | null
+  }
 }
 
 const ARTIFACT_ID_SET = new Set<ArtifactId>(ARTIFACT_IDS)
@@ -102,9 +122,9 @@ function legalLoadout(value: Record<string, unknown>): PlayerLoadout {
   return result
 }
 
-export function createDefaultSave(): PlayerSaveV3 {
+export function createDefaultSave(): PlayerSaveV4 {
   return {
-    version: 3,
+    version: 4,
     spiritStones: 0,
     character: {
       id: 'qinglan',
@@ -126,10 +146,26 @@ export function createDefaultSave(): PlayerSaveV3 {
       relics: [],
     },
     rewardLedger: [],
+    dungeon: {
+      dayKey: '',
+      freeEntriesUsed: 0,
+      activeRun: null,
+    },
   }
 }
 
-export function migratePlayerSave(input: unknown): PlayerSaveV3 {
+function cloneCheckpoint(value: unknown): DungeonRunCheckpoint | null {
+  try {
+    validateDungeonCheckpointShape(value)
+    const checkpoint = JSON.parse(JSON.stringify(value)) as DungeonRunCheckpoint
+    validateDungeonCheckpointShape(checkpoint)
+    return checkpoint
+  } catch {
+    return null
+  }
+}
+
+export function migratePlayerSave(input: unknown): PlayerSaveV4 {
   const defaults = createDefaultSave()
   if (!isRecord(input)) return defaults
 
@@ -140,7 +176,7 @@ export function migratePlayerSave(input: unknown): PlayerSaveV3 {
     ?? nonnegativeInteger(input.stage)
     ?? 0
 
-  return {
+  const result: PlayerSaveV4 = {
     ...defaults,
     spiritStones: nonnegativeFinite(input.spiritStones),
     world: {
@@ -161,11 +197,31 @@ export function migratePlayerSave(input: unknown): PlayerSaveV3 {
       ? input.rewardLedger.filter((entry): entry is string => typeof entry === 'string')
       : [],
   }
+
+  if (input.version === 4 && isRecord(input.dungeon)) {
+    const dungeon = input.dungeon
+    result.dungeon.dayKey = typeof dungeon.dayKey === 'string' ? dungeon.dayKey : ''
+    result.dungeon.freeEntriesUsed = nonnegativeInteger(dungeon.freeEntriesUsed) ?? 0
+
+    if (isRecord(dungeon.activeRun)) {
+      const payment = dungeon.activeRun.payment
+      const checkpoint = cloneCheckpoint(dungeon.activeRun.checkpoint)
+      if ((payment === 'free' || payment === 'pass') && checkpoint !== null) {
+        result.dungeon.activeRun = { payment, checkpoint }
+      } else if (payment === 'free') {
+        result.dungeon.freeEntriesUsed = Math.max(0, result.dungeon.freeEntriesUsed - 1)
+      } else if (payment === 'pass' && result.inventory.dungeonPasses < Number.MAX_SAFE_INTEGER) {
+        result.inventory.dungeonPasses += 1
+      }
+    }
+  }
+
+  return result
 }
 
 export function consumeDungeonPass(
-  current: PlayerSaveV3,
-): { ok: true; save: PlayerSaveV3 } | { ok: false; save: PlayerSaveV3 } {
+  current: PlayerSaveV4,
+): { ok: true; save: PlayerSaveV4 } | { ok: false; save: PlayerSaveV4 } {
   const save = migratePlayerSave(current)
   const rawInventory = isRecord(current) && isRecord(current.inventory) ? current.inventory : null
   const dungeonPasses = rawInventory?.dungeonPasses
@@ -237,10 +293,10 @@ function applyCounts(current: Record<string, number>, additions: Record<string, 
 }
 
 export function applyExtractionLoot(
-  current: PlayerSaveV3,
+  current: PlayerSaveV4,
   rewardId: string,
   loot: RunLoot[],
-): PlayerSaveV3 {
+): PlayerSaveV4 {
   const save = migratePlayerSave(current)
   const canonicalId = canonicalRewardId(rewardId)
   const canonicalItems = canonicalLoot(loot)

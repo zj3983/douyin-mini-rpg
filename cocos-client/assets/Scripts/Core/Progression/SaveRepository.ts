@@ -1,8 +1,8 @@
-import { migratePlayerSave, type PlayerSaveV3 } from './PlayerSave.ts'
+import { migratePlayerSave, type PlayerSaveV4 } from './PlayerSave.ts'
 
 export interface SaveRepository {
-  load(): PlayerSaveV3 | null
-  save(value: PlayerSaveV3): void
+  load(): PlayerSaveV4 | null
+  save(value: PlayerSaveV4): void
 }
 
 export interface StoragePort {
