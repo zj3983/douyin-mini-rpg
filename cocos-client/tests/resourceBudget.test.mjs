@@ -22,6 +22,11 @@ test('resource budget report groups source assets by kind', () => {
   }
   assert.ok(report.groups.image.bytes > report.groups.audio.bytes)
   assert.ok(report.groups.audio.largest.some((entry) => entry.path.endsWith('mist-bamboo.wav')))
+  assert.ok(report.budgets.dungeon)
+  assert.equal(report.budgets.dungeon.withinBudget, true)
+  assert.equal(report.budgets.dungeon.backgroundCount, 6)
+  assert.equal(report.budgets.dungeon.effectCount, 2)
+  assert.equal(report.budgets.dungeon.audioCount, 3)
 })
 
 test('package exposes a repeatable source resource budget command', () => {

@@ -44,6 +44,27 @@
       "resource": "Assets/Audio/Cues/boss-break",
       "minDurationSeconds": 0.75,
       "volume": 0.92
+    },
+    "pursuit-warning": {
+      "title": "雾皇追猎",
+      "description": "修仙副本追猎者逼近时的低沉竹磬与逆风警示。",
+      "resource": "Assets/Audio/Cues/pursuit-warning",
+      "minDurationSeconds": 0.72,
+      "volume": 0.86
+    },
+    "extraction-start": {
+      "title": "撤离阵启",
+      "description": "修仙撤离法阵开始聚拢灵气的玉磬回响。",
+      "resource": "Assets/Audio/Cues/extraction-start",
+      "minDurationSeconds": 0.58,
+      "volume": 0.74
+    },
+    "extraction-complete": {
+      "title": "撤离功成",
+      "description": "修仙传送完成时清亮上扬的灵光和弦。",
+      "resource": "Assets/Audio/Cues/extraction-complete",
+      "minDurationSeconds": 0.9,
+      "volume": 0.82
     }
   }
 }

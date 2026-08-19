@@ -51,6 +51,27 @@ const catalog = {
       minDurationSeconds: 0.75,
       volume: 0.92,
     },
+    'pursuit-warning': {
+      title: '雾皇追猎',
+      description: '修仙副本追猎者逼近时的低沉竹磬与逆风警示。',
+      resource: 'Assets/Audio/Cues/pursuit-warning',
+      minDurationSeconds: 0.72,
+      volume: 0.86,
+    },
+    'extraction-start': {
+      title: '撤离阵启',
+      description: '修仙撤离法阵开始聚拢灵气的玉磬回响。',
+      resource: 'Assets/Audio/Cues/extraction-start',
+      minDurationSeconds: 0.58,
+      volume: 0.74,
+    },
+    'extraction-complete': {
+      title: '撤离功成',
+      description: '修仙传送完成时清亮上扬的灵光和弦。',
+      resource: 'Assets/Audio/Cues/extraction-complete',
+      minDurationSeconds: 0.9,
+      volume: 0.82,
+    },
   },
 }
 
@@ -61,6 +82,9 @@ const metaByResource = {
   'Assets/Audio/Cues/sword-return': 'a03333ee-7f1e-4025-a7fc-8fead5ac4236',
   'Assets/Audio/Cues/light-hit': '1a2b8bb4-1d64-428d-a6cc-cdfb96a0a0e3',
   'Assets/Audio/Cues/boss-break': '785b610e-7cf7-4054-ab77-edfead1708e9',
+  'Assets/Audio/Cues/pursuit-warning': 'af92d07c-6f91-49f2-b64f-2c9e28923b61',
+  'Assets/Audio/Cues/extraction-start': 'b5a10755-7dd6-4fa3-8bb0-8ad9a1eed37d',
+  'Assets/Audio/Cues/extraction-complete': 'd8dfc2d5-7983-4efc-9573-82786d6b6ec1',
 }
 
 function clamp(value, min = -1, max = 1) {
@@ -210,6 +234,23 @@ const renders = {
     const crack = Math.sin(Math.PI * 2 * (320 + 90 * Math.sin(t * 26)) * t) * Math.exp(-t * 4.2) * 0.25
     const shimmer = sweep(t, 540, 1280, duration, 0.18)
     return (low + crack + shimmer) * envelope(t, duration, 0.012, 0.28)
+  }),
+  'Assets/Audio/Cues/pursuit-warning': () => synth(0.86, (t, duration) => {
+    const bell = Math.sin(Math.PI * 2 * 118 * t) * Math.exp(-t * 2.3) * 0.38
+    const bamboo = Math.sin(Math.PI * 2 * 690 * t) * Math.exp(-t * 13) * 0.24
+    const wind = sweep(t, 180, 520, duration, 0.2)
+    return (bell + bamboo + wind) * envelope(t, duration, 0.008, 0.24)
+  }),
+  'Assets/Audio/Cues/extraction-start': () => synth(0.68, (t, duration) => {
+    const pulse = Math.sin(Math.PI * 2 * 294 * t) * (0.16 + 0.1 * Math.sin(Math.PI * 2 * 5 * t))
+    const chime = sweep(t, 440, 880, duration, 0.28)
+    return (pulse + chime) * envelope(t, duration, 0.02, 0.2)
+  }),
+  'Assets/Audio/Cues/extraction-complete': () => synth(1.08, (t, duration) => {
+    const notes = [392, 493.88, 587.33]
+    const chord = notes.reduce((sum, note, index) => sum + pluck(t, note, index * 0.08, 0.2, 2.5), 0)
+    const lift = sweep(t, 660, 1320, duration, 0.18)
+    return (chord + lift) * envelope(t, duration, 0.012, 0.34)
   }),
 }
 

@@ -11,14 +11,15 @@ const stageOneRequiredCounts = {
   'moss-wolf': { idle: 6, move: 8, telegraph: 4, attack: 8, hurt: 4, death: 8 },
   'green-wing-moth': { idle: 6, move: 8, dive: 8, cast: 8, hurt: 4, death: 8 },
   'bamboo-warden': { idle: 8, move: 10, sweep: 12, spikes: 12, roar: 12, hurt: 6, death: 12 },
+  'mist-bamboo-emperor': { idle: 6, move: 6, sweep: 6, spikes: 6, roar: 6, hurt: 6, death: 6 },
 }
 
-test('source and resource manifests are identical and describe twelve complete monster actors', async () => {
+test('source and resource manifests are identical and describe thirteen complete monster actors', async () => {
   const source = JSON.parse(await readFile(sourcePath, 'utf8'))
   const resource = JSON.parse(await readFile(resourcePath, 'utf8'))
   assert.deepEqual(resource, source)
   const monsters = source.actors.filter(actor => actor.type === 'monster')
-  assert.equal(monsters.length, 12)
+  assert.equal(monsters.length, 13)
   for (const actor of monsters) {
     const requiredCounts = stageOneRequiredCounts[actor.id] ?? defaultRequiredCounts
     assert.deepEqual(actor.actions.map(action => action.name), Object.keys(requiredCounts), actor.id)

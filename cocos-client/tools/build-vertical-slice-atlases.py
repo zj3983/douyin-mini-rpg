@@ -14,7 +14,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 from statistics import median
 from typing import Any
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 
 SOURCE_MODES = {"layered-keyframes", "pose-video", "frame-sequence"}
@@ -119,6 +119,201 @@ def remove_small_alpha_components(image: Image.Image, min_area=16):
     return source
 
 
+def remove_isolated_alpha_components(image: Image.Image, *, maximum_gap=6, edge_margin_ratio=0.10):
+    source = image.convert("RGBA")
+    width, height = source.size
+    alpha = source.getchannel("A")
+    pixels = alpha.load()
+    visited = bytearray(width * height)
+    components = []
+    for start_y in range(height):
+        for start_x in range(width):
+            offset = start_y * width + start_x
+            if visited[offset] or pixels[start_x, start_y] == 0:
+                continue
+            queue = deque([(start_x, start_y)])
+            visited[offset] = 1
+            component = []
+            while queue:
+                x, y = queue.popleft()
+                component.append((x, y))
+                for nx in range(max(0, x - 1), min(width, x + 2)):
+                    for ny in range(max(0, y - 1), min(height, y + 2)):
+                        neighbor = ny * width + nx
+                        if not visited[neighbor] and pixels[nx, ny] > 0:
+                            visited[neighbor] = 1
+                            queue.append((nx, ny))
+            components.append(component)
+
+    if not components:
+        return source
+    components.sort(key=len, reverse=True)
+    main = components[0]
+    main_xs = [point[0] for point in main]
+    main_ys = [point[1] for point in main]
+    main_box = (min(main_xs), min(main_ys), max(main_xs), max(main_ys))
+    edge_x = max(31, round(width * edge_margin_ratio))
+    edge_y = max(31, round(height * edge_margin_ratio))
+    output = source.load()
+    for component in components[1:]:
+        xs = [point[0] for point in component]
+        ys = [point[1] for point in component]
+        horizontal_gap = max(main_box[0] - max(xs) - 1, min(xs) - main_box[2] - 1, 0)
+        vertical_gap = max(main_box[1] - max(ys) - 1, min(ys) - main_box[3] - 1, 0)
+        near_safe_edge = (
+            min(xs) <= edge_x
+            or min(ys) <= edge_y
+            or max(xs) >= width - edge_x - 1
+            or max(ys) >= height - edge_y - 1
+        )
+        if len(component) < 4 or near_safe_edge or horizontal_gap > maximum_gap or vertical_gap > maximum_gap:
+            for x, y in component:
+                red, green, blue, _alpha = output[x, y]
+                output[x, y] = (red, green, blue, 0)
+    return source
+
+
+def sanitize_runtime_frame(image: Image.Image, frame_size, *, padding_ratio=0.10, anchor=None):
+    anchor = anchor or {"x": 0.5, "y": 0.86}
+    cleaned = remove_isolated_alpha_components(image)
+    normalized = normalize_frame(cleaned, frame_size, padding_ratio, anchor)
+    normalized.putalpha(normalized.getchannel("A").point(lambda alpha: alpha if alpha >= ALPHA_VISIBILITY_THRESHOLD else 0))
+    return remove_isolated_alpha_components(normalized)
+
+
+def split_sheet_cells(image: Image.Image, columns: int, rows: int):
+    if type(columns) is not int or type(rows) is not int or columns <= 0 or rows <= 0:
+        raise ValueError("sheet columns and rows must be positive integers")
+    source = image.convert("RGBA")
+    cells = []
+    for row in range(rows):
+        top = round(row * source.height / rows)
+        bottom = round((row + 1) * source.height / rows)
+        for column in range(columns):
+            left = round(column * source.width / columns)
+            right = round((column + 1) * source.width / columns)
+            cells.append(source.crop((left, top, right, bottom)))
+    return cells
+
+
+def split_sheet_row_bands(image: Image.Image, columns: int, row_bands):
+    if type(columns) is not int or columns <= 0:
+        raise ValueError("sheet columns must be a positive integer")
+    if not isinstance(row_bands, (list, tuple)) or not row_bands:
+        raise ValueError("sheet row_bands must be a non-empty list")
+
+    source = image.convert("RGBA")
+    normalized_bands = []
+    previous_bottom = 0
+    for index, band in enumerate(row_bands):
+        if not isinstance(band, (list, tuple)) or len(band) != 2:
+            raise ValueError("sheet row bands must contain top/bottom pairs")
+        top, bottom = band
+        if type(top) is not int or type(bottom) is not int or top < 0 or bottom > source.height or top >= bottom:
+            raise ValueError("sheet row bands must be valid image bounds")
+        if index > 0 and top < previous_bottom:
+            raise ValueError("sheet row bands must be ordered and non-overlapping")
+        normalized_bands.append((top, bottom))
+        previous_bottom = bottom
+
+    cells = []
+    for top, bottom in normalized_bands:
+        for column in range(columns):
+            left = round(column * source.width / columns)
+            right = round((column + 1) * source.width / columns)
+            cells.append(source.crop((left, top, right, bottom)))
+    return cells
+
+
+def split_sheet_boxes(image: Image.Image, boxes):
+    if not isinstance(boxes, (list, tuple)) or not boxes:
+        raise ValueError("sheet boxes must be a non-empty list")
+    source = image.convert("RGBA")
+    cells = []
+    for box in boxes:
+        if not isinstance(box, (list, tuple)) or len(box) != 4:
+            raise ValueError("sheet boxes must contain left/top/right/bottom values")
+        left, top, right, bottom = box
+        if (
+            any(type(value) is not int for value in box)
+            or left < 0
+            or top < 0
+            or right > source.width
+            or bottom > source.height
+            or left >= right
+            or top >= bottom
+        ):
+            raise ValueError("sheet boxes must use valid image bounds")
+        cells.append(source.crop((left, top, right, bottom)))
+    return cells
+
+
+def remove_border_connected_checkerboard(
+    image: Image.Image,
+    *,
+    minimum_channel=232,
+    maximum_chroma=18,
+    edge_protection_radius=2,
+):
+    source = image.convert("RGBA")
+    width, height = source.size
+    pixels = source.load()
+    foreground_seed = Image.new("L", source.size, 0)
+    foreground_pixels = foreground_seed.load()
+
+    def background_like(red, green, blue):
+        return min(red, green, blue) >= minimum_channel and max(red, green, blue) - min(red, green, blue) <= maximum_chroma
+
+    for y in range(height):
+        for x in range(width):
+            red, green, blue, alpha = pixels[x, y]
+            if alpha > 0 and not background_like(red, green, blue):
+                foreground_pixels[x, y] = 255
+
+    if edge_protection_radius > 0:
+        protected = foreground_seed.filter(ImageFilter.MaxFilter(edge_protection_radius * 2 + 1))
+    else:
+        protected = foreground_seed
+    protected_pixels = protected.load()
+    removable = bytearray(width * height)
+    for y in range(height):
+        for x in range(width):
+            red, green, blue, alpha = pixels[x, y]
+            if alpha > 0 and protected_pixels[x, y] == 0 and background_like(red, green, blue):
+                removable[y * width + x] = 1
+
+    visited = bytearray(width * height)
+    queue = deque()
+    for x in range(width):
+        queue.append((x, 0))
+        queue.append((x, height - 1))
+    for y in range(1, height - 1):
+        queue.append((0, y))
+        queue.append((width - 1, y))
+
+    while queue:
+        x, y = queue.popleft()
+        offset = y * width + x
+        if visited[offset] or not removable[offset]:
+            continue
+        visited[offset] = 1
+        if x > 0:
+            queue.append((x - 1, y))
+        if x + 1 < width:
+            queue.append((x + 1, y))
+        if y > 0:
+            queue.append((x, y - 1))
+        if y + 1 < height:
+            queue.append((x, y + 1))
+
+    for y in range(height):
+        for x in range(width):
+            if visited[y * width + x]:
+                red, green, blue, _alpha = pixels[x, y]
+                pixels[x, y] = (red, green, blue, 0)
+    return source
+
+
 def normalize_frame(image: Image.Image, frame_size, padding_ratio, anchor):
     target_width, target_height = _as_size(list(frame_size), "frame_size")
     if not 0 <= padding_ratio < 0.4:
@@ -146,6 +341,27 @@ def normalize_frame(image: Image.Image, frame_size, padding_ratio, anchor):
     paste_y = max(round(target_height * padding_ratio), min(round(target_height * (1 - padding_ratio) - resized.height), paste_y))
     frame.alpha_composite(resized, (paste_x, paste_y))
     return remove_small_alpha_components(frame)
+
+
+def prepare_sheet_frame(image: Image.Image, frame_size, *, padding_ratio=0.05, baseline_ratio=0.95):
+    target_width, target_height = _as_size(list(frame_size), "frame_size")
+    if not 0 < baseline_ratio <= 1:
+        raise ValueError("baseline_ratio must be in (0, 1]")
+    cleaned = remove_border_connected_checkerboard(image)
+    normalized = sanitize_runtime_frame(
+        cleaned,
+        frame_size,
+        padding_ratio=padding_ratio,
+        anchor={"x": 0.5, "y": 0.86},
+    )
+    left, top, right, bottom = _bbox_or_error(normalized)
+    target_bottom = round(target_height * baseline_ratio)
+    shift_y = target_bottom - bottom
+    if top + shift_y < 0 or bottom + shift_y > target_height:
+        raise ValueError("aligned sheet subject exceeds runtime frame")
+    aligned = Image.new("RGBA", (target_width, target_height), (0, 0, 0, 0))
+    aligned.alpha_composite(normalized, (0, shift_y))
+    return remove_small_alpha_components(aligned)
 
 
 def validate_subject(frame: Image.Image, padding_ratio):
@@ -589,7 +805,7 @@ def _load_action_source_frames(action_config, source_root: Path):
 
 def _normalize_action_frames(source_frames, frame_size, anchor):
     frames = [
-        normalize_frame(frame, frame_size, 0.10, anchor)
+        sanitize_runtime_frame(frame, frame_size, padding_ratio=0.10, anchor=anchor)
         for frame in source_frames
     ]
     for frame in frames:
@@ -621,6 +837,11 @@ def build_actor(source_config, source_root, output_root, report_root=None, repor
     source_modes = {}
     effective_qualities = {}
     playback_orders = {}
+    packing_mode = source_config.get("packingMode", "per-action")
+    if packing_mode not in ("per-action", "unified"):
+        raise ValueError(f"{actor_id}.packingMode must be per-action or unified")
+    unified_frames = []
+    unified_action_ranges = {}
     for action_name, action_config in source_config["actions"].items():
         context = f"{actor_id}/{action_name}"
         action_quality = _merge_action_quality(quality, action_config.get("quality"), context)
@@ -661,11 +882,18 @@ def build_actor(source_config, source_root, output_root, report_root=None, repor
             sample_keys=playback_order,
         )
         source_modes[action_name] = action_config.get("sourceMode", "frame-sequence")
-        atlas, rects = pack_action(frames, frame_size)
-        atlas_dimensions[action_name] = [atlas.width, atlas.height]
-        atlas_path = actor_dir / f"{action_name}.png"
-        atlas.save(atlas_path)
-        relative_atlas = f"Assets/ActorAtlases/{folder}/{action_name}.png"
+        if packing_mode == "unified":
+            start = len(unified_frames)
+            unified_frames.extend(frames)
+            unified_action_ranges[action_name] = (start, len(unified_frames))
+            rects = []
+            relative_atlas = f"Assets/ActorAtlases/{folder}/atlas.png"
+        else:
+            atlas, rects = pack_action(frames, frame_size)
+            atlas_dimensions[action_name] = [atlas.width, atlas.height]
+            atlas_path = actor_dir / f"{action_name}.png"
+            atlas.save(atlas_path)
+            relative_atlas = f"Assets/ActorAtlases/{folder}/{action_name}.png"
         action = {
             "name": action_name,
             "atlas": relative_atlas,
@@ -681,6 +909,14 @@ def build_actor(source_config, source_root, output_root, report_root=None, repor
                 for event in events
             ]
         actions.append(action)
+
+    if packing_mode == "unified":
+        atlas, rects = pack_action(unified_frames, frame_size)
+        atlas.save(actor_dir / "atlas.png")
+        for action in actions:
+            start, end = unified_action_ranges[action["name"]]
+            action["frames"] = rects[start:end]
+            atlas_dimensions[action["name"]] = [atlas.width, atlas.height]
 
     actor = {
         "id": actor_id,
@@ -1846,6 +2082,9 @@ def check_source_manifest(root: Path):
             raise ValueError(f"{actor_id}.id must be non-empty and match its actor key")
         if actor.get("folder") is not None:
             _validate_actor_folder(actor["folder"])
+        packing_mode = actor.get("packingMode", "per-action")
+        if packing_mode not in ("per-action", "unified"):
+            raise ValueError(f"{actor_id}.packingMode must be per-action or unified")
         _as_size(actor.get("masterFrameSize"), f"{actor_id}.masterFrameSize")
         _as_size(actor.get("runtimeFrameSize"), f"{actor_id}.runtimeFrameSize")
         _validate_anchor(actor_id, actor.get("anchor"))

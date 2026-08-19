@@ -39,6 +39,39 @@ function walk(dir, out = []) {
 }
 
 const files = walk(root).sort((left, right) => right.bytes - left.bytes || left.path.localeCompare(right.path))
+const dungeonExpected = [
+  ...[1, 2, 3].flatMap((floor) => [
+    `assets/resources/Assets/Dungeon/MistBamboo/Floor${floor}/far.webp`,
+    `assets/resources/Assets/Dungeon/MistBamboo/Floor${floor}/mid.webp`,
+  ]),
+  'assets/resources/Assets/Dungeon/MistBamboo/Effects/pursuit_edge.png',
+  'assets/resources/Assets/Dungeon/MistBamboo/Effects/extraction_array.png',
+  'assets/resources/Assets/ActorAtlases/MistBambooEmperor/atlas.png',
+  'assets/resources/Assets/Audio/Cues/pursuit-warning.wav',
+  'assets/resources/Assets/Audio/Cues/extraction-start.wav',
+  'assets/resources/Assets/Audio/Cues/extraction-complete.wav',
+]
+const dungeonActorFolders = new Set([
+  'MossWolf',
+  'GreenWingMoth',
+  'FogSpider',
+  'LanternWraith',
+  'MistDeerKing',
+  'MistBambooEmperor',
+])
+const dungeonFiles = files.filter(({ path }) => (
+  path.startsWith('assets/resources/Assets/Dungeon/MistBamboo/')
+  || path.startsWith('assets/resources/Assets/Audio/Cues/pursuit-warning.')
+  || path.startsWith('assets/resources/Assets/Audio/Cues/extraction-start.')
+  || path.startsWith('assets/resources/Assets/Audio/Cues/extraction-complete.')
+  || (
+    path.startsWith('assets/resources/Assets/ActorAtlases/')
+    && dungeonActorFolders.has(path.split('/')[4])
+  )
+))
+const dungeonPaths = new Set(dungeonFiles.map(({ path }) => path))
+const dungeonBytes = dungeonFiles.reduce((sum, file) => sum + file.bytes, 0)
+const dungeonLimitBytes = 24 * 1024 * 1024
 const groups = {
   image: { bytes: 0, count: 0, largest: [] },
   audio: { bytes: 0, count: 0, largest: [] },
@@ -72,6 +105,19 @@ console.log(JSON.stringify({
     count: files.length,
   },
   groups,
+  budgets: {
+    dungeon: {
+      bytes: dungeonBytes,
+      megabytes: megabytes(dungeonBytes),
+      limitBytes: dungeonLimitBytes,
+      withinBudget: dungeonExpected.every((path) => dungeonPaths.has(path)) && dungeonBytes <= dungeonLimitBytes,
+      missing: dungeonExpected.filter((path) => !dungeonPaths.has(path)),
+      backgroundCount: dungeonFiles.filter(({ path }) => /\/Floor[123]\/(?:far|mid)\.webp$/.test(path)).length,
+      effectCount: dungeonFiles.filter(({ path }) => /\/Effects\/.*\.png$/.test(path)).length,
+      audioCount: dungeonFiles.filter(({ path }) => /\/Audio\/Cues\/.*\.wav$/.test(path)).length,
+      actorAtlasCount: dungeonFiles.filter(({ path }) => /\/ActorAtlases\/.*\.png$/.test(path)).length,
+    },
+  },
   largest: files.slice(0, largestCount).map((file) => ({
     path: file.path,
     kind: file.kind,

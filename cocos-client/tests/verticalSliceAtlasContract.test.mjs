@@ -42,6 +42,28 @@ const expectedActors = {
     actions: { idle: 8, move: 10, sweep: 12, spikes: 12, roar: 12, hurt: 6, death: 12 },
     sourceModes: Object.fromEntries(['idle', 'move', 'sweep', 'spikes', 'roar', 'hurt', 'death'].map((name) => [name, 'frame-sequence'])),
   },
+  'mist-bamboo-emperor': {
+    masterFrameSize: [512, 640],
+    runtimeFrameSize: [256, 320],
+    actions: { idle: 6, move: 6, sweep: 6, spikes: 6, roar: 6, hurt: 6, death: 6 },
+    sourceModes: {
+      idle: 'pose-video',
+      move: 'pose-video',
+      sweep: 'pose-video',
+      spikes: 'pose-video',
+      roar: 'pose-video',
+      hurt: 'frame-sequence',
+      death: 'frame-sequence',
+    },
+    quality: {
+      maxCenterDrift: 0.1,
+      maxScaleDrift: 0.16,
+      minAlphaCoverage: 0.02,
+      maxAlphaCoverage: 0.76,
+      safePadding: 0.1,
+    },
+    packingMode: 'unified',
+  },
 }
 
 const expectedQuality = {
@@ -68,7 +90,8 @@ test('vertical slice source manifest locks actor frame sizes anchors and action 
     assert.equal(actor.masterFrameSize[0] * 5, actor.masterFrameSize[1] * 4, `${actorId} master is 4:5`)
     assert.equal(actor.runtimeFrameSize[0] * 5, actor.runtimeFrameSize[1] * 4, `${actorId} runtime is 4:5`)
     assert.deepEqual(Object.fromEntries(Object.entries(actor.actions).map(([name, action]) => [name, action.frames])), expected.actions)
-    assert.deepEqual(actor.quality, expectedQuality, `${actorId} quality`)
+    assert.deepEqual(actor.quality, expected.quality ?? expectedQuality, `${actorId} quality`)
+    assert.equal(actor.packingMode ?? 'per-action', expected.packingMode ?? 'per-action', `${actorId} packing mode`)
     assert.deepEqual(
       Object.fromEntries(Object.entries(actor.actions).map(([name, action]) => [name, action.sourceMode])),
       expected.sourceModes,

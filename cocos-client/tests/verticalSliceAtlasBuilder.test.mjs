@@ -124,6 +124,152 @@ print(json.dumps({
   }
 })
 
+test('unified packing writes one atlas while per-action manifests stay byte equivalent', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'vertical-slice-unified-'))
+  try {
+    const script = String.raw`
+import importlib.util
+import json
+import sys
+from pathlib import Path
+from PIL import Image, ImageDraw
+
+root = Path(sys.argv[1])
+temp = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("builder", root / "tools/build-vertical-slice-atlases.py")
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+
+source = temp / "source"
+for action in ("idle", "move"):
+    for index in range(3):
+        path = source / "unified" / action / f"{index:02d}.png"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        image = Image.new("RGBA", (128, 160), (0, 0, 0, 0))
+        ImageDraw.Draw(image).rectangle((36 + index, 28, 92 + index, 140), fill=(80, 150, 210, 255))
+        image.save(path)
+
+base = {
+    "id": "unified", "folder": "Unified", "type": "monster",
+    "masterFrameSize": [128, 160], "runtimeFrameSize": [64, 80],
+    "anchor": {"x": 0.5, "y": 0.85}, "quality": builder.DEFAULT_QUALITY,
+    "actions": {
+        name: {"frames": 3, "fps": 6, "loop": True, "source": f"unified/{name}", "sourceMode": "frame-sequence"}
+        for name in ("idle", "move")
+    },
+}
+per_action = builder.build_actor(dict(base), source, temp / "per-action")
+unified_config = dict(base)
+unified_config["packingMode"] = "unified"
+unified = builder.build_actor(unified_config, source, temp / "unified-output")
+assert len({action["atlas"] for action in unified["actions"]}) == 1
+assert unified["atlas"] == "Assets/ActorAtlases/Unified/atlas.png"
+assert (temp / "unified-output/Assets/ActorAtlases/Unified/atlas.png").is_file()
+assert [action["name"] for action in unified["actions"]] == ["idle", "move"]
+assert all(len(action["frames"]) == 3 for action in unified["actions"])
+
+legacy_again = builder.build_actor(dict(base), source, temp / "per-action-again")
+assert json.dumps(per_action, ensure_ascii=False, sort_keys=True).encode() == json.dumps(legacy_again, ensure_ascii=False, sort_keys=True).encode()
+print("unified and compatible")
+`
+    assert.match(runPython(script, [tempRoot]), /unified and compatible/)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('sheet preprocessing removes border-connected checkerboard without punching white costume holes', () => {
+  const script = String.raw`
+import importlib.util
+import sys
+from pathlib import Path
+from PIL import Image, ImageDraw
+
+root = Path(sys.argv[1])
+spec = importlib.util.spec_from_file_location("builder", root / "tools/build-vertical-slice-atlases.py")
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+
+image = Image.new("RGB", (160, 200), (254, 254, 254))
+draw = ImageDraw.Draw(image)
+for y in range(0, 200, 16):
+    for x in range(0, 160, 16):
+        if (x // 16 + y // 16) % 2:
+            draw.rectangle((x, y, x + 15, y + 15), fill=(244, 244, 244))
+draw.rectangle((45, 28, 115, 188), fill=(28, 54, 42))
+draw.rectangle((53, 42, 107, 166), fill=(250, 250, 248))
+draw.rectangle((65, 65, 96, 145), fill=(230, 238, 232))
+draw.rectangle((72, 82, 90, 128), fill=(40, 116, 82))
+
+cleaned = builder.remove_border_connected_checkerboard(image)
+assert cleaned.mode == "RGBA"
+assert cleaned.getpixel((0, 0))[3] == 0
+assert cleaned.getpixel((159, 199))[3] == 0
+assert cleaned.getpixel((60, 70))[3] >= 245
+assert cleaned.getpixel((80, 100))[3] == 255
+
+sheet = Image.new("RGB", (60, 40), (244, 244, 244))
+cells = builder.split_sheet_cells(sheet, columns=6, rows=2)
+assert len(cells) == 12
+assert all(cell.size == (10, 20) for cell in cells)
+banded = builder.split_sheet_row_bands(sheet, columns=6, row_bands=[(0, 17), (17, 40)])
+assert len(banded) == 12
+assert all(cell.size == (10, 17) for cell in banded[:6])
+assert all(cell.size == (10, 23) for cell in banded[6:])
+boxed = builder.split_sheet_boxes(sheet, [(0, 0, 13, 17), (13, 17, 60, 40)])
+assert [cell.size for cell in boxed] == [(13, 17), (47, 23)]
+try:
+    builder.split_sheet_row_bands(sheet, columns=6, row_bands=[(0, 21), (20, 40)])
+except ValueError as error:
+    assert "ordered and non-overlapping" in str(error)
+else:
+    raise AssertionError("overlapping row bands must be rejected")
+try:
+    builder.split_sheet_boxes(sheet, [(0, 0, 61, 40)])
+except ValueError as error:
+    assert "valid image bounds" in str(error)
+else:
+    raise AssertionError("out-of-bounds cell boxes must be rejected")
+runtime = builder.prepare_sheet_frame(image, (256, 320), padding_ratio=0.05, baseline_ratio=0.95)
+assert runtime.size == (256, 320)
+assert runtime.getchannel("A").getbbox()[3] == 304
+print("checker removed and costume protected")
+`
+  assert.match(runPython(script), /checker removed and costume protected/)
+})
+
+test('runtime frame sanitizing enforces safe margins and removes detached extraction fragments', () => {
+  const script = String.raw`
+import importlib.util
+import sys
+from pathlib import Path
+from PIL import Image, ImageDraw
+
+root = Path(sys.argv[1])
+spec = importlib.util.spec_from_file_location("builder", root / "tools/build-vertical-slice-atlases.py")
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+
+image = Image.new("RGBA", (256, 320), (0, 0, 0, 0))
+draw = ImageDraw.Draw(image)
+draw.rectangle((13, 30, 220, 304), fill=(40, 116, 82, 255))
+draw.rectangle((238, 286, 250, 300), fill=(190, 250, 236, 255))
+
+cleaned = builder.sanitize_runtime_frame(
+    image,
+    (256, 320),
+    padding_ratio=0.10,
+    anchor={"x": 0.5, "y": 0.86},
+)
+left, top, right, bottom = cleaned.getchannel("A").getbbox()
+assert min(left / 256, top / 320, (256 - right) / 256, (320 - bottom) / 320) >= 0.08
+assert cleaned.getpixel((244, 293))[3] == 0
+assert cleaned.getchannel("A").getbbox() is not None
+print("runtime frame sanitized")
+`
+  assert.match(runPython(script), /runtime frame sanitized/)
+})
+
 test('builder command line check validates the checked-in source manifest', () => {
   const result = spawnSync('python', ['tools/build-vertical-slice-atlases.py', '--check'], {
     cwd: resolve('.'),

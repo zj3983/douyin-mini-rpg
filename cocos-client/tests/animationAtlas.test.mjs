@@ -23,6 +23,7 @@ const verticalSliceActorIds = new Set([
   'moss-wolf',
   'green-wing-moth',
   'bamboo-warden',
+  'mist-bamboo-emperor',
 ])
 
 function pngSize(assetPath) {

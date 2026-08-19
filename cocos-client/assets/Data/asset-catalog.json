@@ -123,6 +123,13 @@
       "theme": "starlight-ruin",
       "animationActorId": "meteor-guardian",
       "skillCue": "meteor-fall"
+    },
+    {
+      "id": "mist-bamboo-emperor",
+      "name": "雾竹皇",
+      "theme": "mist-bamboo",
+      "animationActorId": "mist-bamboo-emperor",
+      "skillCue": "bamboo-emperor-pursuit"
     }
   ],
   "skills": [
