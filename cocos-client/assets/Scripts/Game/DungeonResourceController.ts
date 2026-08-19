@@ -69,9 +69,11 @@ export class DungeonResourceController<T = Asset> {
   private preparedFloor: ResourceBatch<T> | null = null
   private activeFloor: ResourceBatch<T> | null = null
   private preparation: Promise<boolean> | null = null
+  private presentationTail: Promise<void> = Promise.resolve()
   private lastEntryActors: readonly string[] = []
   private resourceStatus: DungeonResourceStatus = Object.freeze({ state: 'idle' })
   private activationGeneration = 0
+  private prefetchGeneration = 0
   private destroyed = false
 
   constructor(private readonly adapter: DungeonResourceAdapter<T> = createCocosAdapter() as DungeonResourceAdapter<T>) {}
@@ -97,6 +99,7 @@ export class DungeonResourceController<T = Asset> {
   }
 
   retryPreparation() {
+    if (this.preparation) return this.preparation
     if (this.resourceStatus.state !== 'retry') return Promise.resolve(this.isReady())
     return this.prepareEntry(this.lastEntryActors)
   }
@@ -124,8 +127,8 @@ export class DungeonResourceController<T = Asset> {
         this.releaseBatch(candidate)
         return false
       }
-      await this.adapter.showFloor(floor, new Map(candidate.entries.map((entry) => [entry.descriptor.path, entry.resource])))
-      if (this.destroyed || generation !== this.activationGeneration) {
+      const presented = await this.presentFloor(generation, floor, candidate)
+      if (!presented) {
         this.releaseBatch(candidate)
         return false
       }
@@ -138,7 +141,8 @@ export class DungeonResourceController<T = Asset> {
         this.preparedFloor = null
       }
       this.releaseUnusedPrefetches(floor < 3 ? floor + 1 as MistVaultFloor : null)
-      if (floor < 3) void this.prefetchFloor(floor + 1 as MistVaultFloor)
+      const prefetchGeneration = ++this.prefetchGeneration
+      if (floor < 3) void this.prefetchFloor(floor + 1 as MistVaultFloor, prefetchGeneration)
       return true
     } catch (error) {
       if (candidate) this.releaseBatch(candidate)
@@ -153,6 +157,7 @@ export class DungeonResourceController<T = Asset> {
     if (this.destroyed) return
     this.destroyed = true
     this.activationGeneration += 1
+    this.prefetchGeneration += 1
     this.resourceStatus = Object.freeze({ state: 'destroyed' })
     if (this.activeFloor) this.releaseBatch(this.activeFloor)
     if (this.preparedFloor) this.releaseBatch(this.preparedFloor)
@@ -217,11 +222,16 @@ export class DungeonResourceController<T = Asset> {
     }
   }
 
-  private async prefetchFloor(floor: MistVaultFloor) {
+  private async prefetchFloor(floor: MistVaultFloor, generation: number) {
     if (this.destroyed || this.prefetched.has(floor) || this.activeFloor?.floor === floor) return false
     try {
       const batch = await this.acquireBatch(floor, floorDescriptorList(floor))
-      if (this.destroyed || this.activeFloor?.floor === floor || this.prefetched.has(floor)) {
+      if (
+        this.destroyed
+        || generation !== this.prefetchGeneration
+        || this.activeFloor?.floor === floor
+        || this.prefetched.has(floor)
+      ) {
         this.releaseBatch(batch)
         return false
       }
@@ -242,6 +252,16 @@ export class DungeonResourceController<T = Asset> {
       throw failure.reason
     }
     return { floor, descriptors, entries } as ResourceBatch<T>
+  }
+
+  private presentFloor(generation: number, floor: MistVaultFloor, batch: ResourceBatch<T>): Promise<boolean> {
+    const presentation = this.presentationTail.catch(() => {}).then(async () => {
+      if (this.destroyed || generation !== this.activationGeneration) return false
+      await this.adapter.showFloor(floor, new Map(batch.entries.map((entry) => [entry.descriptor.path, entry.resource])))
+      return !this.destroyed && generation === this.activationGeneration
+    })
+    this.presentationTail = presentation.then(() => {}, () => {})
+    return presentation
   }
 
   private async acquire(descriptor: DungeonResourceDescriptor) {

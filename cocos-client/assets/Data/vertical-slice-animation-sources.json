@@ -114,11 +114,11 @@
       "actions": {
         "idle": { "frames": 6, "fps": 6, "loop": true, "source": "mist-bamboo-emperor/idle", "sourceMode": "pose-video" },
         "move": { "frames": 6, "fps": 8, "loop": true, "source": "mist-bamboo-emperor/move", "sourceMode": "pose-video" },
-        "sweep": { "frames": 6, "fps": 10, "loop": false, "source": "mist-bamboo-emperor/sweep", "sourceMode": "pose-video", "events": [{ "name": "sweep-impact", "time": 0.58 }] },
-        "spikes": { "frames": 6, "fps": 10, "loop": false, "source": "mist-bamboo-emperor/spikes", "sourceMode": "pose-video", "events": [{ "name": "spikes-rise", "time": 0.62 }] },
+        "sweep": { "frames": 6, "fps": 10, "loop": false, "source": "mist-bamboo-emperor/sweep", "sourceMode": "pose-video", "quality": { "maxScaleDrift": 0.35 }, "events": [{ "name": "sweep-impact", "time": 0.58 }] },
+        "spikes": { "frames": 6, "fps": 10, "loop": false, "source": "mist-bamboo-emperor/spikes", "sourceMode": "pose-video", "quality": { "maxScaleDrift": 0.30 }, "events": [{ "name": "spikes-rise", "time": 0.62 }] },
         "roar": { "frames": 6, "fps": 8, "loop": false, "source": "mist-bamboo-emperor/roar", "sourceMode": "pose-video", "events": [{ "name": "pursuit-roar", "time": 0.5 }] },
-        "hurt": { "frames": 6, "fps": 10, "loop": false, "source": "mist-bamboo-emperor/hurt", "sourceMode": "frame-sequence" },
-        "death": { "frames": 6, "fps": 8, "loop": false, "source": "mist-bamboo-emperor/death", "sourceMode": "frame-sequence" }
+        "hurt": { "frames": 6, "fps": 10, "loop": false, "source": "mist-bamboo-emperor/hurt", "sourceMode": "frame-sequence", "quality": { "maxScaleDrift": 0.22 } },
+        "death": { "frames": 6, "fps": 8, "loop": false, "source": "mist-bamboo-emperor/death", "sourceMode": "frame-sequence", "quality": { "maxScaleDrift": 0.28 } }
       }
     }
   }

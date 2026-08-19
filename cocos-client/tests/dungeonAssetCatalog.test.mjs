@@ -153,6 +153,31 @@ test('pursuit boss uses one atlas with seven complete action contracts', () => {
   assert.deepEqual(actor.actions.map((action) => action.name), ['idle', 'move', 'sweep', 'spikes', 'roar', 'hurt', 'death'])
   assert.equal(actor.actions.every((action) => action.frames.length >= 6), true)
   assert.equal(existsSync(resolve(root, 'assets/resources', actor.atlas)), true)
+  for (const [actionName, action] of Object.entries(sourceActor.actions)) {
+    const sourceDir = resolve(root, 'art-source/vertical-slice', action.source)
+    assert.equal(existsSync(sourceDir), true, `missing reproducible source directory ${actionName}`)
+    const sourceFrames = Array.from({ length: action.frames }, (_, index) => resolve(sourceDir, `${String(index).padStart(2, '0')}.png`))
+    assert.equal(sourceFrames.every(existsSync), true, `missing reproducible source frames ${actionName}`)
+  }
+})
+
+test('pursuit boss source frames rebuild through the reviewed atlas pipeline', () => {
+  const script = String.raw`
+import importlib.util, json, sys, tempfile
+from pathlib import Path
+root = Path(sys.argv[1])
+spec = importlib.util.spec_from_file_location("builder", root / "tools/build-vertical-slice-atlases.py")
+builder = importlib.util.module_from_spec(spec); spec.loader.exec_module(builder)
+config = json.loads((root / "assets/Data/vertical-slice-animation-sources.json").read_text("utf-8"))["actors"]["mist-bamboo-emperor"]
+with tempfile.TemporaryDirectory() as directory:
+    actor = builder.build_actor(config, root / "art-source/vertical-slice", Path(directory) / "resources")
+    assert actor["id"] == "mist-bamboo-emperor"
+    assert len(actor["actions"]) == 7
+    assert sum(len(action["frames"]) for action in actor["actions"]) == 42
+print("boss source rebuild ok")
+`
+  const result = spawnSync('python', ['-c', script, root], { cwd: root, encoding: 'utf8' })
+  assert.equal(result.status, 0, result.stdout || result.stderr)
 })
 
 test('asset and audio catalogs bind the pursuit boss and three short cues without adding BGM', () => {
@@ -203,6 +228,20 @@ test('entry preparation loads only floor one essentials and exposes retry after 
   assert.equal(await retrying, true)
   assert.equal(harness.controller.isReady(), true)
   assert.equal(harness.controller.status().state, 'ready')
+})
+
+test('concurrent retry callers share the same preparation result', async () => {
+  const { DungeonResourceController } = await loadResourceRuntime()
+  const harness = createResourceHarness(DungeonResourceController)
+  const firstPreparation = harness.controller.prepareEntry()
+  harness.pending.shift().rejectLoad(new Error('temporary'))
+  await harness.settle()
+  assert.equal(await firstPreparation, false)
+
+  const firstRetry = harness.controller.retryPreparation()
+  const secondRetry = harness.controller.retryPreparation()
+  await harness.settle()
+  assert.deepEqual(await Promise.all([firstRetry, secondRetry]), [true, true])
 })
 
 test('a visible-floor failure releases the detached candidate and remains retryable', async () => {
@@ -281,4 +320,65 @@ test('concurrent stale activation cannot replace the latest floor and destroy re
   assert.equal(snapshot.destroyed, true)
   assert.deepEqual(snapshot.retainedFloors, [])
   assert.deepEqual(snapshot.pendingFloors, [])
+})
+
+test('an older asynchronous floor presentation cannot overwrite the latest floor', async () => {
+  const { DungeonResourceController } = await loadResourceRuntime()
+  const deferredPresentations = []
+  const visible = []
+  const controller = new DungeonResourceController({
+    load: (descriptor) => Promise.resolve({ path: descriptor.path }),
+    release: () => {},
+    showFloor: (floor) => new Promise((resolveShow) => deferredPresentations.push({ floor, resolveShow }))
+      .then(() => visible.push(floor)),
+  })
+  assert.equal(await controller.prepareEntry(), true)
+
+  const first = controller.activateFloor(1)
+  await Promise.resolve()
+  const second = controller.activateFloor(2)
+  for (let index = 0; index < 10; index += 1) await Promise.resolve()
+  const simultaneousSecond = deferredPresentations.find(({ floor }) => floor === 2)
+  const firstPresentation = deferredPresentations.find(({ floor }) => floor === 1)
+  if (simultaneousSecond) {
+    simultaneousSecond.resolveShow()
+    await Promise.resolve()
+    firstPresentation?.resolveShow()
+    for (let index = 0; index < 10; index += 1) await Promise.resolve()
+  } else {
+    firstPresentation.resolveShow()
+    for (let index = 0; index < 10; index += 1) await Promise.resolve()
+    deferredPresentations.find(({ floor }) => floor === 2).resolveShow()
+  }
+  assert.deepEqual(await Promise.all([first, second]), [false, true])
+  assert.equal(visible.at(-1), 2)
+  assert.equal(controller.snapshot().activeFloor, 2)
+})
+
+test('a completed stale prefetch is released instead of returning after the player skips ahead', async () => {
+  const { DungeonResourceController } = await loadResourceRuntime()
+  const deferredFloorTwo = []
+  const released = []
+  const controller = new DungeonResourceController({
+    load(descriptor) {
+      if (descriptor.path.includes('/Floor2/')) {
+        return new Promise((resolveLoad) => deferredFloorTwo.push({ descriptor, resolveLoad }))
+      }
+      return Promise.resolve({ path: descriptor.path })
+    },
+    release: (descriptor, resource) => released.push({ descriptor, resource }),
+    showFloor: () => {},
+  })
+
+  assert.equal(await controller.prepareEntry(), true)
+  assert.equal(await controller.activateFloor(1), true)
+  await Promise.resolve()
+  assert.ok(deferredFloorTwo.length > 0)
+  assert.equal(await controller.activateFloor(3), true)
+  for (const request of deferredFloorTwo.splice(0)) request.resolveLoad({ path: request.descriptor.path })
+  for (let index = 0; index < 10; index += 1) await Promise.resolve()
+
+  assert.equal(controller.snapshot().retainedFloors.includes(2), false)
+  assert.equal(controller.snapshot().prefetchedFloors.includes(2), false)
+  assert.equal(released.some(({ descriptor }) => descriptor.path.includes('/Floor2/')), true)
 })

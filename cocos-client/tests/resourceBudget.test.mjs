@@ -26,7 +26,9 @@ test('resource budget report groups source assets by kind', () => {
   assert.equal(report.budgets.dungeon.withinBudget, true)
   assert.equal(report.budgets.dungeon.backgroundCount, 6)
   assert.equal(report.budgets.dungeon.effectCount, 2)
-  assert.equal(report.budgets.dungeon.audioCount, 3)
+  assert.equal(report.budgets.dungeon.audioCount, 4)
+  assert.equal(report.budgets.dungeon.limitBytes, 20 * 1024 * 1024)
+  assert.deepEqual(report.budgets.dungeon.missing, [])
 })
 
 test('package exposes a repeatable source resource budget command', () => {

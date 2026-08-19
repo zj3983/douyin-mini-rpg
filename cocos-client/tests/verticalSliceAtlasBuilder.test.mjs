@@ -270,6 +270,41 @@ print("runtime frame sanitized")
   assert.match(runPython(script), /runtime frame sanitized/)
 })
 
+test('ordinary frame normalization preserves intentional detached weapons', () => {
+  const script = String.raw`
+import importlib.util
+import sys
+from collections import deque
+from pathlib import Path
+from PIL import Image, ImageDraw
+
+root = Path(sys.argv[1])
+spec = importlib.util.spec_from_file_location("builder", root / "tools/build-vertical-slice-atlases.py")
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+image = Image.new("RGBA", (256, 320), (0, 0, 0, 0))
+draw = ImageDraw.Draw(image)
+draw.rectangle((88, 42, 168, 286), fill=(40, 116, 82, 255))
+draw.rectangle((204, 140, 230, 164), fill=(190, 250, 236, 255))
+frame = builder._normalize_action_frames([image], (256, 320), {"x": 0.5, "y": 0.86})[0]
+alpha = frame.getchannel("A")
+pixels = alpha.load(); visited = set(); components = 0
+for y in range(alpha.height):
+    for x in range(alpha.width):
+        if pixels[x, y] == 0 or (x, y) in visited: continue
+        components += 1; queue = deque([(x, y)]); visited.add((x, y))
+        while queue:
+            px, py = queue.popleft()
+            for nx in range(max(0, px - 1), min(alpha.width, px + 2)):
+                for ny in range(max(0, py - 1), min(alpha.height, py + 2)):
+                    if pixels[nx, ny] > 0 and (nx, ny) not in visited:
+                        visited.add((nx, ny)); queue.append((nx, ny))
+assert components >= 2, components
+print("detached weapon preserved")
+`
+  assert.match(runPython(script), /detached weapon preserved/)
+})
+
 test('builder command line check validates the checked-in source manifest', () => {
   const result = spawnSync('python', ['tools/build-vertical-slice-atlases.py', '--check'], {
     cwd: resolve('.'),

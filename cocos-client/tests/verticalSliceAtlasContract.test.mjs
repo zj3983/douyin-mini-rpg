@@ -129,6 +129,10 @@ test('vertical slice source manifest locks actor frame sizes anchors and action 
     }
   }
   assert.deepEqual(overrides.sort(), [
+    'mist-bamboo-emperor/death',
+    'mist-bamboo-emperor/hurt',
+    'mist-bamboo-emperor/spikes',
+    'mist-bamboo-emperor/sweep',
     'moss-wolf/attack',
     'moss-wolf/death',
     'qinglan-sword-cultivator/cast',

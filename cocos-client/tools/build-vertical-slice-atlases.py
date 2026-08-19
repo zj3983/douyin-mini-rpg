@@ -805,7 +805,7 @@ def _load_action_source_frames(action_config, source_root: Path):
 
 def _normalize_action_frames(source_frames, frame_size, anchor):
     frames = [
-        sanitize_runtime_frame(frame, frame_size, padding_ratio=0.10, anchor=anchor)
+        normalize_frame(frame, frame_size, 0.10, anchor)
         for frame in source_frames
     ]
     for frame in frames:
