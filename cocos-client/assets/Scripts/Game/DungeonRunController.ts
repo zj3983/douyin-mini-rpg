@@ -1,206 +1,322 @@
 import { _decorator, Component, JsonAsset, Label } from 'cc'
 import {
+  advanceDungeonRun,
+  applyDungeonCommand,
+  applyPursuerDamage,
+  checkpointDungeonRun,
   createDungeonSession,
-  extractRun,
+  defeatDungeonRun,
+  interruptDungeonRun,
+  restoreDungeonSession,
+  type DungeonCommandResult,
+  type DungeonRunCheckpoint,
 } from '../Core/Dungeon/DungeonSession.ts'
-import { interactDungeonRun } from '../Core/Dungeon/DungeonInteraction.ts'
-import type { DungeonInteractionResult } from '../Core/Dungeon/DungeonInteraction.ts'
 import type {
-  DungeonExtractionEvent,
+  DungeonCommand,
   DungeonProfile,
   DungeonRun,
+  DungeonRunEvent,
+  RunLoot,
 } from '../Core/Dungeon/DungeonTypes.ts'
 import { notifyBestEffort } from '../Core/Progression/BestEffortNotification.ts'
 
 const { ccclass, property } = _decorator
 
-function cloneRun(run: DungeonRun): DungeonRun {
-  return {
-    id: run.id,
-    profile: {
-      id: run.profile.id,
-      entryRoomId: run.profile.entryRoomId,
-      extractionRoomId: run.profile.extractionRoomId,
-      rooms: run.profile.rooms.map((room) => ({
-        id: room.id,
-        floor: room.floor,
-        kind: room.kind,
-        exits: room.exits.map((exit) => ({ ...exit })),
-        ...(room.loot ? { loot: room.loot.map((item) => ({ ...item })) } : {}),
-        ...(room.doorCurrency !== undefined ? { doorCurrency: room.doorCurrency } : {}),
-      })),
-    },
-    phase: run.phase,
-    currentRoomId: run.currentRoomId,
-    doorCurrency: run.doorCurrency,
-    searchedRoomIds: [...run.searchedRoomIds],
-    carriedLoot: run.carriedLoot.map((item) => ({ ...item })),
-  }
+type ControllerRejected = { accepted: false; reason: string; events: [] }
+
+export type DungeonBattleCompletion =
+  | { type: 'pursuer-damage'; effectiveDamage: number }
+  | { type: 'player-defeated' }
+
+export type DungeonTerminalResult =
+  | { type: 'dungeon-extracted'; runId: string; loot: RunLoot[]; exitKind: 'damaged' | 'full'; explorationRate: number; bossDefeated: boolean }
+  | { type: 'dungeon-defeated'; runId: string; retainedLoot: RunLoot[] }
+  | { type: 'dungeon-abandoned'; runId: string; retainedLoot: RunLoot[] }
+
+function cloneValue<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T
 }
 
-export type DungeonRunPresentationChange =
-  | { readonly type: 'began' }
-  | { readonly type: 'cancelled' }
-  | { readonly type: 'extracted' }
-  | Extract<DungeonInteractionResult, { type: 'searched' | 'moved' }>
-
-function clonePresentationChange(change: DungeonRunPresentationChange): DungeonRunPresentationChange {
-  if (change.type === 'searched') {
-    return { ...change, loot: change.loot.map((item) => ({ ...item })) }
-  }
-  return { ...change }
+function rejected(reason: string): ControllerRejected {
+  return { accepted: false, reason, events: [] }
 }
 
 @ccclass('DungeonRunController')
 export class DungeonRunController extends Component {
-  @property(JsonAsset)
-  profileData: JsonAsset | null = null
+  @property(JsonAsset) profileData: JsonAsset | null = null
+  @property(Label) roomLabel: Label | null = null
 
-  @property(Label)
-  roomLabel: Label | null = null
+  onCheckpoint: ((checkpoint: DungeonRunCheckpoint) => boolean) | null = null
+  onRunEvent: ((event: DungeonRunEvent) => void) | null = null
+  onTerminalResult: ((result: DungeonTerminalResult) => boolean) | null = null
 
   private run: DungeonRun | null = null
+  private componentPaused = false
+  private mapOverlayOpen = false
+  private choiceOverlayOpen = false
+  private pendingTerminalResult: DungeonTerminalResult | null = null
+  private terminalDeliveryAttempted = false
 
-  onExtractionRequested: ((payload: DungeonExtractionEvent) => boolean) | null = null
+  isReady(): boolean {
+    if (!this.profileData) return false
+    try {
+      createDungeonSession(this.profileData.json as DungeonProfile, 0)
+      return true
+    } catch {
+      return false
+    }
+  }
 
-  onRunChanged: ((snapshot: DungeonRun | null, change: DungeonRunPresentationChange) => void) | null = null
-
-  hasRun() {
+  hasRun(): boolean {
     return this.run !== null
   }
 
-  currentRunId() {
+  currentRunId(): string | null {
     return this.run?.id ?? null
   }
 
-  previewRunId(seed: number) {
-    if (!this.profileData) return null
+  previewRunId(seed: number): string | null {
+    if (!this.isReady()) return null
     try {
-      return createDungeonSession(this.profileData.json as DungeonProfile, seed).id
+      return createDungeonSession(this.profileData?.json as DungeonProfile, seed).id
     } catch {
       return null
     }
   }
 
-  begin(seed: number) {
-    if (this.run) return false
-    if (!this.profileData) return false
-
-    let nextRun: DungeonRun
+  begin(seed: number): boolean {
+    if (this.run || !this.isReady()) return false
     try {
-      nextRun = createDungeonSession(this.profileData.json as DungeonProfile, seed)
+      this.run = createDungeonSession(this.profileData?.json as DungeonProfile, seed)
+      this.resetTransientState()
+      this.refreshRoomLabel()
+      return true
     } catch {
       return false
     }
-
-    this.run = nextRun
-    this.refreshRoomLabel()
-    this.notifyPresentationBestEffort({ type: 'began' })
-    this.emitBestEffort('dungeon-run-began', {
-      runId: nextRun.id,
-      roomId: nextRun.currentRoomId,
-    })
-    return true
   }
 
-  cancelRun() {
+  restore(checkpoint: DungeonRunCheckpoint): boolean {
+    if (this.run || !this.isReady()) return false
+    try {
+      this.run = restoreDungeonSession(this.profileData?.json as DungeonProfile, checkpoint)
+      this.resetTransientState()
+      this.refreshRoomLabel()
+      this.captureTerminalResult([])
+      return true
+    } catch {
+      this.run = null
+      return false
+    }
+  }
+
+  checkpoint(): DungeonRunCheckpoint | null {
+    if (!this.run) return null
+    try {
+      return checkpointDungeonRun(this.run)
+    } catch {
+      return null
+    }
+  }
+
+  cancelRun(): boolean {
     if (!this.run) return false
     this.run = null
+    this.resetTransientState()
     this.refreshRoomLabel()
-    this.notifyPresentationBestEffort({ type: 'cancelled' })
     return true
   }
 
-  isExtractedRun(runId: string) {
+  isExtractedRun(runId: string): boolean {
     return this.run?.id === runId && this.run.phase === 'extracted'
   }
 
-  extractedLoot(runId: string) {
+  extractedLoot(runId: string): RunLoot[] | null {
     if (!this.isExtractedRun(runId) || !this.run) return null
-    return this.run.carriedLoot.map((item) => ({ ...item }))
+    return cloneValue(this.run.carriedLoot)
   }
 
-  interact(): DungeonInteractionResult | null {
+  applyCommand(command: DungeonCommand): DungeonCommandResult | ControllerRejected {
+    return this.mutate((candidate) => applyDungeonCommand(candidate, command))
+  }
+
+  handleEffectiveDamage(hit: { sourceRole: 'ordinary' | 'elite' | 'boss'; effectiveDamage: number }): DungeonCommandResult | ControllerRejected {
+    if (!Number.isFinite(hit?.effectiveDamage) || hit.effectiveDamage <= 0) return rejected('ineffective-damage')
+    return this.mutate((candidate) => interruptDungeonRun(candidate, hit))
+  }
+
+  handleBattleCompleted(result: DungeonBattleCompletion): DungeonCommandResult | ControllerRejected {
+    if (result?.type === 'pursuer-damage') {
+      if (!Number.isFinite(result.effectiveDamage) || result.effectiveDamage <= 0) return rejected('ineffective-damage')
+      return this.mutate((candidate) => applyPursuerDamage(candidate, result.effectiveDamage))
+    }
+    if (result?.type === 'player-defeated') {
+      if (!this.run) return rejected('no-active-run')
+      const candidate = this.cloneAuthoritativeRun()
+      if (!candidate) return rejected('candidate-restore-failed')
+      const terminal = defeatDungeonRun(candidate)
+      const event: DungeonRunEvent = { type: 'dungeon-defeated', retainedLoot: terminal.retainedLoot }
+      if (!this.commitCandidate(candidate)) return rejected('checkpoint-rejected')
+      this.deliverEvents([event])
+      this.captureTerminalResult([event])
+      this.tryDeliverTerminal()
+      return { accepted: true, events: [cloneValue(event)], retainedLoot: cloneValue(terminal.retainedLoot) }
+    }
+    return rejected('invalid-battle-completion')
+  }
+
+  update(deltaSeconds: number): void {
+    if (!this.run || this.isPaused() || !Number.isFinite(deltaSeconds) || deltaSeconds <= 0) return
+    const candidate = this.cloneAuthoritativeRun()
+    if (!candidate) return
+    let result: { events: DungeonRunEvent[] }
+    try {
+      result = advanceDungeonRun(candidate, deltaSeconds, { paused: false })
+    } catch {
+      return
+    }
+    if (!this.commitCandidate(candidate)) return
+    this.deliverEvents(result.events)
+    this.captureTerminalResult(result.events)
+    if (!this.terminalDeliveryAttempted) this.tryDeliverTerminal()
+  }
+
+  setPaused(paused: boolean): void {
+    this.componentPaused = paused
+  }
+
+  setMapOverlayOpen(open: boolean): void {
+    this.mapOverlayOpen = open
+  }
+
+  setChoiceOverlayOpen(open: boolean): void {
+    this.choiceOverlayOpen = open
+  }
+
+  acknowledgeTerminalResult(): boolean {
+    return this.tryDeliverTerminal()
+  }
+
+  getRunSnapshot(): DungeonRunCheckpoint | null {
+    return this.checkpoint()
+  }
+
+  onDestroy(): void {
+    this.onCheckpoint = null
+    this.onRunEvent = null
+    this.onTerminalResult = null
+    this.run = null
+    this.resetTransientState()
+  }
+
+  private mutate(mutation: (candidate: DungeonRun) => DungeonCommandResult): DungeonCommandResult | ControllerRejected {
+    if (!this.run) return rejected('no-active-run')
+    const candidate = this.cloneAuthoritativeRun()
+    if (!candidate) return rejected('candidate-restore-failed')
+    let result: DungeonCommandResult
+    try {
+      result = mutation(candidate)
+    } catch {
+      return rejected('mutation-failed')
+    }
+    if (!result.accepted) return cloneValue(result)
+    if (!this.commitCandidate(candidate)) return rejected('checkpoint-rejected')
+    this.deliverEvents(result.events)
+    this.captureTerminalResult(result.events)
+    if (!this.terminalDeliveryAttempted) this.tryDeliverTerminal()
+    return cloneValue(result)
+  }
+
+  private cloneAuthoritativeRun(): DungeonRun | null {
     if (!this.run) return null
-    const result = interactDungeonRun(this.run)
-    if (result.type === 'searched') {
-      this.notifyPresentationBestEffort(result)
-      if (result.loot.length > 0) {
-        this.emitBestEffort('dungeon-loot-found', result.loot.map((item) => ({ ...item })))
-      }
-    } else if (result.type === 'moved') {
-      this.refreshRoomLabel()
-      this.notifyPresentationBestEffort(result)
-      this.emitBestEffort('dungeon-room-changed', { roomId: result.roomId })
-    } else if (result.type === 'extraction-requested') {
-      this.extract()
+    try {
+      return restoreDungeonSession(this.run.profile, checkpointDungeonRun(this.run))
+    } catch {
+      return null
     }
-    return result
   }
 
-  extract() {
-    if (!this.run) return false
-    const run = this.run
-    const result = extractRun(run)
-    if (!result.ok) return false
-    const request: DungeonExtractionEvent = {
-      runId: run.id,
-      loot: result.loot.map((item) => ({ ...item })),
-    }
-    const onExtractionRequested = this.onExtractionRequested
-    if (!onExtractionRequested) {
-      this.restoreExtraction(run)
-      return false
-    }
+  private commitCandidate(candidate: DungeonRun): boolean {
+    const callback = this.onCheckpoint
+    if (!callback) return false
+    const checkpoint = checkpointDungeonRun(candidate)
     let accepted = false
     try {
-      accepted = onExtractionRequested(request)
+      accepted = callback(cloneValue(checkpoint))
     } catch {
-      this.restoreExtraction(run)
-      return false
+      accepted = false
     }
-    if (!accepted) {
-      this.restoreExtraction(run)
-      return false
-    }
-    if (this.run !== run) return false
-    this.run = null
+    if (!accepted) return false
+    this.run = candidate
     this.refreshRoomLabel()
-    this.notifyPresentationBestEffort({ type: 'extracted' })
-    const notification: DungeonExtractionEvent = {
-      runId: request.runId,
-      loot: request.loot.map((item) => ({ ...item })),
-    }
-    this.emitBestEffort('dungeon-extracted', notification)
     return true
   }
 
-  getRunSnapshot() {
-    return this.run ? cloneRun(this.run) : null
-  }
-
-  private refreshRoomLabel() {
-    if (this.roomLabel) this.roomLabel.string = this.run?.currentRoomId ?? ''
-  }
-
-  private notifyPresentationBestEffort(change: DungeonRunPresentationChange) {
-    const callback = this.onRunChanged
+  private deliverEvents(events: readonly DungeonRunEvent[]): void {
+    const callback = this.onRunEvent
     if (!callback) return
-    const notification = {
-      snapshot: this.getRunSnapshot(),
-      change: clonePresentationChange(change),
+    notifyBestEffort(events.map((event) => cloneValue(event)), (event) => callback(cloneValue(event)))
+  }
+
+  private captureTerminalResult(events: readonly DungeonRunEvent[]): void {
+    if (!this.run) return
+    const event = [...events].reverse().find((candidate) => (
+      candidate.type === 'extraction-completed' ||
+      candidate.type === 'dungeon-defeated' ||
+      candidate.type === 'dungeon-abandoned'
+    ))
+    if (event?.type === 'extraction-completed' || (!event && this.run.phase === 'extracted')) {
+      const settlement = event?.type === 'extraction-completed' ? event : null
+      this.pendingTerminalResult = {
+        type: 'dungeon-extracted',
+        runId: this.run.id,
+        loot: cloneValue(this.run.carriedLoot),
+        exitKind: settlement?.exitKind ?? (this.run.extraction.roomId === this.run.profile.finalExtractionRoomId ? 'full' : 'damaged'),
+        explorationRate: settlement?.explorationRate ?? this.explorationRate(this.run),
+        bossDefeated: settlement?.bossDefeated ?? this.run.pursuer.phase === 'defeated',
+      }
+    } else if (event?.type === 'dungeon-defeated' || (!event && this.run.phase === 'defeated')) {
+      this.pendingTerminalResult = { type: 'dungeon-defeated', runId: this.run.id, retainedLoot: cloneValue(this.run.boundLoot) }
+    } else if (event?.type === 'dungeon-abandoned' || (!event && this.run.phase === 'abandoned')) {
+      this.pendingTerminalResult = { type: 'dungeon-abandoned', runId: this.run.id, retainedLoot: cloneValue(this.run.boundLoot) }
     }
-    notifyBestEffort([notification], (item) => callback(item.snapshot, item.change))
   }
 
-  // Analytics observers are optional; presentation is delivered through onRunChanged.
-  private emitBestEffort(eventName: string, ...args: unknown[]) {
-    notifyBestEffort([{ eventName, args }], (notification) => {
-      this.node.emit(notification.eventName, ...notification.args)
-    })
+  private tryDeliverTerminal(): boolean {
+    if (!this.pendingTerminalResult || !this.run) return false
+    this.terminalDeliveryAttempted = true
+    const callback = this.onTerminalResult
+    if (!callback) return false
+    let accepted = false
+    try {
+      accepted = callback(cloneValue(this.pendingTerminalResult))
+    } catch {
+      accepted = false
+    }
+    if (!accepted) return false
+    this.run = null
+    this.pendingTerminalResult = null
+    this.refreshRoomLabel()
+    return true
   }
 
-  private restoreExtraction(run: DungeonRun) {
-    if (this.run === run && run.phase === 'extracted') run.phase = 'exploring'
+  private explorationRate(run: DungeonRun): number {
+    return Number(Math.min(1, new Set(run.map.revealedRoomIds).size / run.profile.rooms.length).toFixed(6))
+  }
+
+  private isPaused(): boolean {
+    return this.componentPaused || this.mapOverlayOpen || this.choiceOverlayOpen
+  }
+
+  private resetTransientState(): void {
+    this.componentPaused = false
+    this.mapOverlayOpen = false
+    this.choiceOverlayOpen = false
+    this.pendingTerminalResult = null
+    this.terminalDeliveryAttempted = false
+  }
+
+  private refreshRoomLabel(): void {
+    if (this.roomLabel) this.roomLabel.string = this.run?.map.currentRoomId ?? ''
   }
 }
