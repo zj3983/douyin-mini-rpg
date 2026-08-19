@@ -43,10 +43,12 @@ function createDungeonPort({
   cancelThrows = false,
   ready = true,
   restoreOk = true,
+  restoredRunId = null,
 } = {}) {
   let runId = activeRunId
   let runPhase = activeRunId ? phase : null
   let runCheckpoint = activeRunId ? makeCheckpoint(Number(activeRunId.split('-').at(-1)) || 7) : null
+  let canCancel = cancelOk
   const calls = { begin: [], cancel: 0, preview: [], ready: 0, restore: [], checkpoint: 0 }
 
   return {
@@ -79,7 +81,7 @@ function createDungeonPort({
       calls.restore.push(structuredClone(value))
       if (!restoreOk) return false
       runCheckpoint = structuredClone(value)
-      runId = value.runId
+      runId = restoredRunId ?? value.runId
       runPhase = value.phase
       return true
     },
@@ -90,7 +92,7 @@ function createDungeonPort({
     cancelRun() {
       calls.cancel += 1
       if (cancelThrows) throw new Error('cancel unavailable')
-      if (!cancelOk) return false
+      if (!canCancel) return false
       if (runId === null) return false
       runId = null
       runPhase = null
@@ -108,6 +110,16 @@ function createDungeonPort({
     markExtracted() {
       assert.notEqual(runId, null)
       runPhase = 'extracted'
+    },
+    markTerminal(type, retainedLoot) {
+      assert.notEqual(runCheckpoint, null)
+      runCheckpoint.phase = type === 'dungeon-defeated' ? 'defeated' : 'abandoned'
+      runCheckpoint.carriedLoot = []
+      runCheckpoint.boundLoot = retainedLoot.map((item) => ({ ...item }))
+      runPhase = runCheckpoint.phase
+    },
+    setCancelOk(value) {
+      canCancel = value
     },
   }
 }
@@ -220,6 +232,47 @@ test('failed restore remains recoverable and refunds once only after persistence
   assert.equal(runtime.getSaveSnapshot().inventory.dungeonPasses, 1)
 })
 
+test('restore identity mismatch cancels the wrong live session before refunding', () => {
+  const checkpoint = makeCheckpoint(29)
+  const save = createDefaultSave()
+  save.dungeon.activeRun = { payment: 'pass', checkpoint }
+  const repository = createRepository()
+  const dungeon = createDungeonPort({ restoredRunId: 'mist-vault-999' })
+  const runtime = createDualModeRuntime({ initialSave: save, repository, dungeon })
+
+  assert.equal(dungeon.hasRun(), true)
+  assert.deepEqual(runtime.recoverDungeonRestoreFailure(), { ok: true, saveChanged: true })
+  assert.equal(dungeon.calls.cancel, 1)
+  assert.equal(dungeon.hasRun(), false)
+  assert.equal(runtime.getSaveSnapshot().dungeon.activeRun, null)
+  assert.equal(runtime.getSaveSnapshot().inventory.dungeonPasses, 1)
+  assert.equal(repository.saved.length, 1)
+})
+
+test('restore recovery keeps payment and activeRun when the wrong session cannot be cancelled', () => {
+  const checkpoint = makeCheckpoint(30)
+  const save = createDefaultSave()
+  save.dungeon.activeRun = { payment: 'free', checkpoint }
+  save.dungeon.freeEntriesUsed = 1
+  const repository = createRepository()
+  const dungeon = createDungeonPort({ restoredRunId: 'mist-vault-998', cancelOk: false })
+  const runtime = createDualModeRuntime({ initialSave: save, repository, dungeon })
+
+  assert.deepEqual(runtime.recoverDungeonRestoreFailure(), {
+    ok: false,
+    reason: 'dungeon-cancel-failed',
+  })
+  assert.equal(repository.saved.length, 0)
+  assert.equal(runtime.getSaveSnapshot().dungeon.freeEntriesUsed, 1)
+  assert.notEqual(runtime.getSaveSnapshot().dungeon.activeRun, null)
+  assert.equal(dungeon.hasRun(), true)
+
+  dungeon.setCancelOk(true)
+  assert.deepEqual(runtime.recoverDungeonRestoreFailure(), { ok: true, saveChanged: true })
+  assert.equal(runtime.getSaveSnapshot().dungeon.freeEntriesUsed, 0)
+  assert.equal(runtime.getSaveSnapshot().dungeon.activeRun, null)
+})
+
 test('checkpoint updates replace active progress with one atomic save and remain retryable', () => {
   const repository = createRepository({ failAt: 2 })
   const dungeon = createDungeonPort()
@@ -254,10 +307,14 @@ test('defeat and abandon persist only retained loot, clear activeRun, and return
       dungeon,
     })
     assert.equal(runtime.enterDungeon(26).ok, true)
+    const type = method === 'handleDungeonDefeated' ? 'dungeon-defeated' : 'dungeon-abandoned'
+    const retainedLoot = [{ itemId: 'realm-experience', amount: 8 }]
+    dungeon.markTerminal(type, retainedLoot)
 
     const result = runtime[method]({
-      type: method === 'handleDungeonDefeated' ? 'dungeon-defeated' : 'dungeon-abandoned',
-      retainedLoot: [{ itemId: 'realm-experience', amount: 8 }],
+      type,
+      runId: 'mist-vault-26',
+      retainedLoot,
     })
 
     assert.deepEqual(result, { ok: true, runId: 'mist-vault-26', saveChanged: true })
@@ -278,7 +335,9 @@ test('terminal persistence failure leaves active run and retained loot retryable
     dungeon,
   })
   assert.equal(runtime.enterDungeon(27).ok, true)
-  const event = { type: 'dungeon-defeated', retainedLoot: [{ itemId: 'realm-experience', amount: 3 }] }
+  const retainedLoot = [{ itemId: 'realm-experience', amount: 3 }]
+  dungeon.markTerminal('dungeon-defeated', retainedLoot)
+  const event = { type: 'dungeon-defeated', runId: 'mist-vault-27', retainedLoot }
 
   assert.deepEqual(runtime.handleDungeonDefeated(event), { ok: false, reason: 'save-persist-failed' })
   assert.equal(runtime.getMode(), 'dungeon')
@@ -288,6 +347,54 @@ test('terminal persistence failure leaves active run and retained loot retryable
   repository.save = (value) => repository.saved.push(migratePlayerSave(value))
   assert.equal(runtime.handleDungeonDefeated(event).ok, true)
   assert.equal(runtime.getSaveSnapshot().inventory.materials['realm-experience'], 3)
+})
+
+test('terminal settlement rejects a non-terminal authoritative checkpoint without saving', () => {
+  const repository = createRepository()
+  const dungeon = createDungeonPort()
+  const runtime = createDualModeRuntime({ initialSave: saveWithPasses(1), repository, dungeon })
+  assert.equal(runtime.enterDungeon(31).ok, true)
+
+  assert.deepEqual(runtime.handleDungeonDefeated({
+    type: 'dungeon-defeated',
+    runId: 'mist-vault-31',
+    retainedLoot: [],
+  }), { ok: false, reason: 'run-not-terminal' })
+  assert.equal(repository.saved.length, 1)
+  assert.notEqual(runtime.getSaveSnapshot().dungeon.activeRun, null)
+})
+
+test('terminal settlement rejects a caller run ID that differs from the active run', () => {
+  const repository = createRepository()
+  const dungeon = createDungeonPort()
+  const runtime = createDualModeRuntime({ initialSave: saveWithPasses(1), repository, dungeon })
+  assert.equal(runtime.enterDungeon(32).ok, true)
+  dungeon.markTerminal('dungeon-defeated', [])
+
+  assert.deepEqual(runtime.handleDungeonDefeated({
+    type: 'dungeon-defeated',
+    runId: 'mist-vault-999',
+    retainedLoot: [],
+  }), { ok: false, reason: 'run-id-mismatch' })
+  assert.equal(repository.saved.length, 1)
+  assert.notEqual(runtime.getSaveSnapshot().dungeon.activeRun, null)
+})
+
+test('terminal settlement rejects forged retained loot against the authoritative checkpoint', () => {
+  const repository = createRepository()
+  const dungeon = createDungeonPort()
+  const runtime = createDualModeRuntime({ initialSave: saveWithPasses(1), repository, dungeon })
+  assert.equal(runtime.enterDungeon(33).ok, true)
+  dungeon.markTerminal('dungeon-abandoned', [{ itemId: 'realm-experience', amount: 2 }])
+
+  assert.deepEqual(runtime.handleDungeonAbandoned({
+    type: 'dungeon-abandoned',
+    runId: 'mist-vault-33',
+    retainedLoot: [{ itemId: 'realm-experience', amount: 999 }],
+  }), { ok: false, reason: 'retained-loot-mismatch' })
+  assert.equal(repository.saved.length, 1)
+  assert.equal(runtime.getSaveSnapshot().inventory.materials['realm-experience'], undefined)
+  assert.notEqual(runtime.getSaveSnapshot().dungeon.activeRun, null)
 })
 
 test('default entry probes from a generated uint32 seed until the run ID is unused', () => {

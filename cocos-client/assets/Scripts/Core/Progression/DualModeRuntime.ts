@@ -106,11 +106,14 @@ function parseDungeonExtractionEvent(value: unknown): DungeonExtractionEvent | n
 function parseTerminalEvent(
   value: unknown,
   expectedType: 'dungeon-defeated' | 'dungeon-abandoned',
-): { retainedLoot: RunLoot[] } | null {
+): { runId: string; retainedLoot: RunLoot[] } | null {
   try {
     if (!isRecord(value)) return null
+    const runId = canonicalId(value.runId)
     const retainedLoot = parseLoot(value.retainedLoot)
-    return value.type !== expectedType || retainedLoot === null ? null : { retainedLoot }
+    return value.type !== expectedType || runId === null || retainedLoot === null
+      ? null
+      : { runId, retainedLoot }
   } catch {
     return null
   }
@@ -305,8 +308,24 @@ export function createDualModeRuntime(options: DualModeRuntimeOptions) {
     const event = parseTerminalEvent(payload, expectedType)
     if (!event) return { ok: false, reason: 'invalid-terminal-event' }
     if (activeRunId === null || save.dungeon.activeRun === null) return { ok: false, reason: 'no-active-run' }
+    if (event.runId !== activeRunId) return { ok: false, reason: 'run-id-mismatch' }
     const runId = activeRunId
-    const next = applyExtractionLoot(save, runId, event.retainedLoot)
+
+    let checkpoint: DungeonRunCheckpoint | null
+    try {
+      checkpoint = cloneCheckpoint(options.dungeon.checkpoint())
+    } catch {
+      checkpoint = null
+    }
+    if (checkpoint === null) return { ok: false, reason: 'invalid-terminal-checkpoint' }
+    if (checkpoint.runId !== runId) return { ok: false, reason: 'run-id-mismatch' }
+    const expectedPhase = expectedType === 'dungeon-defeated' ? 'defeated' : 'abandoned'
+    if (checkpoint.phase !== expectedPhase) return { ok: false, reason: 'run-not-terminal' }
+    if (!sameLoot(event.retainedLoot, checkpoint.boundLoot)) {
+      return { ok: false, reason: 'retained-loot-mismatch' }
+    }
+
+    const next = applyExtractionLoot(save, runId, checkpoint.boundLoot)
     next.dungeon.activeRun = null
     if (!persist(next)) return { ok: false, reason: 'save-persist-failed' }
     save = next
@@ -347,6 +366,17 @@ export function createDualModeRuntime(options: DualModeRuntimeOptions) {
   function recoverDungeonRestoreFailure(): SaveAccepted | RejectedTransition {
     const active = save.dungeon.activeRun
     if (!restoreFailed || active === null) return { ok: false, reason: 'no-restore-failure' }
+
+    try {
+      if (options.dungeon.hasRun()) {
+        if (!options.dungeon.cancelRun() || options.dungeon.hasRun()) {
+          return { ok: false, reason: 'dungeon-cancel-failed' }
+        }
+      }
+    } catch {
+      return { ok: false, reason: 'dungeon-cancel-failed' }
+    }
+
     const refunded = refundDungeonEntry(save, active.payment)
     if (!refunded.ok) return { ok: false, reason: refunded.reason }
     refunded.save.dungeon.activeRun = null
