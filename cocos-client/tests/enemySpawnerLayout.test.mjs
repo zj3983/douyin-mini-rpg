@@ -55,6 +55,7 @@ class SpawnNode {
   position = { x: 0, y: 0, z: 0 }
   controller
   visual
+  listeners = new Map()
   transform = {
     contentSize: { width: 210, height: 336 },
     setContentSize: (width, height) => { this.transform.contentSize = { width, height } },
@@ -67,9 +68,22 @@ class SpawnNode {
   setPosition(x, y, z) { this.position = typeof x === 'object' ? { ...x } : { x, y, z } }
   setScale() {}
   setRotationFromEuler() {}
-  on() {}
-  off() {}
-  emit() {}
+  on(event, callback, target) {
+    const listeners = this.listeners.get(event) ?? []
+    listeners.push({ callback, target })
+    this.listeners.set(event, listeners)
+  }
+  off(event, callback, target) {
+    const listeners = this.listeners.get(event) ?? []
+    this.listeners.set(event, listeners.filter((listener) => (
+      listener.callback !== callback || listener.target !== target
+    )))
+  }
+  emit(event, ...args) {
+    for (const listener of [...(this.listeners.get(event) ?? [])]) {
+      listener.callback.call(listener.target, ...args)
+    }
+  }
   getComponent(Type) {
     if (Type.name === 'EnemyController') return this.controller
     if (Type.name === 'EnemyVisualController') return this.visual
@@ -183,4 +197,142 @@ test('EnemySpawner reuses the versioned neighbor array on stable frames without 
   assert.strictEqual(stable, first)
   assert.deepEqual(stable.map((entry) => entry.id), [1, 2])
   assert.equal(Object.isFrozen(stable), true)
+})
+
+test('every non-Boss dungeon catalog actor resolves to a live EnemyBrain archetype', async () => {
+  const { EnemySpawner } = await loadEnemySpawner()
+  const catalog = JSON.parse(await readFile(
+    new URL('../assets/resources/Data/dungeon-encounters.json', import.meta.url),
+    'utf8',
+  ))
+  const profiles = new Map()
+  for (const encounter of catalog.encounters) {
+    for (const enemy of encounter.enemies) {
+      if (enemy.role !== 'boss') profiles.set(enemy.id, enemy)
+    }
+  }
+
+  const resolved = {}
+  for (const [index, [actorId, enemyProfile]] of [...profiles].entries()) {
+    let binding = null
+    let visualActorId = null
+    const controller = {
+      bindRuntimeEnemy(_enemy, nextBinding) { binding = nextBinding },
+      setTarget() {},
+    }
+    const visual = {
+      animator: null,
+      resetForSpawn(profile) { visualActorId = profile.id },
+    }
+    const node = new SpawnNode(controller, visual)
+    const spawner = new EnemySpawner()
+    spawner.enemyPool = { spawn: () => node, activateNode() {}, hasAvailableSlot: () => true }
+    spawner.spawnEnemy({
+      id: index + 1,
+      hp: 100,
+      alive: true,
+      position: { x: 0, y: 0 },
+      profile: enemyProfile,
+    })
+    resolved[actorId] = binding?.kind ?? null
+    assert.equal(visualActorId, actorId)
+  }
+  assert.deepEqual(resolved, {
+    'moss-wolf': 'moss-wolf',
+    'green-wing-moth': 'green-wing-moth',
+    'fog-spider': 'moss-wolf',
+    'lantern-wraith': 'green-wing-moth',
+    'mist-deer-king': 'moss-wolf',
+  })
+  assert.equal(Object.values(resolved).every(Boolean), true)
+})
+
+test('dungeon AI presentation actions stay on each visual actor atlas', async () => {
+  const { EnemySpawner } = await loadEnemySpawner()
+  const sourceManifest = JSON.parse(await readFile(
+    new URL('../assets/resources/Data/animation-atlas.json', import.meta.url),
+    'utf8',
+  ))
+  const cases = [
+    ['fog-spider', 'ground', ['telegraph']],
+    ['lantern-wraith', 'flying', ['dive', 'cast']],
+    ['mist-deer-king', 'ground', ['telegraph']],
+  ]
+
+  for (const [index, [actorId, role, actions]] of cases.entries()) {
+    const manifest = structuredClone(sourceManifest)
+    const controller = {
+      bindRuntimeEnemy() {},
+      setTarget() {},
+      prepareForPool() {},
+    }
+    const visual = {
+      animator: { animationManifest: { json: manifest }, targetSprite: null },
+      resetForSpawn() {},
+      prepareForPool() {},
+    }
+    const node = new SpawnNode(controller, visual)
+    const spawner = new EnemySpawner()
+    spawner.enemyPool = {
+      spawn: () => node,
+      activateNode() {},
+      despawn() {},
+      hasAvailableSlot: () => true,
+    }
+    spawner.spawnEnemy({
+      id: 700 + index,
+      hp: 100,
+      alive: true,
+      position: { x: 0, y: 0 },
+      profile: { id: actorId, role },
+    })
+
+    for (const action of actions) {
+      node.emit('enemy-semantic-animation', 'brain-action', action)
+      const actor = manifest.actors.find((entry) => entry.id === actorId)
+      const adapted = actor.actions.find((entry) => entry.name === action)
+      const ownAttack = actor.actions.find((entry) => entry.name === 'attack')
+      assert.ok(adapted, `${actorId} must present ${action} without switching actor atlases`)
+      assert.equal(adapted.atlas, ownAttack.atlas)
+      assert.deepEqual(adapted.frames, ownAttack.frames)
+    }
+
+    spawner.despawnEnemy(node)
+    assert.equal(node.listeners.get('enemy-semantic-animation')?.length ?? 0, 0)
+  }
+})
+
+test('Mist Bamboo Emperor keeps its visual actor ID while binding the shared Boss Brain', async () => {
+  const { EnemySpawner } = await loadEnemySpawner()
+  let binding = null
+  let visualActorId = null
+  const controller = {
+    bindRuntimeEnemy(_enemy, nextBinding) { binding = nextBinding },
+    setTarget() {},
+    syncBossBattleSpace() {},
+  }
+  const visual = {
+    animator: null,
+    resetForSpawn(profile) { visualActorId = profile.id },
+  }
+  const node = new SpawnNode(controller, visual)
+  const spawner = new EnemySpawner()
+  spawner.enemyPool = { spawn: () => node, activateNode() {}, hasAvailableSlot: () => true }
+  const enemy = {
+    id: 500,
+    hp: 520,
+    alive: true,
+    position: { x: 0, y: 0 },
+    profile: {
+      id: 'mist-bamboo-emperor',
+      name: '雾竹皇',
+      role: 'boss',
+      theme: 'mist-bamboo-pursuit',
+    },
+  }
+
+  spawner.spawnEnemy(enemy)
+
+  assert.equal(visualActorId, 'mist-bamboo-emperor')
+  assert.equal(binding.kind, 'bamboo-warden')
 })

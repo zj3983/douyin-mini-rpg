@@ -362,6 +362,22 @@ test('changing rooms fully cleans the old generation and stale callbacks are ign
   assert.equal(controller.isDungeonEncounterActive(), false)
 })
 
+test('begin, room change, and cancel publish every battle generation reset', async () => {
+  const { BattleRuntimeController } = await loadController()
+  const { controller } = controllerHarness(BattleRuntimeController)
+
+  assert.equal(controller.beginDungeonEncounter(request({ id: 'room:first' })), true)
+  assert.equal(controller.beginDungeonEncounter(request({ id: 'room:second', seed: 2 })), true)
+  assert.equal(controller.cancelDungeonEncounter('room:second'), true)
+
+  const resets = controller.node.events
+    .filter(([name]) => name === 'battle-generation-reset')
+    .map(([, payload]) => payload.generation)
+  assert.equal(resets.length, 3)
+  assert.deepEqual(resets, resets.toSorted((left, right) => left - right))
+  assert.equal(new Set(resets).size, resets.length)
+})
+
 test('dungeon defeat emits authority event without a world defeat panel', async () => {
   const { BattleRuntimeController } = await loadController()
   const { controller } = controllerHarness(BattleRuntimeController)

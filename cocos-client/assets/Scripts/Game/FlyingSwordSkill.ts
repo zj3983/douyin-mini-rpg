@@ -26,6 +26,7 @@ export class FlyingSwordSkill extends Component {
   private artifact: ArtifactRuntime | null = null
   private visiblePathId: string | null = null
   private casting = false
+  private boundBattleRuntimeNode: Node | null = null
 
   onLoad() {
     this.artifact = createArtifactRuntime({
@@ -36,11 +37,25 @@ export class FlyingSwordSkill extends Component {
     this.hideSword()
   }
 
+  onEnable() {
+    this.bindBattleRuntimeEvents()
+  }
+
+  start() {
+    this.bindBattleRuntimeEvents()
+  }
+
   onDisable() {
+    this.unbindBattleRuntimeEvents()
     this.cancelCast(true)
   }
 
+  onDestroy() {
+    this.unbindBattleRuntimeEvents()
+  }
+
   update(deltaTime: number) {
+    this.bindBattleRuntimeEvents()
     if (!this.battleRuntime || !this.artifact) return
     if (this.battleRuntime.isBattleFrozen()) {
       this.cancelCast(false)
@@ -57,7 +72,7 @@ export class FlyingSwordSkill extends Component {
     for (const command of commands) this.applyArtifactCommand(command)
   }
 
-  public resetForStage(generation: number) {
+  resetForStage(generation: number) {
     if (!this.artifact) return
     resetArtifact(this.artifact, generation)
     this.cancelCast(true)
@@ -73,6 +88,7 @@ export class FlyingSwordSkill extends Component {
         this.node.emit('player-action-requested', command.action)
         return
       case 'spawn-sword':
+        if (!this.isCurrentArtifactPath(command.pathId)) return
         if (!this.visiblePathId) {
           this.visiblePathId = command.pathId
           if (this.sword) {
@@ -93,16 +109,19 @@ export class FlyingSwordSkill extends Component {
         }
         return
       case 'move-sword':
-        if (command.pathId === this.visiblePathId) this.applySwordPose(command)
+        if (this.isCurrentArtifactPath(command.pathId) && command.pathId === this.visiblePathId) {
+          this.applySwordPose(command)
+        }
         return
       case 'resolve-sword-hit':
+        if (!this.isCurrentArtifactPath(command.pathId)) return
         this.node.emit('sword-pass-resolved', {
           phase: command.phase,
           result: this.battleRuntime?.resolveArtifactSwordHit(command.targetId),
         })
         return
       case 'despawn-sword':
-        if (command.pathId !== this.visiblePathId) return
+        if (!this.isCurrentArtifactPath(command.pathId) || command.pathId !== this.visiblePathId) return
         this.visiblePathId = null
         this.finishCast()
         return
@@ -115,6 +134,30 @@ export class FlyingSwordSkill extends Component {
     const angle = Math.atan2(to.y - from.y, to.x - from.x) * 180 / Math.PI
     this.sword.setPosition(to.x, to.y, 0)
     this.sword.setRotationFromEuler(0, 0, angle)
+  }
+
+  private bindBattleRuntimeEvents() {
+    const runtimeNode = this.battleRuntime?.node ?? null
+    if (runtimeNode === this.boundBattleRuntimeNode) return
+    this.unbindBattleRuntimeEvents()
+    if (!runtimeNode) return
+    runtimeNode.on('battle-generation-reset', this.onBattleGenerationReset, this)
+    this.boundBattleRuntimeNode = runtimeNode
+  }
+
+  private unbindBattleRuntimeEvents() {
+    this.boundBattleRuntimeNode?.off('battle-generation-reset', this.onBattleGenerationReset, this)
+    this.boundBattleRuntimeNode = null
+  }
+
+  private onBattleGenerationReset(payload: { generation: number }) {
+    if (!Number.isSafeInteger(payload?.generation) || payload.generation <= 0) return
+    this.resetForStage(payload.generation)
+  }
+
+  private isCurrentArtifactPath(pathId: string) {
+    if (!this.artifact) return false
+    return pathId.startsWith(`${this.artifact.ownerId}-sword-${this.artifact.generation}-`)
   }
 
   private finishCast() {

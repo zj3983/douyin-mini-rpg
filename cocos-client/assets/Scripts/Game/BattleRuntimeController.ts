@@ -728,6 +728,7 @@ export class BattleRuntimeController extends Component {
     this.bossTelegraphPresenter?.hideAll()
     const nextGeneration = Math.max(this.stageGeneration + 1, this.enemyCombatResolver.generation + 1)
     this.stageGeneration = nextGeneration
+    this.node.emit('battle-generation-reset', { generation: nextGeneration })
     this.attemptState = createBattleAttemptState(nextGeneration, this.stageNumber)
     resetEnemyCombatResolverAdapter(this.enemyCombatResolver, nextGeneration)
     this.bossTelegraphPresenter?.resetGeneration(nextGeneration)
