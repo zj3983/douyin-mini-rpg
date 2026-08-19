@@ -3,86 +3,237 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import ts from 'typescript'
+import { findCreatorCommand, findCreatorTypeDeclarations } from '../tools/check-cocos-build-readiness.mjs'
 
 const moduleUrl = (source) => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
-const clone = (value) => JSON.parse(JSON.stringify(value))
+
+function creatorSemanticDiagnostics(creatorCcPath) {
+  const presenterPath = resolve('assets/Scripts/Game/DungeonRunPresenter.ts')
+  const options = {
+    allowImportingTsExtensions: true,
+    experimentalDecorators: true,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    noEmit: true,
+    skipLibCheck: true,
+    strict: false,
+    strictNullChecks: false,
+    target: ts.ScriptTarget.ES2022,
+  }
+  const host = ts.createCompilerHost(options)
+  host.resolveModuleNames = (moduleNames, containingFile) => moduleNames.map((moduleName) => {
+    if (moduleName === 'cc') return { resolvedFileName: creatorCcPath, extension: ts.Extension.Dts }
+    return ts.resolveModuleName(moduleName, containingFile, options, host).resolvedModule
+  })
+  const program = ts.createProgram([presenterPath], options, host)
+  return ts.getPreEmitDiagnostics(program).map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'))
+}
 
 async function loadPresenter() {
   const ccUrl = moduleUrl(`
-    export class Component {}
+    export class Renderable2D {}
+    export class Component { constructor() { this.node = null } }
     export class Node {
-      constructor(name = '') { this.name = name; this.children = []; this.parent = null; this.active = true }
-      addChild(node) { node.parent = this; this.children.push(node) }
-      removeFromParent() { if (this.parent) this.parent.children = this.parent.children.filter((n) => n !== this); this.parent = null }
-      destroy() { this.destroyed = true; this.removeFromParent() }
+      constructor(name = '') { this.name = name; this.active = true; this.layer = 0; this.children = []; this.components = []; this.listeners = new Map(); this._parent = null; this.position = { x: 0, y: 0, z: 0 }; this.destroyed = false }
+      set parent(value) { if (this._parent === value) return; if (this._parent) this._parent.children = this._parent.children.filter((child) => child !== this); this._parent = value; if (value && !value.children.includes(this)) value.children.push(this) }
+      get parent() { return this._parent }
+      addChild(node) { node.parent = this }
+      addComponent(Type) { const component = new Type(); component.node = this; this.components.push(component); return component }
+      getComponent(Type) { return this.components.find((component) => component instanceof Type) ?? null }
+      getChildByName(name) { return this.children.find((child) => child.name === name) ?? null }
+      setPosition(x, y, z = 0) { this.position = { x, y, z } }
+      on(eventName, callback, target) { const entries = this.listeners.get(eventName) ?? []; entries.push({ callback, target }); this.listeners.set(eventName, entries) }
+      off(eventName, callback, target) { const entries = this.listeners.get(eventName) ?? []; this.listeners.set(eventName, entries.filter((entry) => entry.callback !== callback || entry.target !== target)) }
+      emit(eventName, payload) { for (const entry of [...(this.listeners.get(eventName) ?? [])]) entry.callback.call(entry.target, payload) }
+      listenerCount(eventName) { return (this.listeners.get(eventName) ?? []).length }
+      destroy() { this.destroyed = true; this.active = false; this.listeners.clear(); this.parent = null }
     }
+    export class UITransform { constructor() { this.width = 0; this.height = 0; this.anchorX = 0.5; this.anchorY = 0.5 } setContentSize(width, height) { this.width = width; this.height = height } setAnchorPoint(x, y) { this.anchorX = x; this.anchorY = y } }
+    export class Label extends Renderable2D { static Overflow = { SHRINK: 2 }; constructor() { super(); this.string = ''; this.fontSize = 0; this.lineHeight = 0; this.color = null; this.overflow = null } }
+    export class Graphics extends Renderable2D { constructor() { super(); this.drawCount = 0 } clear() {} roundRect() { this.drawCount += 1 } rect() { this.drawCount += 1 } fill() {} stroke() {} }
+    export class Button { static EventType = { CLICK: 'click' }; constructor() { this.interactable = true; this.node = null } click() { if (!this.interactable) return false; this.node.emit(Button.EventType.CLICK); return true } }
+    export class Color { constructor(r, g, b, a = 255) { Object.assign(this, { r, g, b, a }) } }
+    export const HorizontalTextAlignment = { LEFT: 0, CENTER: 1 }
+    export const VerticalTextAlignment = { CENTER: 0 }
+    export const Layers = { Enum: { UI_2D: 1 } }
     export const _decorator = { ccclass: () => (value) => value, property: () => () => undefined }
   `)
   const source = readFileSync(resolve('assets/Scripts/Game/DungeonRunPresenter.ts'), 'utf8')
   let javascript = ts.transpileModule(source, {
     compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext, experimentalDecorators: true },
   }).outputText
-  javascript = javascript.replace("from 'cc'", `from '${ccUrl}'`)
-  return import(moduleUrl(javascript))
+  javascript = javascript
+    .replace("from 'cc'", `from '${ccUrl}'`)
+    .replace("from './DungeonLayout.ts'", `from '${new URL('../assets/Scripts/Game/DungeonLayout.ts', import.meta.url).href}'`)
+  return { ...await import(moduleUrl(javascript)), ...await import(ccUrl) }
 }
 
-function sharedLayers() {
-  return { actor: { name: 'SharedActorLayer' }, effect: { name: 'SharedEffectLayer' }, drop: { name: 'SharedDropLayer' }, input: { name: 'SharedInputLayer' } }
+function createHarness(api, options = {}) {
+  const root = new api.Node('DungeonPresenterRoot')
+  const actor = new api.Node('SharedActorLayer')
+  const effect = new api.Node('SharedEffectLayer')
+  const drop = new api.Node('SharedDropLayer')
+  const input = new api.Node('SharedInputLayer')
+  const player = new api.Node('Player')
+  player.setPosition(120, 40, 0)
+  actor.addChild(player)
+  const controllerCalls = []
+  const controller = { setMapOverlayOpen(open) { controllerCalls.push(open) } }
+  const presenter = new api.DungeonRunPresenter()
+  presenter.node = root
+  presenter.sharedActorLayer = actor
+  presenter.sharedEffectLayer = effect
+  presenter.sharedDropLayer = drop
+  presenter.sharedInputLayer = input
+  presenter.playerTarget = player
+  presenter.pickupCapacity = options.pickupCapacity ?? 3
+  presenter.toastCapacity = options.toastCapacity ?? 2
+  presenter.bindController(controller)
+  presenter.onLoad()
+  presenter.configureViewport(options.viewport ?? { cssWidth: 390, cssHeight: 844, topInsetPx: 47, bottomInsetPx: 34, leftInsetPx: 0, rightInsetPx: 0 })
+  return { presenter, root, actor, effect, drop, input, player, controllerCalls }
 }
 
-test('presenter hierarchy contains only dungeon UI and keeps shared combat ownership external', async () => {
-  const { DUNGEON_NODE_NAMES, DungeonPresenterModel } = await loadPresenter()
-  assert.deepEqual(DUNGEON_NODE_NAMES, ['DungeonWorldLayer', 'DungeonHud', 'DungeonPressureBar', 'DungeonMapButton', 'DungeonMapOverlay', 'DungeonInteractionHint', 'DungeonPursuitWarning', 'DungeonSettlement'])
-  const layers = sharedLayers()
-  const model = new DungeonPresenterModel(layers)
-  assert.equal(model.sharedLayers.actor, layers.actor)
-  assert.equal(model.sharedLayers.effect, layers.effect)
-  assert.equal(model.sharedLayers.drop, layers.drop)
-  assert.equal(model.sharedLayers.input, layers.input)
-  assert.equal(model.createdCombatRuntimeCount, 0)
+function label(api, node, childName) {
+  return node.getChildByName(childName).getComponent(api.Label)
+}
+
+const creatorCommand = process.env.COCOS_CREATOR_PATH ?? findCreatorCommand()
+const creatorCcPath = findCreatorTypeDeclarations(creatorCommand)
+
+test('dungeon presenter passes Cocos Creator 3.8.8 semantic compilation', {
+  skip: creatorCcPath ? false : 'Cocos Creator declarations are not installed',
+}, () => {
+  assert.deepEqual(creatorSemanticDiagnostics(creatorCcPath), [])
 })
 
-test('HUD stays minimal, map pauses, and pursuit warning precedes final Boss visibility', async () => {
-  const { DungeonPresenterModel } = await loadPresenter()
-  const model = new DungeonPresenterModel(sharedLayers())
-  model.presentHud({ health: 88, floor: 2, pressure: 121, carriedLootCount: 6, attack: 999, realm: 'ignored' })
-  assert.deepEqual(model.snapshot().hud, { health: 88, floor: 2, pressure: 121, carriedLootCount: 6 })
-  model.setMapOpen(true)
-  assert.equal(model.snapshot().paused, true)
-  model.consumeEvent({ type: 'pursuer-hunt-started', hunt: 1 })
-  assert.equal(model.snapshot().pursuitWarningVisible, true)
-  assert.equal(model.snapshot().bossBarVisible, false)
-  model.consumeEvent({ type: 'altar-activated', roomId: 'f3-altar' })
-  assert.equal(model.snapshot().bossBarVisible, true)
+test('presenter builds visible Cocos HUD, controls, and safe-area layout instead of empty nodes', async () => {
+  const api = await loadPresenter()
+  const { presenter, root } = createHarness(api)
+  for (const name of api.DUNGEON_NODE_NAMES) {
+    const node = root.getChildByName(name)
+    assert.ok(node, name)
+    assert.ok(node.getComponent(api.UITransform), `${name}: transform`)
+  }
+  const hud = root.getChildByName('DungeonHud')
+  assert.equal(hud.children.filter((node) => node.getComponent(api.Label)).length, 4)
+  presenter.presentHud({ health: 88, floor: 2, pressure: 121, carriedLootCount: 6, attack: 999, realm: 'ignored' })
+  assert.equal(label(api, hud, 'DungeonHealthLabel').string, '生命 88')
+  assert.equal(label(api, hud, 'DungeonFloorLabel').string, '第2层')
+  assert.equal(label(api, hud, 'DungeonPressureLabel').string, '压力 121')
+  assert.equal(label(api, hud, 'DungeonLootLabel').string, '携带 6')
+  assert.equal(hud.children.some((node) => node.getComponent(api.Label)?.string.includes('999')), false)
+
+  const layout = presenter.getLayoutSnapshot()
+  const settlementTransform = root.getChildByName('DungeonSettlement').getComponent(api.UITransform)
+  assert.ok(settlementTransform.height <= layout.safeRect.height * 0.7 + 0.001)
+  for (const name of ['DungeonMapButton', 'DungeonMapCloseButton', 'DungeonSettlementCloseButton']) {
+    const node = name === 'DungeonMapButton'
+      ? root.getChildByName(name)
+      : name === 'DungeonMapCloseButton'
+        ? root.getChildByName('DungeonMapOverlay').getChildByName(name)
+        : root.getChildByName('DungeonSettlement').getChildByName(name)
+    const transform = node.getComponent(api.UITransform)
+    assert.ok(transform.width * layout.physicalScale >= 44, `${name}: width`)
+    assert.ok(transform.height * layout.physicalScale >= 44, `${name}: height`)
+    assert.ok(node.getComponent(api.Button), `${name}: button`)
+  }
+  for (const [parentName, childName] of [
+    ['DungeonMapButton', 'DungeonMapButtonLabel'],
+    ['DungeonInteractionHint', 'DungeonInteractionLabel'],
+    ['DungeonPursuitWarning', 'DungeonPursuitWarningLabel'],
+    ['DungeonFinalBossBar', 'DungeonFinalBossLabel'],
+  ]) {
+    const transform = root.getChildByName(parentName).getChildByName(childName).getComponent(api.UITransform)
+    assert.ok(transform.width > 0 && transform.height > 0, `${childName}: visible content size`)
+  }
 })
 
-test('loot pickups are pooled and bounded while equipment uses a brief identity toast', async () => {
-  const { DungeonPresenterModel } = await loadPresenter()
-  const model = new DungeonPresenterModel(sharedLayers(), { maxPickups: 3 })
-  model.consumeEvent({ type: 'room-searched', roomId: 'cache', doorCurrencyGranted: 0, loot: [{ itemId: 'mist-herb', amount: 4 }, { itemId: 'flying-sword', amount: 1 }, { itemId: 'jade-guard', amount: 1 }] })
-  const state = model.snapshot()
-  assert.equal(state.pickups.length, 3)
-  assert.equal(state.pickups.every((pickup) => pickup.attractingToPlayer), true)
-  assert.deepEqual(state.toasts.map((toast) => toast.itemId), ['flying-sword', 'jade-guard'])
-  assert.equal(state.toasts.every((toast) => toast.icon !== '' && toast.rarity !== '' && toast.name !== ''), true)
-  model.releasePickup(state.pickups[0].id)
-  model.consumeEvent({ type: 'room-searched', roomId: 'next', doorCurrencyGranted: 0, loot: [{ itemId: 'ore', amount: 2 }] })
-  assert.equal(model.snapshot().pickups.length, 3)
+test('map buttons toggle the real overlay and controller pause, then unbind on destroy', async () => {
+  const api = await loadPresenter()
+  const { presenter, root, controllerCalls } = createHarness(api)
+  const mapButton = root.getChildByName('DungeonMapButton')
+  const overlay = root.getChildByName('DungeonMapOverlay')
+  const closeButton = overlay.getChildByName('DungeonMapCloseButton')
+  assert.equal(overlay.active, false)
+  mapButton.getComponent(api.Button).click()
+  assert.equal(overlay.active, true)
+  assert.deepEqual(controllerCalls, [true])
+  closeButton.getComponent(api.Button).click()
+  assert.equal(overlay.active, false)
+  assert.deepEqual(controllerCalls, [true, false])
+  presenter.onDestroy()
+  assert.equal(mapButton.listenerCount(api.Button.EventType.CLICK), 0)
+  assert.equal(closeButton.listenerCount(api.Button.EventType.CLICK), 0)
 })
 
-test('settlement is manual, distinguishes exits, and destroy clears callbacks and pending work', async () => {
-  const { DungeonPresenterModel } = await loadPresenter()
-  const model = new DungeonPresenterModel(sharedLayers())
-  model.consumeEvent({ type: 'extraction-completed', exitKind: 'damaged', explorationRate: 0.625, bossDefeated: false, loot: [], retainedLoot: [] })
-  assert.deepEqual(model.snapshot().settlement, { visible: true, exitKind: 'damaged', explorationRate: 0.625, bossDefeated: false, manualClose: true })
-  assert.equal(model.pendingScheduleCount, 0)
-  model.onPauseChanged = () => undefined
-  model.onMapClosed = () => undefined
-  model.destroy()
-  const state = model.snapshot()
-  assert.equal(state.destroyed, true)
-  assert.equal(model.onPauseChanged, null)
-  assert.equal(model.onMapClosed, null)
-  assert.equal(model.pendingScheduleCount, 0)
-  assert.deepEqual(clone(state.pickups), [])
+test('SharedDropLayer owns a bounded moving pickup node pool that recycles nodes', async () => {
+  const api = await loadPresenter()
+  const { presenter, drop, player } = createHarness(api, { pickupCapacity: 3 })
+  presenter.presentRunEvent({ type: 'room-searched', roomId: 'cache', doorCurrencyGranted: 0, loot: [{ itemId: 'mist-herb', amount: 5 }] }, { x: -120, y: -40 })
+  assert.equal(drop.children.length, 3)
+  assert.equal(drop.children.filter((node) => node.active).length, 3)
+  assert.equal(drop.children.every((node) => node.getComponent(api.Graphics)?.drawCount > 0), true)
+  const first = drop.children[0]
+  const before = { ...first.position }
+  presenter.update(0.1)
+  assert.ok(first.position.x > before.x)
+  assert.ok(first.position.y > before.y)
+  for (let index = 0; index < 120; index += 1) presenter.update(0.1)
+  assert.equal(drop.children.filter((node) => node.active).length, 0)
+  presenter.presentRunEvent({ type: 'room-searched', roomId: 'next', doorCurrencyGranted: 0, loot: [{ itemId: 'ore', amount: 1 }] }, { x: 0, y: 0 })
+  assert.equal(drop.children.length, 3)
+  assert.equal(drop.children.filter((node) => node.active).length, 1)
+  assert.equal(drop.children.find((node) => node.active), first)
+  assert.equal(player.position.x, 120)
+})
+
+test('equipment toasts are visible, bounded, timed, and reuse their nodes', async () => {
+  const api = await loadPresenter()
+  const { presenter, root } = createHarness(api, { toastCapacity: 2 })
+  presenter.presentRunEvent({ type: 'room-searched', roomId: 'cache', doorCurrencyGranted: 0, loot: [
+    { itemId: 'flying-sword', amount: 1 },
+    { itemId: 'jade-guard', amount: 1 },
+    { itemId: 'thunder-seal', amount: 1 },
+  ] })
+  const toastLayer = root.getChildByName('DungeonToastLayer')
+  assert.equal(toastLayer.children.length, 2)
+  assert.equal(toastLayer.children.filter((node) => node.active).length, 2)
+  for (const toast of toastLayer.children) {
+    const text = toast.getChildByName('DungeonToastLabel').getComponent(api.Label).string
+    assert.match(text, /图标/)
+    assert.match(text, /(史诗|传说|玄品|灵品)/)
+    assert.ok(text.length > 6)
+  }
+  const first = toastLayer.children[0]
+  presenter.update(2)
+  assert.equal(toastLayer.children.filter((node) => node.active).length, 0)
+  presenter.presentRunEvent({ type: 'room-searched', roomId: 'again', doorCurrencyGranted: 0, loot: [{ itemId: 'spirit-vessel', amount: 1 }] })
+  assert.equal(toastLayer.children.length, 2)
+  assert.equal(toastLayer.children.find((node) => node.active), first)
+})
+
+test('pursuit warning precedes the final Boss bar and settlement closes only by button', async () => {
+  const api = await loadPresenter()
+  const { presenter, root } = createHarness(api)
+  const warning = root.getChildByName('DungeonPursuitWarning')
+  const bossBar = root.getChildByName('DungeonFinalBossBar')
+  presenter.presentRunEvent({ type: 'pursuer-hunt-started', hunt: 1 })
+  assert.equal(warning.active, true)
+  assert.equal(bossBar.active, false)
+  presenter.presentRunEvent({ type: 'altar-activated', roomId: 'f3-altar' })
+  assert.equal(warning.active, false)
+  assert.equal(bossBar.active, true)
+
+  presenter.presentRunEvent({ type: 'extraction-completed', exitKind: 'damaged', explorationRate: 0.625, bossDefeated: false, loot: [], retainedLoot: [] })
+  const settlement = root.getChildByName('DungeonSettlement')
+  const body = label(api, settlement, 'DungeonSettlementBody').string
+  assert.equal(settlement.active, true)
+  assert.match(body, /受损撤离/)
+  assert.match(body, /63%/)
+  assert.match(body, /Boss 未击败/)
+  presenter.update(10)
+  assert.equal(settlement.active, true)
+  settlement.getChildByName('DungeonSettlementCloseButton').getComponent(api.Button).click()
+  assert.equal(settlement.active, false)
 })
