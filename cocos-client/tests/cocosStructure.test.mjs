@@ -197,35 +197,20 @@ test('dual-mode Cocos controllers delegate progression and dungeon rules to Core
   const world = readSource('assets/Scripts/Game/BattleRuntimeController.ts')
 
   assert.match(dungeon, /Core\/Dungeon\/DungeonSession/)
-  assert.match(dungeon, /Core\/Dungeon\/DungeonInteraction/)
   assert.match(dungeon, /Core\/Dungeon\/DungeonTypes/)
   assert.match(dungeon, /Core\/Progression\/BestEffortNotification/)
-  assert.match(dungeon, /onRunChanged/)
-  assert.match(dungeon, /notifyPresentationBestEffort/)
+  assert.match(dungeon, /onCheckpoint/)
+  assert.match(dungeon, /onRunEvent/)
+  assert.match(dungeon, /onTerminalResult/)
   assert.doesNotMatch(dungeon, /CultivationRuntime|resolveDungeonFloor/)
   assert.doesNotMatch(dungeon, /\.\.\/Combat\//)
   assert.match(dungeon, /@property\(JsonAsset\)\s*profileData/)
   assert.match(dungeon, /@property\(Label\)\s*roomLabel/)
   assert.match(dungeon, /createDungeonSession\(/)
-  assert.match(dungeon, /emitBestEffort\('dungeon-run-began'/)
-  assert.match(dungeon, /interactDungeonRun\(this\.run\)/)
+  assert.match(dungeon, /applyDungeonCommand\(candidate, command\)/)
+  assert.match(dungeon, /checkpointDungeonRun/)
+  assert.match(dungeon, /notifyBestEffort/)
   assert.doesNotMatch(dungeon, /grantDoorCurrency|doorCurrency\s*[+\-*/]?=/)
-  assert.match(dungeon, /extractRun\(/)
-  assert.match(dungeon, /emitBestEffort\('dungeon-room-changed'/)
-  assert.match(dungeon, /emitBestEffort\('dungeon-loot-found'/)
-  assert.match(dungeon, /emitBestEffort\('dungeon-extracted'/)
-  assert.equal(countOccurrences(dungeon, 'this.node.emit('), 1)
-  const safeEmit = extractBlock(dungeon, 'private emitBestEffort(')
-  assert.match(safeEmit, /notifyBestEffort/)
-  assert.match(safeEmit, /this\.node\.emit\(notification\.eventName/)
-  const interact = extractBlock(dungeon, 'interact():')
-  assert.doesNotMatch(interact, /this\.node\.emit/)
-  assertStatementOrder(interact, [
-    'const result = interactDungeonRun(this.run)',
-    'this.notifyPresentationBestEffort',
-    'this.emitBestEffort',
-    'return result',
-  ])
 
   assert.match(dualMode, /Core\/Progression\/DualModeRuntime/)
   assert.match(dualMode, /Core\/Progression\/SaveRepository/)
@@ -233,13 +218,15 @@ test('dual-mode Cocos controllers delegate progression and dungeon rules to Core
   assert.doesNotMatch(dualMode, /applyWorldBossClear|consumeDungeonPass|applyExtractionLoot/)
   assert.doesNotMatch(dualMode, /DEFAULT_DUNGEON_SEED/)
   assert.doesNotMatch(dualMode, /spiritStones\s*[+-]=|dungeonPasses\s*[+-]=/)
-  assert.match(dualMode, /createJsonSaveRepository\(sys\.localStorage,\s*'cultivation-save-v3'\)/)
+  assert.match(dualMode, /createJsonSaveRepository\(sys\.localStorage,\s*'cultivation-save-v4'\)/)
   assert.match(dualMode, /createDualModeRuntime\(/)
+  assert.match(dualMode, /handleDungeonCheckpoint/)
   assert.match(dualMode, /save-persist-failed/)
   assert.match(dualMode, /eventName:\s*'player-save-changed'/)
   assert.match(runtime, /applyWorldBossClear/)
   assert.match(runtime, /applyExtractionLoot/)
-  assert.match(runtime, /consumeDungeonPass/)
+  assert.match(runtime, /consumeDungeonEntry/)
+  assert.match(runtime, /refundDungeonEntry/)
   assert.doesNotMatch(runtime, /Core\/Battle|structuredClone|\.flatMap\(|Object\.values\(/)
 
   assert.match(world, /emit\('world-stage-cleared'/)
@@ -251,60 +238,33 @@ test('new dungeon entry layout does not depend on the frozen Combat layer', () =
   assert.doesNotMatch(source, /Scripts\/Combat|\.\.\/Combat\//)
 })
 
-test('dungeon begin commits before best-effort observer notification', () => {
+test('dungeon begin initializes one authoritative checkpointable run', () => {
   const source = readSource('assets/Scripts/Game/DungeonRunController.ts')
   const begin = extractBlock(source, 'begin(seed: number)')
 
-  assert.doesNotMatch(begin, /this\.run = null/)
-  assert.equal(countOccurrences(begin, 'this.run = nextRun'), 1)
   assertStatementOrder(begin, [
-    'if (this.run) return false',
-    'if (!this.profileData) return false',
-    'nextRun = createDungeonSession',
-    'this.run = nextRun',
+    'if (this.run || !this.isReady()) return false',
+    'this.run = createDungeonSession',
+    'this.resetTransientState()',
     'this.refreshRoomLabel()',
-    'this.notifyPresentationBestEffort',
-    "this.emitBestEffort('dungeon-run-began'",
     'return true',
   ])
-  const committed = begin.slice(begin.indexOf('this.run = nextRun'))
-  assert.match(committed, /this\.emitBestEffort\('dungeon-run-began'/)
-  assert.doesNotMatch(committed.slice(committed.indexOf('this.emitBestEffort')), /return false/)
+  assert.match(source, /checkpoint\(\): DungeonRunCheckpoint \| null/)
+  assert.match(source, /restore\(checkpoint: DungeonRunCheckpoint\)/)
 })
 
-test('dungeon extraction uses a direct authority callback and isolates post-commit notifications', () => {
+test('dungeon extraction remains pending until manual settlement acknowledgement', () => {
   const source = readSource('assets/Scripts/Game/DungeonRunController.ts')
-  const preview = extractBlock(source, 'previewRunId(seed: number)')
-  const cancel = extractBlock(source, 'cancelRun()')
-  const extract = extractBlock(source, 'extract()')
-
-  assert.match(source, /hasRun\(\)/)
-  assert.match(preview, /createDungeonSession\(/)
-  assert.doesNotMatch(preview, /this\.run\s*=/)
-  assertStatementOrder(cancel, [
-    'if (!this.run) return false',
+  const acknowledge = extractBlock(source, 'private tryDeliverTerminal()')
+  assert.match(source, /pendingTerminalResult/)
+  assert.match(source, /acknowledgeTerminalResult\(\): boolean/)
+  assertStatementOrder(acknowledge, [
+    'if (!this.pendingTerminalResult || !this.run) return false',
+    'const callback = this.onTerminalResult',
+    'accepted = callback',
+    'if (!accepted) return false',
     'this.run = null',
-    'this.refreshRoomLabel()',
-    'this.notifyPresentationBestEffort',
-    'return true',
-  ])
-  assert.match(source, /onExtractionRequested[\s\S]*DungeonExtractionEvent[\s\S]*boolean/)
-  assert.doesNotMatch(source, /acknowledged/)
-  assert.match(extract, /try\s*{[\s\S]*onExtractionRequested\(request\)[\s\S]*}\s*catch\s*{[\s\S]*restoreExtraction\(run\)[\s\S]*return false/)
-  assert.match(extract, /if \(!accepted\)[\s\S]*restoreExtraction\(run\)[\s\S]*return false/)
-  assert.match(extract, /const notification:[\s\S]*loot: request\.loot\.map/)
-  assert.match(extract, /this\.emitBestEffort\('dungeon-extracted', notification\)/)
-  assertStatementOrder(extract, [
-    'const run = this.run',
-    'const result = extractRun(run)',
-    'const request:',
-    'onExtractionRequested(request)',
-    'if (!accepted)',
-    'this.run = null',
-    'this.refreshRoomLabel()',
-    'this.notifyPresentationBestEffort',
-    'const notification:',
-    "this.emitBestEffort('dungeon-extracted', notification)",
+    'this.pendingTerminalResult = null',
     'return true',
   ])
 })
@@ -329,7 +289,7 @@ test('world clear emits exactly once inside the successful claimed-result branch
   ])
 })
 
-test('dual-mode bootstrap wires direct extraction authority, live events, and cleanup', () => {
+test('dual-mode bootstrap wires checkpoint authority, typed events, and cleanup', () => {
   const source = readSource('assets/Scripts/Game/PortraitBattleBootstrap.ts')
   const onDestroy = extractBlock(source, 'onDestroy()')
   const runtimeSetupStart = source.indexOf("const runtimeNode = this.createNode('Runtime', parent)")
@@ -346,11 +306,11 @@ test('dual-mode bootstrap wires direct extraction authority, live events, and cl
   assert.match(source, /Data\/dual-mode-slice/)
   assert.match(runtimeSetup, /runtimeNode\.on\('battle-stage-changed',\s*this\.onStageChanged,\s*this\)/)
   assert.match(runtimeSetup, /runtimeNode\.on\('world-stage-cleared',\s*dualMode\.handleWorldCleared,\s*dualMode\)/)
-  assert.match(source, /dungeonRun\.onExtractionRequested\s*=\s*this\.dungeonExtractionRequest/)
-  assert.match(source, /dualMode\.handleDungeonExtracted\(payload\)/)
+  assert.match(source, /dungeonRun\.onRunEvent = \(event\) => this\.onDungeonRunEvent\(event\)/)
+  assert.match(source, /dualMode\.dungeonRun = dungeonRun/)
   assert.match(onDestroy, /runtimeNode\?\.off\('battle-stage-changed',\s*this\.onStageChanged,\s*this\)/)
   assert.match(onDestroy, /runtimeNode\?\.off\('world-stage-cleared',\s*this\.dualModeController\?\.handleWorldCleared,\s*this\.dualModeController\)/)
-  assert.match(onDestroy, /onExtractionRequested\s*=\s*null/)
+  assert.match(onDestroy, /dungeonRunController\) this\.dungeonRunController\.onRunEvent = null/)
   assertStatementOrder(profileLoad, ['if (this.destroyed) return', 'dungeonRun.profileData = asset'])
 })
 
@@ -623,9 +583,9 @@ test('portrait bootstrap assembles the approved compact playable scene', () => {
   assert.match(source, /camera\.visibility = UI_LAYER/)
   assert.match(source, /canvas\.cameraComponent = camera/)
   for (const name of [
-    'Canvas', 'BattleRoot', 'WorldLayer', 'FarBackground', 'MidBackground',
-    'ActorLayer', 'Player', 'EnemySpawner', 'EffectLayer', 'FlyingSwordSkill',
-    'Sword', 'DropLayer', 'InputLayer', 'HudLayer', 'TopHud', 'BossHud',
+    'Canvas', 'SharedCombatRoot', 'WorldRoot', 'DungeonRoot', 'WorldLayer', 'FarBackground', 'MidBackground',
+    'SharedActorLayer', 'Player', 'EnemySpawner', 'SharedEffectLayer', 'FlyingSwordSkill',
+    'Sword', 'SharedDropLayer', 'SharedInputLayer', 'WorldHudLayer', 'TopHud', 'BossHud',
     'BottomNavigation', 'StageClearPanel',
   ]) {
     assert.match(source, new RegExp(`['\"]${name}['\"]`), `bootstrap should create ${name}`)
@@ -689,4 +649,39 @@ test('stage clear panel renders reward fields and next stage action', () => {
   assert.equal(source.includes('spiritStones'), true)
   assert.equal(source.includes('artifactEssence'), false)
   assert.equal(source.includes('dungeonPasses'), true)
+})
+
+test('dungeon route validation uses a Cocos-safe Set conversion', () => {
+  const source = readSource('assets/Scripts/Core/Dungeon/DungeonSession.ts')
+  assert.match(source, /Array\.from\(reachable\)\.every/)
+  assert.doesNotMatch(source, /\[\.\.\.reachable\]\.every/)
+
+  const mapSource = readSource('assets/Scripts/Core/Dungeon/DungeonMapRuntime.ts')
+  assert.match(mapSource, /Array\.from\(reachableFromCurrent\)\.every/)
+
+  assert.match(source, /Array\.from\(vaultEntryExitIds\)\.sort/)
+})
+
+test('dual-mode controller binds dungeon callbacks after dynamic Cocos assembly', () => {
+  const source = readSource('assets/Scripts/Game/DualModeGameController.ts')
+  const initialize = extractBlock(source, 'private initializeRuntimeWhenReady()')
+  assertStatementOrder(initialize, [
+    'this.bindDungeonCallbacks()',
+    'if (this.runtime || !this.repository || !this.dungeonRun?.isReady()) return',
+  ])
+})
+
+test('floor-two elite gate owns the second pursuit transition in the dungeon session', () => {
+  const session = readSource('assets/Scripts/Core/Dungeon/DungeonSession.ts')
+  assert.match(session, /exit\.to === 'f2-gate-elite'[\s\S]*beginSecondPursuit\(nextRun\)/)
+  const bootstrap = readSource('assets/Scripts/Game/PortraitBattleBootstrap.ts')
+  assert.doesNotMatch(bootstrap, /startSecondPursuit\(\)/)
+})
+
+test('Cocos runtime does not spread Set or Map iterators into resource arrays', () => {
+  const resources = readSource('assets/Scripts/Game/DungeonResourceController.ts')
+  assert.match(resources, /Array\.from\(byPath\.values\(\)\)/)
+  assert.doesNotMatch(resources, /\[\.\.\.byPath\.values\(\)\]/)
+  assert.match(resources, /Array\.from\(this\.prefetched\.keys\(\)\)/)
+  assert.match(resources, /Array\.from\(this\.loaded\.keys\(\)\)/)
 })

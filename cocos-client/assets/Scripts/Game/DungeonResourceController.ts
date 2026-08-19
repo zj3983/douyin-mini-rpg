@@ -58,7 +58,7 @@ function uniqueDescriptors(descriptors: readonly DungeonResourceDescriptor[]): D
     if (existing && existing.kind !== descriptor.kind) throw new Error(`Resource kind mismatch: ${descriptor.path}`)
     byPath.set(descriptor.path, Object.freeze({ ...descriptor }))
   }
-  return [...byPath.values()]
+  return Array.from(byPath.values())
 }
 
 export class DungeonResourceController<T = Asset> {
@@ -173,14 +173,14 @@ export class DungeonResourceController<T = Asset> {
   snapshot() {
     return {
       activeFloor: this.activeFloor?.floor ?? null,
-      retainedFloors: [...new Set([
+      retainedFloors: Array.from(new Set([
         this.activeFloor?.floor,
         this.preparedFloor?.floor,
-        ...this.prefetched.keys(),
-      ].filter((floor): floor is MistVaultFloor => floor !== undefined && floor !== null))].sort(),
-      prefetchedFloors: [...this.prefetched.keys()].sort(),
+        ...Array.from(this.prefetched.keys()),
+      ].filter((floor): floor is MistVaultFloor => floor !== undefined && floor !== null))).sort(),
+      prefetchedFloors: Array.from(this.prefetched.keys()).sort(),
       pendingFloors: this.inFlight.size > 0 ? [-1] : [],
-      loadedPaths: [...this.loaded.keys()].sort(),
+      loadedPaths: Array.from(this.loaded.keys()).sort(),
       destroyed: this.destroyed,
     }
   }
@@ -328,14 +328,19 @@ function createCocosAdapter(): DungeonResourceAdapter<Asset> {
       const assetType = descriptor.kind === 'spriteFrame'
         ? SpriteFrame
         : descriptor.kind === 'audioClip' ? AudioClip : Texture2D
-      resources.load(descriptor.path, assetType, (error: Error | null, asset: Asset | null) => {
-        if (error || !asset) {
-          reject(error ?? new Error(`Missing dungeon resource: ${descriptor.path}`))
-          return
-        }
-        asset.addRef()
-        resolve(asset)
-      })
+      const fail = (error: unknown) => {
+        const detail = error instanceof Error ? error.message : String(error ?? 'asset missing')
+        reject(new Error(`Failed dungeon resource ${descriptor.path} (${descriptor.kind}): ${detail}`))
+      }
+      try {
+        resources.load(descriptor.path, assetType, (error: Error | null, asset: Asset | null) => {
+          if (error || !asset) return fail(error)
+          asset.addRef()
+          resolve(asset)
+        })
+      } catch (error) {
+        fail(error)
+      }
     }),
     release: (_descriptor, resource) => resource.decRef(),
     showFloor: () => {},

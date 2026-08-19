@@ -12,14 +12,28 @@ import { canvasAspectHealth, canvasHealth, dungeonLoopReview, playtestReview, re
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const runId = new Date().toISOString().replace(/[:.]/g, '-')
 const outDir = join(rootDir, 'artifacts', 'game-agent', runId)
-const viewport = { width: 430, height: 860 }
+
+function argument(name, fallback = '') {
+  const index = process.argv.indexOf(`--${name}`)
+  return index >= 0 && process.argv[index + 1] ? process.argv[index + 1] : fallback
+}
+
+function parseViewport(value) {
+  const match = String(value).match(/^(\d+)x(\d+)$/i)
+  if (!match) return { width: 430, height: 860 }
+  return { width: Number(match[1]), height: Number(match[2]) }
+}
+
+const agentMode = argument('mode', process.env.GAME_AGENT_SCENARIO || 'default').toLowerCase()
+const dungeonPolicy = argument('policy', 'balanced').toLowerCase()
+const viewport = parseViewport(argument('viewport', process.env.GAME_AGENT_VIEWPORT || '430x860'))
 const port = Number(process.env.GAME_AGENT_PORT || 5179)
 const apiPort = Number(process.env.GAME_AGENT_API_PORT || 4174)
-const baseUrl = process.env.GAME_AGENT_URL || `http://127.0.0.1:${port}/`
+const baseUrl = argument('url', process.env.GAME_AGENT_URL || `http://127.0.0.1:${port}/`)
 const apiHealthUrl = `http://127.0.0.1:${apiPort}/api/health`
 const randomMs = Number(process.env.GAME_AGENT_RANDOM_MS || 20000)
 const playtestMs = Number(process.env.GAME_AGENT_PLAYTEST_MS || 24000)
-const scenario = String(process.env.GAME_AGENT_SCENARIO || 'default').toLowerCase()
+const scenario = agentMode
 const headless = process.env.GAME_AGENT_HEADLESS !== '0'
 const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 const chromeCandidates = process.platform === 'win32'
@@ -48,6 +62,7 @@ let browser
 let page
 let startedAt = new Date().toISOString()
 let performance = { averageFrameMs: 0, slowFrames: 0 }
+let performancePhase = 'not-sampled'
 let playtest = null
 let dungeonReview = null
 
@@ -538,6 +553,284 @@ async function runDungeonScenario() {
 
   dungeonReview = dungeonLoopReview({ before, after, samples, settlementText, entered })
   addCheck('副本闭环专项评测', dungeonReview.ok, `${dungeonReview.reason}; changed=${dungeonReview.changedResources.join(',') || 'none'}`)
+}
+
+async function bridgeCall(method, payload) {
+  return page.evaluate(({ methodName, value }) => {
+    const bridge = globalThis.__M3_DUNGEON_AGENT__
+    if (!bridge || typeof bridge[methodName] !== 'function') throw new Error(`Dungeon bridge method unavailable: ${methodName}`)
+    return bridge[methodName](value)
+  }, { methodName: method, value: payload })
+}
+
+async function dungeonCommand(command, label) {
+  const result = await bridgeCall('command', command)
+  const accepted = Boolean(result?.accepted)
+  addCheck(label, accepted, accepted ? JSON.stringify(command) : JSON.stringify(result))
+  await page.waitForTimeout(120)
+  return accepted
+}
+
+async function dungeonMove(exitId) {
+  return dungeonCommand({ type: 'choose-exit', exitId }, `通过路线 ${exitId}`)
+}
+
+async function measureDetailedFrames(sampleCount = 180, phase = '基线') {
+  const result = await page.evaluate(async (count) => {
+    const samples = []
+    let previous = await new Promise((resolveFrame) => requestAnimationFrame(resolveFrame))
+    while (samples.length < count) {
+      const current = await new Promise((resolveFrame) => requestAnimationFrame(resolveFrame))
+      samples.push(current - previous)
+      previous = current
+    }
+    const sorted = [...samples].sort((a, b) => a - b)
+    const percentile = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))]
+    const max = sorted.at(-1) ?? 0
+    return {
+      averageFrameMs: samples.reduce((sum, value) => sum + value, 0) / samples.length,
+      p95FrameMs: percentile,
+      minimumFps: max > 0 ? 1000 / max : 0,
+      droppedFrames: samples.filter((value) => value > 34).length,
+    }
+  }, sampleCount)
+  performance = result
+  performancePhase = phase
+  addCheck('Cocos 帧时间', result.p95FrameMs <= 20 && result.minimumFps >= 30, `P95 ${result.p95FrameMs.toFixed(2)}ms, min ${result.minimumFps.toFixed(1)} FPS, dropped ${result.droppedFrames}`)
+  addCheck('性能采样阶段', phase.includes('战斗'), phase)
+  return result
+}
+
+function designRectToCss(rect, scale) {
+  return {
+    left: viewport.width / 2 + (rect.centerX - rect.width / 2) * scale,
+    right: viewport.width / 2 + (rect.centerX + rect.width / 2) * scale,
+    top: viewport.height / 2 - (rect.centerY + rect.height / 2) * scale,
+    bottom: viewport.height / 2 - (rect.centerY - rect.height / 2) * scale,
+    width: rect.width * scale,
+    height: rect.height * scale,
+  }
+}
+
+async function inspectDungeonUiLayout() {
+  const layout = await bridgeCall('uiLayout')
+  const keys = ['hud', 'mapButton', 'interaction', 'commandBar', 'settlement']
+  const rects = Object.fromEntries(keys.map((key) => [key, designRectToCss(layout[key], layout.physicalScale)]))
+  const inside = Object.values(rects).every((rect) => (
+    rect.left >= -1 && rect.top >= -1 && rect.right <= viewport.width + 1 && rect.bottom <= viewport.height + 1
+  ))
+  const touchable = rects.mapButton.width >= 44 && rects.mapButton.height >= 44 && rects.commandBar.height >= 44
+  addCheck('副本功能区完整显示', inside, JSON.stringify(rects))
+  addCheck('副本触控尺寸可用', touchable, `map=${rects.mapButton.width.toFixed(1)}x${rects.mapButton.height.toFixed(1)}, command=${rects.commandBar.height.toFixed(1)}`)
+  return layout
+}
+
+async function clickDungeonCommand(layout, index) {
+  const minimumTouch = 44 / layout.physicalScale
+  const buttonWidth = Math.max(minimumTouch, (layout.commandBar.width - 24) / 4)
+  const centerX = layout.commandBar.centerX + (index - 1.5) * (buttonWidth + 8)
+  const x = viewport.width / 2 + centerX * layout.physicalScale
+  const y = viewport.height / 2 - layout.commandBar.centerY * layout.physicalScale
+  await page.mouse.click(x, y)
+  await page.waitForTimeout(180)
+}
+
+async function clickDungeonMapRoundTrip(layout) {
+  const mapX = viewport.width / 2 + layout.mapButton.centerX * layout.physicalScale
+  const mapY = viewport.height / 2 - layout.mapButton.centerY * layout.physicalScale
+  await page.mouse.click(mapX, mapY)
+  await page.waitForTimeout(100)
+  const pausedStart = await bridgeCall('snapshot')
+  await bridgeCall('advance', 1)
+  await page.waitForTimeout(100)
+  const pausedEnd = await bridgeCall('snapshot')
+  const touch = Math.max(44 / layout.physicalScale, 44)
+  const closeXDesign = layout.safeRect.centerX + layout.safeRect.width / 2 - touch / 2 - 12
+  const closeYDesign = layout.safeRect.centerY + layout.safeRect.height / 2 - touch / 2 - 12
+  await page.mouse.click(
+    viewport.width / 2 + closeXDesign * layout.physicalScale,
+    viewport.height / 2 - closeYDesign * layout.physicalScale,
+  )
+  await page.waitForTimeout(180)
+  const unchanged = pausedStart?.pressure?.elapsedSeconds === pausedEnd?.pressure?.elapsedSeconds
+  addCheck('地图按钮可点击并暂停', unchanged, `${pausedStart?.pressure?.elapsedSeconds} -> ${pausedEnd?.pressure?.elapsedSeconds}`)
+}
+
+async function clickSettlementClose(layout) {
+  const touch = Math.max(44 / layout.physicalScale, 44)
+  const centerY = layout.settlement.centerY - layout.settlement.height / 2 + touch / 2 + 18
+  await page.mouse.click(
+    viewport.width / 2 + layout.settlement.centerX * layout.physicalScale,
+    viewport.height / 2 - centerY * layout.physicalScale,
+  )
+  await page.waitForTimeout(200)
+  return (await bridgeCall('snapshot')) === null
+}
+
+async function inspectCocosViewport() {
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('#GameCanvas')
+    return Boolean(canvas && canvas.width === innerWidth && canvas.height === innerHeight)
+  }, null, { timeout: 30000 })
+  const metrics = await page.evaluate(() => {
+    const canvas = document.querySelector('#GameCanvas')
+    const rect = canvas?.getBoundingClientRect()
+    return {
+      found: Boolean(canvas),
+      left: rect?.left ?? -1,
+      top: rect?.top ?? -1,
+      right: rect?.right ?? -1,
+      bottom: rect?.bottom ?? -1,
+      width: rect?.width ?? 0,
+      height: rect?.height ?? 0,
+      viewportWidth: innerWidth,
+      viewportHeight: innerHeight,
+      intrinsicWidth: canvas?.width ?? 0,
+      intrinsicHeight: canvas?.height ?? 0,
+    }
+  })
+  const withinViewport = metrics.found
+    && metrics.left >= -1 && metrics.top >= -1
+    && metrics.right <= metrics.viewportWidth + 1 && metrics.bottom <= metrics.viewportHeight + 1
+  const intrinsicAspect = metrics.intrinsicHeight ? metrics.intrinsicWidth / metrics.intrinsicHeight : 0
+  const cssAspect = metrics.height ? metrics.width / metrics.height : 0
+  const unstretched = intrinsicAspect > 0 && Math.abs(intrinsicAspect - cssAspect) <= 0.02
+  addCheck('Cocos 画布完整显示', withinViewport, JSON.stringify(metrics))
+  addCheck('Cocos 画面未拉伸', unstretched, `intrinsic=${intrinsicAspect.toFixed(3)}, css=${cssAspect.toFixed(3)}`)
+  return metrics
+}
+
+async function playCocosDungeonPolicy(policy) {
+  if (!['safe', 'balanced', 'greedy'].includes(policy)) throw new Error(`Unknown dungeon policy: ${policy}`)
+  await page.waitForFunction(() => globalThis.__M3_DUNGEON_AGENT__?.ready(), null, { timeout: 30000 })
+  await page.waitForFunction(() => globalThis.__M3_DUNGEON_AGENT__?.resourceStatus()?.state !== 'loading', null, { timeout: 30000 })
+  const resourceStatus = await bridgeCall('resourceStatus')
+  addCheck('副本美术资源加载完成', resourceStatus?.state === 'ready', JSON.stringify(resourceStatus))
+  await page.evaluate(() => localStorage.removeItem('cultivation-save-v4'))
+  const entered = await bridgeCall('enterDungeon', policy === 'safe' ? 300 : policy === 'balanced' ? 301 : 302)
+  addCheck('进入 Cocos 副本', entered, policy)
+  if (!entered) throw new Error('Dungeon entry was rejected')
+  await page.waitForTimeout(1000)
+  await shot(`${policy}-entry`)
+
+  const uiLayout = await inspectDungeonUiLayout()
+  await clickDungeonMapRoundTrip(uiLayout)
+  await clickDungeonCommand(uiLayout, 1)
+  const firstRoom = await bridgeCall('snapshot')
+  addCheck('真实按钮进入首个房间', firstRoom?.map?.currentRoomId === 'f1-forest-combat', firstRoom?.map?.currentRoomId ?? 'missing')
+  if (policy === 'safe') {
+    await measureDetailedFrames(180, '首房真实战斗')
+    await dungeonMove('f1-forest-to-floor2')
+    await dungeonMove('f2-bridge-to-exit')
+  } else {
+    await dungeonCommand({ type: 'search' }, '搜索雾竹林')
+    await dungeonMove('f1-forest-to-sealed-cache')
+    await dungeonCommand({ type: 'search' }, '搜索封印宝库')
+    await dungeonMove('f1-sealed-cache-to-forest')
+
+    if (policy === 'balanced') {
+      await dungeonMove('f1-forest-to-alchemy')
+      await dungeonCommand({ type: 'search' }, '搜索炼丹遗址')
+      await dungeonMove('f1-alchemy-to-forest')
+      await shot('balanced-before-pursuit')
+      await bridgeCall('advance', 80)
+      await page.waitForTimeout(250)
+      await measureDetailedFrames(180, '追击真实战斗')
+      await bridgeCall('completeEncounter')
+      await dungeonMove('f1-forest-to-floor2')
+      await dungeonMove('f2-bridge-to-exit')
+    } else {
+      await dungeonMove('f1-forest-to-floor2')
+      await dungeonCommand({ type: 'search' }, '搜索寒灯桥')
+      await dungeonMove('f2-bridge-to-sword-array')
+      await dungeonCommand({ type: 'search' }, '破解剑阵')
+      await shot('greedy-before-pursuit')
+      await bridgeCall('advance', 70)
+      await page.waitForTimeout(250)
+      await bridgeCall('completeEncounter')
+      await bridgeCall('advance', 125)
+      await page.waitForTimeout(250)
+      await dungeonMove('f2-sword-array-to-elite')
+      await page.waitForTimeout(250)
+      await bridgeCall('completeEncounter')
+      await dungeonMove('f2-elite-to-floor3')
+      await dungeonMove('f3-antechamber-to-altar')
+      await dungeonCommand({ type: 'activate-altar' }, '激活竹皇祭坛')
+      await page.waitForTimeout(300)
+      await shot('greedy-final-boss-telegraph')
+      await measureDetailedFrames(180, 'Boss真实战斗')
+      await bridgeCall('completeEncounter')
+      await dungeonMove('f3-altar-to-vault')
+      await dungeonCommand({ type: 'search' }, '搜索飞剑宝库')
+      await dungeonMove('f3-vault-to-exit')
+    }
+  }
+
+  const beforeExtraction = await bridgeCall('snapshot')
+  await dungeonCommand({ type: 'begin-extraction' }, '开始三秒撤离')
+  await bridgeCall('advance', 3.2)
+  await page.waitForTimeout(300)
+  const terminalSnapshot = await bridgeCall('snapshot')
+  const extracted = terminalSnapshot?.phase === 'extracted'
+  addCheck('副本完成撤离', extracted, `${beforeExtraction?.map?.currentRoomId ?? 'unknown'} -> ${terminalSnapshot?.phase ?? 'missing'}`)
+  await shot(`${policy}-settlement`)
+  const closed = await clickSettlementClose(uiLayout)
+  addCheck('真实按钮关闭结算', closed, String(closed))
+  return { beforeExtraction, terminalSnapshot }
+}
+
+async function runCocosDungeonAgent() {
+  if (!await probe(baseUrl, 1500)) throw new Error(`Cocos build is not reachable: ${baseUrl}`)
+  browser = await chromium.launch(browserLaunchOptions())
+  const context = await browser.newContext({ viewport, deviceScaleFactor: 1, isMobile: viewport.width < viewport.height, hasTouch: true })
+  page = await context.newPage()
+  page.on('console', (message) => {
+    const location = message.location()
+    if (message.type() === 'error' && !location.url.endsWith('/favicon.ico')) {
+      consoleIssues.push({ type: message.type(), text: message.text(), url: location.url })
+    }
+  })
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+  page.on('requestfailed', (request) => requestFailures.push(`${request.method()} ${request.url()} ${request.failure()?.errorText ?? ''}`))
+  await page.goto(`${baseUrl}${baseUrl.includes('?') ? '&' : '?'}gameAgent=1`, { waitUntil: 'domcontentloaded', timeout: 30000 })
+  await inspectCocosViewport()
+  const route = await playCocosDungeonPolicy(dungeonPolicy)
+  addCheck('运行时无错误', consoleIssues.length === 0 && pageErrors.length === 0 && requestFailures.length === 0, `console=${consoleIssues.length}, page=${pageErrors.length}, request=${requestFailures.length}`)
+
+  const evidence = {
+    mode: 'dungeon', policy: dungeonPolicy, viewport, baseUrl,
+    checks, performance, performancePhase, consoleIssues, pageErrors, requestFailures, screenshots, route,
+  }
+  await writeFile(join(outDir, 'dungeon-evidence.json'), JSON.stringify(evidence, null, 2), 'utf8')
+  const markdown = [
+    `# Cocos Dungeon Agent: ${dungeonPolicy}`,
+    '',
+    `- Viewport: ${viewport.width}x${viewport.height}`,
+    `- P95 frame: ${performance.p95FrameMs?.toFixed(2) ?? 'n/a'}ms`,
+    `- Performance phase: ${performancePhase}`,
+    `- Minimum sampled FPS: ${performance.minimumFps?.toFixed(1) ?? 'n/a'}`,
+    `- Result: ${checks.every((check) => check.ok) ? 'PASS' : 'FAIL'}`,
+    '',
+    ...checks.map((check) => `- ${check.ok ? '[x]' : '[ ]'} ${check.name}: ${check.detail}`),
+  ].join('\n')
+  await writeFile(join(outDir, 'report.md'), markdown, 'utf8')
+  console.log(markdown)
+  console.log(`\nReport: ${join(outDir, 'report.md')}`)
+  await browser.close()
+  browser = null
+  return checks.every((check) => check.ok)
+}
+
+if (agentMode === 'dungeon') {
+  let ok = false
+  try {
+    ok = await runCocosDungeonAgent()
+  } catch (error) {
+    console.error(error.stack || error.message)
+  } finally {
+    if (browser) await browser.close().catch(() => {})
+  }
+  process.exit(ok ? 0 : 1)
 }
 
 try {

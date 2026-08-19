@@ -141,7 +141,7 @@ export class DungeonRunPresenter extends Component {
   onLoad(): void {
     if (this.destroyed || this.worldLayer) return
     this.buildInterface()
-    this.configureViewport(DEFAULT_VIEWPORT)
+    this.applyLayout()
   }
 
   configureViewport(metrics: Pick<ViewportMetrics,
@@ -342,19 +342,15 @@ export class DungeonRunPresenter extends Component {
     })
     this.resizeAndPlace(this.interactionHint, this.layout.interaction)
     this.fitChildLabel(this.interactionHint, 'DungeonInteractionLabel')
-    this.resizeAndPlace(this.commandBar, {
-      centerX: this.layout.interaction.centerX,
-      centerY: this.layout.interaction.centerY - this.layout.interaction.height - 38,
-      width: Math.min(this.layout.safeRect.width - 24, 640),
-      height: 60,
-    })
-    const buttonWidth = Math.min(144, (Math.min(this.layout.safeRect.width - 24, 640) - 24) / 4)
+    this.resizeAndPlace(this.commandBar, this.layout.commandBar)
+    const minimumTouch = 44 / this.layout.physicalScale
+    const buttonWidth = Math.max(minimumTouch, (this.layout.commandBar.width - 24) / 4)
     const buttons = [this.searchButton, this.doorButton, this.altarButton, this.extractionButton]
     buttons.forEach((button, index) => this.resizeAndPlace(button, {
       centerX: (index - 1.5) * (buttonWidth + 8),
       centerY: 0,
       width: buttonWidth,
-      height: 54,
+      height: Math.max(minimumTouch, this.layout.commandBar.height - 6),
     }))
     buttons.forEach((button) => this.fitChildLabel(button, `${button?.name}Label`))
     this.resizeAndPlace(this.settlement, this.layout.settlement)

@@ -145,6 +145,30 @@ test('second pursuit seals a reachable exit on the current floor before older ro
   assert.equal(sourceRoom.id, 'f2-bridge-combat')
 })
 
+test('entering the floor-two elite gate starts the second pursuit in the same checkpoint', () => {
+  const run = makeRun(44)
+  chooseDungeonExit(run, 'f1-entry-to-forest')
+  advanceTicks(run, 1200)
+  applyPursuerDamage(run, 999)
+  chooseDungeonExit(run, 'f1-forest-to-floor2')
+  searchCurrentRoom(run)
+  chooseDungeonExit(run, 'f2-bridge-to-sword-array')
+  searchCurrentRoom(run)
+
+  const result = chooseDungeonExit(run, 'f2-sword-array-to-elite')
+
+  assert.equal(result.accepted, true)
+  assert.equal(run.map.currentRoomId, 'f2-gate-elite')
+  assert.equal(run.pursuer.phase, 'second-hunt')
+  assert.equal(result.events.some((event) => event.type === 'pursuer-hunt-started' && event.hunt === 2), true)
+  assert.equal(result.events.some((event) => event.type === 'route-sealed'), true)
+
+  const checkpoint = checkpointDungeonRun(run)
+  const restored = restoreDungeonSession(profile, JSON.parse(JSON.stringify(checkpoint)))
+  assert.equal(restored.map.currentRoomId, 'f2-gate-elite')
+  assert.equal(restored.pursuer.phase, 'second-hunt')
+})
+
 test('second pursuit rejects atomically when the current floor has no safe seal candidate', () => {
   const run = makeRun(43)
   chooseDungeonExit(run, 'f1-entry-to-forest')

@@ -155,7 +155,7 @@ export function stageResourcePlanFor(stageId: number): StageResourcePlan {
 export function planBackgroundRelease(previous: StageVisual | null, current: StageVisual | null): string[] {
   if (!previous) return []
   const currentPaths = new Set(current ? [current.farPath, current.midPath].filter(Boolean) : [])
-  return [...new Set([previous.farPath, previous.midPath].filter(Boolean) as string[])]
+  return Array.from(new Set([previous.farPath, previous.midPath].filter(Boolean) as string[]))
     .filter((path) => !currentPaths.has(path))
 }
 

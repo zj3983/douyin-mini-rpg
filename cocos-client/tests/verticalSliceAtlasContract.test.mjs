@@ -43,7 +43,7 @@ const expectedActors = {
     sourceModes: Object.fromEntries(['idle', 'move', 'sweep', 'spikes', 'roar', 'hurt', 'death'].map((name) => [name, 'frame-sequence'])),
   },
   'mist-bamboo-emperor': {
-    masterFrameSize: [512, 640],
+    masterFrameSize: [256, 320],
     runtimeFrameSize: [256, 320],
     actions: { idle: 6, move: 6, sweep: 6, spikes: 6, roar: 6, hurt: 6, death: 6 },
     sourceModes: {

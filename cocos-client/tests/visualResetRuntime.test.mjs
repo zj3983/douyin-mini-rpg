@@ -19,6 +19,7 @@ import {
 
 test('generic Boss attack resolves to an action present in its atlas', () => {
   assert.equal(resolveActorVisualAction('bamboo-warden', 'attack'), 'sweep')
+  assert.equal(resolveActorVisualAction('mist-bamboo-emperor', 'attack'), 'sweep')
   assert.equal(resolveActorVisualAction('bamboo-warden', 'hurt'), 'hurt')
   assert.equal(resolveActorVisualAction('moss-wolf', 'attack'), 'attack')
 })

@@ -393,11 +393,29 @@ function chooseExitCommand(run: DungeonRun, exitId: string): DungeonCommandResul
   const exit = current.exits.find((candidate) => candidate.id === exitId)
   if (!exit) return rejected('unknown-exit')
   const fromRoomId = current.id
-  const entered = enterMappedRoom(run.map, run.profile, exit.to, run.doorCurrency)
+  const nextMap = snapshotDungeonMap(run.map)
+  const entered = enterMappedRoom(nextMap, run.profile, exit.to, run.doorCurrency)
   if (!entered.ok) return rejected(entered.reason)
 
+  const nextRun: DungeonRun = {
+    ...run,
+    map: nextMap,
+    pursuer: snapshotPursuitBoss(run.pursuer),
+    doorCurrency: entered.currency,
+  }
+  const events: DungeonRunEvent[] = [
+    { type: 'room-entered', fromRoomId, roomId: exit.to, exitId, cost: exit.cost },
+  ]
+  if (exit.to === 'f2-gate-elite' && nextRun.pursuer.phase === 'first-repelled') {
+    const pursuit = beginSecondPursuit(nextRun)
+    if (pursuit.accepted === false) return rejected(pursuit.reason)
+    events.push(...pursuit.events)
+  }
+
+  run.map = nextRun.map
+  run.pursuer = nextRun.pursuer
   run.doorCurrency = entered.currency
-  return accepted(run, [{ type: 'room-entered', fromRoomId, roomId: exit.to, exitId, cost: exit.cost }])
+  return accepted(run, events)
 }
 
 function activateAltarCommand(run: DungeonRun): DungeonCommandResult {
@@ -589,7 +607,7 @@ export function applyPursuerDamage(run: DungeonRun, amount: number): DungeonComm
           .map((exit) => exit.id),
       ),
     )
-    for (const exitId of [...vaultEntryExitIds].sort()) {
+    for (const exitId of Array.from(vaultEntryExitIds).sort()) {
       const index = run.map.sealedExitIds.indexOf(exitId)
       if (index >= 0) {
         run.map.sealedExitIds.splice(index, 1)
@@ -719,7 +737,7 @@ function routeStateCanExtract(profile: DungeonProfile, map: DungeonMapState): bo
       if (!canExtract.has(previousId)) reversePending.push(previousId)
     }
   }
-  return [...reachable].every((roomId) => canExtract.has(roomId))
+  return Array.from(reachable).every((roomId) => canExtract.has(roomId))
 }
 
 function revealedHistoryIsConnected(profile: DungeonProfile, map: DungeonMapState): boolean {

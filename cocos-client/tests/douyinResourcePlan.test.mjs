@@ -10,6 +10,7 @@ test('Douyin source resources are separated by launch priority', () => {
   assert.equal(classifyDouyinResource('Assets/World/MistBamboo/far.webp'), 'stage-one')
   assert.equal(classifyDouyinResource('Assets/World/FlameRavine/far.webp'), 'deferred')
   assert.equal(classifyDouyinResource('Assets/ActorAtlases/FlameOgre/atlas.png'), 'deferred')
+  assert.equal(classifyDouyinResource('Assets/Dungeon/MistBamboo/Floor2/far.webp'), 'deferred')
   assert.equal(classifyDouyinResource('Assets/Generated/Atlases/characters-atlas.png'), 'review')
   assert.equal(classifyDouyinResource('Assets/Combat/FlameRavine/flame-ogre-strip.png'), 'review')
   assert.equal(classifyDouyinResource('Data/animation-atlas.json'), 'shared')

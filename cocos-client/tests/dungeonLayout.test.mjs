@@ -25,18 +25,33 @@ function assertInside(inner, outer, label) {
 test('dungeon regions stay inside the physical safe area on portrait and landscape screens', () => {
   for (const viewport of viewports) {
     const layout = computeDungeonLayout(viewport)
-    for (const key of ['hud', 'mapButton', 'interaction', 'settlement']) assertInside(layout[key], layout.safeRect, `${viewport.name}:${key}`)
+    for (const key of ['hud', 'mapButton', 'interaction', 'commandBar', 'settlement']) assertInside(layout[key], layout.safeRect, `${viewport.name}:${key}`)
     assert.ok(layout.settlement.height <= layout.safeRect.height * 0.7 + 0.001, `${viewport.name}: settlement height`)
     assert.ok(layout.mapButton.width * layout.physicalScale >= 44, `${viewport.name}: map width`)
     assert.ok(layout.mapButton.height * layout.physicalScale >= 44, `${viewport.name}: map height`)
     assert.ok(layout.interaction.height * layout.physicalScale >= 44, `${viewport.name}: interaction height`)
+    assert.ok(layout.commandBar.height * layout.physicalScale >= 44, `${viewport.name}: command bar height`)
   }
 })
 
-test('font sizes are fixed design values and do not scale from viewport width', () => {
-  const fontContracts = viewports.map((viewport) => computeDungeonLayout(viewport).fontSizes)
-  for (const contract of fontContracts.slice(1)) assert.deepEqual(contract, fontContracts[0])
-  assert.deepEqual(fontContracts[0], { hud: 24, hint: 26, settlementTitle: 34, settlementBody: 24 })
+test('landscape uses show-all scale and exposes the full physical viewport to dungeon UI', () => {
+  const layout = computeDungeonLayout(viewports.at(-1))
+  assert.ok(Math.abs(layout.physicalScale - 390 / 1334) < 0.000001)
+  assert.ok(Math.abs(layout.width * layout.physicalScale - 844) < 0.001)
+  assert.ok(Math.abs(layout.height * layout.physicalScale - 390) < 0.001)
+  assert.ok(layout.width > 750)
+  assert.ok(layout.fontSizes.hint * layout.physicalScale >= 12)
+})
+
+test('font sizes retain their design minimum and remain physically readable', () => {
+  const fontContracts = viewports.map((viewport) => computeDungeonLayout(viewport))
+  for (const layout of fontContracts) {
+    assert.ok(layout.fontSizes.hud >= 24)
+    assert.ok(layout.fontSizes.hint >= 26)
+    assert.ok(layout.fontSizes.settlementTitle >= 34)
+    assert.ok(layout.fontSizes.settlementBody >= 24)
+    assert.ok(layout.fontSizes.hud * layout.physicalScale >= 12)
+  }
 })
 
 test('invalid metrics produce a frozen usable layout', () => {

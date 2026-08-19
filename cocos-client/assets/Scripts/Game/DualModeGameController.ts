@@ -33,6 +33,7 @@ export class DualModeGameController extends Component {
   private repository: SaveRepository | null = null
   private runtime: DualModeRuntime | null = null
   private initialSave: PlayerSaveV4 = createDefaultSave()
+  private callbacksBoundTo: DungeonRunController | null = null
 
   onLoad() {
     this.repository = createJsonSaveRepository(sys.localStorage, 'cultivation-save-v4')
@@ -150,10 +151,12 @@ export class DualModeGameController extends Component {
     }
     this.runtime = null
     this.repository = null
+    this.callbacksBoundTo = null
   }
 
   private bindDungeonCallbacks() {
-    if (!this.dungeonRun) return
+    if (!this.dungeonRun || this.callbacksBoundTo === this.dungeonRun) return
+    this.callbacksBoundTo = this.dungeonRun
     this.dungeonRun.onCheckpoint = (checkpoint) => {
       const result = this.runtime?.handleDungeonCheckpoint(checkpoint)
       if (!result?.ok) return false
@@ -164,6 +167,7 @@ export class DualModeGameController extends Component {
   }
 
   private initializeRuntimeWhenReady() {
+    this.bindDungeonCallbacks()
     if (this.runtime || !this.repository || !this.dungeonRun?.isReady()) return
     const hadActiveRun = this.initialSave.dungeon.activeRun !== null
     this.runtime = createDualModeRuntime({

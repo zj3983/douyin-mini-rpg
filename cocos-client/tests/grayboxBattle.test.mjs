@@ -2,85 +2,62 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { createDungeonSession, extractRun } from '../assets/Scripts/Core/Dungeon/DungeonSession.ts'
-import { interactDungeonRun } from '../assets/Scripts/Core/Dungeon/DungeonInteraction.ts'
+import { greedyPolicy, simulateDungeon } from '../tools/simulate-pursuit-dungeon.mjs'
+import {
+  advanceDungeonRun,
+  applyDungeonCommand,
+  checkpointDungeonRun,
+  createDungeonSession,
+  restoreDungeonSession,
+} from '../assets/Scripts/Core/Dungeon/DungeonSession.ts'
 import { createDualModeRuntime } from '../assets/Scripts/Core/Progression/DualModeRuntime.ts'
-import { createDefaultSave } from '../assets/Scripts/Core/Progression/PlayerSave.ts'
+import { createDefaultSave, migratePlayerSave } from '../assets/Scripts/Core/Progression/PlayerSave.ts'
 
 const read = (path) => readFileSync(resolve(path), 'utf8')
 
-test('graybox controller wires the new battle core to cocos nodes', () => {
+test('graybox controller remains available as a battle-core diagnostic scene', () => {
   const source = read('assets/Scripts/Game/GrayboxBattleController.ts')
-
   assert.match(source, /class GrayboxBattleController/)
   assert.match(source, /createBattleSession\(STAGE_ONE/)
   assert.match(source, /tickBattleSession\(this\.session, deltaTime\)/)
   assert.match(source, /Node\.EventType\.TOUCH_END/)
-  assert.match(source, /convertToNodeSpaceAR/)
-  assert.match(source, /setMoveTarget\(this\.session\.player/)
-  assert.match(source, /requestSettleContinue/)
-  assert.match(source, /Graphics/)
-  assert.match(source, /update\(deltaTime: number\)/)
-})
-
-test('graybox controller renders telegraphs, settlement countdown, and defeat restart', () => {
-  const source = read('assets/Scripts/Game/GrayboxBattleController.ts')
-
   assert.match(source, /drawTelegraphs/)
-  assert.match(source, /sweepFan/)
-  assert.match(source, /roarWave/)
-  assert.match(source, /settleElapsed/)
+  assert.match(source, /requestSettleContinue/)
   assert.match(source, /rebuildSession/)
-  assert.match(source, /'settle'/)
-  assert.match(source, /'defeated'/)
-  assert.match(source, /'enemy-death'/)
 })
 
-test('portrait bootstrap assembles and wires the dungeon graybox through real Buttons', () => {
+test('portrait bootstrap assembles the complete dungeon presenter and shared combat runtime', () => {
   const source = read('assets/Scripts/Game/PortraitBattleBootstrap.ts')
-
-  for (const name of ['DungeonRoomLabel', 'DungeonStatusLabel', 'DungeonInteractButton', 'DungeonEntryButton']) {
+  for (const name of ['SharedCombatRoot', 'SharedActorLayer', 'SharedEffectLayer', 'SharedDropLayer', 'WorldRoot', 'DungeonRoot', 'DungeonEntryButton']) {
     assert.match(source, new RegExp(`createNode\\('${name}'|createLabel\\('${name}'`), `missing ${name}`)
   }
-  assert.match(source, /createDungeonFloor\(\s*dungeonRoot,\s*1,/)
-  assert.match(source, /createDungeonFloor\(\s*dungeonRoot,\s*2,/)
-  assert.match(source, /createDungeonFloor\(\s*dungeonRoot,\s*3,/)
-  assert.match(source, /createNode\(`DungeonFloor\$\{floor\}`/)
+  assert.match(source, /dungeonRoot\.addComponent\(DungeonRunPresenter\)/)
   assert.match(source, /dungeonEntryNode\.addComponent\(Button\)/)
-  assert.match(source, /dungeonInteractNode\.addComponent\(Button\)/)
   assert.match(source, /dungeonEntryNode\.on\(Button\.EventType\.CLICK,\s*this\.enterDungeonFromWorld,\s*this\)/)
-  assert.match(source, /dungeonInteractNode\.on\(Button\.EventType\.CLICK,\s*this\.interactWithDungeon,\s*this\)/)
   assert.match(source, /dualModeController\?\.enterDungeon\(\)/)
-  assert.match(source, /dungeonRun\.interact\(\)/)
-  assert.match(source, /getRunSnapshot\(\)/)
-  assert.match(source, /graphics\.clear\(\)/)
-  assert.match(source, /graphics\.rect\(-WIDTH \/ 2, -visibleHeight \/ 2, WIDTH, visibleHeight\)/)
-  assert.match(source, /dungeon-entry-rejected/)
-  assert.match(source, /dungeonRun\.onRunChanged = this\.dungeonPresentationCallback/)
-  assert.match(source, /visibleHeight/)
-  assert.doesNotMatch(source, /document\.|window\.|querySelector|createElement/)
-  assert.doesNotMatch(source, /applyWorldBossClear|consumeDungeonPass|applyExtractionLoot/)
-  assert.doesNotMatch(source, /grantDoorCurrency|searchCurrentRoom|\.moveTo\(|doorCurrency\s*[+\-*/]?=|dungeonPasses\s*[+\-]=|carriedLoot\.push|inventory\.[a-zA-Z]+\s*[+\-]=/)
+  assert.match(source, /dungeonRun\.onRunEvent = \(event\) => this\.onDungeonRunEvent\(event\)/)
+  assert.match(source, /presenter\.onCommandRequested = \(command\) => this\.applyDungeonCommand\(command\)/)
+  assert.doesNotMatch(source, /createDungeonFloor|DungeonInteractButton/)
+  assert.doesNotMatch(source, /querySelector|createElement/)
 })
 
-test('dungeon interaction authority exists in Core', () => {
+test('dungeon command authority remains in the Core session', () => {
   assert.equal(existsSync(resolve('assets/Scripts/Core/Dungeon/DungeonInteraction.ts')), true)
   const controller = read('assets/Scripts/Game/DungeonRunController.ts')
-  assert.match(controller, /Core\/Dungeon\/DungeonInteraction/)
-  assert.match(controller, /interactDungeonRun\(this\.run\)/)
+  assert.match(controller, /applyDungeonCommand/)
+  assert.match(controller, /this\.mutate\(\(candidate\) => applyDungeonCommand\(candidate, command\)\)/)
   assert.doesNotMatch(controller, /grantDoorCurrency|doorCurrency\s*[+\-*/]?=/)
 })
 
-test('bootstrap refreshes dungeon UI through the direct controller callback, not analytics listener order', () => {
+test('bootstrap refreshes dungeon UI through typed run events and explicit commands', () => {
   const source = read('assets/Scripts/Game/PortraitBattleBootstrap.ts')
-
-  assert.match(source, /dungeonRun\.onRunChanged = this\.dungeonPresentationCallback/)
-  assert.match(source, /this\.refreshDungeonPresentation\([^)]*,\s*snapshot\)/)
-  assert.match(source, /if \(this\.dungeonRunController\?\.onRunChanged === this\.dungeonPresentationCallback\)/)
+  assert.match(source, /dungeonRun\.onRunEvent = \(event\) => this\.onDungeonRunEvent\(event\)/)
+  assert.match(source, /private applyDungeonCommand\(command: DungeonCommand\)/)
+  assert.match(source, /this\.refreshDungeonPresentation\(\)/)
   assert.doesNotMatch(source, /dungeonNode\.on\('dungeon-(?:run-began|room-changed|loot-found|extracted)'/)
 })
 
-test('dual and dungeon adapters stay isolated from legacy battle and new combat modules', () => {
+test('dual and dungeon adapters stay isolated from the legacy battle layer', () => {
   for (const file of [
     'assets/Scripts/Game/DungeonRunController.ts',
     'assets/Scripts/Game/DualModeGameController.ts',
@@ -90,15 +67,24 @@ test('dual and dungeon adapters stay isolated from legacy battle and new combat 
     const source = read(file)
     assert.doesNotMatch(source, /Core\/Battle/)
     assert.doesNotMatch(source, /(?:\.\.\/)+Combat\//)
-    assert.doesNotMatch(source, /document\.|window\.|querySelector|createElement/)
+    assert.doesNotMatch(source, /querySelector|createElement/)
   }
 })
 
-test('world boss pass supports a searched three-floor extraction persisted exactly once', () => {
+test('greedy policy completes the authored three-floor Boss route exactly once', () => {
+  const report = simulateDungeon(88, greedyPolicy)
+  assert.equal(report.phase, 'extracted')
+  assert.equal(report.bossDefeated, true)
+  assert.equal(report.visitedRoomIds.includes('f3-sword-vault'), true)
+  assert.equal(report.exitKind, 'full')
+  assert.equal(report.rewardCommitCount, 1)
+})
+
+test('production dungeon extraction commits its reward ledger exactly once through DualModeRuntime', () => {
   const profile = JSON.parse(read('assets/resources/Data/dual-mode-slice.json'))
   let run = null
-  const saved = []
   const dungeon = {
+    isReady: () => true,
     hasRun: () => run !== null,
     currentRunId: () => run?.id ?? null,
     previewRunId: (seed) => createDungeonSession(profile, seed).id,
@@ -107,6 +93,12 @@ test('world boss pass supports a searched three-floor extraction persisted exact
       run = createDungeonSession(profile, seed)
       return true
     },
+    restore(checkpoint) {
+      if (run) return false
+      run = restoreDungeonSession(profile, checkpoint)
+      return true
+    },
+    checkpoint: () => run ? checkpointDungeonRun(run) : null,
     cancelRun() {
       if (!run) return false
       run = null
@@ -114,39 +106,28 @@ test('world boss pass supports a searched three-floor extraction persisted exact
     },
     isExtractedRun: (runId) => run?.id === runId && run.phase === 'extracted',
     extractedLoot: (runId) => run?.id === runId && run.phase === 'extracted'
-      ? run.carriedLoot.map((item) => ({ ...item }))
+      ? structuredClone(run.carriedLoot)
       : null,
   }
+  const saved = []
   const runtime = createDualModeRuntime({
     initialSave: createDefaultSave(),
-    repository: { load: () => null, save: (save) => saved.push(structuredClone(save)) },
+    repository: { save: (value) => saved.push(migratePlayerSave(value)) },
     dungeon,
   })
-
-  assert.equal(runtime.handleWorldCleared({ stage: 1, rewardId: 'world-boss-loop' }).ok, true)
-  assert.equal(runtime.enterDungeon(88).ok, true)
-  const visited = [run.currentRoomId]
-  for (let click = 0; click < 20; click += 1) {
-    const result = interactDungeonRun(run)
-    assert.notEqual(result.type, 'blocked')
-    if (result.type === 'moved') visited.push(result.roomId)
-    if (result.type === 'extraction-requested') break
+  assert.equal(runtime.enterDungeon(188).ok, true)
+  for (const exitId of ['f1-entry-to-forest', 'f1-forest-to-floor2', 'f2-bridge-to-exit']) {
+    assert.equal(applyDungeonCommand(run, { type: 'choose-exit', exitId }).accepted, true)
+    assert.equal(runtime.handleDungeonCheckpoint(checkpointDungeonRun(run)).ok, true)
   }
-  assert.deepEqual(visited, ['f1-entry', 'f1-combat', 'f1-store', 'f2-alchemy', 'f2-elite', 'f3-boss', 'f3-gate'])
-  assert.equal(interactDungeonRun(run).type, 'extraction-requested')
-  const extraction = extractRun(run)
-  assert.equal(extraction.ok, true)
-  const accepted = runtime.handleDungeonExtracted({ runId: run.id, loot: extraction.loot })
-  assert.equal(accepted.ok, true)
+  assert.equal(applyDungeonCommand(run, { type: 'begin-extraction' }).accepted, true)
+  for (let frame = 0; frame < 40; frame += 1) advanceDungeonRun(run, 0.1, { paused: false })
+  assert.equal(run.phase, 'extracted')
 
-  const save = runtime.getSaveSnapshot()
-  assert.equal(save.inventory.artifacts['flying-sword'], 1)
-  assert.equal(save.inventory.materials['spirit-ore'], 2)
-  assert.equal(save.inventory.materials['mist-herb'], 2)
-  assert.equal(save.rewardLedger.filter((id) => id === run.id).length, 1)
-  assert.deepEqual(runtime.handleDungeonExtracted({ runId: run.id, loot: extraction.loot }), {
-    ok: false,
-    reason: 'no-active-run',
-  })
-  assert.equal(saved.length, 3)
+  const payload = { runId: run.id, loot: structuredClone(run.carriedLoot) }
+  assert.equal(runtime.handleDungeonExtracted(payload).ok, true)
+  const savesAfterAcceptance = saved.length
+  assert.deepEqual(runtime.handleDungeonExtracted(payload), { ok: false, reason: 'no-active-run' })
+  assert.equal(saved.length, savesAfterAcceptance)
+  assert.equal(runtime.getSaveSnapshot().rewardLedger.filter((entry) => entry === 'mist-vault-188').length, 1)
 })

@@ -102,6 +102,22 @@ type RuntimeLoadState =
   | { status: 'ready'; runtime: BattleRuntimeController }
   | { status: 'failed' }
 
+type DungeonAgentBridge = {
+  ready: () => boolean
+  resourceStatus: () => unknown
+  uiLayout: () => unknown
+  enterDungeon: (seed?: number) => boolean
+  snapshot: () => unknown
+  command: (command: DungeonCommand) => unknown
+  advance: (seconds: number) => unknown
+  completeEncounter: () => unknown
+  closeSettlement: () => boolean
+}
+
+type DungeonAgentGlobal = typeof globalThis & {
+  __M3_DUNGEON_AGENT__?: DungeonAgentBridge
+}
+
 @ccclass('PortraitBattleBootstrap')
 export class PortraitBattleBootstrap extends Component {
   private fullHeightNodes: Node[] = []
@@ -157,10 +173,13 @@ export class PortraitBattleBootstrap extends Component {
     this.assembleScene(initialLayout, initialMetrics)
     this.viewportMetricsCleanup = this.viewportMetricsProvider.subscribe((metrics) => this.relayoutVisibleArea(metrics))
     view.on('canvas-resize', this.onCanvasResize, this)
+    this.installDungeonAgentBridge()
   }
 
   onDestroy() {
     this.destroyed = true
+    const agentGlobal = globalThis as DungeonAgentGlobal
+    if (agentGlobal.__M3_DUNGEON_AGENT__) delete agentGlobal.__M3_DUNGEON_AGENT__
     this.stopRuntimeBinding()
     this.runtimeNode?.off('battle-stage-changed', this.onStageChanged, this)
     this.runtimeNode?.off('battle-runtime-ready')
@@ -185,6 +204,38 @@ export class PortraitBattleBootstrap extends Component {
     this.viewportMetricsProvider?.destroy()
     this.viewportMetricsProvider = null
     view.off('canvas-resize', this.onCanvasResize, this)
+  }
+
+  private installDungeonAgentBridge(): void {
+    const query = new URLSearchParams(globalThis.location?.search ?? '')
+    if (!query.has('gameAgent')) return
+    const agentGlobal = globalThis as DungeonAgentGlobal
+    agentGlobal.__M3_DUNGEON_AGENT__ = {
+      ready: () => Boolean(this.dualModeController && this.dungeonRunController?.isReady()),
+      resourceStatus: () => this.dungeonResources?.status() ?? { state: 'missing' },
+      uiLayout: () => this.dungeonPresenter?.getLayoutSnapshot() ?? null,
+      enterDungeon: (seed) => Boolean(this.dualModeController?.enterDungeon(seed)),
+      snapshot: () => this.dungeonRunController?.getRunSnapshot() ?? null,
+      command: (command) => this.applyDungeonCommand(command),
+      advance: (seconds) => {
+        const steps = Math.min(3000, Math.max(0, Math.ceil(Number(seconds) * 10)))
+        for (let index = 0; index < steps; index += 1) this.dungeonRunController?.update(0.1)
+        this.refreshDungeonPresentation()
+        return this.dungeonRunController?.getRunSnapshot() ?? null
+      },
+      completeEncounter: () => {
+        const phase = this.dungeonRunController?.getRunSnapshot()?.pursuer.phase
+        if (phase === 'first-hunt' || phase === 'second-hunt') {
+          return this.dungeonRunController?.handleBattleCompleted({ type: 'pursuer-damage', effectiveDamage: 600 }) ?? null
+        }
+        if (phase === 'final-fight') {
+          return this.dungeonRunController?.handleBattleCompleted({ type: 'pursuer-damage', effectiveDamage: 1200 }) ?? null
+        }
+        this.battleRuntimeController?.enterDungeonExplorationMode()
+        return { accepted: true, events: [] }
+      },
+      closeSettlement: () => this.dungeonRunController?.acknowledgeTerminalResult() ?? false,
+    }
   }
 
   update(deltaTime: number) {
@@ -468,6 +519,7 @@ export class PortraitBattleBootstrap extends Component {
     const result = this.dungeonRunController?.applyCommand(command)
     if (!result?.accepted) this.dungeonPresenter?.setInteractionHint('当前无法执行')
     this.refreshDungeonPresentation()
+    return result ?? { accepted: false, reason: 'controller-not-ready', events: [] }
   }
 
   private onDungeonRunEvent(event: DungeonRunEvent) {

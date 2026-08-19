@@ -119,7 +119,7 @@ function allReachableRoomsCanExtract(
     }
   }
 
-  return [...reachableFromCurrent].every((roomId) => canExtract.has(roomId))
+  return Array.from(reachableFromCurrent).every((roomId) => canExtract.has(roomId))
 }
 
 export function sealRoute(map: DungeonMapState, profile: DungeonProfile, exitId: string) {

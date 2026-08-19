@@ -136,8 +136,11 @@ function createHarness(api, options = {}) {
   const sharedPauseCalls = []
   presenter.onSharedCombatPauseChanged = (paused) => sharedPauseCalls.push(paused)
   presenter.bindController(controller)
+  if (options.viewportBeforeLoad) presenter.configureViewport(options.viewportBeforeLoad)
   presenter.onLoad()
-  presenter.configureViewport(options.viewport ?? { cssWidth: 390, cssHeight: 844, topInsetPx: 47, bottomInsetPx: 34, leftInsetPx: 0, rightInsetPx: 0 })
+  if (!options.viewportBeforeLoad) {
+    presenter.configureViewport(options.viewport ?? { cssWidth: 390, cssHeight: 844, topInsetPx: 47, bottomInsetPx: 34, leftInsetPx: 0, rightInsetPx: 0 })
+  }
   return { presenter, root, actor, effect, drop, input, player, controllerCalls, acknowledgeCalls, sharedPauseCalls }
 }
 
@@ -152,6 +155,15 @@ test('dungeon presenter passes Cocos Creator 3.8.8 semantic compilation', {
   skip: creatorCcPath ? false : 'Cocos Creator declarations are not installed',
 }, () => {
   assert.deepEqual(creatorSemanticDiagnostics(creatorCcPath), [])
+})
+
+test('deferred onLoad preserves viewport metrics configured while the dungeon root is inactive', async () => {
+  const api = await loadPresenter()
+  const viewport = { cssWidth: 844, cssHeight: 390, topInsetPx: 0, bottomInsetPx: 20, leftInsetPx: 0, rightInsetPx: 0 }
+  const { presenter } = createHarness(api, { viewportBeforeLoad: viewport })
+  const layout = presenter.getLayoutSnapshot()
+  assert.ok(Math.abs(layout.physicalScale - 390 / 1334) < 0.000001)
+  assert.ok(layout.width > 2800)
 })
 
 test('presenter builds visible Cocos HUD, controls, and safe-area layout instead of empty nodes', async () => {

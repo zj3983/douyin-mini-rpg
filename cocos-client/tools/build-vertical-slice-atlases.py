@@ -803,11 +803,9 @@ def _load_action_source_frames(action_config, source_root: Path):
     return frames
 
 
-def _normalize_action_frames(source_frames, frame_size, anchor):
-    frames = [
-        normalize_frame(frame, frame_size, 0.10, anchor)
-        for frame in source_frames
-    ]
+def _normalize_action_frames(source_frames, frame_size, anchor, *, sanitize_fragments=False):
+    normalize = sanitize_runtime_frame if sanitize_fragments else normalize_frame
+    frames = [normalize(frame, frame_size, padding_ratio=0.10, anchor=anchor) for frame in source_frames]
     for frame in frames:
         validate_subject(frame, 0.10)
     return frames
@@ -868,7 +866,12 @@ def build_actor(source_config, source_root, output_root, report_root=None, repor
             enforce_motion_limits=False,
         )
         try:
-            frames = _normalize_action_frames(source_frames, frame_size, anchor)
+            frames = _normalize_action_frames(
+                source_frames,
+                frame_size,
+                anchor,
+                sanitize_fragments=bool(source_config.get("sanitizeRuntimeFragments", False)),
+            )
         except ValueError as error:
             raise ValueError(f"{context}: normalization failed: {error}") from error
         del source_frames

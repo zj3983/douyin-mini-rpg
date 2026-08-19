@@ -17,6 +17,7 @@ const DEFERRED_PREFIXES = [
   'Assets/ActorAtlases/',
   'Assets/Artifacts/',
   'Assets/Characters/',
+  'Assets/Dungeon/',
   'Assets/Skills/',
   'Assets/World/',
 ]

@@ -740,7 +740,7 @@ export class BattleRuntimeController extends Component {
     const result: DungeonBattleResult = {
       requestId,
       completion: request.completion,
-      defeatedEnemyIds: [...this.dungeonDefeatedEnemyIds],
+      defeatedEnemyIds: Array.from(this.dungeonDefeatedEnemyIds),
     }
     this.lastDungeonBattleResult = {
       ...result,
