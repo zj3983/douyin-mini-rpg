@@ -147,7 +147,11 @@ function createDependencyModule() {
     export function segmentHitEnemiesAlongPath() { return [] }
     export function snapshotLivingSwordTargets(enemies) { return enemies }
     export function recordGeometricSwordHits() { return [] }
-    export function stageProfileFromDesign() { throw new Error('not used') }
+    export function stageProfileFromDesign(design, stageNumber) {
+      const stage = design.worldStages.find((entry) => entry.id === stageNumber)
+      if (!stage) throw new Error('unknown stage')
+      return structuredClone(stage)
+    }
     export function stageVisualFor(stageId) { return { stageId, backgroundId: 'world', theme: 'world' } }
     export function feedbackFor() { return [] }
     export function createEnemyCombatResolverAdapter(generation) { return { generation } }
@@ -187,6 +191,44 @@ async function loadController() {
   return { BattleRuntimeController: controllerModule.BattleRuntimeController, dependencies, cc }
 }
 
+async function loadFlyingSwordSkill() {
+  const source = readFileSync(resolve('assets/Scripts/Game/FlyingSwordSkill.ts'), 'utf8')
+  const ccUrl = createCcModule()
+  const artifactUrl = new URL('../assets/Scripts/Combat/ArtifactRuntime.ts', import.meta.url).href
+  const feedbackUrl = moduleUrl('export function feedbackFor() { return [] }')
+  const runtimeUrl = moduleUrl('export class BattleRuntimeController {}')
+  let javascript = ts.transpileModule(source, {
+    compilerOptions: {
+      experimentalDecorators: true,
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2022,
+    },
+  }).outputText
+  javascript = javascript
+    .replace("from 'cc'", `from '${ccUrl}'`)
+    .replace("from '../Combat/ArtifactRuntime.ts'", `from '${artifactUrl}'`)
+    .replace("from '../Combat/FeedbackTimeline.ts'", `from '${feedbackUrl}'`)
+    .replace("from './BattleRuntimeController'", `from '${runtimeUrl}'`)
+  return import(moduleUrl(javascript))
+}
+
+class EventNode {
+  constructor() { this.listeners = new Map(); this.events = [] }
+  on(name, callback, context) {
+    const listeners = this.listeners.get(name) ?? []
+    listeners.push({ callback, context })
+    this.listeners.set(name, listeners)
+  }
+  off(name, callback, context) {
+    const listeners = this.listeners.get(name) ?? []
+    this.listeners.set(name, listeners.filter((entry) => entry.callback !== callback || entry.context !== context))
+  }
+  emit(name, ...args) {
+    this.events.push([name, ...args])
+    for (const entry of [...(this.listeners.get(name) ?? [])]) entry.callback.call(entry.context, ...args)
+  }
+}
+
 function request(overrides = {}) {
   return {
     id: 'room:1',
@@ -208,6 +250,19 @@ function fakeNode(id = 1) {
     events: [],
     emit(name, ...args) { this.events.push([name, ...args]) },
     on() {}, off() {}, getComponent() { return null },
+  }
+}
+
+function worldStage(id) {
+  const boss = profile(`world-boss-${id}`, 'boss')
+  return {
+    id,
+    name: `World Stage ${id}`,
+    theme: 'mist-bamboo',
+    background: `world-stage-${id}`,
+    encounter: 'normal',
+    enemies: [profile('moss-wolf'), boss],
+    boss,
   }
 }
 
@@ -275,6 +330,117 @@ test('begin passes limits into the shared battle runtime and rejects malformed r
   assert.equal(controller.runtime, activeRuntime)
   assert.equal(controller.stageGeneration, activeGeneration)
   assert.ok(activeGeneration > beforeGeneration)
+})
+
+test('ordinary and Boss reservation failures leave the active dungeon generation untouched', async () => {
+  const { BattleRuntimeController } = await loadController()
+
+  for (const nextRequest of [
+    request({ id: 'ordinary:blocked' }),
+    request({
+      id: 'boss:blocked',
+      enemies: [],
+      defeatTarget: 1,
+      maxAlive: 1,
+      boss: profile('mist-bamboo-emperor', 'boss'),
+      completion: 'kill',
+    }),
+  ]) {
+    const { controller, despawned } = controllerHarness(BattleRuntimeController)
+    assert.equal(controller.beginDungeonEncounter(request({ id: 'active:old' })), true)
+    const oldRuntime = controller.runtime
+    const oldGeneration = controller.stageGeneration
+    const oldRequest = controller.activeDungeonRequest
+    const oldEnemyNodes = new Map(controller.enemyNodes)
+    const oldEvents = controller.node.events.length
+    const oldScheduled = controller._scheduled.length
+    controller.enemySpawner.spawnEnemy = () => null
+
+    assert.equal(controller.beginDungeonEncounter(nextRequest), false)
+    assert.strictEqual(controller.runtime, oldRuntime)
+    assert.equal(controller.stageGeneration, oldGeneration)
+    assert.strictEqual(controller.activeDungeonRequest, oldRequest)
+    assert.deepEqual(controller.enemyNodes, oldEnemyNodes)
+    assert.equal(controller.node.events.length, oldEvents)
+    assert.equal(controller._scheduled.length, oldScheduled)
+    assert.deepEqual(despawned, [])
+  }
+})
+
+test('missing dungeon spawner rejects before touching the active request', async () => {
+  const { BattleRuntimeController } = await loadController()
+  const { controller } = controllerHarness(BattleRuntimeController)
+  assert.equal(controller.beginDungeonEncounter(request({ id: 'active:old' })), true)
+  const oldRuntime = controller.runtime
+  const oldGeneration = controller.stageGeneration
+  const oldRequest = controller.activeDungeonRequest
+  controller.enemySpawner = null
+
+  assert.equal(controller.beginDungeonEncounter(request({ id: 'ordinary:no-spawner' })), false)
+  assert.strictEqual(controller.runtime, oldRuntime)
+  assert.equal(controller.stageGeneration, oldGeneration)
+  assert.strictEqual(controller.activeDungeonRequest, oldRequest)
+})
+
+test('successful dungeon begin reserves and adopts the first actor exactly once', async () => {
+  const { BattleRuntimeController } = await loadController()
+  const { controller } = controllerHarness(BattleRuntimeController)
+
+  assert.equal(controller.beginDungeonEncounter(request()), true)
+  assert.equal(controller.enemySpawner.spawned.length, 1)
+  assert.equal(controller.runtime.enemies.length, 1)
+  assert.equal(controller.runtime.enemies[0].id, 1)
+  assert.equal(controller.runtime.enemies[0].profile.id, 'moss-wolf')
+  assert.equal(controller.runtime.nextEnemyId, 2)
+  assert.strictEqual(controller.enemyNodes.get(1), controller.enemySpawner.spawned[0][1])
+})
+
+test('world stage rebuild resets an active sword path before a same-ID target can be hit', async () => {
+  const [{ BattleRuntimeController }, { FlyingSwordSkill }] = await Promise.all([
+    loadController(),
+    loadFlyingSwordSkill(),
+  ])
+  const { controller } = controllerHarness(BattleRuntimeController)
+  controller.node = new EventNode()
+  controller.designData = { json: { worldStages: [worldStage(1), worldStage(2)] } }
+  assert.equal(controller.initialize(), true)
+
+  const hits = []
+  const swordRuntime = {
+    node: controller.node,
+    isBattleFrozen: () => false,
+    getCurrentPlayerPosition: () => ({ x: 0, y: 0 }),
+    getLivingSwordTargets: () => [{ id: 'same-id', position: { x: 140, y: 0 }, alive: true }],
+    getBattleBounds: () => ({ minX: -360, maxX: 360, minY: -260, maxY: 260 }),
+    getCurrentVfxQuality: () => 'full',
+    resolveArtifactSwordHit(targetId) { hits.push(targetId); return { hitCount: 1 } },
+  }
+  const skill = new FlyingSwordSkill()
+  skill.node = new EventNode()
+  skill.sword = {
+    active: false,
+    setPosition() {},
+    setRotationFromEuler() {},
+  }
+  skill.battleRuntime = swordRuntime
+  skill.onLoad()
+  skill.onEnable()
+  skill.start()
+  skill.update(1 / 60)
+  const stalePathId = skill.visiblePathId
+  assert.ok(stalePathId)
+
+  assert.deepEqual(controller.advanceToStage(2), { ok: true, stageNumber: 2 })
+  assert.equal(skill.artifact.generation, controller.stageGeneration)
+  assert.equal(skill.artifact.activePaths.size, 0)
+  assert.equal(skill.visiblePathId, null)
+  skill.applyArtifactCommand({
+    type: 'resolve-sword-hit',
+    pathId: stalePathId,
+    targetId: 'same-id',
+    phase: 'outbound',
+  })
+  assert.deepEqual(hits, [])
 })
 
 test('ordinary dungeon completion fires exactly once with an isolated result', async () => {
@@ -345,8 +511,11 @@ test('changing rooms fully cleans the old generation and stale callbacks are ign
   assert.equal(controller.beginDungeonEncounter(request({ id: 'room:2', seed: 2 })), true)
   assert.ok(controller.stageGeneration > oldGeneration)
   assert.ok(despawned.length >= 1)
-  assert.equal(controller.enemyNodes.size, 0)
-  assert.equal(controller.enemyByNode.size, 0)
+  const reservedNode = controller.enemySpawner.spawned.at(-1)[1]
+  assert.equal(controller.enemyNodes.size, 1)
+  assert.equal(controller.enemyByNode.size, 1)
+  assert.strictEqual(controller.enemyNodes.get(1), reservedNode)
+  assert.strictEqual(controller.enemyByNode.get(reservedNode), controller.runtime.enemies[0])
   assert.ok(dependencies.calls.resetResolver.includes(controller.stageGeneration))
   assert.ok(telegraph.hidden >= 1)
   assert.ok(poolCalls.soul >= 1 && poolCalls.damage >= 1 && poolCalls.boss >= 1)

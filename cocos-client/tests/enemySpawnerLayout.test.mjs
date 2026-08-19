@@ -247,20 +247,14 @@ test('every non-Boss dungeon catalog actor resolves to a live EnemyBrain archety
   assert.equal(Object.values(resolved).every(Boolean), true)
 })
 
-test('dungeon AI presentation actions stay on each visual actor atlas', async () => {
+test('EnemySpawner never mutates a manifest shared by multiple visual instances', async () => {
   const { EnemySpawner } = await loadEnemySpawner()
-  const sourceManifest = JSON.parse(await readFile(
+  const manifest = JSON.parse(await readFile(
     new URL('../assets/resources/Data/animation-atlas.json', import.meta.url),
     'utf8',
   ))
-  const cases = [
-    ['fog-spider', 'ground', ['telegraph']],
-    ['lantern-wraith', 'flying', ['dive', 'cast']],
-    ['mist-deer-king', 'ground', ['telegraph']],
-  ]
-
-  for (const [index, [actorId, role, actions]] of cases.entries()) {
-    const manifest = structuredClone(sourceManifest)
+  const original = structuredClone(manifest)
+  for (const [index, actorId] of ['fog-spider', 'fog-spider'].entries()) {
     const controller = {
       bindRuntimeEnemy() {},
       setTarget() {},
@@ -284,22 +278,12 @@ test('dungeon AI presentation actions stay on each visual actor atlas', async ()
       hp: 100,
       alive: true,
       position: { x: 0, y: 0 },
-      profile: { id: actorId, role },
+      profile: { id: actorId, role: 'ground' },
     })
-
-    for (const action of actions) {
-      node.emit('enemy-semantic-animation', 'brain-action', action)
-      const actor = manifest.actors.find((entry) => entry.id === actorId)
-      const adapted = actor.actions.find((entry) => entry.name === action)
-      const ownAttack = actor.actions.find((entry) => entry.name === 'attack')
-      assert.ok(adapted, `${actorId} must present ${action} without switching actor atlases`)
-      assert.equal(adapted.atlas, ownAttack.atlas)
-      assert.deepEqual(adapted.frames, ownAttack.frames)
-    }
-
+    node.emit('enemy-semantic-animation', 'wolf-crouch', 'telegraph')
     spawner.despawnEnemy(node)
-    assert.equal(node.listeners.get('enemy-semantic-animation')?.length ?? 0, 0)
   }
+  assert.deepEqual(manifest, original)
 })
 
 test('Mist Bamboo Emperor keeps its visual actor ID while binding the shared Boss Brain', async () => {

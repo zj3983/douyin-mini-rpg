@@ -48,7 +48,6 @@ export class EnemySpawner extends Component {
     root: { width: number; height: number }
     visual: { width: number; height: number }
   }>()
-  private visualActionBridges = new WeakMap<Node, (semanticAction: string, presentationAction: string) => void>()
 
   configureBattleLayout(layout: BattleLayout) {
     this.battleLayout = layout
@@ -72,7 +71,6 @@ export class EnemySpawner extends Component {
     node.on('enemy-visual-frame-ready', this.onEnemyVisualFrameReady, this)
     const visualSize = this.captureAndRestoreVisualSize(node, visual).root
     visual?.resetForSpawn(enemy.profile)
-    this.bindVisualActionBridge(node, visual, enemy.profile.id)
     const spawn = isBoss
       ? this.battleLayout.bossSpawn
       : computeOrdinaryEnemySpawn(this.battleLayout, visualSize, laneY)
@@ -127,7 +125,6 @@ export class EnemySpawner extends Component {
     }
     if (this.activeBoss?.node === node) this.activeBoss = null
     node.off('enemy-visual-frame-ready', this.onEnemyVisualFrameReady, this)
-    this.unbindVisualActionBridge(node)
     visual?.prepareForPool()
     controller?.prepareForPool()
     this.enemyPool?.despawn(node)
@@ -143,35 +140,6 @@ export class EnemySpawner extends Component {
       return 'green-wing-moth'
     }
     return null
-  }
-
-  private bindVisualActionBridge(node: Node, visual: EnemyVisualController | null, actorId: string) {
-    this.unbindVisualActionBridge(node)
-    if (!visual) return
-    const bridge = (_semanticAction: string, presentationAction: string) => {
-      if (presentationAction !== 'telegraph' && presentationAction !== 'dive' && presentationAction !== 'cast') return
-      const manifest = visual.animator?.animationManifest?.json as AnimationAtlasManifest | undefined
-      const actor = manifest?.actors.find((entry) => entry.id === actorId)
-      if (!actor || actor.actions.some((action) => action.name === presentationAction)) return
-      const attack = actor.actions.find((action) => action.name === 'attack')
-      if (!attack) return
-      actor.actions.push({
-        ...attack,
-        name: presentationAction,
-        order: [...attack.order],
-        frames: attack.frames.map((frame) => ({ ...frame })),
-        events: attack.events?.map((event) => ({ ...event })),
-      })
-    }
-    node.on('enemy-semantic-animation', bridge, this)
-    this.visualActionBridges.set(node, bridge)
-  }
-
-  private unbindVisualActionBridge(node: Node) {
-    const bridge = this.visualActionBridges.get(node)
-    if (!bridge) return
-    node.off('enemy-semantic-animation', bridge, this)
-    this.visualActionBridges.delete(node)
   }
 
   private livingNeighbors(): readonly EnemyNeighborSnapshot[] {

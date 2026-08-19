@@ -104,6 +104,8 @@ export function setVisualActionState(state: VisualResetState, action: string): V
 
 export function resolveActorVisualAction(actorId: string | null, action: string): string {
   if (actorId === 'bamboo-warden' && action === 'attack') return 'sweep'
+  if ((actorId === 'fog-spider' || actorId === 'mist-deer-king') && action === 'telegraph') return 'attack'
+  if (actorId === 'lantern-wraith' && (action === 'dive' || action === 'cast' || action === 'telegraph')) return 'attack'
   return action
 }
 

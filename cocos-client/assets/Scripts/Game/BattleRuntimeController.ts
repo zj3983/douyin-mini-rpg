@@ -164,6 +164,8 @@ export class BattleRuntimeController extends Component {
   beginDungeonEncounter(request: DungeonBattleRequest): boolean {
     const accepted = this.cloneValidDungeonRequest(request)
     if (!accepted) return false
+    const reserved = this.reserveDungeonActor(accepted)
+    if (!reserved) return false
 
     this.clearBattleGeneration()
     this.activeDungeonRequest = accepted
@@ -189,11 +191,10 @@ export class BattleRuntimeController extends Component {
     this.hud?.updateStage(stage.name, this.stageNumber)
     this.hud?.updateSoul(0, this.runtime.defeatTarget)
     this.hud?.hideBoss()
-
-    if (accepted.boss && !this.spawnDungeonBoss(accepted.boss)) {
-      this.clearBattleGeneration()
-      return false
-    }
+    this.runtime.enemies.push(reserved.enemy)
+    this.runtime.nextEnemyId = reserved.enemy.id + 1
+    this.runtime.bossSpawned = reserved.enemy.profile.role === 'boss'
+    this.adoptSpawnedEnemy(reserved.enemy, reserved.node)
     return true
   }
 
@@ -345,6 +346,7 @@ export class BattleRuntimeController extends Component {
     this.stageNumber = stage.id
     this.attemptState = beginBattleAttempt(this.attemptState, this.stageNumber)
     this.stageGeneration = this.attemptState.generation
+    this.publishGenerationReset(this.stageGeneration)
     resetEnemyCombatResolverAdapter(this.enemyCombatResolver, this.stageGeneration)
     this.bossTelegraphPresenter?.resetGeneration(this.stageGeneration)
     this.setEnemyControllersPaused(false)
@@ -376,6 +378,10 @@ export class BattleRuntimeController extends Component {
   private spawnRuntimeEnemy(enemy: BattleEnemy) {
     const node = this.enemySpawner?.spawnEnemy(enemy)
     if (!node) return null
+    return this.adoptSpawnedEnemy(enemy, node)
+  }
+
+  private adoptSpawnedEnemy(enemy: BattleEnemy, node: Node) {
     this.enemyNodes.set(enemy.id, node)
     this.enemyByNode.set(node, enemy)
     this.attachEnemyCombatListeners(node)
@@ -665,23 +671,27 @@ export class BattleRuntimeController extends Component {
     }
   }
 
-  private spawnDungeonBoss(profile: EnemyProfile): boolean {
-    if (!this.runtime) return false
+  private reserveDungeonActor(request: DungeonBattleRequest): { enemy: BattleEnemy; node: Node } | null {
+    const spawner = this.enemySpawner
+    if (!spawner || !spawner.canSpawn()) return null
+    const profile = request.boss ?? request.enemies[0]
+    if (!profile) return null
     const enemy: BattleEnemy = {
-      id: this.runtime.nextEnemyId,
+      id: 1,
       profile: { ...profile },
-      hp: 520,
-      position: { x: 580, y: -42 },
-      radius: 70,
+      hp: profile.role === 'boss' ? 520 : 100,
+      position: {
+        x: profile.role === 'boss' ? 580 : 520,
+        y: profile.role === 'flying' ? 70 : profile.role === 'boss' ? -42 : -60,
+      },
+      radius: profile.role === 'boss' ? 70 : 34,
       alive: true,
       dropped: false,
     }
-    this.runtime.nextEnemyId += 1
-    this.runtime.bossSpawned = true
-    this.runtime.enemies.push(enemy)
-    if (this.spawnRuntimeEnemy(enemy)) return true
-    rollbackSpawnedEnemy(this.runtime, enemy.id)
-    return false
+    const node = spawner.spawnEnemy(enemy)
+    if (!node) return null
+    node.getComponent(EnemyController)?.setCombatPaused(true)
+    return { enemy, node }
   }
 
   private scheduleDungeonEnemyRecycle(generation: number, enemyId: number, enemyNode: Node) {
@@ -728,7 +738,7 @@ export class BattleRuntimeController extends Component {
     this.bossTelegraphPresenter?.hideAll()
     const nextGeneration = Math.max(this.stageGeneration + 1, this.enemyCombatResolver.generation + 1)
     this.stageGeneration = nextGeneration
-    this.node.emit('battle-generation-reset', { generation: nextGeneration })
+    this.publishGenerationReset(nextGeneration)
     this.attemptState = createBattleAttemptState(nextGeneration, this.stageNumber)
     resetEnemyCombatResolverAdapter(this.enemyCombatResolver, nextGeneration)
     this.bossTelegraphPresenter?.resetGeneration(nextGeneration)
@@ -739,6 +749,10 @@ export class BattleRuntimeController extends Component {
     this.stageFlow = createStageFlow(1, nextGeneration)
     this.stageSettlement = createStageSettlementState(nextGeneration)
     this.battleInput?.setInputEnabled(false)
+  }
+
+  private publishGenerationReset(generation: number) {
+    this.node.emit('battle-generation-reset', { generation })
   }
 
   private attachEnemyCombatListeners(node: Node) {
