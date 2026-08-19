@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { pathToFileURL } from 'node:url'
 import { resolve } from 'node:path'
 import ts from 'typescript'
 import { findCreatorCommand, findCreatorTypeDeclarations } from '../tools/check-cocos-build-readiness.mjs'
@@ -33,6 +34,7 @@ async function loadPresenter() {
   const ccUrl = moduleUrl(`
     export class Renderable2D {}
     export class Component { constructor() { this.node = null } }
+    export class JsonAsset {}
     export class Node {
       constructor(name = '') { this.name = name; this.active = true; this.layer = 0; this.children = []; this.components = []; this.listeners = new Map(); this._parent = null; this.position = { x: 0, y: 0, z: 0 }; this.destroyed = false }
       set parent(value) { if (this._parent === value) return; if (this._parent) this._parent.children = this._parent.children.filter((child) => child !== this); this._parent = value; if (value && !value.children.includes(this)) value.children.push(this) }
@@ -56,6 +58,13 @@ async function loadPresenter() {
     export const HorizontalTextAlignment = { LEFT: 0, CENTER: 1 }
     export const VerticalTextAlignment = { CENTER: 0 }
     export const Layers = { Enum: { UI_2D: 1 } }
+    const storage = new Map()
+    export const sys = { localStorage: {
+      getItem(key) { return storage.has(key) ? storage.get(key) : null },
+      setItem(key, value) { storage.set(key, String(value)) },
+      removeItem(key) { storage.delete(key) },
+      clear() { storage.clear() },
+    } }
     export const _decorator = { ccclass: () => (value) => value, property: () => () => undefined }
   `)
   const source = readFileSync(resolve('assets/Scripts/Game/DungeonRunPresenter.ts'), 'utf8')
@@ -65,7 +74,33 @@ async function loadPresenter() {
   javascript = javascript
     .replace("from 'cc'", `from '${ccUrl}'`)
     .replace("from './DungeonLayout.ts'", `from '${new URL('../assets/Scripts/Game/DungeonLayout.ts', import.meta.url).href}'`)
-  return { ...await import(moduleUrl(javascript)), ...await import(ccUrl) }
+  const presenterModule = await import(moduleUrl(javascript))
+  const sessionUrl = pathToFileURL(resolve('assets/Scripts/Core/Dungeon/DungeonSession.ts')).href
+  const notificationUrl = pathToFileURL(resolve('assets/Scripts/Core/Progression/BestEffortNotification.ts')).href
+  const controllerSource = readFileSync(resolve('assets/Scripts/Game/DungeonRunController.ts'), 'utf8')
+  let controllerJavascript = ts.transpileModule(controllerSource, {
+    compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext, experimentalDecorators: true },
+  }).outputText
+  controllerJavascript = controllerJavascript
+    .replace("from 'cc'", `from '${ccUrl}'`)
+    .replace("from '../Core/Dungeon/DungeonSession.ts'", `from '${sessionUrl}'`)
+    .replace("from '../Core/Progression/BestEffortNotification.ts'", `from '${notificationUrl}'`)
+  const controllerUrl = moduleUrl(controllerJavascript)
+  const controllerModule = await import(controllerUrl)
+
+  const dualModeSource = readFileSync(resolve('assets/Scripts/Game/DualModeGameController.ts'), 'utf8')
+  let dualModeJavascript = ts.transpileModule(dualModeSource, {
+    compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext, experimentalDecorators: true },
+  }).outputText
+  dualModeJavascript = dualModeJavascript
+    .replace("from 'cc'", `from '${ccUrl}'`)
+    .replace("from '../Core/Progression/DualModeRuntime.ts'", `from '${pathToFileURL(resolve('assets/Scripts/Core/Progression/DualModeRuntime.ts')).href}'`)
+    .replace("from '../Core/Progression/PlayerSave.ts'", `from '${pathToFileURL(resolve('assets/Scripts/Core/Progression/PlayerSave.ts')).href}'`)
+    .replace("from '../Core/Progression/SaveRepository.ts'", `from '${pathToFileURL(resolve('assets/Scripts/Core/Progression/SaveRepository.ts')).href}'`)
+    .replace("from '../Core/Progression/BestEffortNotification.ts'", `from '${notificationUrl}'`)
+    .replace("from './DungeonRunController'", `from '${controllerUrl}'`)
+  const dualModeModule = await import(moduleUrl(dualModeJavascript))
+  return { ...presenterModule, ...controllerModule, ...dualModeModule, ...await import(ccUrl) }
 }
 
 function createHarness(api, options = {}) {
@@ -78,7 +113,15 @@ function createHarness(api, options = {}) {
   player.setPosition(120, 40, 0)
   actor.addChild(player)
   const controllerCalls = []
-  const controller = { setMapOverlayOpen(open) { controllerCalls.push(open) } }
+  const acknowledgeCalls = []
+  const acknowledgeResults = [...(options.acknowledgeResults ?? [true])]
+  const controller = options.controller ?? {
+    setMapOverlayOpen(open) { controllerCalls.push(open) },
+    acknowledgeTerminalResult() {
+      acknowledgeCalls.push(true)
+      return acknowledgeResults.shift() ?? false
+    },
+  }
   const presenter = new api.DungeonRunPresenter()
   presenter.node = root
   presenter.sharedActorLayer = actor
@@ -88,10 +131,12 @@ function createHarness(api, options = {}) {
   presenter.playerTarget = player
   presenter.pickupCapacity = options.pickupCapacity ?? 3
   presenter.toastCapacity = options.toastCapacity ?? 2
+  const sharedPauseCalls = []
+  presenter.onSharedCombatPauseChanged = (paused) => sharedPauseCalls.push(paused)
   presenter.bindController(controller)
   presenter.onLoad()
   presenter.configureViewport(options.viewport ?? { cssWidth: 390, cssHeight: 844, topInsetPx: 47, bottomInsetPx: 34, leftInsetPx: 0, rightInsetPx: 0 })
-  return { presenter, root, actor, effect, drop, input, player, controllerCalls }
+  return { presenter, root, actor, effect, drop, input, player, controllerCalls, acknowledgeCalls, sharedPauseCalls }
 }
 
 function label(api, node, childName) {
@@ -151,18 +196,26 @@ test('presenter builds visible Cocos HUD, controls, and safe-area layout instead
 
 test('map buttons toggle the real overlay and controller pause, then unbind on destroy', async () => {
   const api = await loadPresenter()
-  const { presenter, root, controllerCalls } = createHarness(api)
+  const { presenter, root, input, controllerCalls, sharedPauseCalls } = createHarness(api)
   const mapButton = root.getChildByName('DungeonMapButton')
   const overlay = root.getChildByName('DungeonMapOverlay')
   const closeButton = overlay.getChildByName('DungeonMapCloseButton')
   assert.equal(overlay.active, false)
   mapButton.getComponent(api.Button).click()
   assert.equal(overlay.active, true)
+  assert.equal(input.active, false)
   assert.deepEqual(controllerCalls, [true])
+  assert.deepEqual(sharedPauseCalls, [true])
   closeButton.getComponent(api.Button).click()
   assert.equal(overlay.active, false)
+  assert.equal(input.active, true)
   assert.deepEqual(controllerCalls, [true, false])
+  assert.deepEqual(sharedPauseCalls, [true, false])
+  mapButton.getComponent(api.Button).click()
+  assert.equal(input.active, false)
   presenter.onDestroy()
+  assert.equal(input.active, true)
+  assert.deepEqual(sharedPauseCalls, [true, false, true, false])
   assert.equal(mapButton.listenerCount(api.Button.EventType.CLICK), 0)
   assert.equal(closeButton.listenerCount(api.Button.EventType.CLICK), 0)
 })
@@ -215,7 +268,7 @@ test('equipment toasts are visible, bounded, timed, and reuse their nodes', asyn
 
 test('pursuit warning precedes the final Boss bar and settlement closes only by button', async () => {
   const api = await loadPresenter()
-  const { presenter, root } = createHarness(api)
+  const { presenter, root, acknowledgeCalls } = createHarness(api, { acknowledgeResults: [false, true] })
   const warning = root.getChildByName('DungeonPursuitWarning')
   const bossBar = root.getChildByName('DungeonFinalBossBar')
   presenter.presentRunEvent({ type: 'pursuer-hunt-started', hunt: 1 })
@@ -235,5 +288,58 @@ test('pursuit warning precedes the final Boss bar and settlement closes only by 
   presenter.update(10)
   assert.equal(settlement.active, true)
   settlement.getChildByName('DungeonSettlementCloseButton').getComponent(api.Button).click()
+  assert.equal(settlement.active, true)
+  assert.equal(acknowledgeCalls.length, 1)
+  settlement.getChildByName('DungeonSettlementCloseButton').getComponent(api.Button).click()
   assert.equal(settlement.active, false)
+  assert.equal(acknowledgeCalls.length, 2)
+})
+
+test('defeat and abandon events use manual terminal settlement states', async () => {
+  const api = await loadPresenter()
+  const { presenter, root } = createHarness(api, { acknowledgeResults: [false] })
+  const settlement = root.getChildByName('DungeonSettlement')
+  presenter.presentRunEvent({ type: 'dungeon-defeated', retainedLoot: [{ itemId: 'ore', amount: 1 }] })
+  assert.equal(settlement.active, true)
+  assert.match(label(api, settlement, 'DungeonSettlementTitle').string, /战败/)
+  presenter.presentRunEvent({ type: 'dungeon-abandoned', retainedLoot: [] })
+  assert.match(label(api, settlement, 'DungeonSettlementTitle').string, /放弃/)
+  presenter.update(30)
+  assert.equal(settlement.active, true)
+})
+
+test('controller, presenter, and DualMode keep terminal checkpoint until manual settlement acknowledgement', async () => {
+  const api = await loadPresenter()
+  api.sys.localStorage.clear()
+  const run = new api.DungeonRunController()
+  run.profileData = { json: JSON.parse(readFileSync(resolve('assets/resources/Data/dual-mode-slice.json'), 'utf8')) }
+  const worldRoot = new api.Node('WorldRoot')
+  const dungeonRoot = new api.Node('DungeonRoot')
+  const dualMode = new api.DualModeGameController()
+  dualMode.node = new api.Node('DualMode')
+  dualMode.worldRoot = worldRoot
+  dualMode.dungeonRoot = dungeonRoot
+  dualMode.dungeonRun = run
+  dualMode.onLoad()
+  assert.equal(dualMode.enterDungeon(77), true)
+
+  const { presenter, root } = createHarness(api, { controller: run })
+  run.onRunEvent = (event) => presenter.presentRunEvent(event)
+  for (const exitId of ['f1-entry-to-forest', 'f1-forest-to-floor2', 'f2-bridge-to-exit']) {
+    assert.equal(run.applyCommand({ type: 'choose-exit', exitId }).accepted, true)
+  }
+  assert.equal(run.applyCommand({ type: 'begin-extraction' }).accepted, true)
+  for (let index = 0; index < 40; index += 1) run.update(0.1)
+
+  const settlement = root.getChildByName('DungeonSettlement')
+  assert.equal(settlement.active, true)
+  assert.equal(worldRoot.active, false)
+  assert.equal(dungeonRoot.active, true)
+  assert.equal(dualMode.getSaveSnapshot().dungeon.activeRun.checkpoint.phase, 'extracted')
+  settlement.getChildByName('DungeonSettlementCloseButton').getComponent(api.Button).click()
+  assert.equal(settlement.active, false)
+  assert.equal(worldRoot.active, true)
+  assert.equal(dungeonRoot.active, false)
+  assert.equal(dualMode.getSaveSnapshot().dungeon.activeRun, null)
+  assert.equal(run.hasRun(), false)
 })

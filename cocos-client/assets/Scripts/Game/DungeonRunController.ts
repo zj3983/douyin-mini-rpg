@@ -21,6 +21,9 @@ import type {
 import { notifyBestEffort } from '../Core/Progression/BestEffortNotification.ts'
 
 const { ccclass, property } = _decorator
+const CHECKPOINT_INTERVAL_SECONDS = 0.5
+const MAX_FRAME_DELTA_SECONDS = 0.1
+const CHECKPOINT_EPSILON = 0.000000001
 
 type ControllerRejected = { accepted: false; reason: string; events: [] }
 
@@ -55,7 +58,7 @@ export class DungeonRunController extends Component {
   private mapOverlayOpen = false
   private choiceOverlayOpen = false
   private pendingTerminalResult: DungeonTerminalResult | null = null
-  private terminalDeliveryAttempted = false
+  private checkpointElapsedSeconds = 0
 
   isReady(): boolean {
     if (!this.profileData) return false
@@ -137,15 +140,18 @@ export class DungeonRunController extends Component {
   }
 
   applyCommand(command: DungeonCommand): DungeonCommandResult | ControllerRejected {
+    if (this.isPaused()) return rejected('paused')
     return this.mutate((candidate) => applyDungeonCommand(candidate, command))
   }
 
   handleEffectiveDamage(hit: { sourceRole: 'ordinary' | 'elite' | 'boss'; effectiveDamage: number }): DungeonCommandResult | ControllerRejected {
+    if (this.isPaused()) return rejected('paused')
     if (!Number.isFinite(hit?.effectiveDamage) || hit.effectiveDamage <= 0) return rejected('ineffective-damage')
     return this.mutate((candidate) => interruptDungeonRun(candidate, hit))
   }
 
   handleBattleCompleted(result: DungeonBattleCompletion): DungeonCommandResult | ControllerRejected {
+    if (this.isPaused()) return rejected('paused')
     if (result?.type === 'pursuer-damage') {
       if (!Number.isFinite(result.effectiveDamage) || result.effectiveDamage <= 0) return rejected('ineffective-damage')
       return this.mutate((candidate) => applyPursuerDamage(candidate, result.effectiveDamage))
@@ -159,7 +165,6 @@ export class DungeonRunController extends Component {
       if (!this.commitCandidate(candidate)) return rejected('checkpoint-rejected')
       this.deliverEvents([event])
       this.captureTerminalResult([event])
-      this.tryDeliverTerminal()
       return { accepted: true, events: [cloneValue(event)], retainedLoot: cloneValue(terminal.retainedLoot) }
     }
     return rejected('invalid-battle-completion')
@@ -167,18 +172,30 @@ export class DungeonRunController extends Component {
 
   update(deltaSeconds: number): void {
     if (!this.run || this.isPaused() || !Number.isFinite(deltaSeconds) || deltaSeconds <= 0) return
+    if (this.pendingTerminalResult) return
     const candidate = this.cloneAuthoritativeRun()
     if (!candidate) return
+    const previousPhase = this.run.phase
     let result: { events: DungeonRunEvent[] }
     try {
       result = advanceDungeonRun(candidate, deltaSeconds, { paused: false })
     } catch {
       return
     }
-    if (!this.commitCandidate(candidate)) return
+    const elapsed = Math.min(deltaSeconds, MAX_FRAME_DELTA_SECONDS)
+    const nextCheckpointElapsed = this.checkpointElapsedSeconds + elapsed
+    const requiresImmediateCheckpoint = result.events.length > 0 || candidate.phase !== previousPhase
+    const cadenceReached = nextCheckpointElapsed + CHECKPOINT_EPSILON >= CHECKPOINT_INTERVAL_SECONDS
+    if (requiresImmediateCheckpoint || cadenceReached) {
+      this.checkpointElapsedSeconds = nextCheckpointElapsed
+      if (!this.commitCandidate(candidate)) return
+    } else {
+      this.run = candidate
+      this.checkpointElapsedSeconds = nextCheckpointElapsed
+      this.refreshRoomLabel()
+    }
     this.deliverEvents(result.events)
     this.captureTerminalResult(result.events)
-    if (!this.terminalDeliveryAttempted) this.tryDeliverTerminal()
   }
 
   setPaused(paused: boolean): void {
@@ -223,7 +240,6 @@ export class DungeonRunController extends Component {
     if (!this.commitCandidate(candidate)) return rejected('checkpoint-rejected')
     this.deliverEvents(result.events)
     this.captureTerminalResult(result.events)
-    if (!this.terminalDeliveryAttempted) this.tryDeliverTerminal()
     return cloneValue(result)
   }
 
@@ -248,6 +264,7 @@ export class DungeonRunController extends Component {
     }
     if (!accepted) return false
     this.run = candidate
+    this.checkpointElapsedSeconds = 0
     this.refreshRoomLabel()
     return true
   }
@@ -284,7 +301,6 @@ export class DungeonRunController extends Component {
 
   private tryDeliverTerminal(): boolean {
     if (!this.pendingTerminalResult || !this.run) return false
-    this.terminalDeliveryAttempted = true
     const callback = this.onTerminalResult
     if (!callback) return false
     let accepted = false
@@ -296,6 +312,7 @@ export class DungeonRunController extends Component {
     if (!accepted) return false
     this.run = null
     this.pendingTerminalResult = null
+    this.checkpointElapsedSeconds = 0
     this.refreshRoomLabel()
     return true
   }
@@ -313,7 +330,7 @@ export class DungeonRunController extends Component {
     this.mapOverlayOpen = false
     this.choiceOverlayOpen = false
     this.pendingTerminalResult = null
-    this.terminalDeliveryAttempted = false
+    this.checkpointElapsedSeconds = 0
   }
 
   private refreshRoomLabel(): void {

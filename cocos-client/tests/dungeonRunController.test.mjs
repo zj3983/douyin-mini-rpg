@@ -122,6 +122,81 @@ test('run events are immutable notifications and pressure pauses under map, choi
   assert.ok(elapsed() > initial)
 })
 
+test('sixty smooth frames advance pressure in memory with a bounded checkpoint cadence', async () => {
+  const { DungeonRunController } = await loadController()
+  const controller = createReadyController(DungeonRunController)
+  assert.equal(controller.begin(31), true)
+  const checkpoints = []
+  controller.onCheckpoint = (checkpoint) => {
+    checkpoints.push(clone(checkpoint))
+    return true
+  }
+  for (let frame = 0; frame < 60; frame += 1) controller.update(1 / 60)
+  assert.ok(Math.abs(controller.checkpoint().pressure.elapsedSeconds - 1) < 0.000001)
+  assert.ok(checkpoints.length >= 1)
+  assert.ok(checkpoints.length <= 3, `checkpoint count ${checkpoints.length}`)
+})
+
+test('checkpoint cadence retries a failed due frame without assigning its candidate', async () => {
+  const { DungeonRunController } = await loadController()
+  const controller = createReadyController(DungeonRunController)
+  assert.equal(controller.begin(32), true)
+  let accepts = false
+  let attempts = 0
+  controller.onCheckpoint = () => {
+    attempts += 1
+    return accepts
+  }
+  for (let frame = 0; frame < 29; frame += 1) controller.update(1 / 60)
+  const beforeDueFrame = controller.checkpoint().pressure.elapsedSeconds
+  controller.update(1 / 60)
+  assert.equal(attempts, 1)
+  assert.equal(controller.checkpoint().pressure.elapsedSeconds, beforeDueFrame)
+  accepts = true
+  controller.update(1 / 60)
+  assert.equal(attempts, 2)
+  assert.ok(controller.checkpoint().pressure.elapsedSeconds > beforeDueFrame)
+})
+
+test('run events bypass cadence and checkpoint immediately', async () => {
+  const { DungeonRunController } = await loadController()
+  const source = createReadyController(DungeonRunController)
+  assert.equal(source.begin(33), true)
+  const checkpoint = source.checkpoint()
+  checkpoint.pressure.elapsedSeconds = 119.95
+  const controller = createReadyController(DungeonRunController)
+  assert.equal(controller.restore(checkpoint), true)
+  const saved = []
+  const events = []
+  controller.onCheckpoint = (value) => { saved.push(clone(value)); return true }
+  controller.onRunEvent = (event) => events.push(clone(event))
+  controller.update(0.1)
+  assert.equal(saved.length, 1)
+  assert.equal(saved[0].pressure.phase, 'restless')
+  assert.equal(events.some((event) => event.type === 'pressure-phase-changed'), true)
+})
+
+test('map, choice, and component pause reject every command and battle mutation', async () => {
+  const { DungeonRunController } = await loadController()
+  const controller = createReadyController(DungeonRunController)
+  assert.equal(controller.begin(34), true)
+  controller.onCheckpoint = () => true
+  const pauseModes = [
+    ['map', (value) => controller.setMapOverlayOpen(value)],
+    ['choice', (value) => controller.setChoiceOverlayOpen(value)],
+    ['component', (value) => controller.setPaused(value)],
+  ]
+  for (const [name, setPaused] of pauseModes) {
+    setPaused(true)
+    const before = controller.checkpoint()
+    assert.equal(controller.applyCommand({ type: 'search' }).reason, 'paused', name)
+    assert.equal(controller.handleEffectiveDamage({ sourceRole: 'boss', effectiveDamage: 10 }).reason, 'paused', name)
+    assert.equal(controller.handleBattleCompleted({ type: 'player-defeated' }).reason, 'paused', name)
+    assert.deepEqual(controller.checkpoint(), before, name)
+    setPaused(false)
+  }
+})
+
 test('effective elite damage interrupts extraction atomically and battle damage targets the pursuer', async () => {
   const { DungeonRunController } = await loadController()
   const controller = createReadyController(DungeonRunController)
@@ -157,6 +232,8 @@ test('terminal extraction is manually acknowledged and carries a cloned authorit
   }
   controller.applyCommand({ type: 'begin-extraction' })
   const terminal = []
+  const notified = []
+  controller.onRunEvent = (event) => notified.push(clone(event))
   controller.onTerminalResult = (result) => {
     terminal.push(clone(result))
     result.loot.push({ itemId: 'forged', amount: 99 })
@@ -165,8 +242,10 @@ test('terminal extraction is manually acknowledged and carries a cloned authorit
   for (let index = 0; index < 40; index += 1) controller.update(0.1)
   assert.equal(controller.checkpoint().phase, 'extracted')
   assert.equal(controller.hasRun(), true)
-  assert.equal(terminal.length, 1)
+  assert.equal(terminal.length, 0)
+  assert.equal(notified.some((event) => event.type === 'extraction-completed'), true)
   assert.equal(controller.acknowledgeTerminalResult(), false)
+  assert.equal(terminal.length, 1)
   assert.equal(controller.hasRun(), true)
 
   controller.onTerminalResult = () => true

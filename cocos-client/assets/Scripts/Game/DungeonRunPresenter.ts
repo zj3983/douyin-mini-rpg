@@ -55,6 +55,7 @@ const UI_LAYER = Layers.Enum.UI_2D
 
 interface DungeonPausePort {
   setMapOverlayOpen(open: boolean): void
+  acknowledgeTerminalResult(): boolean
 }
 
 interface PointLike {
@@ -87,6 +88,7 @@ export class DungeonRunPresenter extends Component {
 
   pickupCapacity = 24
   toastCapacity = 4
+  onSharedCombatPauseChanged: ((paused: boolean) => void) | null = null
 
   private controller: DungeonPausePort | null = null
   private layout: DungeonLayout = computeDungeonLayout(DEFAULT_VIEWPORT)
@@ -193,7 +195,17 @@ export class DungeonRunPresenter extends Component {
       }
       return
     }
-    if (event.type === 'extraction-completed') this.showSettlement(event)
+    if (event.type === 'extraction-completed') {
+      this.showExtractionSettlement(event)
+      return
+    }
+    if (event.type === 'dungeon-defeated') {
+      this.showTerminalSettlement('战败结算', `本次探索失败\n保留战利品 ${this.lootCount(event.retainedLoot)}`)
+      return
+    }
+    if (event.type === 'dungeon-abandoned') {
+      this.showTerminalSettlement('放弃探索', `已主动结束探索\n保留战利品 ${this.lootCount(event.retainedLoot)}`)
+    }
   }
 
   update(deltaSeconds: number): void {
@@ -205,11 +217,13 @@ export class DungeonRunPresenter extends Component {
   onDestroy(): void {
     if (this.destroyed) return
     this.destroyed = true
-    if (this.mapOverlay?.active) this.controller?.setMapOverlayOpen(false)
+    if (this.mapOverlay?.active) this.setMapOpen(false)
+    if (this.sharedInputLayer) this.sharedInputLayer.active = true
     this.mapButton?.off(Button.EventType.CLICK, this.openMap, this)
     this.mapCloseButton?.off(Button.EventType.CLICK, this.closeMap, this)
     this.settlementCloseButton?.off(Button.EventType.CLICK, this.closeSettlement, this)
     this.controller = null
+    this.onSharedCombatPauseChanged = null
     for (const pickup of this.pickups.splice(0)) pickup.node.destroy()
     for (const node of this.ownedNodes.splice(0)) node.destroy()
     this.toasts.length = 0
@@ -449,30 +463,55 @@ export class DungeonRunPresenter extends Component {
     })
   }
 
-  private showSettlement(event: Extract<DungeonRunEvent, { type: 'extraction-completed' }>): void {
-    if (!this.settlement) return
+  private showExtractionSettlement(event: Extract<DungeonRunEvent, { type: 'extraction-completed' }>): void {
     if (this.settlementTitle) this.settlementTitle.string = event.exitKind === 'full' ? '完整撤离' : '受损撤离'
     if (this.settlementBody) {
       const explored = Math.round(Math.min(1, Math.max(0, event.explorationRate)) * 100)
       this.settlementBody.string = `${event.exitKind === 'full' ? '完整撤离' : '受损撤离'}\n探索率 ${explored}%\n${event.bossDefeated ? 'Boss 已击败' : 'Boss 未击败'}`
     }
-    this.settlement.active = true
+    if (this.settlement) this.settlement.active = true
+  }
+
+  private showTerminalSettlement(title: string, body: string): void {
+    if (this.settlementTitle) this.settlementTitle.string = title
+    if (this.settlementBody) this.settlementBody.string = body
+    if (this.settlement) this.settlement.active = true
+  }
+
+  private lootCount(loot: readonly { amount: number }[]): number {
+    return loot.reduce((total, item) => total + Math.max(0, finite(item.amount)), 0)
   }
 
   private openMap(): void {
     if (!this.mapOverlay || this.mapOverlay.active) return
-    this.mapOverlay.active = true
-    this.controller?.setMapOverlayOpen(true)
+    this.setMapOpen(true)
   }
 
   private closeMap(): void {
     if (!this.mapOverlay || !this.mapOverlay.active) return
-    this.mapOverlay.active = false
-    this.controller?.setMapOverlayOpen(false)
+    this.setMapOpen(false)
+  }
+
+  private setMapOpen(open: boolean): void {
+    if (this.mapOverlay) this.mapOverlay.active = open
+    if (this.sharedInputLayer) this.sharedInputLayer.active = !open
+    this.controller?.setMapOverlayOpen(open)
+    try {
+      this.onSharedCombatPauseChanged?.(open)
+    } catch {
+      // Presentation must still restore input even if an external pause hook fails.
+    }
   }
 
   private closeSettlement(): void {
-    if (this.settlement) this.settlement.active = false
+    if (!this.settlement?.active) return
+    let accepted = false
+    try {
+      accepted = this.controller?.acknowledgeTerminalResult() ?? false
+    } catch {
+      accepted = false
+    }
+    if (accepted) this.settlement.active = false
   }
 
   private createPanel(name: string, parent: Node, fill: Color, stroke: Color, track = true): Node {
