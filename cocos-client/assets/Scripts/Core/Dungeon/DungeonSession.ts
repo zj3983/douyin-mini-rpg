@@ -13,17 +13,23 @@ const DUNGEON_ROOM_KINDS = new Set<DungeonRoomKind>([
   'combat',
   'treasure',
   'alchemy',
+  'mechanism',
   'elite',
   'boss',
   'extraction',
 ])
+const DUNGEON_FLOORS = new Set([1, 2, 3])
+const DUNGEON_RISKS = new Set(['low', 'medium', 'high', 'extreme'])
+const SEARCH_PRESSURE_SECONDS = new Set([12, 20])
 
 function cloneLoot(item: RunLoot): RunLoot {
   return { itemId: item.itemId, amount: item.amount }
 }
 
 function cloneExit(exit: DungeonExit): DungeonExit {
-  return { to: exit.to, cost: exit.cost }
+  const cloned: DungeonExit = { id: exit.id, to: exit.to, cost: exit.cost }
+  if (exit.unlock !== undefined) cloned.unlock = exit.unlock
+  return cloned
 }
 
 function cloneRoom(room: DungeonRoom): DungeonRoom {
@@ -31,10 +37,14 @@ function cloneRoom(room: DungeonRoom): DungeonRoom {
     id: room.id,
     floor: room.floor,
     kind: room.kind,
+    sceneId: room.sceneId,
+    risk: room.risk,
     exits: room.exits.map(cloneExit),
   }
+  if (room.encounterId !== undefined) cloned.encounterId = room.encounterId
   if (room.loot) cloned.loot = room.loot.map(cloneLoot)
   if (room.doorCurrency !== undefined) cloned.doorCurrency = room.doorCurrency
+  if (room.searchPressureSeconds !== undefined) cloned.searchPressureSeconds = room.searchPressureSeconds
   return cloned
 }
 
@@ -42,7 +52,10 @@ function cloneProfile(profile: DungeonProfile): DungeonProfile {
   return {
     id: profile.id,
     entryRoomId: profile.entryRoomId,
-    extractionRoomId: profile.extractionRoomId,
+    extractionRoomIds: [...profile.extractionRoomIds],
+    finalExtractionRoomId: profile.finalExtractionRoomId,
+    bossAltarRoomId: profile.bossAltarRoomId,
+    extractionRoomId: profile.finalExtractionRoomId,
     rooms: profile.rooms.map(cloneRoom),
   }
 }
@@ -55,6 +68,10 @@ function invalidInteger(value: number, allowZero: boolean): boolean {
   return !Number.isSafeInteger(value) || (allowZero ? value < 0 : value <= 0)
 }
 
+function isCanonicalId(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value === value.trim()
+}
+
 export function validateDungeonProfile(profile: DungeonProfile): void {
   if (!profile || !Array.isArray(profile.rooms)) throw new Error('Dungeon rooms are missing.')
   if (typeof profile.id !== 'string' || profile.id.trim().length === 0) {
@@ -62,37 +79,79 @@ export function validateDungeonProfile(profile: DungeonProfile): void {
   }
 
   const ids = new Set<string>()
+  const sceneIds = new Set<string>()
   for (const room of profile.rooms) {
-    if (!room || typeof room.id !== 'string' || room.id.trim().length === 0) {
-      throw new Error('Dungeon room IDs must not be blank.')
+    if (!room || !isCanonicalId(room.id)) {
+      throw new Error('Dungeon room IDs must be canonical and not blank.')
     }
     if (ids.has(room.id)) throw new Error('Dungeon room IDs must be unique.')
     ids.add(room.id)
     if (!DUNGEON_ROOM_KINDS.has(room.kind)) throw new Error(`Invalid dungeon room kind in ${room.id}.`)
+    if (!DUNGEON_FLOORS.has(room.floor)) throw new Error(`Invalid floor in ${room.id}.`)
+    if (!isCanonicalId(room.sceneId)) throw new Error(`Invalid scene ID in ${room.id}.`)
+    if (sceneIds.has(room.sceneId)) throw new Error('Dungeon scene IDs must be unique.')
+    sceneIds.add(room.sceneId)
+    if (!DUNGEON_RISKS.has(room.risk)) throw new Error(`Invalid risk in ${room.id}.`)
+    if (room.encounterId !== undefined && !isCanonicalId(room.encounterId)) {
+      throw new Error(`Invalid encounter ID in ${room.id}.`)
+    }
+    if (room.searchPressureSeconds !== undefined && !SEARCH_PRESSURE_SECONDS.has(room.searchPressureSeconds)) {
+      throw new Error(`Invalid search pressure in ${room.id}.`)
+    }
   }
 
-  if (profile.entryRoomId === profile.extractionRoomId) {
-    throw new Error('Dungeon entry and extraction rooms must be distinct.')
-  }
   if (!ids.has(profile.entryRoomId)) throw new Error('Dungeon entry room is missing.')
-  if (!ids.has(profile.extractionRoomId)) throw new Error('Dungeon extraction room is missing.')
   const entryRoom = roomById(profile, profile.entryRoomId) as DungeonRoom
-  const extractionRoom = roomById(profile, profile.extractionRoomId) as DungeonRoom
   if (entryRoom.kind !== 'entry') throw new Error('Dungeon entry room must have entry kind.')
-  if (extractionRoom.kind !== 'extraction') throw new Error('Dungeon extraction room must have extraction kind.')
 
+  if (!Array.isArray(profile.extractionRoomIds) || profile.extractionRoomIds.length === 0) {
+    throw new Error('Dungeon extraction rooms are missing.')
+  }
+  const extractionIds = new Set<string>()
+  for (const extractionRoomId of profile.extractionRoomIds) {
+    if (!isCanonicalId(extractionRoomId) || !ids.has(extractionRoomId)) {
+      throw new Error('Dungeon extraction room is missing.')
+    }
+    if (extractionIds.has(extractionRoomId)) throw new Error('Dungeon extraction room IDs must be unique.')
+    extractionIds.add(extractionRoomId)
+    if (extractionRoomId === profile.entryRoomId) {
+      throw new Error('Dungeon entry and extraction rooms must be distinct.')
+    }
+    if ((roomById(profile, extractionRoomId) as DungeonRoom).kind !== 'extraction') {
+      throw new Error('Dungeon extraction rooms must have extraction kind.')
+    }
+  }
+  if (!isCanonicalId(profile.finalExtractionRoomId) || !extractionIds.has(profile.finalExtractionRoomId)) {
+    throw new Error('Dungeon final extraction room must be one of the extraction rooms.')
+  }
+
+  if (!isCanonicalId(profile.bossAltarRoomId) || !ids.has(profile.bossAltarRoomId)) {
+    throw new Error('Dungeon boss altar room is missing.')
+  }
+  const bossRooms = profile.rooms.filter((room) => room.kind === 'boss')
+  const bossAltar = roomById(profile, profile.bossAltarRoomId) as DungeonRoom
+  if (bossRooms.length !== 1 || bossRooms[0].id !== bossAltar.id || bossAltar.floor !== 3) {
+    throw new Error('Dungeon boss altar must be the one floor-three boss room.')
+  }
+
+  const exitIds = new Set<string>()
   for (const room of profile.rooms) {
-    if (invalidInteger(room.floor, false)) throw new Error(`Invalid floor in ${room.id}.`)
     if (!Array.isArray(room.exits)) throw new Error(`Dungeon exits are missing in ${room.id}.`)
 
     const exitTargets = new Set<string>()
     for (const exit of room.exits) {
-      if (!exit || typeof exit.to !== 'string' || exit.to.trim().length === 0 || !ids.has(exit.to)) {
+      if (!exit || !isCanonicalId(exit.id)) throw new Error(`Invalid dungeon exit ID in ${room.id}.`)
+      if (exitIds.has(exit.id)) throw new Error(`Duplicate dungeon exit ID: ${exit.id}`)
+      exitIds.add(exit.id)
+      if (!isCanonicalId(exit.to) || !ids.has(exit.to)) {
         throw new Error(`Broken dungeon exit: ${room.id} -> ${exit && exit.to}`)
       }
       if (exitTargets.has(exit.to)) throw new Error(`Duplicate dungeon exit target in ${room.id}: ${exit.to}`)
       exitTargets.add(exit.to)
       if (invalidInteger(exit.cost, true)) throw new Error(`Invalid door cost in ${room.id}.`)
+      if (exit.unlock !== undefined && exit.unlock !== 'boss-defeat') {
+        throw new Error(`Invalid dungeon exit unlock in ${room.id}.`)
+      }
     }
 
     if (room.loot !== undefined && !Array.isArray(room.loot)) throw new Error(`Invalid loot in ${room.id}.`)
@@ -129,7 +188,7 @@ export function validateDungeonProfile(profile: DungeonProfile): void {
   }
 
   const reachesExtraction = new Set<string>()
-  const reversePending: string[] = [profile.extractionRoomId]
+  const reversePending: string[] = [...profile.extractionRoomIds]
   while (reversePending.length > 0) {
     const roomId = reversePending.shift() as string
     if (reachesExtraction.has(roomId)) continue
@@ -139,7 +198,7 @@ export function validateDungeonProfile(profile: DungeonProfile): void {
     }
   }
   if (reachesExtraction.size !== profile.rooms.length) {
-    throw new Error('Every dungeon room must have a path to the extraction room.')
+    throw new Error('Every dungeon room must have a path to the extraction set.')
   }
 }
 
@@ -200,7 +259,7 @@ export function searchRoom(run: DungeonRun) {
 }
 
 export function extractRun(run: DungeonRun) {
-  if (run.phase !== 'exploring' || run.currentRoomId !== run.profile.extractionRoomId) {
+  if (run.phase !== 'exploring' || run.profile.extractionRoomIds.indexOf(run.currentRoomId) < 0) {
     return { ok: false as const, loot: [] as RunLoot[] }
   }
 

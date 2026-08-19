@@ -14,33 +14,62 @@ function makeProfile() {
   return {
     id: 'mist-vault',
     entryRoomId: 'f1-entry',
-    extractionRoomId: 'f3-gate',
+    extractionRoomIds: ['f3-gate'],
+    finalExtractionRoomId: 'f3-gate',
+    bossAltarRoomId: 'f3-altar',
     rooms: [
       {
         id: 'f1-entry',
         floor: 1,
         kind: 'entry',
+        sceneId: 'mist-entry',
+        risk: 'low',
         exits: [
-          { to: 'f1-store', cost: 2 },
-          { to: 'f2-alchemy', cost: 0 },
+          { id: 'entry-to-store', to: 'f1-store', cost: 2 },
+          { id: 'entry-to-alchemy', to: 'f2-alchemy', cost: 0 },
         ],
       },
       {
         id: 'f1-store',
         floor: 1,
         kind: 'treasure',
-        exits: [{ to: 'f3-gate', cost: 0 }],
+        sceneId: 'mist-store',
+        risk: 'medium',
+        exits: [{ id: 'store-to-gate', to: 'f3-gate', cost: 0 }],
         loot: [{ itemId: 'flying-sword', amount: 1 }],
         doorCurrency: 2,
+        searchPressureSeconds: 20,
       },
       {
         id: 'f2-alchemy',
         floor: 2,
         kind: 'alchemy',
-        exits: [{ to: 'f3-gate', cost: 0 }],
+        sceneId: 'mist-alchemy',
+        risk: 'medium',
+        exits: [
+          { id: 'alchemy-to-gate', to: 'f3-gate', cost: 0 },
+          { id: 'alchemy-to-altar', to: 'f3-altar', cost: 0 },
+        ],
         loot: [{ itemId: 'mist-herb', amount: 2 }],
+        searchPressureSeconds: 12,
       },
-      { id: 'f3-gate', floor: 3, kind: 'extraction', exits: [] },
+      {
+        id: 'f3-gate',
+        floor: 3,
+        kind: 'extraction',
+        sceneId: 'mist-gate',
+        risk: 'high',
+        exits: [],
+      },
+      {
+        id: 'f3-altar',
+        floor: 3,
+        kind: 'boss',
+        sceneId: 'mist-altar',
+        risk: 'extreme',
+        encounterId: 'mist-emperor',
+        exits: [{ id: 'altar-to-gate', to: 'f3-gate', cost: 0 }],
+      },
     ],
   }
 }
@@ -96,7 +125,10 @@ test('sessions and searched loot are deeply isolated and rooms can be searched o
   assert.equal(first.id, 'mist-vault-7')
   assert.equal(first.currentRoomId, 'f1-entry')
   assert.equal(first.doorCurrency, 0)
+  assert.equal(first.profile.extractionRoomId, first.profile.finalExtractionRoomId)
+  assert.equal(profile.extractionRoomId, undefined)
   assert.notEqual(first.profile, profile)
+  assert.notEqual(first.profile.extractionRoomIds, profile.extractionRoomIds)
   assert.notEqual(first.profile.rooms[1], profile.rooms[1])
   assert.notEqual(first.profile.rooms[1].loot, profile.rooms[1].loot)
 
@@ -211,10 +243,17 @@ test('profile validation enforces runtime identity and room kind invariants', ()
   const cases = [
     ['blank profile ID', (profile) => { profile.id = '  ' }],
     ['blank room ID', (profile) => { profile.rooms[1].id = '  ' }],
+    ['noncanonical room ID', (profile) => { profile.rooms[1].id = ' f1-store ' }],
     ['invalid room kind', (profile) => { profile.rooms[1].kind = 'shop' }],
-    ['same entry and extraction', (profile) => { profile.extractionRoomId = profile.entryRoomId }],
+    ['same entry and extraction', (profile) => {
+      profile.extractionRoomIds = [profile.entryRoomId]
+      profile.finalExtractionRoomId = profile.entryRoomId
+    }],
     ['wrong entry kind', (profile) => { profile.rooms[0].kind = 'combat' }],
     ['wrong extraction kind', (profile) => { profile.rooms[3].kind = 'treasure' }],
+    ['boss altar below floor three', (profile) => { profile.rooms[4].floor = 2 }],
+    ['boss altar is not the boss room', (profile) => { profile.bossAltarRoomId = 'f3-gate' }],
+    ['more than one boss room', (profile) => { profile.rooms[2].kind = 'boss' }],
   ]
 
   for (const [name, mutate] of cases) {
@@ -230,7 +269,9 @@ test('profile validation rejects rooms unreachable from entry', () => {
     id: 'f2-orphan',
     floor: 2,
     kind: 'combat',
-    exits: [{ to: 'f3-gate', cost: 0 }],
+    sceneId: 'mist-orphan',
+    risk: 'medium',
+    exits: [{ id: 'orphan-to-gate', to: 'f3-gate', cost: 0 }],
   })
 
   assert.throws(() => validateDungeonProfile(profile), /unreachable from the entry/i)
@@ -238,11 +279,13 @@ test('profile validation rejects rooms unreachable from entry', () => {
 
 test('profile validation rejects reachable rooms with no path to extraction', () => {
   const profile = makeProfile()
-  profile.rooms[0].exits.push({ to: 'f1-dead-end', cost: 0 })
+  profile.rooms[0].exits.push({ id: 'entry-to-dead-end', to: 'f1-dead-end', cost: 0 })
   profile.rooms.push({
     id: 'f1-dead-end',
     floor: 1,
     kind: 'combat',
+    sceneId: 'mist-dead-end',
+    risk: 'low',
     exits: [],
   })
 
@@ -251,7 +294,7 @@ test('profile validation rejects reachable rooms with no path to extraction', ()
 
 test('profile validation rejects duplicate exit targets with ambiguous costs', () => {
   const profile = makeProfile()
-  profile.rooms[0].exits.push({ to: 'f1-store', cost: 5 })
+  profile.rooms[0].exits.push({ id: 'entry-to-store-again', to: 'f1-store', cost: 5 })
 
   assert.throws(() => validateDungeonProfile(profile), /duplicate.*exit/i)
 })
@@ -269,19 +312,35 @@ test('profile validation rejects malformed room graphs and loot', () => {
   const cases = [
     ['duplicate room IDs', (profile) => profile.rooms.push({ ...profile.rooms[0] })],
     ['missing entry room', (profile) => { profile.entryRoomId = 'missing' }],
-    ['missing extraction room', (profile) => { profile.extractionRoomId = 'missing' }],
+    ['missing extraction room', (profile) => {
+      profile.extractionRoomIds = ['missing']
+      profile.finalExtractionRoomId = 'missing'
+    }],
+    ['duplicate extraction room', (profile) => { profile.extractionRoomIds.push('f3-gate') }],
+    ['final extraction absent from choices', (profile) => { profile.finalExtractionRoomId = 'f3-altar' }],
+    ['missing boss altar', (profile) => { profile.bossAltarRoomId = 'missing' }],
     ['missing exit target', (profile) => { profile.rooms[0].exits[0].to = '' }],
     ['unknown exit target', (profile) => { profile.rooms[0].exits[0].to = 'missing' }],
+    ['blank exit ID', (profile) => { profile.rooms[0].exits[0].id = ' ' }],
+    ['noncanonical exit ID', (profile) => { profile.rooms[0].exits[0].id = ' entry-to-store ' }],
+    ['duplicate exit ID', (profile) => { profile.rooms[2].exits[0].id = 'entry-to-store' }],
     ['negative door cost', (profile) => { profile.rooms[0].exits[0].cost = -1 }],
     ['fractional door cost', (profile) => { profile.rooms[0].exits[0].cost = 1.5 }],
     ['non-finite door cost', (profile) => { profile.rooms[0].exits[0].cost = Number.NaN }],
     ['zero floor', (profile) => { profile.rooms[0].floor = 0 }],
     ['fractional floor', (profile) => { profile.rooms[0].floor = 1.5 }],
+    ['floor above three', (profile) => { profile.rooms[0].floor = 4 }],
+    ['blank scene ID', (profile) => { profile.rooms[0].sceneId = ' ' }],
+    ['noncanonical scene ID', (profile) => { profile.rooms[0].sceneId = ' mist-entry ' }],
+    ['duplicate scene ID', (profile) => { profile.rooms[1].sceneId = 'mist-entry' }],
+    ['invalid risk', (profile) => { profile.rooms[0].risk = 'certain-doom' }],
+    ['invalid search pressure', (profile) => { profile.rooms[1].searchPressureSeconds = 15 }],
+    ['invalid exit unlock', (profile) => { profile.rooms[0].exits[0].unlock = 'search' }],
     ['empty loot ID', (profile) => { profile.rooms[1].loot[0].itemId = '' }],
     ['zero loot amount', (profile) => { profile.rooms[1].loot[0].amount = 0 }],
     ['fractional loot amount', (profile) => { profile.rooms[1].loot[0].amount = 1.5 }],
     ['unreachable extraction', (profile) => {
-      profile.rooms[0].exits = [{ to: 'f1-store', cost: 0 }]
+      profile.rooms[0].exits = [{ id: 'entry-to-store', to: 'f1-store', cost: 0 }]
       profile.rooms[1].exits = []
       profile.rooms[2].exits = []
     }],
@@ -294,16 +353,16 @@ test('profile validation rejects malformed room graphs and loot', () => {
   }
 })
 
-test('the real dungeon profile parses, validates, and spans all three floors', async () => {
+test('Mist Bamboo is a three-floor twelve-room authored dungeon with two extraction choices', async () => {
   const raw = await readFile(new URL('../assets/resources/Data/dual-mode-slice.json', import.meta.url), 'utf8')
   const profile = JSON.parse(raw)
 
   assert.doesNotThrow(() => validateDungeonProfile(profile))
-  assert.deepEqual([...new Set(profile.rooms.map((room) => room.floor))].sort(), [1, 2, 3])
-  for (const id of ['f1-entry', 'f1-store', 'f2-alchemy', 'f2-elite', 'f3-boss', 'f3-gate']) {
-    assert.ok(profile.rooms.some((room) => room.id === id), `missing room ${id}`)
-  }
-  for (const id of ['f1-combat', 'f1-store', 'f2-alchemy', 'f2-elite', 'f3-boss']) {
-    assert.equal(profile.rooms.find((room) => room.id === id).doorCurrency, 1, `missing Core door reward in ${id}`)
-  }
+  assert.equal(profile.rooms.length, 12)
+  assert.deepEqual([...new Set(profile.rooms.map((room) => room.floor))], [1, 2, 3])
+  assert.deepEqual(profile.extractionRoomIds, ['f2-damaged-exit', 'f3-full-exit'])
+  assert.equal(profile.finalExtractionRoomId, 'f3-full-exit')
+  assert.equal(profile.bossAltarRoomId, 'f3-altar')
+  assert.equal(profile.rooms.filter((room) => room.kind === 'boss').length, 1)
+  assert.equal(new Set(profile.rooms.map((room) => room.sceneId)).size, 12)
 })
