@@ -14,46 +14,44 @@ import {
 test('frame advancement crosses exact pressure boundaries without floating-point drift', () => {
   const pressure = { elapsedSeconds: 119.9, phase: 'calm' }
 
-  assert.deepEqual(advanceDungeonPressure(pressure, 0.1, false), [
-    { type: 'pressure-phase-changed', phase: 'restless' },
-  ])
+  assert.deepEqual(advanceDungeonPressure(pressure, 0.1, false), {
+    events: [{ type: 'pressure-phase-changed', phase: 'restless' }],
+  })
   assert.deepEqual(pressure, { elapsedSeconds: 120, phase: 'restless' })
 
   pressure.elapsedSeconds = 239.9
-  assert.deepEqual(advanceDungeonPressure(pressure, 0.1, false), [
-    { type: 'pressure-phase-changed', phase: 'frenzy' },
-  ])
+  assert.deepEqual(advanceDungeonPressure(pressure, 0.1, false), {
+    events: [{ type: 'pressure-phase-changed', phase: 'frenzy' }],
+  })
   assert.deepEqual(pressure, { elapsedSeconds: 240, phase: 'frenzy' })
 })
 
 test('paused time does not advance and oversized frames are capped', () => {
   const pressure = createDungeonPressure()
 
-  assert.deepEqual(advanceDungeonPressure(pressure, 30, true), [])
+  assert.deepEqual(advanceDungeonPressure(pressure, 30, true), { events: [] })
   assert.deepEqual(pressure, { elapsedSeconds: 0, phase: 'calm' })
 
-  assert.deepEqual(advanceDungeonPressure(pressure, 4, false), [])
+  assert.deepEqual(advanceDungeonPressure(pressure, 4, false), { events: [] })
   assert.equal(pressure.elapsedSeconds, MAX_FRAME_DELTA_SECONDS)
 })
 
 test('search pressure applies immediately and emits a crossed restless phase', () => {
   const pressure = { elapsedSeconds: 112, phase: 'calm' }
 
-  assert.deepEqual(applySearchPressure(pressure, 12), [
-    { type: 'pressure-phase-changed', phase: 'restless' },
-  ])
+  assert.deepEqual(applySearchPressure(pressure, 12), {
+    events: [{ type: 'pressure-phase-changed', phase: 'restless' }],
+  })
   assert.deepEqual(pressure, { elapsedSeconds: 124, phase: 'restless' })
 })
 
 test('successive searches emit crossed phases in chronological order', () => {
   const pressure = { elapsedSeconds: 112, phase: 'calm' }
-  const events = [
-    ...applySearchPressure(pressure, 20),
-  ]
+  const events = [...applySearchPressure(pressure, 20).events]
 
   pressure.elapsedSeconds = 232
   pressure.phase = 'restless'
-  events.push(...applySearchPressure(pressure, 20))
+  events.push(...applySearchPressure(pressure, 20).events)
 
   assert.deepEqual(events, [
     { type: 'pressure-phase-changed', phase: 'restless' },

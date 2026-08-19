@@ -14,6 +14,10 @@ export interface DungeonPressurePhaseChangedEvent {
   phase: DungeonPressurePhase
 }
 
+export interface DungeonPressureResult {
+  events: DungeonPressurePhaseChangedEvent[]
+}
+
 const PHASES: DungeonPressurePhase[] = ['calm', 'restless', 'frenzy']
 
 function assertValidSeconds(seconds: number, name: string): void {
@@ -73,22 +77,24 @@ export function advanceDungeonPressure(
   state: DungeonPressureState,
   deltaSeconds: number,
   paused: boolean,
-): DungeonPressurePhaseChangedEvent[] {
+): DungeonPressureResult {
   assertValidState(state)
-  if (paused) return []
+  if (paused) return { events: [] }
   assertValidSeconds(deltaSeconds, 'deltaSeconds')
-  return applyElapsedSeconds(state, Math.min(deltaSeconds, MAX_FRAME_DELTA_SECONDS))
+  return {
+    events: applyElapsedSeconds(state, Math.min(deltaSeconds, MAX_FRAME_DELTA_SECONDS)),
+  }
 }
 
 export function applySearchPressure(
   state: DungeonPressureState,
   seconds: 12 | 20,
-): DungeonPressurePhaseChangedEvent[] {
+): DungeonPressureResult {
   assertValidState(state)
   if (seconds !== 12 && seconds !== 20) {
     throw new TypeError('search pressure must be 12 or 20 seconds')
   }
-  return applyElapsedSeconds(state, seconds)
+  return { events: applyElapsedSeconds(state, seconds) }
 }
 
 export function snapshotDungeonPressure(state: DungeonPressureState): DungeonPressureState {
