@@ -33,6 +33,11 @@ import {
   StageFlowState,
 } from '../Core/StageFlowRuntime'
 import { CultivationDesignData, stageProfileFromDesign } from '../Core/CultivationRuntime'
+import type { EnemyProfile, StageProfile } from '../Core/CultivationTypes.ts'
+import type {
+  DungeonBattleRequest,
+  DungeonBattleResult,
+} from '../Core/Dungeon/DungeonEncounterDirector.ts'
 import {
   HomingSwordSegment,
   HomingSwordPhase,
@@ -97,6 +102,7 @@ export class BattleRuntimeController extends Component {
   @property playerHurtDuration = 0.18
 
   canAdvanceToStage: ((stageId: number) => boolean) | null = null
+  onDungeonEncounterCompleted: ((result: DungeonBattleResult) => void) | null = null
 
   private runtime: BattleRuntime | null = null
   private enemyNodes = new Map<number, Node>()
@@ -113,6 +119,10 @@ export class BattleRuntimeController extends Component {
   private playerHurtToken: Readonly<PlayerActionToken> | null = null
   private vfxBudget: PerformanceBudget = createPerformanceBudget()
   private currentVfxQuality: VfxQuality = 'full'
+  private activeDungeonRequest: DungeonBattleRequest | null = null
+  private dungeonDefeatedEnemyIds: number[] = []
+  private dungeonCompletionPending = false
+  private lastDungeonBattleResult: DungeonBattleResult | null = null
 
   start() {
     this.initialize()
@@ -151,17 +161,76 @@ export class BattleRuntimeController extends Component {
     return this.advanceToStage(result.action.stageId)
   }
 
+  beginDungeonEncounter(request: DungeonBattleRequest): boolean {
+    const accepted = this.cloneValidDungeonRequest(request)
+    if (!accepted) return false
+
+    this.clearBattleGeneration()
+    this.activeDungeonRequest = accepted
+    this.dungeonDefeatedEnemyIds = []
+    this.dungeonCompletionPending = false
+    this.lastDungeonBattleResult = null
+
+    const stage = this.stageForDungeonRequest(accepted)
+    this.runtime = createBattleRuntime(stage, this.heroAttack, {
+      defeatTarget: accepted.defeatTarget,
+      maxAlive: accepted.maxAlive,
+    })
+    this.stageFlow = createStageFlow(this.runtime.defeatTarget, this.stageGeneration)
+    this.stageSettlement = createStageSettlementState(this.stageGeneration)
+    this.damageGate = createContactDamageGate({ maxHealth: this.playerMaxHealth, cooldown: 0 })
+    this.soulCollected = 0
+    rebuildBattleFreeze(this.battleFreeze)
+    this.setEnemyControllersPaused(false)
+    this.playerNode?.getComponent(PlayerController)?.reset()
+    this.battleInput?.setInputEnabled(true)
+    this.stageClearPanel?.hide()
+    this.refreshHeroHealth()
+    this.hud?.updateStage(stage.name, this.stageNumber)
+    this.hud?.updateSoul(0, this.runtime.defeatTarget)
+    this.hud?.hideBoss()
+
+    if (accepted.boss && !this.spawnDungeonBoss(accepted.boss)) {
+      this.clearBattleGeneration()
+      return false
+    }
+    return true
+  }
+
+  cancelDungeonEncounter(requestId: string): boolean {
+    if (!this.activeDungeonRequest || this.activeDungeonRequest.id !== requestId) return false
+    this.clearBattleGeneration()
+    return true
+  }
+
+  isDungeonEncounterActive(): boolean {
+    return this.activeDungeonRequest !== null
+  }
+
   update(deltaTime: number) {
     this.currentVfxQuality = updateVfxQuality(this.vfxBudget, deltaTime * 1000)
     if (!this.runtime || this.battleFrozen) return
-    if (this.stageFlow.phase === 'clearing' && this.enemySpawner?.canSpawn() !== false) {
+    if (this.activeDungeonRequest) {
+      if (
+        this.activeDungeonRequest.completion === 'clear-room'
+        && !this.dungeonCompletionPending
+        && this.enemySpawner?.canSpawn() !== false
+      ) {
+        const spawn = nextSpawn(this.runtime, deltaTime)
+        if (spawn.ok && spawn.enemy && !this.spawnRuntimeEnemy(spawn.enemy)) {
+          rollbackSpawnedEnemy(this.runtime, spawn.enemy.id)
+        }
+      }
+    } else if (this.stageFlow.phase === 'clearing' && this.enemySpawner?.canSpawn() !== false) {
       const spawn = nextSpawn(this.runtime, deltaTime)
       if (spawn.ok && spawn.enemy && !this.spawnRuntimeEnemy(spawn.enemy)) {
         rollbackSpawnedEnemy(this.runtime, spawn.enemy.id)
       }
     }
-    const bossRetry = retryBossSpawnFlow(this.runtime, this.stageFlow, this.stageGeneration)
-    if (bossRetry.bossSpawn) this.trySpawnBoss(bossRetry.bossSpawn)
+    if (!this.activeDungeonRequest) {
+      const bossRetry = retryBossSpawnFlow(this.runtime, this.stageFlow, this.stageGeneration)
+      if (bossRetry.bossSpawn) this.trySpawnBoss(bossRetry.bossSpawn)
+    }
     this.syncCombatActors()
     stepEnemyCombatResolverAdapter(this.enemyCombatResolver, deltaTime)
     this.presentEnemyCombatFrame()
@@ -265,6 +334,9 @@ export class BattleRuntimeController extends Component {
   }
 
   private rebuildRuntime(stage: ReturnType<typeof stageProfileFromDesign>) {
+    this.activeDungeonRequest = null
+    this.dungeonDefeatedEnemyIds = []
+    this.dungeonCompletionPending = false
     this.unscheduleAllCallbacks()
     this.playerHurtToken = null
     this.bossTelegraphPresenter?.hideAll()
@@ -359,6 +431,30 @@ export class BattleRuntimeController extends Component {
     this.spawnSoulOrb(enemyNode.position.clone(), enemy.profile.role === 'boss' ? 5 : 1)
 
     const generation = this.stageGeneration
+    if (this.activeDungeonRequest) {
+      if (!this.dungeonDefeatedEnemyIds.includes(enemyId)) this.dungeonDefeatedEnemyIds.push(enemyId)
+      const requestId = this.activeDungeonRequest.id
+      const completed = enemy.profile.role === 'boss'
+        ? this.activeDungeonRequest.completion !== 'clear-room'
+        : this.activeDungeonRequest.completion === 'clear-room'
+          && this.dungeonDefeatedEnemyIds.length >= this.activeDungeonRequest.defeatTarget
+      if (completed && !this.dungeonCompletionPending) {
+        this.dungeonCompletionPending = true
+        this.freezeDungeonBattle()
+        this.scheduleOnce(() => {
+          if (
+            generation !== this.stageGeneration
+            || this.activeDungeonRequest?.id !== requestId
+            || !this.dungeonCompletionPending
+          ) return
+          this.completeDungeonEncounter(generation, requestId)
+        }, Math.max(this.deathRecycleDelay, enemy.profile.role === 'boss' ? this.bossDeathSettleDelay : 0))
+      } else if (!completed) {
+        this.scheduleDungeonEnemyRecycle(generation, enemyId, enemyNode)
+      }
+      return
+    }
+
     if (enemy.profile.role === 'boss') {
       this.presentCombatFeedback(feedbackFor({
         type: 'guard-broken',
@@ -439,6 +535,7 @@ export class BattleRuntimeController extends Component {
       this.freezeBattle()
       playerController?.requestPresentationAction('death', 'battle-runtime')
       this.playerNode?.emit('player-defeated')
+      if (this.activeDungeonRequest) return
       const generation = this.stageGeneration
       this.scheduleOnce(() => {
         if (!isBattleAttemptCallbackCurrent(this.attemptState, generation, 'defeated')) return
@@ -509,14 +606,138 @@ export class BattleRuntimeController extends Component {
   }
 
   onDestroy() {
+    this.clearBattleGeneration()
+  }
+
+  private cloneValidDungeonRequest(request: DungeonBattleRequest): DungeonBattleRequest | null {
+    if (!request || typeof request !== 'object') return null
+    if (typeof request.id !== 'string' || request.id.length === 0 || request.id !== request.id.trim()) return null
+    if (!Number.isInteger(request.seed) || request.seed < 0 || request.seed > 0xffffffff) return null
+    if (!Number.isSafeInteger(request.defeatTarget) || request.defeatTarget <= 0) return null
+    if (!Number.isSafeInteger(request.maxAlive) || request.maxAlive <= 0 || request.maxAlive > 18) return null
+    if (!Array.isArray(request.enemies)) return null
+    if (!this.validDungeonEnemyProfiles(request.enemies)) return null
+    if (request.completion === 'clear-room') {
+      if (request.boss !== null || request.enemies.length === 0 || request.enemies.some((enemy) => enemy.role === 'boss')) return null
+    } else if (request.completion === 'repel' || request.completion === 'kill') {
+      if (request.enemies.length !== 0 || !request.boss || !this.validDungeonEnemyProfiles([request.boss]) || request.boss.role !== 'boss') return null
+    } else return null
+    return {
+      id: request.id,
+      seed: request.seed,
+      enemies: request.enemies.map((enemy) => ({ ...enemy })),
+      defeatTarget: request.defeatTarget,
+      maxAlive: request.maxAlive,
+      boss: request.boss ? { ...request.boss } : null,
+      completion: request.completion,
+    }
+  }
+
+  private validDungeonEnemyProfiles(enemies: readonly EnemyProfile[]): boolean {
+    return enemies.every((enemy) => (
+      Boolean(enemy)
+      && typeof enemy.id === 'string'
+      && enemy.id.length > 0
+      && enemy.id === enemy.id.trim()
+      && typeof enemy.name === 'string'
+      && enemy.name.trim().length > 0
+      && (enemy.role === 'ground' || enemy.role === 'flying' || enemy.role === 'boss')
+      && typeof enemy.theme === 'string'
+      && enemy.theme.trim().length > 0
+    ))
+  }
+
+  private stageForDungeonRequest(request: DungeonBattleRequest): StageProfile {
+    const fallbackBoss: EnemyProfile = request.boss ?? {
+      id: 'mist-bamboo-emperor',
+      name: '雾竹皇',
+      role: 'boss',
+      theme: 'mist-bamboo-pursuit',
+    }
+    return {
+      id: 0,
+      name: request.id,
+      theme: request.boss?.theme ?? request.enemies[0]?.theme ?? 'mist-bamboo',
+      background: request.id,
+      encounter: request.boss ? 'elite' : 'normal',
+      enemies: request.enemies.map((enemy) => ({ ...enemy })),
+      boss: { ...fallbackBoss },
+    }
+  }
+
+  private spawnDungeonBoss(profile: EnemyProfile): boolean {
+    if (!this.runtime) return false
+    const enemy: BattleEnemy = {
+      id: this.runtime.nextEnemyId,
+      profile: { ...profile },
+      hp: 520,
+      position: { x: 580, y: -42 },
+      radius: 70,
+      alive: true,
+      dropped: false,
+    }
+    this.runtime.nextEnemyId += 1
+    this.runtime.bossSpawned = true
+    this.runtime.enemies.push(enemy)
+    if (this.spawnRuntimeEnemy(enemy)) return true
+    rollbackSpawnedEnemy(this.runtime, enemy.id)
+    return false
+  }
+
+  private scheduleDungeonEnemyRecycle(generation: number, enemyId: number, enemyNode: Node) {
+    this.scheduleOnce(() => {
+      if (generation !== this.stageGeneration || !this.activeDungeonRequest) return
+      if (this.enemyNodes.get(enemyId) === enemyNode) {
+        this.detachEnemyCombatListeners(enemyNode)
+        this.enemySpawner?.despawnEnemy(enemyNode)
+        this.enemyNodes.delete(enemyId)
+        this.enemyByNode.delete(enemyNode)
+      }
+    }, this.deathRecycleDelay)
+  }
+
+  private freezeDungeonBattle() {
+    this.freezeBattle()
+  }
+
+  private completeDungeonEncounter(generation: number, requestId: string) {
+    const request = this.activeDungeonRequest
+    if (!request || request.id !== requestId || generation !== this.stageGeneration || !this.dungeonCompletionPending) return
+    const result: DungeonBattleResult = {
+      requestId,
+      completion: request.completion,
+      defeatedEnemyIds: [...this.dungeonDefeatedEnemyIds],
+    }
+    this.lastDungeonBattleResult = {
+      ...result,
+      defeatedEnemyIds: [...result.defeatedEnemyIds],
+    }
+    const callback = this.onDungeonEncounterCompleted
+    this.clearBattleGeneration()
+    callback?.({ ...result, defeatedEnemyIds: [...result.defeatedEnemyIds] })
+  }
+
+  private clearBattleGeneration() {
+    this.unscheduleAllCallbacks()
+    this.playerHurtToken = null
     this.setEnemyControllersPaused(true)
-    for (const node of this.enemyNodes.values()) this.detachEnemyCombatListeners(node)
-    this.bossTelegraphPresenter?.hideAll()
+    this.recycleAllEnemies()
+    this.soulOrbPool?.despawnAll()
+    this.damageNumberPool?.despawnAll()
     this.bossSkillEffectPool?.despawnAll()
-    resetEnemyCombatResolverAdapter(
-      this.enemyCombatResolver,
-      Math.max(this.stageGeneration + 1, this.enemyCombatResolver.generation + 1),
-    )
+    this.bossTelegraphPresenter?.hideAll()
+    const nextGeneration = Math.max(this.stageGeneration + 1, this.enemyCombatResolver.generation + 1)
+    this.stageGeneration = nextGeneration
+    this.attemptState = createBattleAttemptState(nextGeneration, this.stageNumber)
+    resetEnemyCombatResolverAdapter(this.enemyCombatResolver, nextGeneration)
+    this.bossTelegraphPresenter?.resetGeneration(nextGeneration)
+    this.activeDungeonRequest = null
+    this.dungeonDefeatedEnemyIds = []
+    this.dungeonCompletionPending = false
+    this.runtime = null
+    this.stageFlow = createStageFlow(1, nextGeneration)
+    this.stageSettlement = createStageSettlementState(nextGeneration)
+    this.battleInput?.setInputEnabled(false)
   }
 
   private attachEnemyCombatListeners(node: Node) {

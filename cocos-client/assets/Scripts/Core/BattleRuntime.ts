@@ -31,6 +31,11 @@ export interface BattleRuntime {
   stageClearClaimed: boolean
 }
 
+export interface BattleRuntimeLimits {
+  defeatTarget: number
+  maxAlive: number
+}
+
 export interface DamageEvent {
   enemyId: number
   damage: number
@@ -54,14 +59,26 @@ export interface StageClearResult {
   reward: StageClearReward
 }
 
-export function createBattleRuntime(stage: StageProfile, heroAttack: number): BattleRuntime {
+export function createBattleRuntime(
+  stage: StageProfile,
+  heroAttack: number,
+  limits?: BattleRuntimeLimits,
+): BattleRuntime {
+  const defeatTarget = limits?.defeatTarget ?? 12
+  const maxAlive = limits?.maxAlive ?? 18
+  if (!Number.isSafeInteger(defeatTarget) || defeatTarget <= 0) {
+    throw new RangeError('defeatTarget must be a positive safe integer.')
+  }
+  if (!Number.isSafeInteger(maxAlive) || maxAlive <= 0 || maxAlive > 18) {
+    throw new RangeError('maxAlive must be a positive safe integer no greater than 18.')
+  }
   return {
     stage,
     heroAttack,
     spawnTimer: 0,
     spawnInterval: 1,
-    defeatTarget: 12,
-    maxAliveEnemies: 18,
+    defeatTarget,
+    maxAliveEnemies: maxAlive,
     nextEnemyId: 1,
     enemies: [],
     soulDrops: [],
