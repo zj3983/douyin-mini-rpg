@@ -297,6 +297,21 @@ test('profile validation rejects duplicate exit targets with ambiguous costs', (
   assert.throws(() => validateDungeonProfile(profile), /duplicate.*exit/i)
 })
 
+test('profile validation rejects extraction rooms omitted from extractionRoomIds', () => {
+  const profile = makeProfile()
+  profile.rooms[2].exits.push({ id: 'alchemy-to-emergency-exit', to: 'f3-emergency-exit', cost: 0 })
+  profile.rooms.push({
+    id: 'f3-emergency-exit',
+    floor: 3,
+    kind: 'extraction',
+    sceneId: 'mist-emergency-exit',
+    risk: 'high',
+    exits: [{ id: 'emergency-exit-to-gate', to: 'f3-gate', cost: 0 }],
+  })
+
+  assert.throws(() => validateDungeonProfile(profile), /extraction.*declared/i)
+})
+
 test('session seeds must be uint32 integers', () => {
   for (const seed of [Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5, 4294967296]) {
     assert.throws(() => createDungeonSession(makeProfile(), seed), /seed/i)
@@ -365,4 +380,22 @@ test('Mist Bamboo is a three-floor twelve-room authored dungeon with two extract
   assert.equal(new Set(profile.rooms.map((room) => room.sceneId)).size, 12)
   const sealedCache = profile.rooms.find((room) => room.id === 'f1-sealed-cache')
   assert.equal(sealedCache.exits.find((exit) => exit.id === 'f1-sealed-cache-to-forest').cost, 2)
+  const vaultEntrances = profile.rooms.flatMap((room) => room.exits.filter((exit) => exit.to === 'f3-sword-vault'))
+  assert.ok(vaultEntrances.length > 0)
+  assert.ok(vaultEntrances.every((exit) => exit.unlock === 'boss-defeat'))
+})
+
+test('Mist Bamboo sealed cache search refunds enough currency for the return door', async () => {
+  const raw = await readFile(new URL('../assets/resources/Data/dual-mode-slice.json', import.meta.url), 'utf8')
+  const run = createDungeonSession(JSON.parse(raw), 21)
+
+  assert.deepEqual(enterRoom(run, 'f1-forest-combat'), { ok: true })
+  assert.equal(searchRoom(run).doorCurrencyGranted, 2)
+  assert.equal(run.doorCurrency, 2)
+  assert.deepEqual(enterRoom(run, 'f1-sealed-cache'), { ok: true })
+  assert.equal(run.doorCurrency, 0)
+  assert.equal(searchRoom(run).doorCurrencyGranted, 2)
+  assert.equal(run.doorCurrency, 2)
+  assert.deepEqual(enterRoom(run, 'f1-forest-combat'), { ok: true })
+  assert.equal(run.doorCurrency, 0)
 })

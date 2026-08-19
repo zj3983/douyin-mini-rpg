@@ -120,6 +120,10 @@ export function validateDungeonProfile(profile: DungeonProfile): void {
       throw new Error('Dungeon extraction rooms must have extraction kind.')
     }
   }
+  const extractionRooms = profile.rooms.filter((room) => room.kind === 'extraction')
+  if (extractionRooms.length !== extractionIds.size || extractionRooms.some((room) => !extractionIds.has(room.id))) {
+    throw new Error('Dungeon extraction rooms must exactly match the declared extractionRoomIds.')
+  }
   if (!isCanonicalId(profile.finalExtractionRoomId) || !extractionIds.has(profile.finalExtractionRoomId)) {
     throw new Error('Dungeon final extraction room must be one of the extraction rooms.')
   }

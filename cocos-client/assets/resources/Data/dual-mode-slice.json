@@ -62,6 +62,7 @@
         { "itemId": "flying-sword", "amount": 1 },
         { "itemId": "spirit-stone", "amount": 3 }
       ],
+      "doorCurrency": 2,
       "searchPressureSeconds": 20
     },
     {
@@ -181,7 +182,7 @@
       "risk": "high",
       "exits": [
         { "id": "f3-full-exit-to-antechamber", "to": "f3-antechamber", "cost": 0 },
-        { "id": "f3-full-exit-to-vault", "to": "f3-sword-vault", "cost": 0 }
+        { "id": "f3-full-exit-to-vault", "to": "f3-sword-vault", "cost": 0, "unlock": "boss-defeat" }
       ]
     }
   ]
