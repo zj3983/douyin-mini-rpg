@@ -213,10 +213,10 @@ test('Core interaction requires explicit commands and never auto-routes', () => 
   assert.equal(run.phase, 'exploring')
 })
 
-test('extraction only succeeds at the gate while exploring and returns cloned loot', () => {
+test('deprecated extraction adapter starts channeling but cannot settle the run', () => {
   const run = createDungeonSession(makeProfile(), 7)
 
-  assert.deepEqual(extractRun(run), { ok: false, loot: [] })
+  assert.deepEqual(extractRun(run), { ok: false, reason: 'wrong-room', loot: [] })
   assert.equal(run.phase, 'exploring')
 
   run.doorCurrency = 2
@@ -227,14 +227,12 @@ test('extraction only succeeds at the gate while exploring and returns cloned lo
     doorCurrencyGranted: 2,
   })
   assert.deepEqual(enterRoom(run, 'f3-gate'), { ok: true })
-  const extracted = extractRun(run)
-  assert.deepEqual(extracted, { ok: true, loot: [{ itemId: 'flying-sword', amount: 1 }] })
-  assert.equal(run.phase, 'extracted')
-  assert.notEqual(extracted.loot[0], run.carriedLoot[0])
-
-  extracted.loot[0].amount = 100
+  assert.deepEqual(extractRun(run), { ok: false, reason: 'channeling', loot: [] })
+  assert.equal(run.phase, 'extracting')
+  assert.equal(run.extraction.phase, 'channeling')
   assert.equal(run.carriedLoot[0].amount, 1)
-  assert.deepEqual(extractRun(run), { ok: false, loot: [] })
+  assert.deepEqual(extractRun(run), { ok: false, reason: 'inactive', loot: [] })
+  assert.equal(run.phase, 'extracting')
 })
 
 test('profile validation enforces runtime identity and room kind invariants', () => {

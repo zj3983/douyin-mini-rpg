@@ -255,8 +255,7 @@ type DungeonCommandFailureReason =
   | 'door-cost'
   | 'wrong-room'
   | 'invalid-phase'
-  | 'already-there'
-  | 'unreachable'
+  | 'no-safe-route'
 
 export type DungeonCommandResult =
   | { accepted: true; events: DungeonRunEvent[]; retainedLoot?: RunLoot[] }
@@ -561,12 +560,20 @@ function deterministicSealCandidate(run: DungeonRun): string | null {
 
 export function beginSecondPursuit(run: DungeonRun): DungeonCommandResult {
   if (TERMINAL_PHASES.has(run.phase)) return rejected('inactive')
-  const result = beginSecondHunt(run.pursuer)
+  const nextPursuer = snapshotPursuitBoss(run.pursuer)
+  const nextMap = snapshotDungeonMap(run.map)
+  const result = beginSecondHunt(nextPursuer)
   if (!result.ok) return rejected('invalid-phase')
-  const events: DungeonRunEvent[] = [{ type: 'pursuer-hunt-started', hunt: 2 }]
-  const sealedExitId = deterministicSealCandidate(run)
-  if (sealedExitId) events.push({ type: 'route-sealed', exitId: sealedExitId })
-  return accepted(run, events)
+  const draftRun: DungeonRun = { ...run, map: nextMap, pursuer: nextPursuer }
+  const sealedExitId = deterministicSealCandidate(draftRun)
+  if (!sealedExitId) return rejected('no-safe-route')
+
+  run.map = nextMap
+  run.pursuer = nextPursuer
+  return accepted(run, [
+    { type: 'pursuer-hunt-started', hunt: 2 },
+    { type: 'route-sealed', exitId: sealedExitId },
+  ])
 }
 
 export function applyPursuerDamage(run: DungeonRun, amount: number): DungeonCommandResult {
@@ -591,43 +598,6 @@ export function applyPursuerDamage(run: DungeonRun, amount: number): DungeonComm
     }
   }
   return accepted(run, events)
-}
-
-export function moveRunTo(run: DungeonRun, targetRoomId: string): DungeonCommandResult {
-  if (run.phase !== 'exploring') return rejected('inactive')
-  if (!roomById(run.profile, targetRoomId)) return rejected('unknown-room')
-  if (run.map.currentRoomId === targetRoomId) return rejected('already-there')
-  if (invalidInteger(run.doorCurrency, true)) return rejected('invalid-currency')
-
-  type RouteNode = { roomId: string; currency: number; path: string[] }
-  const pending: RouteNode[] = [{ roomId: run.map.currentRoomId, currency: run.doorCurrency, path: [] }]
-  const bestCurrency = new Map<string, number>([[run.map.currentRoomId, run.doorCurrency]])
-  let route: string[] | null = null
-  while (pending.length > 0 && !route) {
-    const node = pending.shift() as RouteNode
-    const room = roomById(run.profile, node.roomId) as DungeonRoom
-    for (const exit of [...room.exits].sort((left, right) => left.id.localeCompare(right.id))) {
-      if (run.map.sealedExitIds.includes(exit.id) || node.currency < exit.cost) continue
-      const currency = node.currency - exit.cost
-      const path = [...node.path, exit.id]
-      if (exit.to === targetRoomId) {
-        route = path
-        break
-      }
-      if ((bestCurrency.get(exit.to) ?? -1) >= currency) continue
-      bestCurrency.set(exit.to, currency)
-      pending.push({ roomId: exit.to, currency, path })
-    }
-  }
-  if (!route) return rejected('unreachable')
-
-  const events: DungeonRunEvent[] = []
-  for (const exitId of route) {
-    const result = chooseDungeonExit(run, exitId)
-    if (!result.accepted) throw new Error(`Validated dungeon route failed at ${exitId}`)
-    events.push(...result.events)
-  }
-  return { accepted: true, events: cloneEvents(events) }
 }
 
 export function defeatDungeonRun(run: DungeonRun): { phase: DungeonRunPhase; retainedLoot: RunLoot[] } {
@@ -752,6 +722,22 @@ function routeStateCanExtract(profile: DungeonProfile, map: DungeonMapState): bo
   return [...reachable].every((roomId) => canExtract.has(roomId))
 }
 
+function revealedHistoryIsConnected(profile: DungeonProfile, map: DungeonMapState): boolean {
+  const revealed = new Set(map.revealedRoomIds)
+  const connected = new Set<string>()
+  const pending = [profile.entryRoomId]
+  while (pending.length > 0) {
+    const roomId = pending.shift() as string
+    if (connected.has(roomId) || !revealed.has(roomId)) continue
+    connected.add(roomId)
+    const room = roomById(profile, roomId)
+    for (const exit of room?.exits ?? []) {
+      if (revealed.has(exit.to) && !connected.has(exit.to)) pending.push(exit.to)
+    }
+  }
+  return connected.size === revealed.size && connected.has(map.currentRoomId)
+}
+
 export function restoreDungeonSession(profile: DungeonProfile, value: unknown): DungeonRun {
   validateDungeonProfile(profile)
   validateDungeonCheckpointShape(value)
@@ -770,11 +756,20 @@ export function restoreDungeonSession(profile: DungeonProfile, value: unknown): 
       !checkpoint.map.revealedRoomIds.includes(checkpoint.map.currentRoomId)) {
     throw new TypeError('Dungeon reveal state omits an authoritative room')
   }
+  if (!revealedHistoryIsConnected(profile, checkpoint.map)) {
+    throw new TypeError('Dungeon reveal history is not connected to the entry')
+  }
   if (checkpoint.searchedRoomIds.some((id) => !checkpoint.map.revealedRoomIds.includes(id))) {
     throw new TypeError('Searched dungeon rooms must be revealed')
   }
   if (!routeStateCanExtract(profile, checkpoint.map)) {
     throw new TypeError('Dungeon route state cannot reach extraction')
+  }
+
+  const altarRequiredPhases = new Set(['true-form-locked', 'final-fight', 'defeated'])
+  if (altarRequiredPhases.has(checkpoint.pursuer.phase) &&
+      !checkpoint.map.revealedRoomIds.includes(profile.bossAltarRoomId)) {
+    throw new TypeError('Advanced pursuit Boss state requires a revealed altar')
   }
   const vaultEntranceIds = profile.rooms.flatMap((room) =>
     room.exits
@@ -861,12 +856,11 @@ export function searchRoom(run: DungeonRun) {
   return { ok: true as const, loot: cloneLootList(event.loot), doorCurrencyGranted: event.doorCurrencyGranted }
 }
 
+/** @deprecated Task 8 will migrate the old controller to beginDungeonExtraction. */
 export function extractRun(run: DungeonRun) {
   const started = beginDungeonExtraction(run)
-  if (!started.accepted) return { ok: false as const, loot: [] as RunLoot[] }
-  const result = advanceExtraction(run.extraction, 3)
-  if (result.type !== 'extraction-completed') return { ok: false as const, loot: [] as RunLoot[] }
-  run.phase = 'extracted'
-  run.eventSequence += 1
-  return { ok: true as const, loot: cloneLootList(run.carriedLoot) }
+  if (started.accepted === false) {
+    return { ok: false as const, reason: started.reason, loot: [] as RunLoot[] }
+  }
+  return { ok: false as const, reason: 'channeling' as const, loot: [] as RunLoot[] }
 }

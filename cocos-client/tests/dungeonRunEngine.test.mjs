@@ -12,7 +12,6 @@ import {
   createDungeonSession,
   defeatDungeonRun,
   interruptDungeonRun,
-  moveRunTo,
   restoreDungeonSession,
   searchCurrentRoom,
   validateDungeonCheckpointShape,
@@ -49,6 +48,14 @@ function reachAltar(run) {
   chooseDungeonExit(run, 'f2-elite-to-floor3')
   chooseDungeonExit(run, 'f3-antechamber-to-altar')
 }
+
+test('production dungeon session exposes no route-skipping movement helper', async () => {
+  const source = await readFile(
+    new URL('../assets/Scripts/Core/Dungeon/DungeonSession.ts', import.meta.url),
+    'utf8',
+  )
+  assert.doesNotMatch(source, /\bmoveRunTo\b/)
+})
 
 test('session owns map, pressure, pursuer, extraction and serializable rewards', () => {
   const run = makeRun(7)
@@ -113,7 +120,9 @@ test('one deterministic run searches, pays, triggers both hunts, and extracts ea
   assert.equal(run.pursuer.phase, 'second-hunt')
   applyPursuerDamage(run, 999)
 
-  moveRunTo(run, 'f2-damaged-exit')
+  chooseDungeonExit(run, 'f2-bridge-to-sword-array')
+  chooseDungeonExit(run, 'f2-sword-array-to-elite')
+  chooseDungeonExit(run, 'f2-elite-to-exit')
   beginDungeonExtraction(run)
   advanceTicks(run, 30)
   assert.equal(run.phase, 'extracted')
@@ -134,6 +143,26 @@ test('second pursuit seals a reachable exit on the current floor before older ro
   const sourceRoom = profile.rooms.find((room) => room.exits.some((exit) => exit.id === sealed.exitId))
   assert.equal(sourceRoom.floor, 2)
   assert.equal(sourceRoom.id, 'f2-bridge-combat')
+})
+
+test('second pursuit rejects atomically when the current floor has no safe seal candidate', () => {
+  const run = makeRun(43)
+  chooseDungeonExit(run, 'f1-entry-to-forest')
+  advanceTicks(run, 1200)
+  applyPursuerDamage(run, 999)
+  chooseDungeonExit(run, 'f1-forest-to-floor2')
+  const floorTwoExitIds = profile.rooms
+    .filter((room) => room.floor === 2)
+    .flatMap((room) => room.exits.map((exit) => exit.id))
+  run.map.sealedExitIds.push(...floorTwoExitIds.filter((id) => !run.map.sealedExitIds.includes(id)))
+  const before = JSON.stringify(run)
+
+  assert.deepEqual(beginSecondPursuit(run), {
+    accepted: false,
+    reason: 'no-safe-route',
+    events: [],
+  })
+  assert.equal(JSON.stringify(run), before)
 })
 
 test('paused frames advance neither pressure nor extraction and elite damage returns to exploring', () => {
@@ -334,6 +363,15 @@ test('restoration rejects dead-end seals and cross-runtime contradictions', () =
 
   const defeatedButLocked = structuredClone(checkpoint)
   defeatedButLocked.pressure = { elapsedSeconds: 120, phase: 'restless' }
+  defeatedButLocked.map.revealedRoomIds = [
+    'f1-entry',
+    'f1-forest-combat',
+    'f2-bridge-combat',
+    'f2-sword-array',
+    'f2-gate-elite',
+    'f3-antechamber',
+    'f3-altar',
+  ]
   defeatedButLocked.pursuer = {
     ...defeatedButLocked.pursuer,
     phase: 'defeated',
@@ -348,6 +386,30 @@ test('restoration rejects dead-end seals and cross-runtime contradictions', () =
     (exitId) => exitId !== 'f3-vault-to-altar',
   )
   assert.throws(() => restoreDungeonSession(profile, removedPermanentSeal), /seal/i)
+})
+
+test('restoration rejects discontinuous reveal history and advanced Boss state without the altar', () => {
+  const checkpoint = checkpointDungeonRun(makeRun(26))
+  const discontinuousCurrent = structuredClone(checkpoint)
+  discontinuousCurrent.map.currentRoomId = 'f3-altar'
+  discontinuousCurrent.map.revealedRoomIds = ['f1-entry', 'f3-altar']
+  assert.throws(() => restoreDungeonSession(profile, discontinuousCurrent), /reveal|history|connected/i)
+
+  const defeatedWithoutAltar = structuredClone(checkpoint)
+  defeatedWithoutAltar.pressure = { elapsedSeconds: 240, phase: 'frenzy' }
+  defeatedWithoutAltar.pursuer = {
+    ...defeatedWithoutAltar.pursuer,
+    phase: 'defeated',
+    shield: 0,
+    finalHealth: 0,
+    altarUnlocked: true,
+  }
+  defeatedWithoutAltar.map.sealedExitIds = defeatedWithoutAltar.map.sealedExitIds.filter((exitId) =>
+    !profile.rooms.some((room) =>
+      room.exits.some((exit) => exit.id === exitId && exit.to === 'f3-sword-vault'),
+    ),
+  )
+  assert.throws(() => restoreDungeonSession(profile, defeatedWithoutAltar), /altar|reveal/i)
 })
 
 test('oversized frames share one bounded delta and completion is emitted only once', () => {
