@@ -55,7 +55,6 @@ function cloneProfile(profile: DungeonProfile): DungeonProfile {
     extractionRoomIds: [...profile.extractionRoomIds],
     finalExtractionRoomId: profile.finalExtractionRoomId,
     bossAltarRoomId: profile.bossAltarRoomId,
-    extractionRoomId: profile.finalExtractionRoomId,
     rooms: profile.rooms.map(cloneRoom),
   }
 }

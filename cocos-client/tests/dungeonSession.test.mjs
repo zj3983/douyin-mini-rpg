@@ -125,8 +125,6 @@ test('sessions and searched loot are deeply isolated and rooms can be searched o
   assert.equal(first.id, 'mist-vault-7')
   assert.equal(first.currentRoomId, 'f1-entry')
   assert.equal(first.doorCurrency, 0)
-  assert.equal(first.profile.extractionRoomId, first.profile.finalExtractionRoomId)
-  assert.equal(profile.extractionRoomId, undefined)
   assert.notEqual(first.profile, profile)
   assert.notEqual(first.profile.extractionRoomIds, profile.extractionRoomIds)
   assert.notEqual(first.profile.rooms[1], profile.rooms[1])
@@ -201,7 +199,7 @@ test('profile validation accepts positive safe room currency and rejects invalid
   }
 })
 
-test('Core interaction searches, follows the first affordable exit, and requests extraction', () => {
+test('Core interaction searches and follows the first affordable exit', () => {
   const run = createDungeonSession(makeProfile(), 13)
   assert.equal(interactDungeonRun(run).type, 'searched')
   assert.deepEqual(interactDungeonRun(run), {
@@ -211,7 +209,7 @@ test('Core interaction searches, follows the first affordable exit, and requests
   })
   assert.equal(interactDungeonRun(run).type, 'searched')
   assert.equal(interactDungeonRun(run).type, 'moved')
-  assert.deepEqual(interactDungeonRun(run), { type: 'extraction-requested', runId: run.id })
+  assert.equal(run.currentRoomId, 'f3-gate')
   assert.equal(run.phase, 'exploring')
 })
 
@@ -365,4 +363,6 @@ test('Mist Bamboo is a three-floor twelve-room authored dungeon with two extract
   assert.equal(profile.bossAltarRoomId, 'f3-altar')
   assert.equal(profile.rooms.filter((room) => room.kind === 'boss').length, 1)
   assert.equal(new Set(profile.rooms.map((room) => room.sceneId)).size, 12)
+  const sealedCache = profile.rooms.find((room) => room.id === 'f1-sealed-cache')
+  assert.equal(sealedCache.exits.find((exit) => exit.id === 'f1-sealed-cache-to-forest').cost, 2)
 })

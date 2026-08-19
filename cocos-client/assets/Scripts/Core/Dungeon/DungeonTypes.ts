@@ -45,8 +45,6 @@ export interface DungeonProfile {
   extractionRoomIds: string[]
   finalExtractionRoomId: string
   bossAltarRoomId: string
-  /** @deprecated Runtime compatibility alias for finalExtractionRoomId. */
-  extractionRoomId?: string
   rooms: DungeonRoom[]
 }
 

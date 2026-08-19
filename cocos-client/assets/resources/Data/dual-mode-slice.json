@@ -56,7 +56,7 @@
       "sceneId": "mist-bamboo-exterior-cache",
       "risk": "high",
       "exits": [
-        { "id": "f1-sealed-cache-to-forest", "to": "f1-forest-combat", "cost": 0 }
+        { "id": "f1-sealed-cache-to-forest", "to": "f1-forest-combat", "cost": 2 }
       ],
       "loot": [
         { "itemId": "flying-sword", "amount": 1 },
