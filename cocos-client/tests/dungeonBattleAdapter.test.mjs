@@ -290,6 +290,7 @@ function controllerHarness(Controller) {
   const poolCalls = { soul: 0, damage: 0, boss: 0 }
   const telegraph = { hidden: 0, resets: [], cancelled: [], hideAll() { this.hidden += 1 }, resetGeneration(value) { this.resets.push(value) }, cancelEnemy(generation, id) { this.cancelled.push([generation, id]) } }
   controller.enemySpawner = {
+    enemyPool: {},
     spawned: [],
     spawnEnemy(enemy) { const node = fakeNode(enemy.id); this.spawned.push([enemy, node]); return node },
     despawnEnemy(node) { despawned.push(node) },
@@ -332,7 +333,7 @@ test('begin passes limits into the shared battle runtime and rejects malformed r
   assert.ok(activeGeneration > beforeGeneration)
 })
 
-test('ordinary and Boss reservation failures leave the active dungeon generation untouched', async () => {
+test('empty pool factory failures leave the active dungeon generation untouched', async () => {
   const { BattleRuntimeController } = await loadController()
 
   for (const nextRequest of [
@@ -347,10 +348,12 @@ test('ordinary and Boss reservation failures leave the active dungeon generation
     }),
   ]) {
     const { controller, despawned } = controllerHarness(BattleRuntimeController)
-    assert.equal(controller.beginDungeonEncounter(request({ id: 'active:old' })), true)
-    const oldRuntime = controller.runtime
+    const oldRuntime = { marker: 'active-runtime' }
+    const oldRequest = request({ id: 'active:old' })
+    controller.runtime = oldRuntime
+    controller.activeDungeonRequest = oldRequest
+    controller.stageGeneration = 7
     const oldGeneration = controller.stageGeneration
-    const oldRequest = controller.activeDungeonRequest
     const oldEnemyNodes = new Map(controller.enemyNodes)
     const oldEvents = controller.node.events.length
     const oldScheduled = controller._scheduled.length
@@ -365,6 +368,108 @@ test('ordinary and Boss reservation failures leave the active dungeon generation
     assert.equal(controller._scheduled.length, oldScheduled)
     assert.deepEqual(despawned, [])
   }
+})
+
+test('a full 18-slot world pool enters ordinary and Boss dungeons by reusing released nodes', async () => {
+  const { BattleRuntimeController } = await loadController()
+  const nextRequests = [
+    request({ id: 'ordinary:full-world-pool' }),
+    request({
+      id: 'boss:full-world-pool',
+      enemies: [],
+      defeatTarget: 1,
+      maxAlive: 1,
+      boss: profile('mist-bamboo-emperor', 'boss'),
+      completion: 'kill',
+    }),
+  ]
+
+  for (const nextRequest of nextRequests) {
+    const { controller, despawned } = controllerHarness(BattleRuntimeController)
+    let active = 18
+    let peakActive = active
+    controller.enemySpawner = {
+      enemyPool: { key: 'enemy-pool' },
+      canSpawn() { return active < 18 },
+      spawnEnemy(enemy) {
+        if (active >= 18) return null
+        active += 1
+        peakActive = Math.max(peakActive, active)
+        const node = fakeNode(`dungeon-${enemy.id}`)
+        node.poolActive = true
+        return node
+      },
+      despawnEnemy(node) {
+        if (!node.poolActive) return
+        node.poolActive = false
+        active -= 1
+        despawned.push(node)
+      },
+    }
+    controller.runtime = { marker: 'world-runtime', enemies: [] }
+    controller.stageGeneration = 9
+    for (let enemyId = 1; enemyId <= 18; enemyId += 1) {
+      const node = fakeNode(`world-${enemyId}`)
+      node.poolActive = true
+      const enemy = {
+        id: enemyId,
+        profile: profile('moss-wolf'),
+        hp: 100,
+        position: { x: 0, y: 0 },
+        radius: 34,
+        alive: true,
+        dropped: false,
+      }
+      controller.enemyNodes.set(enemyId, node)
+      controller.enemyByNode.set(node, enemy)
+      controller.runtime.enemies.push(enemy)
+    }
+    const oldGeneration = controller.stageGeneration
+
+    assert.equal(controller.beginDungeonEncounter(nextRequest), true)
+    assert.ok(controller.stageGeneration > oldGeneration)
+    assert.equal(despawned.length, 18)
+    assert.equal(active, 1)
+    assert.equal(peakActive, 18)
+    assert.equal(controller.enemyNodes.size, 1)
+    assert.equal(controller.runtime.enemies.length, 1)
+    assert.equal(controller.runtime.enemies[0].id, 1)
+    assert.equal(controller.runtime.nextEnemyId, 2)
+    assert.equal(controller.runtime.enemies[0].profile.id, nextRequest.boss?.id ?? nextRequest.enemies[0].id)
+  }
+})
+
+test('released-pool invariant failure throws instead of reporting a half-initialized dungeon', async () => {
+  const { BattleRuntimeController } = await loadController()
+  const { controller } = controllerHarness(BattleRuntimeController)
+  const oldNode = fakeNode('world-1')
+  oldNode.poolActive = true
+  const oldEnemy = {
+    id: 1,
+    profile: profile('moss-wolf'),
+    hp: 100,
+    position: { x: 0, y: 0 },
+    radius: 34,
+    alive: true,
+    dropped: false,
+  }
+  controller.runtime = { marker: 'world-runtime', enemies: [oldEnemy] }
+  controller.enemyNodes.set(1, oldNode)
+  controller.enemyByNode.set(oldNode, oldEnemy)
+  controller.enemySpawner = {
+    enemyPool: { key: 'enemy-pool' },
+    canSpawn() { return false },
+    spawnEnemy() { return null },
+    despawnEnemy(node) { node.poolActive = false },
+  }
+
+  assert.throws(
+    () => controller.beginDungeonEncounter(request({ id: 'invariant:factory-failed' })),
+    /released enemy pool|invariant/i,
+  )
+  assert.equal(controller.runtime, null)
+  assert.equal(controller.activeDungeonRequest, null)
+  assert.equal(controller.enemyNodes.size, 0)
 })
 
 test('missing dungeon spawner rejects before touching the active request', async () => {

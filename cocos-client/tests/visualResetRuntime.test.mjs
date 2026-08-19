@@ -168,6 +168,19 @@ test('TypeScript and executable mirrors produce the same pooled lifecycle trace'
   const tsRuntime = await import(`data:text/javascript;base64,${Buffer.from(executable).toString('base64')}`)
 
   assert.deepEqual(parityTrace(tsRuntime), parityTrace(esmRuntime))
+  for (const [actorId, action] of [
+    ['fog-spider', 'telegraph'],
+    ['mist-deer-king', 'telegraph'],
+    ['lantern-wraith', 'dive'],
+    ['lantern-wraith', 'cast'],
+    ['lantern-wraith', 'telegraph'],
+  ]) {
+    assert.equal(
+      tsRuntime.resolveActorVisualAction(actorId, action),
+      esmRuntime.resolveActorVisualAction(actorId, action),
+      `${actorId}.${action} mapping drifted`,
+    )
+  }
 })
 
 function parityTrace(runtime) {

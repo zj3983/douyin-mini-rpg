@@ -164,10 +164,18 @@ export class BattleRuntimeController extends Component {
   beginDungeonEncounter(request: DungeonBattleRequest): boolean {
     const accepted = this.cloneValidDungeonRequest(request)
     if (!accepted) return false
-    const reserved = this.reserveDungeonActor(accepted)
-    if (!reserved) return false
+    const reusesReleasedPoolNode = this.enemyNodes.size > 0
+    if (!this.enemySpawner || (reusesReleasedPoolNode && !this.enemySpawner.enemyPool)) return false
+    let reserved = reusesReleasedPoolNode ? null : this.reserveDungeonActor(accepted)
+    if (!reusesReleasedPoolNode && !reserved) return false
 
     this.clearBattleGeneration()
+    if (!reserved) {
+      reserved = this.reserveDungeonActor(accepted)
+      if (!reserved) {
+        throw new Error('Dungeon transition invariant failed: released enemy pool could not spawn the first actor.')
+      }
+    }
     this.activeDungeonRequest = accepted
     this.dungeonDefeatedEnemyIds = []
     this.dungeonCompletionPending = false

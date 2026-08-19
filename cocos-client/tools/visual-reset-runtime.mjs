@@ -71,6 +71,8 @@ export function setVisualActionState(state, action) {
 
 export function resolveActorVisualAction(actorId, action) {
   if (actorId === 'bamboo-warden' && action === 'attack') return 'sweep'
+  if ((actorId === 'fog-spider' || actorId === 'mist-deer-king') && action === 'telegraph') return 'attack'
+  if (actorId === 'lantern-wraith' && (action === 'dive' || action === 'cast' || action === 'telegraph')) return 'attack'
   return action
 }
 
