@@ -10,6 +10,12 @@ const bossTalismanCompiledMarkers = [
   'BossTelegraphPresenter',
   'BossHazardVisualController',
 ]
+const dungeonCompiledMarkers = [
+  'DungeonPressureRuntime',
+  'PursuitBossRuntime',
+  'DungeonRunPresenter',
+  'DungeonResourceController',
+]
 
 function compressUuid(uuid, prefixLength) {
   const hex = uuid.replaceAll('-', '')
@@ -70,6 +76,10 @@ export function checkCocosBuildOutput({ buildRoot, projectRoot = process.cwd() }
     const missingBossTalismanMarkers = bossTalismanCompiledMarkers.filter((marker) => !mainIndex.includes(marker))
     if (missingBossTalismanMarkers.length > 0) {
       errors.push(`built main index omits boss talisman compiled feature markers: ${missingBossTalismanMarkers.join(', ')}`)
+    }
+    const missingDungeonMarkers = dungeonCompiledMarkers.filter((marker) => !mainIndex.includes(marker))
+    if (missingDungeonMarkers.length > 0) {
+      errors.push(`built main index omits dungeon compiled feature markers: ${missingDungeonMarkers.join(', ')}`)
     }
     const unsafeIteratorSpread = /\.concat\(\s*this\.(?:pending\.values|retained\.keys)\(\)\s*\)/
     const materializesPending = /Array\.from\(\s*this\.pending\.values\(\)\s*\)/.test(mainIndex)

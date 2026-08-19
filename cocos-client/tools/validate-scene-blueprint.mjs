@@ -1,17 +1,21 @@
 const requiredNodes = [
+  'Canvas/SharedCombatRoot',
+  'Canvas/SharedCombatRoot/SharedActorLayer',
+  'Canvas/SharedCombatRoot/SharedEffectLayer',
+  'Canvas/SharedCombatRoot/SharedDropLayer',
+  'Canvas/SharedCombatRoot/SharedInputLayer',
+  'Canvas/SharedCombatRoot/Runtime',
+  'Canvas/SharedCombatRoot/SharedActorLayer/EnemySpawner',
+  'Canvas/SharedCombatRoot/SharedEffectLayer/FlyingSwordSkill',
+  'Canvas/SharedCombatRoot/SharedDropLayer/SoulOrbPool',
   'Canvas/WorldRoot',
-  'Canvas/DungeonRoot/DungeonFloor1',
-  'Canvas/DungeonRoot/DungeonFloor2',
-  'Canvas/DungeonRoot/DungeonFloor3',
-  'Canvas/DungeonRoot/DungeonRoomLabel',
-  'Canvas/DungeonRoot/DungeonStatusLabel',
-  'Canvas/WorldRoot/BattleRoot/Runtime',
-  'Canvas/WorldRoot/BattleRoot/ActorLayer/EnemySpawner',
-  'Canvas/WorldRoot/BattleRoot/EffectLayer/FlyingSwordSkill',
-  'Canvas/WorldRoot/BattleRoot/HudLayer/StageClearPanel',
-  'Canvas/WorldRoot/BattleRoot/DropLayer/SoulOrbPool',
+  'Canvas/WorldRoot/WorldLayer',
+  'Canvas/WorldRoot/WorldHudLayer',
+  'Canvas/WorldRoot/WorldHudLayer/StageClearPanel',
   'Canvas/DungeonRoot',
-  'Canvas/DungeonRoot/DungeonInteractButton',
+  'Canvas/DungeonRoot/DungeonWorldLayer',
+  'Canvas/DungeonRoot/DungeonHud',
+  'Canvas/DungeonRoot/DungeonRunController',
   'Canvas/DualModeGameController',
 ]
 
@@ -21,6 +25,8 @@ const requiredComponents = [
   'FlyingSwordSkill',
   'StageClearPanelController',
   'NodePoolController',
+  'DungeonRunPresenter',
+  'DungeonResourceController',
   'DungeonRunController',
   'DualModeGameController',
 ]
@@ -47,7 +53,7 @@ const controllerBindingContracts = [
   },
   {
     component: 'DungeonRunController',
-    required: ['profileData', 'roomLabel'],
+    required: ['profileData', 'presenter', 'battleRuntime'],
   },
 ]
 
@@ -71,21 +77,16 @@ export function validateSceneBlueprint(blueprint) {
     if (!componentNames.has(component)) errors.push(`missing component: ${component}`)
   }
 
-  const runtimeNode = nodes.find((node) => node.path === 'Canvas/WorldRoot/BattleRoot/Runtime')
+  const runtimeNode = nodes.find((node) => node.path === 'Canvas/SharedCombatRoot/Runtime')
   const runtimeBindings = runtimeNode?.bindings ?? {}
   for (const binding of requiredRuntimeBindings) {
     if (!runtimeBindings[binding]) errors.push(`missing BattleRuntimeController binding: ${binding}`)
   }
 
-  const flyingSwordNode = nodes.find((node) => node.path === 'Canvas/WorldRoot/BattleRoot/EffectLayer/FlyingSwordSkill')
+  const flyingSwordNode = nodes.find((node) => node.path === 'Canvas/SharedCombatRoot/SharedEffectLayer/FlyingSwordSkill')
   const flyingSwordBindings = flyingSwordNode?.bindings ?? {}
   for (const binding of requiredFlyingSwordBindings) {
     if (!flyingSwordBindings[binding]) errors.push(`missing FlyingSwordSkill binding: ${binding}`)
-  }
-
-  const dungeonStatusNode = nodes.find((node) => node.path === 'Canvas/DungeonRoot/DungeonStatusLabel')
-  if (dungeonStatusNode?.bindings?.presentation !== 'Canvas/DungeonRoot/DungeonRunController.onRunChanged') {
-    errors.push('missing DungeonStatusLabel presentation binding: DungeonRunController.onRunChanged')
   }
 
   for (const contract of controllerBindingContracts) {

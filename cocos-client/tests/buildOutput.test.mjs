@@ -27,7 +27,8 @@ function compressAssetUuidFixture(uuid) {
 
 const legacyMainIndex = `PortraitBattleBootstrap ${classId} StageResourceRuntime Array.from(this.pending.values()) Array.from(this.retained.keys())`
 const bossTalismanMarkers = 'BossTelegraphVisualProfile BossTelegraphPresenter BossHazardVisualController'
-const validMainIndex = `${legacyMainIndex} ${bossTalismanMarkers}`
+const dungeonRuntimeMarkers = 'DungeonPressureRuntime PursuitBossRuntime DungeonRunPresenter DungeonResourceController'
+const validMainIndex = `${legacyMainIndex} ${bossTalismanMarkers} ${dungeonRuntimeMarkers}`
 const talismans = ['sweep', 'spike', 'roar'].map((name) => {
   const assetUuid = JSON.parse(
     readFileSync(resolve(`assets/resources/Assets/Skills/BossDomain/talisman_${name}.png.meta`), 'utf8'),
@@ -144,6 +145,16 @@ test('build-output check rejects output without compiled boss talisman feature m
 
   assert.equal(report.ok, false)
   assert.equal(report.errors.some((error) => error.includes('boss talisman compiled feature')), true)
+})
+
+test('build-output check rejects output without compiled dungeon runtime markers', () => {
+  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-missing-dungeon-runtime-'))
+  writeCompleteFixture(buildRoot, `${legacyMainIndex} ${bossTalismanMarkers}`)
+
+  const report = checkCocosBuildOutput({ buildRoot, projectRoot })
+
+  assert.equal(report.ok, false)
+  assert.equal(report.errors.some((error) => error.includes('dungeon compiled feature')), true)
 })
 
 test('build-output check rejects a missing boss talisman spriteFrame resource path', () => {

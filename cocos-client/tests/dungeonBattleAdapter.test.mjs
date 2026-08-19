@@ -333,6 +333,30 @@ test('begin passes limits into the shared battle runtime and rejects malformed r
   assert.ok(activeGeneration > beforeGeneration)
 })
 
+test('dungeon exploration clears world combat and an accepted exit rebuilds the current world stage', async () => {
+  const { BattleRuntimeController } = await loadController()
+  const { controller, despawned } = controllerHarness(BattleRuntimeController)
+  controller.designData = { json: { worldStages: [worldStage(1)] } }
+  controller.runtime = { marker: 'world-runtime', enemies: [] }
+  const enemy = { id: 1, profile: profile('moss-wolf'), hp: 10, alive: true, dropped: false }
+  const enemyNode = fakeNode('world-enemy')
+  controller.runtime.enemies.push(enemy)
+  controller.enemyNodes.set(enemy.id, enemyNode)
+  controller.enemyByNode.set(enemyNode, enemy)
+
+  assert.equal(controller.enterDungeonExplorationMode(), true)
+  assert.equal(controller.runtime, null)
+  assert.equal(controller.isDungeonEncounterActive(), false)
+  assert.equal(controller.enemyNodes.size, 0)
+  assert.deepEqual(despawned, [enemyNode])
+  assert.equal(controller.battleInput.enabled.at(-1), true)
+
+  assert.equal(controller.restoreWorldStage(), true)
+  assert.equal(controller.runtime.stage.id, 1)
+  assert.equal(controller.isDungeonEncounterActive(), false)
+  assert.equal(controller.battleInput.enabled.at(-1), true)
+})
+
 test('empty pool factory failures leave the active dungeon generation untouched', async () => {
   const { BattleRuntimeController } = await loadController()
 
@@ -664,11 +688,13 @@ test('dungeon defeat emits authority event without a world defeat panel', async 
   assert.equal(controller.stageClearPanel.defeats, 0)
 })
 
-test('controller exposes only the four approved dungeon integration APIs', () => {
+test('controller exposes the dungeon encounter, exploration, and world restoration APIs', () => {
   const source = readFileSync(resolve('assets/Scripts/Game/BattleRuntimeController.ts'), 'utf8')
   for (const marker of [
     'beginDungeonEncounter(request:',
     'cancelDungeonEncounter(requestId:',
+    'enterDungeonExplorationMode()',
+    'restoreWorldStage()',
     'isDungeonEncounterActive()',
     'onDungeonEncounterCompleted:',
   ]) assert.equal(source.includes(marker), true, `missing ${marker}`)

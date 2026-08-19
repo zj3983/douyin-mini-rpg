@@ -355,6 +355,29 @@ test('an older asynchronous floor presentation cannot overwrite the latest floor
   assert.equal(controller.snapshot().activeFloor, 2)
 })
 
+test('repeated activation of the visible floor reuses its resources without presenting again', async () => {
+  const { DungeonResourceController } = await loadResourceRuntime()
+  const loaded = []
+  const visible = []
+  const controller = new DungeonResourceController({
+    load: (descriptor) => {
+      loaded.push(descriptor.path)
+      return Promise.resolve({ path: descriptor.path })
+    },
+    release: () => {},
+    showFloor: (floor) => visible.push(floor),
+  })
+
+  assert.equal(await controller.prepareEntry(), true)
+  assert.equal(await controller.activateFloor(1), true)
+  const loadCount = loaded.length
+  assert.equal(await controller.activateFloor(1), true)
+
+  assert.equal(loaded.length, loadCount)
+  assert.deepEqual(visible, [1])
+  assert.equal(controller.snapshot().activeFloor, 1)
+})
+
 test('a completed stale prefetch is released instead of returning after the player skips ahead', async () => {
   const { DungeonResourceController } = await loadResourceRuntime()
   const deferredFloorTwo = []

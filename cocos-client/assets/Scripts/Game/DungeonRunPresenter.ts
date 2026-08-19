@@ -8,10 +8,12 @@ import {
   Label,
   Layers,
   Node,
+  Sprite,
+  SpriteFrame,
   UITransform,
   VerticalTextAlignment,
 } from 'cc'
-import type { DungeonRunEvent } from '../Core/Dungeon/DungeonTypes.ts'
+import type { DungeonCommand, DungeonRunEvent } from '../Core/Dungeon/DungeonTypes.ts'
 import { computeDungeonLayout, type DungeonLayout } from './DungeonLayout.ts'
 import type { ViewportMetrics } from './ViewportMetrics.ts'
 
@@ -24,6 +26,7 @@ export const DUNGEON_NODE_NAMES = Object.freeze([
   'DungeonMapButton',
   'DungeonMapOverlay',
   'DungeonInteractionHint',
+  'DungeonCommandBar',
   'DungeonPursuitWarning',
   'DungeonSettlement',
 ] as const)
@@ -89,6 +92,7 @@ export class DungeonRunPresenter extends Component {
   pickupCapacity = 24
   toastCapacity = 4
   onSharedCombatPauseChanged: ((paused: boolean) => void) | null = null
+  onCommandRequested: ((command: DungeonCommand) => void) | null = null
 
   private controller: DungeonPausePort | null = null
   private layout: DungeonLayout = computeDungeonLayout(DEFAULT_VIEWPORT)
@@ -96,6 +100,8 @@ export class DungeonRunPresenter extends Component {
   private readonly pickups: PickupEntry[] = []
   private readonly toasts: ToastEntry[] = []
   private worldLayer: Node | null = null
+  private farBackground: Sprite | null = null
+  private midBackground: Sprite | null = null
   private hud: Node | null = null
   private pressureBar: Node | null = null
   private pressureFill: Node | null = null
@@ -103,6 +109,12 @@ export class DungeonRunPresenter extends Component {
   private mapOverlay: Node | null = null
   private mapCloseButton: Node | null = null
   private interactionHint: Node | null = null
+  private commandBar: Node | null = null
+  private searchButton: Node | null = null
+  private doorButton: Node | null = null
+  private altarButton: Node | null = null
+  private extractionButton: Node | null = null
+  private availableExitId = ''
   private pursuitWarning: Node | null = null
   private finalBossBar: Node | null = null
   private finalBossFill: Node | null = null
@@ -157,6 +169,16 @@ export class DungeonRunPresenter extends Component {
 
   setInteractionHint(text: string): void {
     if (this.hintLabel) this.hintLabel.string = typeof text === 'string' ? text : ''
+  }
+
+  setAvailableExit(exitId: string | null): void {
+    this.availableExitId = typeof exitId === 'string' ? exitId : ''
+    if (this.doorButton) this.doorButton.active = this.availableExitId.length > 0
+  }
+
+  showFloor(far: SpriteFrame | null, mid: SpriteFrame | null): void {
+    if (this.farBackground) this.farBackground.spriteFrame = far
+    if (this.midBackground) this.midBackground.spriteFrame = mid
   }
 
   presentRunEvent(event: DungeonRunEvent, pickupOrigin?: PointLike): void {
@@ -222,8 +244,13 @@ export class DungeonRunPresenter extends Component {
     this.mapButton?.off(Button.EventType.CLICK, this.openMap, this)
     this.mapCloseButton?.off(Button.EventType.CLICK, this.closeMap, this)
     this.settlementCloseButton?.off(Button.EventType.CLICK, this.closeSettlement, this)
+    this.searchButton?.off(Button.EventType.CLICK, this.requestSearch, this)
+    this.doorButton?.off(Button.EventType.CLICK, this.requestDoor, this)
+    this.altarButton?.off(Button.EventType.CLICK, this.requestAltar, this)
+    this.extractionButton?.off(Button.EventType.CLICK, this.requestExtraction, this)
     this.controller = null
     this.onSharedCombatPauseChanged = null
+    this.onCommandRequested = null
     for (const pickup of this.pickups.splice(0)) pickup.node.destroy()
     for (const node of this.ownedNodes.splice(0)) node.destroy()
     this.toasts.length = 0
@@ -232,6 +259,10 @@ export class DungeonRunPresenter extends Component {
 
   private buildInterface(): void {
     this.worldLayer = this.createNode('DungeonWorldLayer', this.node)
+    this.farBackground = this.createNode('DungeonFarBackground', this.worldLayer).addComponent(Sprite)
+    this.farBackground.sizeMode = Sprite.SizeMode.CUSTOM
+    this.midBackground = this.createNode('DungeonMidBackground', this.worldLayer).addComponent(Sprite)
+    this.midBackground.sizeMode = Sprite.SizeMode.CUSTOM
     this.hud = this.createPanel('DungeonHud', this.node, new Color(5, 20, 29, 215), new Color(58, 190, 184, 180))
     this.healthLabel = this.createLabel('DungeonHealthLabel', this.hud, '生命 0', 24)
     this.floorLabel = this.createLabel('DungeonFloorLabel', this.hud, '第1层', 24)
@@ -256,6 +287,11 @@ export class DungeonRunPresenter extends Component {
 
     this.interactionHint = this.createPanel('DungeonInteractionHint', this.node, new Color(3, 15, 24, 220), new Color(79, 190, 170, 220))
     this.hintLabel = this.createLabel('DungeonInteractionLabel', this.interactionHint, '', 26)
+    this.commandBar = this.createNode('DungeonCommandBar', this.node)
+    this.searchButton = this.createCommandButton('DungeonSearchButton', '搜索', this.requestSearch)
+    this.doorButton = this.createCommandButton('DungeonDoorButton', '开门', this.requestDoor)
+    this.altarButton = this.createCommandButton('DungeonAltarButton', '祭坛', this.requestAltar)
+    this.extractionButton = this.createCommandButton('DungeonExtractionButton', '撤离', this.requestExtraction)
 
     this.pursuitWarning = this.createPanel('DungeonPursuitWarning', this.node, new Color(88, 17, 26, 236), new Color(255, 104, 93, 255))
     this.createLabel('DungeonPursuitWarningLabel', this.pursuitWarning, '追猎者逼近', 28)
@@ -282,6 +318,8 @@ export class DungeonRunPresenter extends Component {
     if (!this.worldLayer) return
     this.resizeAndPlace(this.node, { centerX: 0, centerY: 0, width: this.layout.width, height: this.layout.height })
     this.resizeAndPlace(this.worldLayer, this.layout.battleRect)
+    this.resizeAndPlace(this.farBackground?.node ?? null, { centerX: 0, centerY: 0, width: this.layout.battleRect.width, height: this.layout.battleRect.height })
+    this.resizeAndPlace(this.midBackground?.node ?? null, { centerX: 0, centerY: 0, width: this.layout.battleRect.width, height: this.layout.battleRect.height })
     this.resizeAndPlace(this.hud, this.layout.hud)
     this.layoutHudLabels()
     const pressureWidth = Math.max(1, this.layout.hud.width * 0.72)
@@ -304,6 +342,21 @@ export class DungeonRunPresenter extends Component {
     })
     this.resizeAndPlace(this.interactionHint, this.layout.interaction)
     this.fitChildLabel(this.interactionHint, 'DungeonInteractionLabel')
+    this.resizeAndPlace(this.commandBar, {
+      centerX: this.layout.interaction.centerX,
+      centerY: this.layout.interaction.centerY - this.layout.interaction.height - 38,
+      width: Math.min(this.layout.safeRect.width - 24, 640),
+      height: 60,
+    })
+    const buttonWidth = Math.min(144, (Math.min(this.layout.safeRect.width - 24, 640) - 24) / 4)
+    const buttons = [this.searchButton, this.doorButton, this.altarButton, this.extractionButton]
+    buttons.forEach((button, index) => this.resizeAndPlace(button, {
+      centerX: (index - 1.5) * (buttonWidth + 8),
+      centerY: 0,
+      width: buttonWidth,
+      height: 54,
+    }))
+    buttons.forEach((button) => this.fitChildLabel(button, `${button?.name}Label`))
     this.resizeAndPlace(this.settlement, this.layout.settlement)
     const touch = Math.max(44 / this.layout.physicalScale, 44)
     this.resizeAndPlace(this.mapCloseButton, {
@@ -472,6 +525,30 @@ export class DungeonRunPresenter extends Component {
     if (this.settlement) this.settlement.active = true
   }
 
+  private createCommandButton(name: string, text: string, handler: () => void): Node {
+    const button = this.createPanel(name, this.commandBar ?? this.node, new Color(10, 58, 70, 240), new Color(80, 202, 190, 255))
+    button.addComponent(Button)
+    this.createLabel(`${name}Label`, button, text, 21)
+    button.on(Button.EventType.CLICK, handler, this)
+    return button
+  }
+
+  private requestSearch(): void {
+    this.onCommandRequested?.({ type: 'search' })
+  }
+
+  private requestDoor(): void {
+    if (this.availableExitId) this.onCommandRequested?.({ type: 'choose-exit', exitId: this.availableExitId })
+  }
+
+  private requestAltar(): void {
+    this.onCommandRequested?.({ type: 'activate-altar' })
+  }
+
+  private requestExtraction(): void {
+    this.onCommandRequested?.({ type: 'begin-extraction' })
+  }
+
   private showTerminalSettlement(title: string, body: string): void {
     if (this.settlementTitle) this.settlementTitle.string = title
     if (this.settlementBody) this.settlementBody.string = body
@@ -596,6 +673,8 @@ export class DungeonRunPresenter extends Component {
 
   private clearReferences(): void {
     this.worldLayer = null
+    this.farBackground = null
+    this.midBackground = null
     this.hud = null
     this.pressureBar = null
     this.pressureFill = null
@@ -603,6 +682,11 @@ export class DungeonRunPresenter extends Component {
     this.mapOverlay = null
     this.mapCloseButton = null
     this.interactionHint = null
+    this.commandBar = null
+    this.searchButton = null
+    this.doorButton = null
+    this.altarButton = null
+    this.extractionButton = null
     this.pursuitWarning = null
     this.finalBossBar = null
     this.finalBossFill = null

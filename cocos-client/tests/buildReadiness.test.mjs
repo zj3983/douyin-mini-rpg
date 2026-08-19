@@ -1,9 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { checkCocosBuildReadiness, requiredDualModeAssets } from '../tools/check-cocos-build-readiness.mjs'
 
 function metaConvention(path) {
-  if (path.endsWith('.png.meta')) return { importer: 'image', ver: '1.0.27' }
+  if (path.endsWith('.png.meta') || path.endsWith('.webp.meta')) return { importer: 'image', ver: '1.0.27' }
   if (path.endsWith('.scene.meta')) return { importer: 'scene', ver: '1.1.50' }
   if (path.endsWith('.json.meta')) return { importer: 'json', ver: '2.0.1' }
   if (path.endsWith('.ts.meta')) return { importer: 'typescript', ver: '4.0.24' }
@@ -20,7 +21,7 @@ function validRequiredContents() {
         ...convention,
         imported: true,
         uuid: `00000000-0000-4000-8000-${String(uuidIndex).padStart(12, '0')}`,
-        ...(path.endsWith('.png.meta')
+        ...(path.endsWith('.png.meta') || path.endsWith('.webp.meta')
           ? { subMetas: { f9941: { importer: 'sprite-frame', name: 'spriteFrame' } } }
           : {}),
       }))
@@ -35,14 +36,19 @@ function validRequiredContents() {
 
 function validScene() {
   const names = [
+    'SharedCombatRoot',
+    'SharedActorLayer',
+    'SharedEffectLayer',
+    'SharedDropLayer',
+    'SharedInputLayer',
     'WorldRoot',
+    'WorldLayer',
+    'WorldHudLayer',
     'DualModeGameController',
     'DungeonRoot',
-    'DungeonFloor1',
-    'DungeonFloor2',
-    'DungeonFloor3',
-    'DungeonRoomLabel',
-    'DungeonInteractButton',
+    'DungeonWorldLayer',
+    'DungeonHud',
+    'DungeonRunController',
   ]
   return [
     { __type__: 'cc.SceneAsset', scene: { __id__: 1 } },
@@ -59,22 +65,25 @@ function validScene() {
 
 function validBlueprint() {
   const nodes = [
+    { path: 'Canvas/SharedCombatRoot', components: ['UITransform'] },
+    { path: 'Canvas/SharedCombatRoot/SharedActorLayer', components: ['UITransform'] },
+    { path: 'Canvas/SharedCombatRoot/SharedEffectLayer', components: ['UITransform'] },
+    { path: 'Canvas/SharedCombatRoot/SharedDropLayer', components: ['UITransform'] },
+    { path: 'Canvas/SharedCombatRoot/SharedInputLayer', components: ['UITransform'] },
     { path: 'Canvas/WorldRoot', components: ['UITransform'] },
-    { path: 'Canvas/DungeonRoot', components: ['UITransform'] },
-    { path: 'Canvas/DungeonRoot/DungeonFloor1', components: ['UITransform'] },
-    { path: 'Canvas/DungeonRoot/DungeonFloor2', components: ['UITransform'] },
-    { path: 'Canvas/DungeonRoot/DungeonFloor3', components: ['UITransform'] },
-    { path: 'Canvas/DungeonRoot/DungeonRoomLabel', components: ['Label'] },
-    {
-      path: 'Canvas/DungeonRoot/DungeonStatusLabel',
-      components: ['Label'],
-      bindings: { presentation: 'Canvas/DungeonRoot/DungeonRunController.onRunChanged' },
-    },
-    { path: 'Canvas/DungeonRoot/DungeonInteractButton', components: ['Button'] },
+    { path: 'Canvas/WorldRoot/WorldLayer', components: ['UITransform'] },
+    { path: 'Canvas/WorldRoot/WorldHudLayer', components: ['UITransform'] },
+    { path: 'Canvas/DungeonRoot', components: ['UITransform', 'DungeonRunPresenter', 'DungeonResourceController'] },
+    { path: 'Canvas/DungeonRoot/DungeonWorldLayer', components: ['UITransform'] },
+    { path: 'Canvas/DungeonRoot/DungeonHud', components: ['UITransform'] },
     {
       path: 'Canvas/DungeonRoot/DungeonRunController',
       components: ['DungeonRunController'],
-      bindings: { profileData: 'resources/Data/dual-mode-slice.json', roomLabel: 'Canvas/DungeonRoot/DungeonRoomLabel' },
+      bindings: {
+        profileData: 'resources/Data/dual-mode-slice.json',
+        presenter: 'Canvas/DungeonRoot',
+        battleRuntime: 'Canvas/SharedCombatRoot/Runtime',
+      },
     },
     {
       path: 'Canvas/DualModeGameController',
@@ -86,36 +95,27 @@ function validBlueprint() {
       },
     },
     {
-      path: 'Canvas/WorldRoot/BattleRoot/Runtime',
+      path: 'Canvas/SharedCombatRoot/Runtime',
       components: ['BattleRuntimeController'],
       bindings: {
         designData: 'design', stageClearPanel: 'clear', enemySpawner: 'spawner', soulOrbPool: 'soul',
         damageNumberPool: 'damage', bossSkillEffectPool: 'boss', dualMode: 'dual',
       },
     },
-    { path: 'Canvas/WorldRoot/BattleRoot/ActorLayer/EnemySpawner', components: ['EnemySpawner'] },
+    { path: 'Canvas/SharedCombatRoot/SharedActorLayer/EnemySpawner', components: ['EnemySpawner'] },
     {
-      path: 'Canvas/WorldRoot/BattleRoot/EffectLayer/FlyingSwordSkill',
+      path: 'Canvas/SharedCombatRoot/SharedEffectLayer/FlyingSwordSkill',
       components: ['FlyingSwordSkill'],
       bindings: { battleRuntime: 'runtime', sword: 'sword' },
     },
-    { path: 'Canvas/WorldRoot/BattleRoot/HudLayer/StageClearPanel', components: ['StageClearPanelController'] },
-    { path: 'Canvas/WorldRoot/BattleRoot/DropLayer/SoulOrbPool', components: ['NodePoolController'] },
+    { path: 'Canvas/WorldRoot/WorldHudLayer/StageClearPanel', components: ['StageClearPanelController'] },
+    { path: 'Canvas/SharedCombatRoot/SharedDropLayer/SoulOrbPool', components: ['NodePoolController'] },
   ]
   return { scene: { name: 'MainBattle' }, nodes }
 }
 
 function validDungeonProfile() {
-  return {
-    id: 'fixture-vault',
-    entryRoomId: 'f1-entry',
-    extractionRoomId: 'f3-gate',
-    rooms: [
-      { id: 'f1-entry', floor: 1, kind: 'entry', exits: [{ to: 'f2-room', cost: 0 }] },
-      { id: 'f2-room', floor: 2, kind: 'combat', exits: [{ to: 'f3-gate', cost: 0 }], doorCurrency: 1 },
-      { id: 'f3-gate', floor: 3, kind: 'extraction', exits: [] },
-    ],
-  }
+  return JSON.parse(readFileSync(new URL('../assets/resources/Data/dual-mode-slice.json', import.meta.url), 'utf8'))
 }
 
 test('build readiness reports missing Cocos export blockers', () => {
@@ -145,8 +145,27 @@ test('build readiness passes when editor and every required imported runtime ass
     readFile: (path) => contents.get(path),
   })
 
-  assert.equal(report.ready, true)
+  assert.equal(report.ready, true, report.blockers.join('\n'))
   assert.deepEqual(report.blockers, [])
+})
+
+test('build readiness contract includes the pursuit runtime, presenter, catalog, and every dungeon image', () => {
+  for (const path of [
+    'assets/Scripts/Core/Dungeon/DungeonPressureRuntime.ts',
+    'assets/Scripts/Core/Dungeon/PursuitBossRuntime.ts',
+    'assets/Scripts/Game/DungeonRunPresenter.ts',
+    'assets/Scripts/Game/DungeonResourceController.ts',
+    'assets/resources/Data/dungeon-encounters.json',
+    ...[1, 2, 3].flatMap((floor) => [
+      `assets/resources/Assets/Dungeon/MistBamboo/Floor${floor}/far.webp`,
+      `assets/resources/Assets/Dungeon/MistBamboo/Floor${floor}/mid.webp`,
+    ]),
+    'assets/resources/Assets/Dungeon/MistBamboo/Effects/pursuit_edge.png',
+    'assets/resources/Assets/Dungeon/MistBamboo/Effects/extraction_array.png',
+  ]) {
+    assert.ok(requiredDualModeAssets.includes(path), path)
+    assert.ok(requiredDualModeAssets.includes(`${path}.meta`), `${path}.meta`)
+  }
 })
 
 test('build readiness names missing dual-mode scripts, data, scenes, and meta imports', () => {

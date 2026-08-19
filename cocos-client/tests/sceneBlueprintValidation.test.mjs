@@ -9,9 +9,9 @@ const readBlueprint = () => JSON.parse(readFileSync(resolve('assets/Data/scene-b
 test('scene blueprint validator accepts the runtime authority bindings', () => {
   const blueprint = readBlueprint()
   assert.deepEqual(validateSceneBlueprint(blueprint), { ok: true, errors: [] })
-  const status = blueprint.nodes.find((node) => node.path === 'Canvas/DungeonRoot/DungeonStatusLabel')
-  assert.equal(status.bindings.presentation, 'Canvas/DungeonRoot/DungeonRunController.onRunChanged')
-  assert.equal('events' in status.bindings, false)
+  const dungeon = blueprint.nodes.find((node) => node.path === 'Canvas/DungeonRoot/DungeonRunController')
+  assert.equal(dungeon.bindings.presenter, 'Canvas/DungeonRoot')
+  assert.equal(dungeon.bindings.battleRuntime, 'Canvas/SharedCombatRoot/Runtime')
 })
 
 test('scene blueprint validator rejects unknown and misplaced controller bindings', () => {

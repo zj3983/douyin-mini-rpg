@@ -212,6 +212,22 @@ export class BattleRuntimeController extends Component {
     return true
   }
 
+  enterDungeonExplorationMode(): boolean {
+    if (this.runtime || this.activeDungeonRequest) this.clearBattleGeneration()
+    this.playerNode?.getComponent(PlayerController)?.reset()
+    this.battleInput?.setInputEnabled(true)
+    this.hud?.hideBoss()
+    return true
+  }
+
+  restoreWorldStage(): boolean {
+    const stage = this.resolveStageProfile(this.stageNumber)
+    if (!stage) return false
+    this.recycleAllEnemies()
+    this.rebuildRuntime(stage)
+    return this.runtime !== null
+  }
+
   isDungeonEncounterActive(): boolean {
     return this.activeDungeonRequest !== null
   }

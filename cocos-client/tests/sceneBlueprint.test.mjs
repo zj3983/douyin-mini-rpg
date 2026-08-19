@@ -9,26 +9,26 @@ test('scene blueprint describes the serialized host and actual runtime roots', (
 
   assert.equal(blueprint.scene.name, 'MainBattle')
   assert.deepEqual(nodes.get('Scene/BattleRoot').components, ['PortraitBattleBootstrap'])
-  assert.deepEqual(nodes.get('Canvas').children, ['UICamera', 'WorldRoot', 'DungeonRoot', 'DualModeGameController'])
-  assert.deepEqual(nodes.get('Canvas/WorldRoot/BattleRoot/ActorLayer/EnemySpawner').bindings, {
-    enemyPool: 'Canvas/WorldRoot/BattleRoot/ActorLayer/EnemyPool',
+  assert.deepEqual(nodes.get('Canvas').children, ['UICamera', 'SharedCombatRoot', 'WorldRoot', 'DungeonRoot', 'DualModeGameController'])
+  assert.deepEqual(nodes.get('Canvas/SharedCombatRoot/SharedActorLayer/EnemySpawner').bindings, {
+    enemyPool: 'Canvas/SharedCombatRoot/SharedActorLayer/EnemyPool',
   })
-  assert.deepEqual(nodes.get('Canvas/WorldRoot/BattleRoot/Runtime').bindings, {
+  assert.deepEqual(nodes.get('Canvas/SharedCombatRoot/Runtime').bindings, {
     designData: 'resources/Data/cultivation-design.json',
-    enemySpawner: 'Canvas/WorldRoot/BattleRoot/ActorLayer/EnemySpawner',
-    soulOrbPool: 'Canvas/WorldRoot/BattleRoot/DropLayer/SoulOrbPool',
-    damageNumberPool: 'Canvas/WorldRoot/BattleRoot/EffectLayer/DamageNumberPool',
-    bossSkillEffectPool: 'Canvas/WorldRoot/BattleRoot/EffectLayer/BossEffectPool',
-    playerNode: 'Canvas/WorldRoot/BattleRoot/ActorLayer/Player',
-    hud: 'Canvas/WorldRoot/BattleRoot/HudLayer',
-    stageClearPanel: 'Canvas/WorldRoot/BattleRoot/HudLayer/StageClearPanel',
+    enemySpawner: 'Canvas/SharedCombatRoot/SharedActorLayer/EnemySpawner',
+    soulOrbPool: 'Canvas/SharedCombatRoot/SharedDropLayer/SoulOrbPool',
+    damageNumberPool: 'Canvas/SharedCombatRoot/SharedEffectLayer/DamageNumberPool',
+    bossSkillEffectPool: 'Canvas/SharedCombatRoot/SharedEffectLayer/BossEffectPool',
+    playerNode: 'Canvas/SharedCombatRoot/SharedActorLayer/Player',
+    hud: 'Canvas/WorldRoot/WorldHudLayer',
+    stageClearPanel: 'Canvas/WorldRoot/WorldHudLayer/StageClearPanel',
     dualMode: 'Canvas/DualModeGameController',
   })
 
   const paths = new Set(blueprint.nodes.map((node) => node.path))
   assert.equal([...paths].some((path) => path.startsWith('Canvas/Pools')), false)
-  assert.equal(paths.has('Canvas/DungeonRoot/DungeonStatusLabel'), true)
-  assert.deepEqual(nodes.get('Canvas/WorldRoot/BattleRoot/HudLayer/StageClearPanel').components, ['UITransform', 'Graphics', 'StageClearPanelController'])
+  assert.equal(paths.has('Canvas/DungeonRoot/DungeonHud'), true)
+  assert.deepEqual(nodes.get('Canvas/WorldRoot/WorldHudLayer/StageClearPanel').components, ['UITransform', 'Graphics', 'StageClearPanelController'])
   assert.equal(JSON.stringify(blueprint).includes('StageClearPanelController'), true)
   assert.equal(JSON.stringify(blueprint).includes('NodePoolController'), true)
 })
@@ -47,32 +47,34 @@ test('scene blueprint defines the approved portrait runtime hierarchy', () => {
 
   for (const path of [
     'Canvas',
+    'Canvas/SharedCombatRoot',
     'Canvas/WorldRoot',
     'Canvas/DungeonRoot',
-    'Canvas/WorldRoot/BattleRoot',
-    'Canvas/WorldRoot/BattleRoot/WorldLayer/FarBackground',
-    'Canvas/WorldRoot/BattleRoot/WorldLayer/MidBackground',
-    'Canvas/WorldRoot/BattleRoot/ActorLayer/Player',
-    'Canvas/WorldRoot/BattleRoot/ActorLayer/EnemySpawner',
-    'Canvas/WorldRoot/BattleRoot/ActorLayer/EnemyPool',
-    'Canvas/WorldRoot/BattleRoot/EffectLayer/FlyingSwordSkill/Sword',
-    'Canvas/WorldRoot/BattleRoot/DropLayer',
-    'Canvas/WorldRoot/BattleRoot/DropLayer/SoulOrbPool',
-    'Canvas/WorldRoot/BattleRoot/InputLayer',
-    'Canvas/WorldRoot/BattleRoot/HudLayer/TopHud',
-    'Canvas/WorldRoot/BattleRoot/HudLayer/BossHud',
-    'Canvas/WorldRoot/BattleRoot/HudLayer/BottomNavigation',
-    'Canvas/WorldRoot/BattleRoot/HudLayer/StageClearPanel',
+    'Canvas/WorldRoot/WorldLayer/FarBackground',
+    'Canvas/WorldRoot/WorldLayer/MidBackground',
+    'Canvas/SharedCombatRoot/SharedActorLayer/Player',
+    'Canvas/SharedCombatRoot/SharedActorLayer/EnemySpawner',
+    'Canvas/SharedCombatRoot/SharedActorLayer/EnemyPool',
+    'Canvas/SharedCombatRoot/SharedEffectLayer/FlyingSwordSkill/Sword',
+    'Canvas/SharedCombatRoot/SharedDropLayer',
+    'Canvas/SharedCombatRoot/SharedDropLayer/SoulOrbPool',
+    'Canvas/SharedCombatRoot/SharedInputLayer',
+    'Canvas/WorldRoot/WorldHudLayer/TopHud',
+    'Canvas/WorldRoot/WorldHudLayer/BossHud',
+    'Canvas/WorldRoot/WorldHudLayer/BottomNavigation',
+    'Canvas/WorldRoot/WorldHudLayer/StageClearPanel',
+    'Canvas/DungeonRoot/DungeonWorldLayer',
+    'Canvas/DungeonRoot/DungeonHud',
   ]) {
     assert.equal(nodes.has(path), true, `missing portrait node: ${path}`)
   }
 
-  const inputLayer = nodes.get('Canvas/WorldRoot/BattleRoot/InputLayer')
+  const inputLayer = nodes.get('Canvas/SharedCombatRoot/SharedInputLayer')
   assert.equal(inputLayer.bounds, 'layout.movement')
   assert.equal(inputLayer.excludes, 'BottomNavigation and bottom safe inset')
-  assert.equal(nodes.get('Canvas/WorldRoot/BattleRoot/HudLayer/TopHud').positionY, 'layout-safe top HUD position')
-  assert.equal(nodes.get('Canvas/WorldRoot/BattleRoot/HudLayer/BottomNavigation').positionY, 'layout.navigationTop - 52')
-  assert.deepEqual(nodes.get('Canvas/WorldRoot/BattleRoot/ActorLayer/EnemySpawner').futureBossLayout, {
+  assert.equal(nodes.get('Canvas/WorldRoot/WorldHudLayer/TopHud').positionY, 'layout-safe top HUD position')
+  assert.equal(nodes.get('Canvas/WorldRoot/WorldHudLayer/BottomNavigation').positionY, 'layout.navigationTop - 52')
+  assert.deepEqual(nodes.get('Canvas/SharedCombatRoot/SharedActorLayer/EnemySpawner').futureBossLayout, {
     spawn: 'layout.bossSpawn',
     maxVisualBounds: 'layout.bossMaxVisualBounds',
   })
@@ -92,6 +94,8 @@ test('scene blueprint declares portrait bootstrap component bindings', () => {
     'NodePoolController',
     'StageClearPanelController',
     'DungeonRunController',
+    'DungeonRunPresenter',
+    'DungeonResourceController',
     'DualModeGameController',
   ]) {
     assert.equal(componentNames.has(component), true, `missing portrait component: ${component}`)
@@ -109,6 +113,7 @@ test('scene blueprint keeps dungeon profile data on DungeonRunController', () =>
   })
   assert.deepEqual(nodes.get('Canvas/DungeonRoot/DungeonRunController').bindings, {
     profileData: 'resources/Data/dual-mode-slice.json',
-    roomLabel: 'Canvas/DungeonRoot/DungeonRoomLabel',
+    presenter: 'Canvas/DungeonRoot',
+    battleRuntime: 'Canvas/SharedCombatRoot/Runtime',
   })
 })

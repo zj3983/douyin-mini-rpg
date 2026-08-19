@@ -106,15 +106,16 @@ export class DungeonResourceController<T = Asset> {
 
   async activateFloor(floor: MistVaultFloor, roomActorIds?: readonly string[]) {
     if (!this.isReady()) return false
+    const requested = floorDescriptorList(floor, roomActorIds)
+    if (this.activeFloor?.floor === floor && sameDescriptors(this.activeFloor.descriptors, requested)) return true
     const generation = ++this.activationGeneration
     let candidate: ResourceBatch<T> | null = null
     try {
-      if (floor === 1 && this.preparedFloor && sameDescriptors(this.preparedFloor.descriptors, floorDescriptorList(1, roomActorIds))) {
+      if (floor === 1 && this.preparedFloor && sameDescriptors(this.preparedFloor.descriptors, requested)) {
         candidate = this.preparedFloor
         this.preparedFloor = null
       } else {
         const prefetched = this.prefetched.get(floor)
-        const requested = floorDescriptorList(floor, roomActorIds)
         if (prefetched && sameDescriptors(prefetched.descriptors, requested)) {
           candidate = prefetched
           this.prefetched.delete(floor)

@@ -51,7 +51,7 @@ test('main battle serializes PortraitBattleBootstrap on the existing BattleRoot'
   assert.deepEqual(bootstrap.node, { __id__: battleRootIndex })
 })
 
-test('main battle serializes stable dual-mode dungeon markers with world active', () => {
+test('main battle serializes shared combat and separate world and dungeon presentation roots', () => {
   const scene = JSON.parse(readFileSync(resolve('assets/Scenes/MainBattle.scene'), 'utf8'))
   const nodes = new Map(
     scene
@@ -62,30 +62,62 @@ test('main battle serializes stable dual-mode dungeon markers with world active'
 
   for (const name of [
     'DualModeGameController',
+    'SharedCombatRoot',
+    'SharedActorLayer',
+    'SharedEffectLayer',
+    'SharedDropLayer',
+    'SharedInputLayer',
     'WorldRoot',
+    'WorldLayer',
+    'WorldHudLayer',
     'DungeonRoot',
-    'DungeonFloor1',
-    'DungeonFloor2',
-    'DungeonFloor3',
-    'DungeonRoomLabel',
-    'DungeonInteractButton',
+    'DungeonWorldLayer',
+    'DungeonHud',
   ]) {
     assert.ok(nodes.has(name), `MainBattle.scene should serialize ${name}`)
   }
 
   const sceneRoot = scene[1]
+  const sharedCombatRoot = nodes.get('SharedCombatRoot')
   const worldRoot = nodes.get('WorldRoot')
   const dungeonRoot = nodes.get('DungeonRoot')
+  assert.equal(sharedCombatRoot.entry._active, true)
   assert.equal(worldRoot.entry._active, true)
   assert.equal(dungeonRoot.entry._active, false)
+  assert.deepEqual(sharedCombatRoot.entry._parent, { __id__: 1 })
   assert.deepEqual(worldRoot.entry._parent, { __id__: 1 })
   assert.deepEqual(dungeonRoot.entry._parent, { __id__: 1 })
+  assert.ok(sceneRoot._children.some((child) => child.__id__ === sharedCombatRoot.index))
   assert.ok(sceneRoot._children.some((child) => child.__id__ === worldRoot.index))
   assert.ok(sceneRoot._children.some((child) => child.__id__ === dungeonRoot.index))
 
-  for (const name of ['DungeonFloor1', 'DungeonFloor2', 'DungeonFloor3', 'DungeonRoomLabel', 'DungeonInteractButton']) {
+  for (const name of ['SharedActorLayer', 'SharedEffectLayer', 'SharedDropLayer', 'SharedInputLayer']) {
+    assert.deepEqual(nodes.get(name).entry._parent, { __id__: sharedCombatRoot.index }, `${name} should be under SharedCombatRoot`)
+  }
+  for (const name of ['WorldLayer', 'WorldHudLayer']) {
+    assert.deepEqual(nodes.get(name).entry._parent, { __id__: worldRoot.index }, `${name} should be under WorldRoot`)
+  }
+  for (const name of ['DungeonWorldLayer', 'DungeonHud']) {
     assert.deepEqual(nodes.get(name).entry._parent, { __id__: dungeonRoot.index }, `${name} should be under DungeonRoot`)
   }
+})
+
+test('bootstrap switches shared combat into dungeon exploration and restores world combat only after accepted terminal events', () => {
+  const source = readFileSync(resolve('assets/Scripts/Game/PortraitBattleBootstrap.ts'), 'utf8')
+  assert.match(source, /onDungeonEntryAccepted\(\)[\s\S]*syncActiveDungeonMode\(\)/)
+  assert.match(source, /dungeon-extraction-accepted', this\.onDungeonTerminalAccepted/)
+  assert.match(source, /dungeon-defeat-accepted', this\.onDungeonTerminalAccepted/)
+  assert.match(source, /dungeon-abandon-accepted', this\.onDungeonTerminalAccepted/)
+  assert.match(source, /onDungeonTerminalAccepted\(\)[\s\S]*restoreWorldStage\(\)/)
+  assert.match(source, /bindDungeonRuntime\(this\.runtimeNode\)/)
+  assert.match(source, /attachSharedCombatRoot\(worldRoot\)/)
+  assert.match(source, /attachSharedCombatRoot\(this\.dungeonPresentationRoot\)/)
+  assert.match(source, /available\.find\(\(exit\) => !snapshot\.map\.revealedRoomIds\.includes\(exit\.to\)\)/)
+  assert.match(source, /prepareEntry\(\)[\s\S]*activateFloor\(floor\)/)
+  assert.match(source, /onDungeonEncounterCompleted[\s\S]*enterDungeonExplorationMode\(\)/)
+  assert.match(source, /update\(deltaTime: number\)[\s\S]*syncActiveDungeonMode\(\)/)
+  assert.match(source, /dungeonRuntimeRunId !== snapshot\.runId[\s\S]*enterDungeonExplorationMode\(\)/)
+  assert.match(source, /nextDungeonResourceRetryAt = Date\.now\(\) \+ 2000/)
 })
 
 test('scene blueprint documents runtime-owned dual-mode dungeon assembly', () => {
@@ -93,22 +125,17 @@ test('scene blueprint documents runtime-owned dual-mode dungeon assembly', () =>
   const byPath = new Map(blueprint.nodes.map((node) => [node.path, node]))
 
   assert.equal(blueprint.scene.notes.includes('runtime authority'), true)
+  assert.equal(byPath.get('Canvas').children.includes('SharedCombatRoot'), true)
   assert.equal(byPath.get('Canvas').children.includes('WorldRoot'), true)
   assert.equal(byPath.get('Canvas').children.includes('DungeonRoot'), true)
   assert.deepEqual(byPath.get('Canvas/WorldRoot').bindings.dualModeController, 'Canvas/DualModeGameController')
   assert.equal(byPath.get('Canvas/DungeonRoot').active, false)
-  assert.deepEqual(byPath.get('Canvas/DungeonRoot').children, [
-    'DungeonFloor1',
-    'DungeonFloor2',
-    'DungeonFloor3',
-    'DungeonRoomLabel',
-    'DungeonStatusLabel',
-    'DungeonInteractButton',
-    'DungeonRunController',
-  ])
-  assert.deepEqual(byPath.get('Canvas/WorldRoot/BattleRoot/HudLayer/StageClearPanel').size, { width: 472, height: 214 })
-  assert.equal(byPath.get('Canvas/WorldRoot/BattleRoot/HudLayer/BottomNavigation/DungeonEntryButton').components.includes('Button'), true)
-  assert.equal(byPath.get('Canvas/DungeonRoot/DungeonInteractButton').components.includes('Button'), true)
+  assert.deepEqual(byPath.get('Canvas/SharedCombatRoot').children, ['SharedActorLayer', 'SharedEffectLayer', 'SharedDropLayer', 'SharedInputLayer', 'Runtime'])
+  assert.deepEqual(byPath.get('Canvas/WorldRoot').children, ['WorldLayer', 'WorldHudLayer', 'WorldStageSelectRoot'])
+  assert.deepEqual(byPath.get('Canvas/DungeonRoot').children, ['DungeonWorldLayer', 'DungeonHud', 'DungeonRunController'])
+  assert.deepEqual(byPath.get('Canvas/WorldRoot/WorldHudLayer/StageClearPanel').size, { width: 472, height: 214 })
+  assert.equal(byPath.get('Canvas/WorldRoot/WorldHudLayer/BottomNavigation/DungeonEntryButton').components.includes('Button'), true)
+  assert.equal(byPath.has('Canvas/DungeonRoot/DungeonInteractButton'), false)
   assert.deepEqual(byPath.get('Canvas/DualModeGameController').bindings, {
     worldRoot: 'Canvas/WorldRoot',
     dungeonRoot: 'Canvas/DungeonRoot',
@@ -136,7 +163,7 @@ test('scene blueprint documents the runtime-owned world stage selection page', (
   assert.deepEqual(viewport.children, ['WorldStageContent'])
   assert.deepEqual(content.children, ['WorldStageGrid'])
   assert.deepEqual(grid.children, Array.from({ length: 10 }, (_, index) => `WorldStageItem${index + 1}`))
-  assert.equal(byPath.get('Canvas/WorldRoot/BattleRoot/HudLayer/BottomNavigation/WorldStageEntryButton').components.includes('Button'), true)
+  assert.equal(byPath.get('Canvas/WorldRoot/WorldHudLayer/BottomNavigation/WorldStageEntryButton').components.includes('Button'), true)
 
   for (let stageId = 1; stageId <= 10; stageId += 1) {
     const itemPath = `Canvas/WorldRoot/WorldStageSelectRoot/WorldStageScrollView/WorldStageViewport/WorldStageContent/WorldStageGrid/WorldStageItem${stageId}`

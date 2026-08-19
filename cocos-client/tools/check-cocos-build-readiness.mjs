@@ -29,6 +29,10 @@ export const requiredDualModeAssets = [
   'assets/Scripts/Core/Dungeon/DungeonSession.ts.meta',
   'assets/Scripts/Core/Dungeon/DungeonTypes.ts',
   'assets/Scripts/Core/Dungeon/DungeonTypes.ts.meta',
+  'assets/Scripts/Core/Dungeon/DungeonPressureRuntime.ts',
+  'assets/Scripts/Core/Dungeon/DungeonPressureRuntime.ts.meta',
+  'assets/Scripts/Core/Dungeon/PursuitBossRuntime.ts',
+  'assets/Scripts/Core/Dungeon/PursuitBossRuntime.ts.meta',
   'assets/Scripts/Core/BossTelegraphVisualProfile.ts',
   'assets/Scripts/Core/BossTelegraphVisualProfile.ts.meta',
   'assets/Scripts/Core/GameContent.ts',
@@ -52,6 +56,10 @@ export const requiredDualModeAssets = [
   'assets/Scripts/Core/World/WorldRewards.ts.meta',
   'assets/Scripts/Game/DungeonRunController.ts',
   'assets/Scripts/Game/DungeonRunController.ts.meta',
+  'assets/Scripts/Game/DungeonRunPresenter.ts',
+  'assets/Scripts/Game/DungeonRunPresenter.ts.meta',
+  'assets/Scripts/Game/DungeonResourceController.ts',
+  'assets/Scripts/Game/DungeonResourceController.ts.meta',
   'assets/Scripts/Game/DualModeGameController.ts',
   'assets/Scripts/Game/DualModeGameController.ts.meta',
   'assets/Scripts/Game/BossHazardVisualController.ts',
@@ -66,6 +74,16 @@ export const requiredDualModeAssets = [
   'assets/Scripts/Game/WorldStageSelectPageAssembler.ts.meta',
   'assets/Scripts/Game/WorldStageSelectionViewModel.ts',
   'assets/Scripts/Game/WorldStageSelectionViewModel.ts.meta',
+  'assets/resources/Data/dungeon-encounters.json',
+  'assets/resources/Data/dungeon-encounters.json.meta',
+  ...[1, 2, 3].flatMap((floor) => ['far', 'mid'].flatMap((layer) => [
+    `assets/resources/Assets/Dungeon/MistBamboo/Floor${floor}/${layer}.webp`,
+    `assets/resources/Assets/Dungeon/MistBamboo/Floor${floor}/${layer}.webp.meta`,
+  ])),
+  'assets/resources/Assets/Dungeon/MistBamboo/Effects/pursuit_edge.png',
+  'assets/resources/Assets/Dungeon/MistBamboo/Effects/pursuit_edge.png.meta',
+  'assets/resources/Assets/Dungeon/MistBamboo/Effects/extraction_array.png',
+  'assets/resources/Assets/Dungeon/MistBamboo/Effects/extraction_array.png.meta',
   'assets/resources/Assets/World/MysticSpring.meta',
   'assets/resources/Assets/World/MysticSpring/far.png',
   'assets/resources/Assets/World/MysticSpring/far.png.meta',
@@ -87,14 +105,19 @@ export const requiredDualModeAssets = [
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const REQUIRED_SCENE_NODES = [
+  'SharedCombatRoot',
+  'SharedActorLayer',
+  'SharedEffectLayer',
+  'SharedDropLayer',
+  'SharedInputLayer',
   'WorldRoot',
+  'WorldLayer',
+  'WorldHudLayer',
   'DualModeGameController',
   'DungeonRoot',
-  'DungeonFloor1',
-  'DungeonFloor2',
-  'DungeonFloor3',
-  'DungeonRoomLabel',
-  'DungeonInteractButton',
+  'DungeonWorldLayer',
+  'DungeonHud',
+  'DungeonRunController',
 ]
 const REQUIRED_STRUCTURED_ASSETS = [
   'assets/Scenes/MainBattle.scene',
@@ -103,7 +126,7 @@ const REQUIRED_STRUCTURED_ASSETS = [
 ]
 
 function metaConvention(path) {
-  if (path.endsWith('.png.meta')) return { importer: 'image', ver: '1.0.27' }
+  if (path.endsWith('.png.meta') || path.endsWith('.webp.meta')) return { importer: 'image', ver: '1.0.27' }
   if (path.endsWith('.scene.meta')) return { importer: 'scene', ver: '1.1.50' }
   if (path.endsWith('.json.meta')) return { importer: 'json', ver: '2.0.1' }
   if (path.endsWith('.ts.meta')) return { importer: 'typescript', ver: '4.0.24' }
@@ -170,7 +193,7 @@ export function checkCocosBuildReadiness(options = {}) {
       if (parsed.importer !== expected.importer || parsed.ver !== expected.ver) {
         blockers.push(`${asset} must use importer ${expected.importer} version ${expected.ver}.`)
       }
-      if (asset.endsWith('.png.meta')) {
+      if (asset.endsWith('.png.meta') || asset.endsWith('.webp.meta')) {
         const subMetas = parsed.subMetas && typeof parsed.subMetas === 'object'
           ? Object.values(parsed.subMetas)
           : []

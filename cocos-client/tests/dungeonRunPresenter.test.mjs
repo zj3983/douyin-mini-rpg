@@ -52,6 +52,8 @@ async function loadPresenter() {
     }
     export class UITransform { constructor() { this.width = 0; this.height = 0; this.anchorX = 0.5; this.anchorY = 0.5 } setContentSize(width, height) { this.width = width; this.height = height } setAnchorPoint(x, y) { this.anchorX = x; this.anchorY = y } }
     export class Label extends Renderable2D { static Overflow = { SHRINK: 2 }; constructor() { super(); this.string = ''; this.fontSize = 0; this.lineHeight = 0; this.color = null; this.overflow = null } }
+    export class SpriteFrame {}
+    export class Sprite extends Renderable2D { static SizeMode = { CUSTOM: 0 }; constructor() { super(); this.spriteFrame = null; this.sizeMode = Sprite.SizeMode.CUSTOM } }
     export class Graphics extends Renderable2D { constructor() { super(); this.drawCount = 0 } clear() {} roundRect() { this.drawCount += 1 } rect() { this.drawCount += 1 } fill() {} stroke() {} }
     export class Button { static EventType = { CLICK: 'click' }; constructor() { this.interactable = true; this.node = null } click() { if (!this.interactable) return false; this.node.emit(Button.EventType.CLICK); return true } }
     export class Color { constructor(r, g, b, a = 255) { Object.assign(this, { r, g, b, a }) } }
@@ -218,6 +220,40 @@ test('map buttons toggle the real overlay and controller pause, then unbind on d
   assert.deepEqual(sharedPauseCalls, [true, false, true, false])
   assert.equal(mapButton.listenerCount(api.Button.EventType.CLICK), 0)
   assert.equal(closeButton.listenerCount(api.Button.EventType.CLICK), 0)
+})
+
+test('dungeon command bar sends explicit search, door, altar, and extraction commands', async () => {
+  const api = await loadPresenter()
+  const { presenter, root } = createHarness(api)
+  const commands = []
+  presenter.onCommandRequested = (command) => commands.push(command)
+  presenter.setAvailableExit(null)
+
+  const bar = root.getChildByName('DungeonCommandBar')
+  const search = bar.getChildByName('DungeonSearchButton')
+  const door = bar.getChildByName('DungeonDoorButton')
+  const altar = bar.getChildByName('DungeonAltarButton')
+  const extraction = bar.getChildByName('DungeonExtractionButton')
+  assert.equal(door.active, false)
+
+  search.getComponent(api.Button).click()
+  altar.getComponent(api.Button).click()
+  extraction.getComponent(api.Button).click()
+  presenter.setAvailableExit('f1-entry-to-forest')
+  assert.equal(door.active, true)
+  door.getComponent(api.Button).click()
+
+  assert.deepEqual(commands, [
+    { type: 'search' },
+    { type: 'activate-altar' },
+    { type: 'begin-extraction' },
+    { type: 'choose-exit', exitId: 'f1-entry-to-forest' },
+  ])
+  presenter.onDestroy()
+  assert.equal(search.listenerCount(api.Button.EventType.CLICK), 0)
+  assert.equal(door.listenerCount(api.Button.EventType.CLICK), 0)
+  assert.equal(altar.listenerCount(api.Button.EventType.CLICK), 0)
+  assert.equal(extraction.listenerCount(api.Button.EventType.CLICK), 0)
 })
 
 test('SharedDropLayer owns a bounded moving pickup node pool that recycles nodes', async () => {
