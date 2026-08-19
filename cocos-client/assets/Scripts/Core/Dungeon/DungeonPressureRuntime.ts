@@ -3,6 +3,7 @@ import type { DungeonPressurePhase } from './DungeonTypes.ts'
 export const MAX_FRAME_DELTA_SECONDS = 0.1
 export const RESTLESS_AT_SECONDS = 120
 export const FRENZY_AT_SECONDS = 240
+export const MAX_ELAPSED_SECONDS = 1_000_000
 
 export interface DungeonPressureState {
   elapsedSeconds: number
@@ -26,15 +27,27 @@ function assertValidSeconds(seconds: number, name: string): void {
   }
 }
 
+function assertValidElapsedSeconds(seconds: number): void {
+  assertValidSeconds(seconds, 'elapsedSeconds')
+  if (seconds > MAX_ELAPSED_SECONDS) {
+    throw new TypeError(`elapsedSeconds must not exceed ${MAX_ELAPSED_SECONDS}`)
+  }
+}
+
 function assertValidState(state: DungeonPressureState): void {
-  assertValidSeconds(state.elapsedSeconds, 'elapsedSeconds')
+  assertValidElapsedSeconds(state.elapsedSeconds)
   if (state.phase !== pressurePhaseAt(state.elapsedSeconds)) {
     throw new TypeError('pressure phase does not match elapsedSeconds')
   }
 }
 
 function addSeconds(elapsedSeconds: number, seconds: number): number {
-  return Math.round((elapsedSeconds + seconds) * 1_000_000_000) / 1_000_000_000
+  const nextElapsedSeconds = elapsedSeconds + seconds
+  assertValidElapsedSeconds(nextElapsedSeconds)
+
+  const stableElapsedSeconds = Number(nextElapsedSeconds.toFixed(12))
+  assertValidElapsedSeconds(stableElapsedSeconds)
+  return stableElapsedSeconds
 }
 
 function eventsBetween(
@@ -63,7 +76,7 @@ function applyElapsedSeconds(
 }
 
 export function pressurePhaseAt(seconds: number): DungeonPressurePhase {
-  assertValidSeconds(seconds, 'seconds')
+  assertValidElapsedSeconds(seconds)
   if (seconds >= FRENZY_AT_SECONDS) return 'frenzy'
   if (seconds >= RESTLESS_AT_SECONDS) return 'restless'
   return 'calm'
@@ -81,6 +94,7 @@ export function advanceDungeonPressure(
   assertValidState(state)
   if (paused) return { events: [] }
   assertValidSeconds(deltaSeconds, 'deltaSeconds')
+  if (deltaSeconds === 0) return { events: [] }
   return {
     events: applyElapsedSeconds(state, Math.min(deltaSeconds, MAX_FRAME_DELTA_SECONDS)),
   }

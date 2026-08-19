@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   FRENZY_AT_SECONDS,
+  MAX_ELAPSED_SECONDS,
   MAX_FRAME_DELTA_SECONDS,
   RESTLESS_AT_SECONDS,
   advanceDungeonPressure,
@@ -100,4 +101,41 @@ test('snapshots are isolated from their source state', () => {
 
   assert.deepEqual(pressure, { elapsedSeconds: 0, phase: 'calm' })
   assert.notEqual(snapshot, pressure)
+})
+
+test('unsafe elapsed states are rejected atomically even while paused', () => {
+  for (const elapsedSeconds of [Number.MAX_VALUE, Number.MAX_SAFE_INTEGER]) {
+    const pressure = { elapsedSeconds, phase: 'frenzy' }
+    const before = structuredClone(pressure)
+
+    assert.throws(() => advanceDungeonPressure(pressure, 0, true), TypeError)
+    assert.deepEqual(pressure, before)
+  }
+})
+
+test('zero delta preserves sub-threshold elapsed time exactly', () => {
+  const pressure = { elapsedSeconds: 119.9999999996, phase: 'calm' }
+  const before = structuredClone(pressure)
+
+  assert.deepEqual(advanceDungeonPressure(pressure, 0, false), { events: [] })
+  assert.deepEqual(pressure, before)
+})
+
+test('advancement and search reject elapsed overflow atomically', () => {
+  const cases = [
+    {
+      pressure: { elapsedSeconds: MAX_ELAPSED_SECONDS - 0.05, phase: 'frenzy' },
+      run: (pressure) => advanceDungeonPressure(pressure, 0.1, false),
+    },
+    {
+      pressure: { elapsedSeconds: MAX_ELAPSED_SECONDS - 11, phase: 'frenzy' },
+      run: (pressure) => applySearchPressure(pressure, 12),
+    },
+  ]
+
+  for (const { pressure, run } of cases) {
+    const before = structuredClone(pressure)
+    assert.throws(() => run(pressure), TypeError)
+    assert.deepEqual(pressure, before)
+  }
 })
