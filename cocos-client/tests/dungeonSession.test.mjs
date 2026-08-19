@@ -146,10 +146,10 @@ test('sessions and searched loot are deeply isolated and rooms can be searched o
   assert.deepEqual(first.carriedLoot, [{ itemId: 'flying-sword', amount: 1 }])
   assert.deepEqual(searchRoom(first), { ok: false, reason: 'already-searched', loot: [], doorCurrencyGranted: 0 })
 
-  first.currentRoomId = 'missing-room'
+  first.map.currentRoomId = 'missing-room'
   assert.deepEqual(searchRoom(first), { ok: false, reason: 'missing-room', loot: [], doorCurrencyGranted: 0 })
   first.phase = 'defeated'
-  first.currentRoomId = 'f1-entry'
+  first.map.currentRoomId = 'f1-entry'
   assert.deepEqual(searchRoom(first), { ok: false, reason: 'inactive', loot: [], doorCurrencyGranted: 0 })
 })
 
@@ -199,16 +199,16 @@ test('profile validation accepts positive safe room currency and rejects invalid
   }
 })
 
-test('Core interaction searches and follows the first affordable exit', () => {
+test('Core interaction requires explicit commands and never auto-routes', () => {
   const run = createDungeonSession(makeProfile(), 13)
-  assert.equal(interactDungeonRun(run).type, 'searched')
-  assert.deepEqual(interactDungeonRun(run), {
-    type: 'moved',
-    fromRoomId: 'f1-entry',
-    roomId: 'f2-alchemy',
-  })
-  assert.equal(interactDungeonRun(run).type, 'searched')
-  assert.equal(interactDungeonRun(run).type, 'moved')
+  const before = JSON.stringify(run)
+  assert.deepEqual(interactDungeonRun(run), { accepted: false, reason: 'invalid-phase', events: [] })
+  assert.equal(JSON.stringify(run), before)
+
+  assert.equal(interactDungeonRun(run, { type: 'search' }).accepted, true)
+  assert.equal(interactDungeonRun(run, { type: 'choose-exit', exitId: 'entry-to-alchemy' }).accepted, true)
+  assert.equal(interactDungeonRun(run, { type: 'search' }).accepted, true)
+  assert.equal(interactDungeonRun(run, { type: 'choose-exit', exitId: 'alchemy-to-gate' }).accepted, true)
   assert.equal(run.currentRoomId, 'f3-gate')
   assert.equal(run.phase, 'exploring')
 })

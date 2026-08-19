@@ -107,6 +107,7 @@ test('one deterministic run searches, pays, triggers both hunts, and extracts ea
 
   applyPursuerDamage(run, 999)
   chooseDungeonExit(run, 'f1-forest-to-floor2')
+  searchCurrentRoom(run)
   const second = beginSecondPursuit(run)
   assert.equal(second.accepted, true)
   assert.equal(run.pursuer.phase, 'second-hunt')
@@ -117,6 +118,22 @@ test('one deterministic run searches, pays, triggers both hunts, and extracts ea
   advanceTicks(run, 30)
   assert.equal(run.phase, 'extracted')
   assert.equal(run.pursuer.phase, 'second-repelled')
+})
+
+test('second pursuit seals a reachable exit on the current floor before older routes', () => {
+  const run = makeRun(42)
+  chooseDungeonExit(run, 'f1-entry-to-forest')
+  advanceTicks(run, 1200)
+  applyPursuerDamage(run, 999)
+  chooseDungeonExit(run, 'f1-forest-to-floor2')
+  assert.equal(run.map.currentRoomId, 'f2-bridge-combat')
+
+  const result = beginSecondPursuit(run)
+  const sealed = result.events.find((event) => event.type === 'route-sealed')
+  assert.ok(sealed)
+  const sourceRoom = profile.rooms.find((room) => room.exits.some((exit) => exit.id === sealed.exitId))
+  assert.equal(sourceRoom.floor, 2)
+  assert.equal(sourceRoom.id, 'f2-bridge-combat')
 })
 
 test('paused frames advance neither pressure nor extraction and elite damage returns to exploring', () => {
@@ -266,6 +283,24 @@ test('checkpoint shape and profile restoration reject corrupted identity and run
       ...checkpoint,
       pressure: { elapsedSeconds: 120, phase: 'restless' },
     },
+    {
+      ...checkpoint,
+      phase: 'defeated',
+      carriedLoot: [{ itemId: 'mist-herb', amount: 1 }],
+    },
+    {
+      ...checkpoint,
+      phase: 'abandoned',
+      carriedLoot: [{ itemId: 'mist-herb', amount: 1 }],
+    },
+    {
+      ...checkpoint,
+      pursuer: {
+        ...checkpoint.pursuer,
+        phase: 'first-hunt',
+        shield: checkpoint.pursuer.firstShieldMax,
+      },
+    },
   ]
   for (const candidate of malformed) assert.throws(() => validateDungeonCheckpointShape(candidate), TypeError)
 
@@ -298,6 +333,7 @@ test('restoration rejects dead-end seals and cross-runtime contradictions', () =
   assert.throws(() => restoreDungeonSession(profile, missedFirstHunt), /pursuer|pressure/i)
 
   const defeatedButLocked = structuredClone(checkpoint)
+  defeatedButLocked.pressure = { elapsedSeconds: 120, phase: 'restless' }
   defeatedButLocked.pursuer = {
     ...defeatedButLocked.pursuer,
     phase: 'defeated',

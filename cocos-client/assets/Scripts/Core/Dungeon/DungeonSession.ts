@@ -522,10 +522,36 @@ function deterministicSealCandidate(run: DungeonRun): string | null {
       room.exits.filter((exit) => exit.unlock === 'boss-defeat').map((exit) => exit.id),
     ),
   )
-  const candidates = run.profile.rooms
-    .flatMap((room) => room.exits.map((exit) => exit.id))
-    .filter((exitId) => !initiallyLocked.has(exitId) && !run.map.sealedExitIds.includes(exitId))
+  const sealedExitIds = new Set(run.map.sealedExitIds)
+  const reachableRoomIds = new Set<string>()
+  const pending = [run.map.currentRoomId]
+  while (pending.length > 0) {
+    const roomId = pending.shift() as string
+    if (reachableRoomIds.has(roomId)) continue
+    reachableRoomIds.add(roomId)
+    const room = roomById(run.profile, roomId)
+    for (const exit of room?.exits ?? []) {
+      if (!sealedExitIds.has(exit.id) && !reachableRoomIds.has(exit.to)) pending.push(exit.to)
+    }
+  }
+
+  const currentRoom = roomById(run.profile, run.map.currentRoomId)
+  if (!currentRoom) return null
+  const eligibleExitIds = (room: DungeonRoom) => room.exits
+    .filter((exit) => !initiallyLocked.has(exit.id) && !sealedExitIds.has(exit.id))
+    .map((exit) => exit.id)
     .sort()
+  const sameFloorRooms = run.profile.rooms
+    .filter((room) =>
+      room.floor === currentRoom.floor &&
+      room.id !== currentRoom.id &&
+      reachableRoomIds.has(room.id),
+    )
+    .sort((left, right) => left.id.localeCompare(right.id))
+  const candidates = [
+    ...eligibleExitIds(currentRoom),
+    ...sameFloorRooms.flatMap(eligibleExitIds),
+  ]
   for (const exitId of candidates) {
     const result = sealRoute(run.map, run.profile, exitId)
     if (result.ok) return exitId
@@ -657,13 +683,18 @@ export function validateDungeonCheckpointShape(value: unknown): asserts value is
       ? extraction.phase === 'completed'
       : extraction.phase === 'idle'
   if (!extractionPhaseMatches) throw new TypeError('Dungeon phase and extraction state are inconsistent')
-  if (checkpoint.pressure.phase !== 'calm' && checkpoint.pursuer.phase === 'dormant') {
+  const pressureIsCalm = checkpoint.pressure.phase === 'calm'
+  const pursuerIsDormant = checkpoint.pursuer.phase === 'dormant'
+  if (pressureIsCalm !== pursuerIsDormant) {
     throw new TypeError('Dungeon pressure and pursuer state are inconsistent')
   }
   if (invalidInteger(checkpoint.doorCurrency, true)) throw new TypeError('Dungeon door currency is invalid')
   assertCanonicalIdArray(checkpoint.searchedRoomIds, 'searchedRoomIds')
   assertLootArray(checkpoint.carriedLoot, 'carriedLoot')
   assertLootArray(checkpoint.boundLoot, 'boundLoot')
+  if ((checkpoint.phase === 'defeated' || checkpoint.phase === 'abandoned') && checkpoint.carriedLoot.length > 0) {
+    throw new TypeError('Failed dungeon checkpoints cannot retain carried loot')
+  }
   if (invalidInteger(checkpoint.eventSequence, true)) throw new TypeError('Dungeon event sequence is invalid')
 }
 
