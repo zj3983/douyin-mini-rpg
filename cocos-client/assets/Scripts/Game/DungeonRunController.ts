@@ -140,17 +140,20 @@ export class DungeonRunController extends Component {
   }
 
   applyCommand(command: DungeonCommand): DungeonCommandResult | ControllerRejected {
+    if (this.pendingTerminalResult) return rejected('terminal-pending')
     if (this.isPaused()) return rejected('paused')
     return this.mutate((candidate) => applyDungeonCommand(candidate, command))
   }
 
   handleEffectiveDamage(hit: { sourceRole: 'ordinary' | 'elite' | 'boss'; effectiveDamage: number }): DungeonCommandResult | ControllerRejected {
+    if (this.pendingTerminalResult) return rejected('terminal-pending')
     if (this.isPaused()) return rejected('paused')
     if (!Number.isFinite(hit?.effectiveDamage) || hit.effectiveDamage <= 0) return rejected('ineffective-damage')
     return this.mutate((candidate) => interruptDungeonRun(candidate, hit))
   }
 
   handleBattleCompleted(result: DungeonBattleCompletion): DungeonCommandResult | ControllerRejected {
+    if (this.pendingTerminalResult) return rejected('terminal-pending')
     if (this.isPaused()) return rejected('paused')
     if (result?.type === 'pursuer-damage') {
       if (!Number.isFinite(result.effectiveDamage) || result.effectiveDamage <= 0) return rejected('ineffective-damage')

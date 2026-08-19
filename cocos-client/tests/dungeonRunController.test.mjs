@@ -253,6 +253,55 @@ test('terminal extraction is manually acknowledged and carries a cloned authorit
   assert.equal(controller.hasRun(), false)
 })
 
+test('pending extraction settlement locks every late gameplay mutation until acknowledgement', async () => {
+  const { DungeonRunController } = await loadController()
+  const controller = createReadyController(DungeonRunController)
+  const saved = []
+  controller.onCheckpoint = (checkpoint) => {
+    saved.push(clone(checkpoint))
+    return true
+  }
+  assert.equal(controller.begin(35), true)
+  for (const exitId of ['f1-entry-to-forest', 'f1-forest-to-floor2', 'f2-bridge-to-exit']) {
+    assert.equal(controller.applyCommand({ type: 'choose-exit', exitId }).accepted, true)
+  }
+  assert.equal(controller.applyCommand({ type: 'begin-extraction' }).accepted, true)
+  for (let index = 0; index < 40; index += 1) controller.update(0.1)
+
+  const terminalCheckpoint = controller.checkpoint()
+  const saveCount = saved.length
+  assert.equal(terminalCheckpoint.phase, 'extracted')
+  const lateMutations = [
+    controller.handleBattleCompleted({ type: 'player-defeated' }),
+    controller.handleBattleCompleted({ type: 'pursuer-damage', effectiveDamage: 40 }),
+    controller.applyCommand({ type: 'abandon' }),
+    controller.handleEffectiveDamage({ sourceRole: 'boss', effectiveDamage: 25 }),
+  ]
+  for (const result of lateMutations) {
+    assert.deepEqual(result, { accepted: false, reason: 'terminal-pending', events: [] })
+    assert.deepEqual(controller.checkpoint(), terminalCheckpoint)
+  }
+  controller.update(1)
+  assert.deepEqual(controller.checkpoint(), terminalCheckpoint)
+  assert.equal(saved.length, saveCount)
+
+  const delivered = []
+  controller.onTerminalResult = (result) => {
+    delivered.push(clone(result))
+    return true
+  }
+  assert.equal(controller.acknowledgeTerminalResult(), true)
+  assert.deepEqual(delivered, [{
+    type: 'dungeon-extracted',
+    runId: terminalCheckpoint.runId,
+    loot: terminalCheckpoint.carriedLoot,
+    exitKind: terminalCheckpoint.extraction.roomId === loadProfile().finalExtractionRoomId ? 'full' : 'damaged',
+    explorationRate: Number((new Set(terminalCheckpoint.map.revealedRoomIds).size / loadProfile().rooms.length).toFixed(6)),
+    bossDefeated: false,
+  }])
+  assert.equal(controller.hasRun(), false)
+})
+
 test('dual-mode controller uses V4 storage, binds checkpoint and terminal callbacks, and repairs failed restore', () => {
   const source = readFileSync(resolve('assets/Scripts/Game/DualModeGameController.ts'), 'utf8')
   assert.match(source, /cultivation-save-v4/)
