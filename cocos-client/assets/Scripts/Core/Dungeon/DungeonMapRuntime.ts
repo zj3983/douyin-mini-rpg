@@ -79,29 +79,47 @@ export function enterMappedRoom(
   return { ok: true as const, currency: currency - exit.cost }
 }
 
-function canReachExtraction(
+function allReachableRoomsCanExtract(
   map: DungeonMapState,
   profile: DungeonProfile,
   sealedExitIds: ReadonlySet<string>,
 ): boolean {
-  const extractionRoomIds = new Set(profile.extractionRoomIds)
   const roomsById = new Map(profile.rooms.map((room) => [room.id, room]))
-  const visited = new Set<string>()
-  const pending = [map.currentRoomId]
+  const reachableFromCurrent = new Set<string>()
+  const forwardPending = [map.currentRoomId]
 
-  while (pending.length > 0) {
-    const roomId = pending.shift() as string
-    if (visited.has(roomId)) continue
-    if (extractionRoomIds.has(roomId)) return true
-    visited.add(roomId)
+  while (forwardPending.length > 0) {
+    const roomId = forwardPending.shift() as string
+    if (reachableFromCurrent.has(roomId)) continue
+    reachableFromCurrent.add(roomId)
 
     const room = roomsById.get(roomId)
     for (const exit of room?.exits ?? []) {
-      if (!sealedExitIds.has(exit.id) && !visited.has(exit.to)) pending.push(exit.to)
+      if (!sealedExitIds.has(exit.id) && !reachableFromCurrent.has(exit.to)) {
+        forwardPending.push(exit.to)
+      }
     }
   }
 
-  return false
+  const reverseExits = new Map(profile.rooms.map((room) => [room.id, [] as string[]]))
+  for (const room of profile.rooms) {
+    for (const exit of room.exits) {
+      if (!sealedExitIds.has(exit.id)) reverseExits.get(exit.to)?.push(room.id)
+    }
+  }
+
+  const canExtract = new Set<string>()
+  const reversePending = [...profile.extractionRoomIds]
+  while (reversePending.length > 0) {
+    const roomId = reversePending.shift() as string
+    if (canExtract.has(roomId)) continue
+    canExtract.add(roomId)
+    for (const previousRoomId of reverseExits.get(roomId) ?? []) {
+      if (!canExtract.has(previousRoomId)) reversePending.push(previousRoomId)
+    }
+  }
+
+  return [...reachableFromCurrent].every((roomId) => canExtract.has(roomId))
 }
 
 export function sealRoute(map: DungeonMapState, profile: DungeonProfile, exitId: string) {
@@ -111,7 +129,7 @@ export function sealRoute(map: DungeonMapState, profile: DungeonProfile, exitId:
 
   const candidateSeals = new Set(map.sealedExitIds)
   candidateSeals.add(exitId)
-  if (!canReachExtraction(map, profile, candidateSeals)) {
+  if (!allReachableRoomsCanExtract(map, profile, candidateSeals)) {
     return { ok: false as const, reason: 'would-strand-player' as const }
   }
 

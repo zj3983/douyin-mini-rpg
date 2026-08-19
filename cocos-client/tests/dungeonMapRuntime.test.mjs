@@ -123,6 +123,18 @@ test('safe route sealing refuses the final extraction path', () => {
   assert.deepEqual(snapshotDungeonMap(map), before)
 })
 
+test('route sealing rejects a reachable room that cannot return to extraction', () => {
+  const profile = makeProfile()
+  const map = createDungeonMap(profile)
+  const before = snapshotDungeonMap(map)
+
+  assert.deepEqual(sealRoute(map, profile, 'f1-alchemy-to-forest'), {
+    ok: false,
+    reason: 'would-strand-player',
+  })
+  assert.deepEqual(snapshotDungeonMap(map), before)
+})
+
 test('route sealing rejects unknown exits and is idempotent', () => {
   const profile = makeProfile()
   const map = createDungeonMap(profile)
