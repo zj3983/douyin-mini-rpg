@@ -20,6 +20,13 @@ import {
 test('generic Boss attack resolves to an action present in its atlas', () => {
   assert.equal(resolveActorVisualAction('bamboo-warden', 'attack'), 'sweep')
   assert.equal(resolveActorVisualAction('mist-bamboo-emperor', 'attack'), 'sweep')
+  assert.equal(resolveActorVisualAction('bamboo-warden', 'boss-sweep-telegraph'), 'sweep')
+  assert.equal(resolveActorVisualAction('bamboo-warden', 'boss-sweep-active'), 'sweep')
+  assert.equal(resolveActorVisualAction('bamboo-warden', 'boss-spikes-telegraph'), 'spikes')
+  assert.equal(resolveActorVisualAction('bamboo-warden', 'boss-spikes-active'), 'spikes')
+  assert.equal(resolveActorVisualAction('bamboo-warden', 'boss-roar-telegraph'), 'roar')
+  assert.equal(resolveActorVisualAction('bamboo-warden', 'boss-roar-active'), 'roar')
+  assert.equal(resolveActorVisualAction('bamboo-warden', 'boss-recovery'), 'idle')
   assert.equal(resolveActorVisualAction('bamboo-warden', 'hurt'), 'hurt')
   assert.equal(resolveActorVisualAction('moss-wolf', 'attack'), 'attack')
 })

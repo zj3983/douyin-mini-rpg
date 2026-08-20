@@ -330,10 +330,7 @@ export class EnemyController extends Component {
     this.neighborSnapshotCache = null
   }
 
-  private bossPresentationAction(action: string): 'idle' | 'move' | 'attack' | 'hurt' | 'death' {
-    if (action === 'boss-death') return 'death'
-    if (action === 'boss-hurt' || action === 'boss-interrupted') return 'hurt'
-    if (action === 'boss-recovery') return 'idle'
-    return 'attack'
+  private bossPresentationAction(action: string): string {
+    return action
   }
 }

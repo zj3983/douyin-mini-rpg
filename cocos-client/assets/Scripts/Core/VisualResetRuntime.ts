@@ -103,7 +103,14 @@ export function setVisualActionState(state: VisualResetState, action: string): V
 }
 
 export function resolveActorVisualAction(actorId: string | null, action: string): string {
-  if ((actorId === 'bamboo-warden' || actorId === 'mist-bamboo-emperor') && action === 'attack') return 'sweep'
+  if (actorId === 'bamboo-warden' || actorId === 'mist-bamboo-emperor') {
+    if (action === 'attack' || action.startsWith('boss-sweep-')) return 'sweep'
+    if (action.startsWith('boss-spikes-')) return 'spikes'
+    if (action.startsWith('boss-roar-')) return 'roar'
+    if (action === 'boss-recovery') return 'idle'
+    if (action === 'boss-hurt' || action === 'boss-interrupted') return 'hurt'
+    if (action === 'boss-death') return 'death'
+  }
   if ((actorId === 'fog-spider' || actorId === 'mist-deer-king') && action === 'telegraph') return 'attack'
   if (actorId === 'lantern-wraith' && (action === 'dive' || action === 'cast' || action === 'telegraph')) return 'attack'
   return action

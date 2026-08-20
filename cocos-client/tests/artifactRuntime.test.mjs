@@ -42,6 +42,16 @@ test('flying sword selects the nearest alive target and starts with a hand seal'
   assert.equal(commandsOf('spawn-sword', commands)[0].targetId, 'near')
 })
 
+test('level-one flying sword reaches a distant boss instead of returning early', () => {
+  const runtime = createArtifactRuntime({ artifactId: 'flying-sword', level: 1, ownerId: 'player' })
+  const boss = target('boss', 230, 220)
+
+  const commands = advance(runtime, [boss], 240, 1 / 60, { x: -210, y: -80 })
+
+  assert.ok(commandsOf('resolve-sword-hit', commands)
+    .some((command) => command.targetId === 'boss' && command.phase === 'outbound'))
+})
+
 test('outbound sword steering is curved and remains above the battle floor at close range', () => {
   const runtime = createArtifactRuntime({ artifactId: 'flying-sword', level: 1, ownerId: 'player' })
   stepArtifact(runtime, context([target('close', 24, -180)]), 1 / 60)

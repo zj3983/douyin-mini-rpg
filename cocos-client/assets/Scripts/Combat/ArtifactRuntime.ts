@@ -145,10 +145,14 @@ function createPath(
     x: Math.max(24, target.position.x - origin.x),
     y: target.position.y >= origin.y ? directionBias : -directionBias * 0.55,
   }
+  const targetDistance = Math.hypot(target.position.x - origin.x, target.position.y - origin.y)
   const state = createHomingSword(origin, initialDirection, {
     speed: SWORD_SPEED,
     maxTurnRadians: SWORD_TURN_RADIANS,
-    maxOutboundDistance: SWORD_DISTANCE + Math.abs(offset.y) * 0.8,
+    maxOutboundDistance: Math.max(
+      SWORD_DISTANCE + Math.abs(offset.y) * 0.8,
+      targetDistance + SWORD_HIT_RADIUS * 2,
+    ),
     returnRadius: SWORD_RETURN_RADIUS,
   })
   state.targetId = target.id
