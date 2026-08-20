@@ -40,11 +40,48 @@ const talismans = ['sweep', 'spike', 'roar'].map((name) => {
     resourcePath: `Assets/Skills/BossDomain/talisman_${name}/spriteFrame`,
   }
 })
+const h3ActorIds = new Set(['qinglan-sword-cultivator', 'moss-wolf'])
+const h3Manifest = JSON.parse(readFileSync(resolve('assets/resources/Data/animation-atlas.json'), 'utf8'))
+const h3ManifestUuid = JSON.parse(
+  readFileSync(resolve('assets/resources/Data/animation-atlas.json.meta'), 'utf8'),
+).uuid
+const h3AtlasAssets = [...new Set(
+  h3Manifest.actors
+    .filter(({ id }) => h3ActorIds.has(id))
+    .flatMap(({ actions }) => actions.map(({ atlas }) => atlas)),
+)].map((atlas) => {
+  const sourcePath = resolve('assets/resources', atlas)
+  const uuid = JSON.parse(readFileSync(`${sourcePath}.meta`, 'utf8')).uuid
+  return { atlas, sourcePath, uuid }
+})
 
 function writeFixture(root, path, source) {
   const target = join(root, path)
   mkdirSync(dirname(target), { recursive: true })
   writeFileSync(target, source)
+}
+
+function writeH3AnimationFixture(root, manifest = h3Manifest) {
+  writeFixture(
+    root,
+    `assets/resources/import/${h3ManifestUuid.slice(0, 2)}/${h3ManifestUuid}.json`,
+    JSON.stringify([manifest]),
+  )
+  for (const asset of h3AtlasAssets) {
+    writeFixture(
+      root,
+      `assets/resources/native/${asset.uuid.slice(0, 2)}/${asset.uuid}.png`,
+      readFileSync(asset.sourcePath),
+    )
+  }
+}
+
+function reverseObjectKeys(value) {
+  if (Array.isArray(value)) return value.map(reverseObjectKeys)
+  if (!value || typeof value !== 'object') return value
+  return Object.fromEntries(
+    Object.entries(value).reverse().map(([key, child]) => [key, reverseObjectKeys(child)]),
+  )
 }
 
 function writeBossTalismanFixture(root, {
@@ -83,6 +120,7 @@ function writeCompleteFixture(root, mainIndex = validMainIndex) {
   writeFixture(root, 'assets/main/index.js', mainIndex)
   writeFixture(root, 'assets/main/import/main-battle.json', `["MainBattle","${classId}"]`)
   writeBossTalismanFixture(root)
+  writeH3AnimationFixture(root)
 }
 
 test('build-output check accepts Cocos production filename hashes', () => {
@@ -108,6 +146,7 @@ test('build-output check accepts Cocos production filename hashes', () => {
     )
   }
   writeFixture(buildRoot, 'assets/resources/config.f5a6b.json', JSON.stringify({ uuids, paths }))
+  writeH3AnimationFixture(buildRoot)
 
   const report = checkCocosBuildOutput({ buildRoot, projectRoot })
 
@@ -192,6 +231,46 @@ test('build-output check rejects missing boss talisman import and native artifac
   assert.equal(report.ok, false)
   assert.equal(report.errors.some((error) => error.includes('talisman_sweep') && error.includes('import')), true)
   assert.equal(report.errors.some((error) => error.includes('talisman_spike') && error.includes('native')), true)
+})
+
+test('build-output check rejects output without the promoted H3 animation contract', () => {
+  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-missing-h3-runtime-'))
+  writeCompleteFixture(buildRoot)
+  writeH3AnimationFixture(buildRoot, {
+    ...h3Manifest,
+    actors: h3Manifest.actors.filter(({ id }) => !h3ActorIds.has(id)),
+  })
+
+  const report = checkCocosBuildOutput({ buildRoot, projectRoot })
+
+  assert.equal(report.ok, false)
+  assert.equal(report.errors.some((error) => error.includes('H3 animation')), true)
+})
+
+test('build-output check accepts Cocos key reordering in the promoted H3 manifest', () => {
+  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-reordered-h3-runtime-'))
+  writeCompleteFixture(buildRoot)
+  writeH3AnimationFixture(buildRoot, reverseObjectKeys(h3Manifest))
+
+  const report = checkCocosBuildOutput({ buildRoot, projectRoot })
+
+  assert.equal(report.ok, true, report.errors.join('\n'))
+})
+
+test('build-output check rejects a promoted H3 atlas whose bytes are stale', () => {
+  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-stale-h3-atlas-'))
+  writeCompleteFixture(buildRoot)
+  const stale = h3AtlasAssets.find(({ atlas }) => atlas.endsWith('/MossWolf/attack.png'))
+  writeFixture(
+    buildRoot,
+    `assets/resources/native/${stale.uuid.slice(0, 2)}/${stale.uuid}.png`,
+    'stale-atlas',
+  )
+
+  const report = checkCocosBuildOutput({ buildRoot, projectRoot })
+
+  assert.equal(report.ok, false)
+  assert.equal(report.errors.some((error) => error.includes('H3 atlas bytes') && error.includes(stale.atlas)), true)
 })
 
 test('build-output check rejects the Cocos Map iterator spread regression', () => {

@@ -946,6 +946,22 @@ test('accepted H3 extraction reports match the final manifest and checked-in fra
   }
 })
 
+test('accepted H3 extraction reports use portable LF checkout bytes', () => {
+  const attributes = readFileSync(resolve(projectRoot, '.gitattributes'), 'utf8')
+  assert.match(
+    attributes,
+    /^artifacts\/h3-animation-pilot\/\*\/extraction-report\.json text eol=lf$/m,
+  )
+
+  for (const relativePath of [
+    'artifacts/h3-animation-pilot/20260820-h3-pilot-r4-qinglan-motion/extraction-report.json',
+    'artifacts/h3-animation-pilot/20260820-h3-pilot-r4-wolf-motion/extraction-report.json',
+  ]) {
+    const bytes = readFileSync(resolve(projectRoot, relativePath))
+    assert.equal(bytes.includes(Buffer.from('\r\n')), false, `${relativePath} contains CRLF bytes`)
+  }
+})
+
 test('H3 animation pilot prompts are complete conditioned single-shot action contracts', () => {
   const pilot = JSON.parse(readFileSync(manifestPath, 'utf8'))
   const expectedPromptPaths = expectedJobs.map(({ prompt }) => prompt)

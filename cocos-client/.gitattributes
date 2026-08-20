@@ -1,1 +1,2 @@
 artifacts/animation-candidates/**/*.json text eol=lf
+artifacts/h3-animation-pilot/*/extraction-report.json text eol=lf

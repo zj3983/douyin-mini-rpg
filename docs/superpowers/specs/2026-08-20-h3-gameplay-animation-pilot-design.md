@@ -15,7 +15,7 @@ The pilot does not regenerate portraits, backgrounds, effects, other monsters, o
 
 ## Generation Strategy
 
-Each action is generated as an independent five-second H3 Ref2V job. Existing approved character art is supplied as the identity reference. Prompts require a locked side-view camera, fixed subject scale, no camera movement, no scene translation, readable limb motion, and an uncluttered removable background.
+Each action is generated as an independent five-second H3 FL2V job. An early Ref2V trial was rejected because it introduced Qinglan identity and gender drift. The accepted pipeline therefore uses the approved character art as an exact first frame, with a matching last frame for looped or boundary-sensitive motion and first-frame conditioning for one-shot actions. Prompts require a locked side-view camera, fixed subject scale, no camera movement, no scene translation, readable limb motion, and an uncluttered removable background.
 
 The character must retain face, hair, costume, weapon, body proportions, and dominant colors. The wolf must retain species silhouette, markings, leg count, tail, and head shape. The action must be physically legible at gameplay scale:
 
@@ -82,4 +82,4 @@ Verification includes:
 
 ## Rollout
 
-The pilot is released behind the existing actor atlas identifiers, so no save migration is required. After approval, the same per-action Ref2V process is applied by species and combat role to flying monsters, humanoid enemies, and bosses. Each later batch has its own contact sheet and acceptance record; the pilot does not authorize blind bulk generation.
+The pilot is released behind the existing actor atlas identifiers, so no save migration is required. After approval, the same per-action FL2V process is applied by species and combat role to flying monsters, humanoid enemies, and bosses. Each later batch has its own contact sheet and acceptance record; the pilot does not authorize blind bulk generation.

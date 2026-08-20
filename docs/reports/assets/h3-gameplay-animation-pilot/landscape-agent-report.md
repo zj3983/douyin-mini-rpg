@@ -1,0 +1,31 @@
+# Cocos Dungeon Agent: balanced
+
+- Viewport: 844x390
+- P95 frame: 7.00ms
+- Performance phase: 追击真实战斗
+- Minimum sampled FPS: 140.8
+- Result: PASS
+
+- [x] Cocos 画布完整显示: {"found":true,"left":0,"top":0,"right":844,"bottom":390,"width":844,"height":390,"viewportWidth":844,"viewportHeight":390,"intrinsicWidth":844,"intrinsicHeight":390}
+- [x] Cocos 画面未拉伸: intrinsic=2.164, css=2.164
+- [x] 副本美术资源加载完成: {"state":"ready"}
+- [x] 进入 Cocos 副本: balanced
+- [x] 副本功能区完整显示: {"hud":{"left":16,"right":756,"top":16,"bottom":93.99999999999999,"width":740,"height":78},"mapButton":{"left":772,"right":828,"top":16,"bottom":71.99999999999999,"width":56,"height":56},"interaction":{"left":162,"right":682,"top":227.8,"bottom":298,"width":520,"height":70.2},"commandBar":{"left":102,"right":742,"top":314,"bottom":374,"width":640,"height":60.00000000000001},"settlement":{"left":97,"right":747,"top":58.50000000000003,"bottom":331.5,"width":650,"height":272.99999999999994}}
+- [x] 副本触控尺寸可用: map=56.0x56.0, command=60.0
+- [x] 地图按钮可点击并暂停: 1.0485 -> 1.0485
+- [x] 真实按钮进入首个房间: f1-forest-combat
+- [x] 搜索雾竹林: {"type":"search"}
+- [x] 通过路线 f1-forest-to-sealed-cache: {"type":"choose-exit","exitId":"f1-forest-to-sealed-cache"}
+- [x] 搜索封印宝库: {"type":"search"}
+- [x] 通过路线 f1-sealed-cache-to-forest: {"type":"choose-exit","exitId":"f1-sealed-cache-to-forest"}
+- [x] 通过路线 f1-forest-to-alchemy: {"type":"choose-exit","exitId":"f1-forest-to-alchemy"}
+- [x] 搜索炼丹遗址: {"type":"search"}
+- [x] 通过路线 f1-alchemy-to-forest: {"type":"choose-exit","exitId":"f1-alchemy-to-forest"}
+- [x] Cocos 帧时间: P95 7.00ms, min 140.8 FPS, dropped 0
+- [x] 性能采样阶段: 追击真实战斗
+- [x] 通过路线 f1-forest-to-floor2: {"type":"choose-exit","exitId":"f1-forest-to-floor2"}
+- [x] 通过路线 f2-bridge-to-exit: {"type":"choose-exit","exitId":"f2-bridge-to-exit"}
+- [x] 开始三秒撤离: {"type":"begin-extraction"}
+- [x] 副本完成撤离: f2-damaged-exit -> extracted
+- [x] 真实按钮关闭结算: true
+- [x] 运行时无错误: console=0, page=0, request=0

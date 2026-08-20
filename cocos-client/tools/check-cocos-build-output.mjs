@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isDeepStrictEqual } from 'node:util'
 import { checkCocosBuildReadiness } from './check-cocos-build-readiness.mjs'
 
 const base64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
@@ -16,6 +17,7 @@ const dungeonCompiledMarkers = [
   'DungeonRunPresenter',
   'DungeonResourceController',
 ]
+const h3ActorIds = ['qinglan-sword-cultivator', 'moss-wolf']
 
 function compressUuid(uuid, prefixLength) {
   const hex = uuid.replaceAll('-', '')
@@ -52,6 +54,89 @@ function findBuildFile(directory, basename, extension) {
     .map((entry) => entry.name)
     .find((name) => name === exactName || (name.startsWith(hashedPrefix) && name.endsWith(extension)))
     ?? null
+}
+
+function findEmbeddedAnimationManifest(value) {
+  if (!value || typeof value !== 'object') return null
+  if (
+    value.version === 2
+    && value.framePacking === 'vertical-slice-action-atlases'
+    && Array.isArray(value.actors)
+  ) return value
+  for (const child of Array.isArray(value) ? value : Object.values(value)) {
+    const found = findEmbeddedAnimationManifest(child)
+    if (found) return found
+  }
+  return null
+}
+
+function checkH3AnimationOutput({ projectRoot, resourcesRoot, errors }) {
+  const sourceManifestPath = resolve(projectRoot, 'assets/resources/Data/animation-atlas.json')
+  const manifestMetaPath = `${sourceManifestPath}.meta`
+  if (!existsSync(sourceManifestPath) || !existsSync(manifestMetaPath)) {
+    errors.push(`missing H3 animation manifest or meta: ${sourceManifestPath}`)
+    return
+  }
+
+  let sourceManifest
+  let manifestUuid
+  try {
+    sourceManifest = JSON.parse(readFileSync(sourceManifestPath, 'utf8'))
+    manifestUuid = JSON.parse(readFileSync(manifestMetaPath, 'utf8')).uuid
+  } catch (error) {
+    errors.push(`invalid H3 animation manifest or meta: ${error.message}`)
+    return
+  }
+
+  const manifestImportRoot = join(resourcesRoot, 'import', manifestUuid.slice(0, 2))
+  const manifestImportName = findBuildFile(manifestImportRoot, manifestUuid, '.json')
+  let builtManifest = null
+  if (!manifestImportName) {
+    errors.push(`built H3 animation manifest is missing in: ${manifestImportRoot}`)
+  } else {
+    try {
+      builtManifest = findEmbeddedAnimationManifest(
+        JSON.parse(readFileSync(join(manifestImportRoot, manifestImportName), 'utf8')),
+      )
+    } catch (error) {
+      errors.push(`invalid built H3 animation manifest: ${error.message}`)
+    }
+  }
+
+  const sourceActors = sourceManifest.actors?.filter(({ id }) => h3ActorIds.includes(id)) ?? []
+  const builtActors = builtManifest?.actors?.filter(({ id }) => h3ActorIds.includes(id)) ?? []
+  if (!isDeepStrictEqual(builtActors, sourceActors)) {
+    errors.push('built H3 animation contract differs from the promoted source manifest')
+  }
+
+  const atlasPaths = [...new Set(
+    sourceActors.flatMap(({ actions }) => actions.map(({ atlas }) => atlas)),
+  )]
+  for (const atlasPath of atlasPaths) {
+    const sourcePath = resolve(projectRoot, 'assets/resources', atlasPath)
+    const metaPath = `${sourcePath}.meta`
+    if (!existsSync(sourcePath) || !existsSync(metaPath)) {
+      errors.push(`missing H3 atlas or meta: ${atlasPath}`)
+      continue
+    }
+
+    let uuid
+    try {
+      uuid = JSON.parse(readFileSync(metaPath, 'utf8')).uuid
+    } catch (error) {
+      errors.push(`invalid H3 atlas meta ${atlasPath}: ${error.message}`)
+      continue
+    }
+    const nativeRoot = join(resourcesRoot, 'native', uuid.slice(0, 2))
+    const nativeName = findBuildFile(nativeRoot, uuid, extname(sourcePath))
+    if (!nativeName) {
+      errors.push(`built H3 atlas is missing: ${atlasPath}`)
+      continue
+    }
+    if (!readFileSync(sourcePath).equals(readFileSync(join(nativeRoot, nativeName)))) {
+      errors.push(`built H3 atlas bytes differ from source: ${atlasPath}`)
+    }
+  }
 }
 
 export function checkCocosBuildOutput({ buildRoot, projectRoot = process.cwd() }) {
@@ -137,6 +222,8 @@ export function checkCocosBuildOutput({ buildRoot, projectRoot = process.cwd() }
       if (!nativeName) errors.push(`built ${assetName} native artifact is missing in: ${nativeRoot}`)
     }
   }
+
+  checkH3AnimationOutput({ projectRoot, resourcesRoot, errors })
 
   const sceneFile = collectFiles(join(resolvedBuildRoot, 'assets/main/import'))
     .filter((path) => path.endsWith('.json'))

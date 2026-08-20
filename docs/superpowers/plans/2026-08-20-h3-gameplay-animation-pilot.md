@@ -4,9 +4,11 @@
 
 **Goal:** Generate nine approved Qinglan sword cultivator and moss wolf action videos with the existing local MiniMax H3 service, convert them into stable PNG animation atlases, and verify the new motion in the Cocos game.
 
-**Architecture:** A checked-in pilot manifest and H3 prompt set define reproducible Ref2V jobs. A restart-safe Python client submits and downloads source MP4 files to ignored artifacts, while a separate deterministic extractor selects authored frames into the existing `art-source/vertical-slice` tree. The existing atlas builder validates and promotes only complete candidates, and the current `AtlasAnimator` remains the runtime playback path.
+**Architecture:** A checked-in pilot manifest and H3 prompt set define reproducible FL2V jobs. A restart-safe Python client submits and downloads source MP4 files to ignored artifacts, while a separate deterministic extractor selects authored frames into the existing `art-source/vertical-slice` tree. The existing atlas builder validates and promotes only complete candidates, and the current `AtlasAnimator` remains the runtime playback path.
 
-**Tech Stack:** MiniMax H3 Ref2V, ComfyUI H3 bridge, Python 3.11 standard library, FFmpeg, Pillow, Node.js test runner, Cocos Creator 3.8.8.
+**Tech Stack:** MiniMax H3 FL2V, ComfyUI H3 bridge, Python 3.12 standard library, FFmpeg, Pillow, Node.js test runner, Cocos Creator 3.8.8.
+
+**Execution decision (2026-08-20):** The initial Ref2V contract described in the historical task steps below was evaluated and rejected after it produced Qinglan identity and gender drift. The accepted nine-job batch uses `minimax-h3-fl2v-local`, with `first-last` conditioning for loops and boundary-sensitive movement plus `first-frame` conditioning for one-shot actions. This decision supersedes the Ref2V model references in Tasks 1-3; `art-source/h3-pilot/pilot.json` is the reproducibility authority for the accepted batch.
 
 ---
 

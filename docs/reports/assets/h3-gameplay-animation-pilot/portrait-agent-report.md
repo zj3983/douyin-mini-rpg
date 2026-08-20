@@ -1,0 +1,31 @@
+# Cocos Dungeon Agent: balanced
+
+- Viewport: 390x844
+- P95 frame: 7.00ms
+- Performance phase: 追击真实战斗
+- Minimum sampled FPS: 140.8
+- Result: PASS
+
+- [x] Cocos 画布完整显示: {"found":true,"left":0,"top":0,"right":390,"bottom":844,"width":390,"height":844,"viewportWidth":390,"viewportHeight":844,"intrinsicWidth":390,"intrinsicHeight":844}
+- [x] Cocos 画面未拉伸: intrinsic=0.462, css=0.462
+- [x] 副本美术资源加载完成: {"state":"ready"}
+- [x] 进入 Cocos 副本: balanced
+- [x] 副本功能区完整显示: {"hud":{"left":15.599999999999994,"right":302.79999999999995,"top":15.599999999999966,"bottom":109.59999999999997,"width":287.2,"height":94},"mapButton":{"left":318.4,"right":374.4,"top":15.599999999999966,"bottom":71.59999999999997,"width":56,"height":56},"interaction":{"left":15.599999999999994,"right":374.4,"top":680.8,"bottom":752.8,"width":358.8,"height":72},"commandBar":{"left":15.599999999999994,"right":374.4,"top":768.4,"bottom":828.4000000000001,"width":358.8,"height":60},"settlement":{"left":15.599999999999994,"right":374.4,"top":126.59999999999997,"bottom":717.4000000000001,"width":358.8,"height":590.8000000000001}}
+- [x] 副本触控尺寸可用: map=56.0x56.0, command=60.0
+- [x] 地图按钮可点击并暂停: 1.071199999988 -> 1.071199999988
+- [x] 真实按钮进入首个房间: f1-forest-combat
+- [x] 搜索雾竹林: {"type":"search"}
+- [x] 通过路线 f1-forest-to-sealed-cache: {"type":"choose-exit","exitId":"f1-forest-to-sealed-cache"}
+- [x] 搜索封印宝库: {"type":"search"}
+- [x] 通过路线 f1-sealed-cache-to-forest: {"type":"choose-exit","exitId":"f1-sealed-cache-to-forest"}
+- [x] 通过路线 f1-forest-to-alchemy: {"type":"choose-exit","exitId":"f1-forest-to-alchemy"}
+- [x] 搜索炼丹遗址: {"type":"search"}
+- [x] 通过路线 f1-alchemy-to-forest: {"type":"choose-exit","exitId":"f1-alchemy-to-forest"}
+- [x] Cocos 帧时间: P95 7.00ms, min 140.8 FPS, dropped 0
+- [x] 性能采样阶段: 追击真实战斗
+- [x] 通过路线 f1-forest-to-floor2: {"type":"choose-exit","exitId":"f1-forest-to-floor2"}
+- [x] 通过路线 f2-bridge-to-exit: {"type":"choose-exit","exitId":"f2-bridge-to-exit"}
+- [x] 开始三秒撤离: {"type":"begin-extraction"}
+- [x] 副本完成撤离: f2-damaged-exit -> extracted
+- [x] 真实按钮关闭结算: true
+- [x] 运行时无错误: console=0, page=0, request=0

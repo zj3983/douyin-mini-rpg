@@ -1,0 +1,294 @@
+{
+  "mode": "dungeon",
+  "policy": "balanced",
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "baseUrl": "http://127.0.0.1:4175/",
+  "checks": [
+    {
+      "name": "Cocos 画布完整显示",
+      "ok": true,
+      "detail": "{\"found\":true,\"left\":0,\"top\":0,\"right\":390,\"bottom\":844,\"width\":390,\"height\":844,\"viewportWidth\":390,\"viewportHeight\":844,\"intrinsicWidth\":390,\"intrinsicHeight\":844}"
+    },
+    {
+      "name": "Cocos 画面未拉伸",
+      "ok": true,
+      "detail": "intrinsic=0.462, css=0.462"
+    },
+    {
+      "name": "副本美术资源加载完成",
+      "ok": true,
+      "detail": "{\"state\":\"ready\"}"
+    },
+    {
+      "name": "进入 Cocos 副本",
+      "ok": true,
+      "detail": "balanced"
+    },
+    {
+      "name": "副本功能区完整显示",
+      "ok": true,
+      "detail": "{\"hud\":{\"left\":15.599999999999994,\"right\":302.79999999999995,\"top\":15.599999999999966,\"bottom\":109.59999999999997,\"width\":287.2,\"height\":94},\"mapButton\":{\"left\":318.4,\"right\":374.4,\"top\":15.599999999999966,\"bottom\":71.59999999999997,\"width\":56,\"height\":56},\"interaction\":{\"left\":15.599999999999994,\"right\":374.4,\"top\":680.8,\"bottom\":752.8,\"width\":358.8,\"height\":72},\"commandBar\":{\"left\":15.599999999999994,\"right\":374.4,\"top\":768.4,\"bottom\":828.4000000000001,\"width\":358.8,\"height\":60},\"settlement\":{\"left\":15.599999999999994,\"right\":374.4,\"top\":126.59999999999997,\"bottom\":717.4000000000001,\"width\":358.8,\"height\":590.8000000000001}}"
+    },
+    {
+      "name": "副本触控尺寸可用",
+      "ok": true,
+      "detail": "map=56.0x56.0, command=60.0"
+    },
+    {
+      "name": "地图按钮可点击并暂停",
+      "ok": true,
+      "detail": "1.071199999988 -> 1.071199999988"
+    },
+    {
+      "name": "真实按钮进入首个房间",
+      "ok": true,
+      "detail": "f1-forest-combat"
+    },
+    {
+      "name": "搜索雾竹林",
+      "ok": true,
+      "detail": "{\"type\":\"search\"}"
+    },
+    {
+      "name": "通过路线 f1-forest-to-sealed-cache",
+      "ok": true,
+      "detail": "{\"type\":\"choose-exit\",\"exitId\":\"f1-forest-to-sealed-cache\"}"
+    },
+    {
+      "name": "搜索封印宝库",
+      "ok": true,
+      "detail": "{\"type\":\"search\"}"
+    },
+    {
+      "name": "通过路线 f1-sealed-cache-to-forest",
+      "ok": true,
+      "detail": "{\"type\":\"choose-exit\",\"exitId\":\"f1-sealed-cache-to-forest\"}"
+    },
+    {
+      "name": "通过路线 f1-forest-to-alchemy",
+      "ok": true,
+      "detail": "{\"type\":\"choose-exit\",\"exitId\":\"f1-forest-to-alchemy\"}"
+    },
+    {
+      "name": "搜索炼丹遗址",
+      "ok": true,
+      "detail": "{\"type\":\"search\"}"
+    },
+    {
+      "name": "通过路线 f1-alchemy-to-forest",
+      "ok": true,
+      "detail": "{\"type\":\"choose-exit\",\"exitId\":\"f1-alchemy-to-forest\"}"
+    },
+    {
+      "name": "Cocos 帧时间",
+      "ok": true,
+      "detail": "P95 7.00ms, min 140.8 FPS, dropped 0"
+    },
+    {
+      "name": "性能采样阶段",
+      "ok": true,
+      "detail": "追击真实战斗"
+    },
+    {
+      "name": "通过路线 f1-forest-to-floor2",
+      "ok": true,
+      "detail": "{\"type\":\"choose-exit\",\"exitId\":\"f1-forest-to-floor2\"}"
+    },
+    {
+      "name": "通过路线 f2-bridge-to-exit",
+      "ok": true,
+      "detail": "{\"type\":\"choose-exit\",\"exitId\":\"f2-bridge-to-exit\"}"
+    },
+    {
+      "name": "开始三秒撤离",
+      "ok": true,
+      "detail": "{\"type\":\"begin-extraction\"}"
+    },
+    {
+      "name": "副本完成撤离",
+      "ok": true,
+      "detail": "f2-damaged-exit -> extracted"
+    },
+    {
+      "name": "真实按钮关闭结算",
+      "ok": true,
+      "detail": "true"
+    },
+    {
+      "name": "运行时无错误",
+      "ok": true,
+      "detail": "console=0, page=0, request=0"
+    }
+  ],
+  "performance": {
+    "averageFrameMs": 6.943888888888887,
+    "p95FrameMs": 7,
+    "minimumFps": 140.84507042254603,
+    "droppedFrames": 0
+  },
+  "performancePhase": "追击真实战斗",
+  "consoleIssues": [],
+  "pageErrors": [],
+  "requestFailures": [],
+  "screenshots": [
+    {
+      "label": "balanced-entry",
+      "file": "D:\\游戏\\douyin-mini-rpg\\.worktrees\\m3-pursuit-dungeon\\artifacts\\game-agent\\2026-08-20T09-36-29-445Z\\01-balanced-entry.png"
+    },
+    {
+      "label": "balanced-before-pursuit",
+      "file": "D:\\游戏\\douyin-mini-rpg\\.worktrees\\m3-pursuit-dungeon\\artifacts\\game-agent\\2026-08-20T09-36-29-445Z\\02-balanced-before-pursuit.png"
+    },
+    {
+      "label": "balanced-settlement",
+      "file": "D:\\游戏\\douyin-mini-rpg\\.worktrees\\m3-pursuit-dungeon\\artifacts\\game-agent\\2026-08-20T09-36-29-445Z\\03-balanced-settlement.png"
+    }
+  ],
+  "route": {
+    "beforeExtraction": {
+      "schemaVersion": 1,
+      "runId": "mist-vault-301",
+      "profileId": "mist-vault",
+      "seed": 301,
+      "phase": "exploring",
+      "map": {
+        "currentRoomId": "f2-damaged-exit",
+        "revealedRoomIds": [
+          "f1-entry",
+          "f1-forest-combat",
+          "f1-sealed-cache",
+          "f1-alchemy",
+          "f2-bridge-combat",
+          "f2-damaged-exit"
+        ],
+        "sealedExitIds": [
+          "f3-altar-to-vault",
+          "f3-vault-to-altar",
+          "f3-full-exit-to-vault"
+        ]
+      },
+      "pressure": {
+        "elapsedSeconds": 128.1545,
+        "phase": "restless"
+      },
+      "pursuer": {
+        "phase": "first-repelled",
+        "shield": 0,
+        "finalHealth": 1200,
+        "altarUnlocked": false,
+        "firstShieldMax": 180,
+        "secondShieldMax": 260,
+        "finalHealthMax": 1200
+      },
+      "extraction": {
+        "phase": "idle",
+        "roomId": null,
+        "progressSeconds": 0
+      },
+      "doorCurrency": 0,
+      "searchedRoomIds": [
+        "f1-forest-combat",
+        "f1-sealed-cache",
+        "f1-alchemy"
+      ],
+      "carriedLoot": [
+        {
+          "itemId": "spirit-ore",
+          "amount": 2
+        },
+        {
+          "itemId": "flying-sword",
+          "amount": 1
+        },
+        {
+          "itemId": "spirit-stone",
+          "amount": 3
+        },
+        {
+          "itemId": "mist-herb",
+          "amount": 2
+        },
+        {
+          "itemId": "jade-elixir",
+          "amount": 1
+        }
+      ],
+      "boundLoot": [],
+      "eventSequence": 1054
+    },
+    "terminalSnapshot": {
+      "schemaVersion": 1,
+      "runId": "mist-vault-301",
+      "profileId": "mist-vault",
+      "seed": 301,
+      "phase": "extracted",
+      "map": {
+        "currentRoomId": "f2-damaged-exit",
+        "revealedRoomIds": [
+          "f1-entry",
+          "f1-forest-combat",
+          "f1-sealed-cache",
+          "f1-alchemy",
+          "f2-bridge-combat",
+          "f2-damaged-exit"
+        ],
+        "sealedExitIds": [
+          "f3-altar-to-vault",
+          "f3-vault-to-altar",
+          "f3-full-exit-to-vault"
+        ]
+      },
+      "pressure": {
+        "elapsedSeconds": 131.1865,
+        "phase": "restless"
+      },
+      "pursuer": {
+        "phase": "first-repelled",
+        "shield": 0,
+        "finalHealth": 1200,
+        "altarUnlocked": false,
+        "firstShieldMax": 180,
+        "secondShieldMax": 260,
+        "finalHealthMax": 1200
+      },
+      "extraction": {
+        "phase": "completed",
+        "roomId": "f2-damaged-exit",
+        "progressSeconds": 3
+      },
+      "doorCurrency": 0,
+      "searchedRoomIds": [
+        "f1-forest-combat",
+        "f1-sealed-cache",
+        "f1-alchemy"
+      ],
+      "carriedLoot": [
+        {
+          "itemId": "spirit-ore",
+          "amount": 2
+        },
+        {
+          "itemId": "flying-sword",
+          "amount": 1
+        },
+        {
+          "itemId": "spirit-stone",
+          "amount": 3
+        },
+        {
+          "itemId": "mist-herb",
+          "amount": 2
+        },
+        {
+          "itemId": "jade-elixir",
+          "amount": 1
+        }
+      ],
+      "boundLoot": [],
+      "eventSequence": 1092
+    }
+  }
+}

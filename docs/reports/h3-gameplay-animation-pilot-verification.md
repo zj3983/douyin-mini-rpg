@@ -14,6 +14,7 @@
 - ComfyUI：`0.33.0`，Linux，Python `3.12.3`，PyTorch `2.13.0+cu130`。
 - 显卡：NVIDIA GeForce RTX 5090，显存 32 GB。
 - 模型：`minimax-h3-fl2v-local`，画面 `768x1344`，5 秒，24 FPS。
+- 路线决策：早期 Ref2V 试验因青岚身份与性别漂移被淘汰；最终使用首帧或首尾帧锁定身份的 FL2V。
 - 云端调用：0；全部视频由本地 H3 服务生成。
 - 生成清单 SHA-256：`049d3e104c4087bfff2f850cd0c7947c69f3f047b3590fe3788be4b8e1dfc8eb`。
 
@@ -43,10 +44,10 @@
 
 ## 自动验证
 
-- 全量测试：954 项，953 通过，0 失败，1 项按设计跳过。
-- H3 生成、提帧、哈希、候选晋升与运行时标记专项测试：46/46 通过。
-- Cocos 网页构建完整性检查：通过，主场景、脚本和已构建 H3 图集均可解析。
-- 网页构建：353 个文件，49,360,057 字节；其中图片 43,936,619 字节。
+- 全量测试：958 项，957 通过，0 失败，1 项按设计跳过。
+- H3 生成、提帧、哈希、候选晋升、运行时标记及发布包防回退检查均包含在本次全量测试中并通过。
+- Cocos 网页构建完整性检查：通过，主场景、脚本、H3 源清单和 12 个已构建 H3 图集逐项一致。
+- 网页构建：353 个文件，49,360,101 字节；其中图片 43,936,619 字节。
 - 运行资源：40.79 MB；副本资源 10.78 MB / 20 MB，处于预算内。
 - 构建目录中的青岚待机与地狼扑咬图集和源图集逐字节一致。
 
@@ -61,17 +62,35 @@
 
 ## 截图证据
 
+### 旧版对照
+
+![旧版战斗画面](assets/m3-pursuit-dungeon/390x844-boss.png)
+
+### 动作预览
+
+![青岚循环动作预览](assets/h3-gameplay-animation-pilot/qinglan-action-preview.webp)
+
+![苔甲地狼循环动作预览](assets/h3-gameplay-animation-pilot/moss-wolf-action-preview.webp)
+
+### 动作帧与新构建
+
 ![青岚动作帧](assets/h3-gameplay-animation-pilot/qinglan-contact-sheet.png)
 
 ![苔甲地狼动作帧](assets/h3-gameplay-animation-pilot/moss-wolf-contact-sheet.png)
 
 ![竖屏真实战斗](assets/h3-gameplay-animation-pilot/portrait-gameplay.png)
 
+![第二层青岚与苔甲地狼实战](assets/h3-gameplay-animation-pilot/portrait-moss-wolf-gameplay.png)
+
+![苔甲地狼连续动作帧](assets/h3-gameplay-animation-pilot/portrait-moss-wolf-action.png)
+
 ![横屏兼容验证](assets/h3-gameplay-animation-pilot/landscape-gameplay.png)
+
+原始浏览器记录：[竖屏报告](assets/h3-gameplay-animation-pilot/portrait-agent-report.md)、[竖屏证据 JSON](assets/h3-gameplay-animation-pilot/portrait-agent-evidence.json)、[横屏报告](assets/h3-gameplay-animation-pilot/landscape-agent-report.md)、[横屏证据 JSON](assets/h3-gameplay-animation-pilot/landscape-agent-evidence.json)。
 
 ## 淘汰与修正
 
-- 淘汰过身份漂移、女性化、主体触边、地狼肢体白块和死亡动作漂移过大的生成批次。
+- 淘汰过 Ref2V 身份漂移、女性化、主体触边、地狼肢体白块和死亡动作漂移过大的生成批次。
 - 只对受影响动作使用局部容差；地狼受击最大尺寸漂移为 `0.14`，死亡最大中心漂移为 `0.14`、最大尺寸漂移为 `0.29`。
 - 运行时不加入额外腿、翅膀或手部覆盖层，避免再次出现上下半身分离和假肢感。
 
