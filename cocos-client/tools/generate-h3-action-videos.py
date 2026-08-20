@@ -640,6 +640,8 @@ def process_job(
         persist_entry(state_path, entries, entry)
         raise
     except ClientError as error:
+        entry["status"] = "failed"
+        entry["completedAt"] = utc_now()
         entry["error"] = safe_message(error)
         persist_entry(state_path, entries, entry)
         raise
