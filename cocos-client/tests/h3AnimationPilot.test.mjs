@@ -274,15 +274,13 @@ function escapeRegExp(value) {
 }
 
 function assertNoAffirmativeInPlaceMovement(prompt, label) {
-  const movementCue = /\b(?:travels?|traveling|moves?|moving|movement|crosses?|leaves?|exits?)\b[^.!?\r\n]*\b(?:forward|backward|across (?:the )?(?:screen|frame|image)|(?:the )?frame)\b/i
-  const negationCue = /\b(?:no|not|never|without|rather than|does not|do not|cannot|remains? centered|stays? centered)\b/i
-  const affirmativeSentences = prompt
-    .split(/(?<=[.!?])\s+|\r?\n/)
-    .map((sentence) => sentence.trim())
-    .filter((sentence) => movementCue.test(sentence) && !negationCue.test(sentence))
+  const subjectMovement = /(?:<Subject 1>|The subject)\s+(?:(does not|never)\s+)?(?:travels?|traveling|moves?|moving|slides?|sliding|walks?|walking|runs?|running)\b[^.!?\r\n]*?\b(?:across|through)\s+(?:the\s+)?(?:screen|frame|image)\b/gi
+  const affirmativeMovements = [...prompt.matchAll(subjectMovement)]
+    .filter((match) => match[1] === undefined)
+    .map(([movement]) => movement)
 
   assert.deepEqual(
-    affirmativeSentences,
+    affirmativeMovements,
     [],
     `${label} has no affirmative travel, screen-crossing, or frame-exit motion`,
   )
@@ -301,6 +299,37 @@ test('video path validation rejects traversal through slash and backslash separa
   assert.throws(
     () => resolveVideoInsideActor(projectRoot, 'qinglan', String.raw`qinglan/..\outside.mp4`, 'backslash traversal'),
     /actor directory/,
+  )
+})
+
+test('in-place movement guard scopes motion and negation to the referenced subject', () => {
+  assert.doesNotThrow(() =>
+    assertNoAffirmativeInPlaceMovement(
+      'The long hair moves backward while the body stays fixed in place.',
+      'secondary hair motion',
+    ),
+  )
+  assert.throws(
+    () =>
+      assertNoAffirmativeInPlaceMovement(
+        'With no camera movement, <Subject 1> travels forward across the screen.',
+        'camera negation does not excuse subject travel',
+      ),
+    /affirmative travel/,
+  )
+  assert.throws(
+    () =>
+      assertNoAffirmativeInPlaceMovement(
+        '<Subject 1> moves through the frame while staying centered.',
+        'centered claim does not excuse subject travel',
+      ),
+    /affirmative travel/,
+  )
+  assert.doesNotThrow(() =>
+    assertNoAffirmativeInPlaceMovement(
+      '<Subject 1> does not travel across the screen.',
+      'subject travel is explicitly negated',
+    ),
   )
 })
 
@@ -427,13 +456,13 @@ test('H3 animation pilot prompts are complete Ref2V single-shot action contracts
 test('loop and bite prompt phases align with manifest sampling boundaries', () => {
   const pilot = JSON.parse(readFileSync(manifestPath, 'utf8'))
   const loopContracts = [
-    { jobId: 'qinglan-idle', outputAction: 'idle' },
-    { jobId: 'qinglan-sword-ride', outputAction: 'sword_ride' },
-    { jobId: 'moss-wolf-idle', outputAction: 'idle' },
+    { jobId: 'qinglan-idle', outputAction: 'idle', sampledPhase: 'pose' },
+    { jobId: 'qinglan-sword-ride', outputAction: 'sword_ride', sampledPhase: 'balance pose' },
+    { jobId: 'moss-wolf-idle', outputAction: 'idle', sampledPhase: 'stance' },
     { jobId: 'moss-wolf-run', outputAction: 'move' },
   ]
 
-  for (const { jobId, outputAction } of loopContracts) {
+  for (const { jobId, outputAction, sampledPhase } of loopContracts) {
     const job = pilot.jobs.find(({ id }) => id === jobId)
     assert.ok(job, `${jobId} exists in the manifest`)
     const output = job.outputs.find(({ action }) => action === outputAction)
@@ -444,6 +473,23 @@ test('loop and bite prompt phases align with manifest sampling boundaries', () =
     const finalSampleText = finalSample.toFixed(2)
     const escapedFinalSample = escapeRegExp(finalSampleText)
     const prompt = readFileSync(resolveInside(projectRoot, job.prompt, `${jobId} prompt`), 'utf8')
+
+    if (sampledPhase !== undefined) {
+      const firstSample = output.samples[0]
+      assert.ok(Number.isFinite(firstSample), `${jobId} has a finite first sample`)
+      const firstSampleText = firstSample.toFixed(2)
+      const escapedFirstSample = escapeRegExp(firstSampleText)
+      const escapedSampledPhase = escapeRegExp(sampledPhase)
+      assert.match(
+        prompt,
+        new RegExp(
+          `At ${escapedFirstSample}s,[^.!?\\r\\n]*opening sampled ${escapedSampledPhase}[^.!?\\r\\n]*(?:same|matching) sampled ${escapedSampledPhase}[^.!?\\r\\n]*(?:is )?(?:restored|matched) (?:at|by) ${escapedFinalSample}s`,
+          'i',
+        ),
+        `${jobId} binds first sample ${firstSampleText}s to matching final sample ${finalSampleText}s`,
+      )
+    }
+
     const restoredOpeningPhase = new RegExp(
       `(?:opening sampled (?:pose|balance pose|stance|gait phase)[^.!?\\r\\n]*(?:is restored|returns?)[^.!?\\r\\n]*${escapedFinalSample}s|${escapedFinalSample}s[^.!?\\r\\n]*(?:is restored|returns?)[^.!?\\r\\n]*opening sampled (?:pose|balance pose|stance|gait phase))`,
       'i',
