@@ -1,9 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
-import { isAbsolute, relative, resolve, sep } from 'node:path'
+import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const projectRoot = resolve('.')
+const projectRoot = fileURLToPath(new URL('../', import.meta.url))
 const manifestPath = resolve(projectRoot, 'art-source/h3-pilot/pilot.json')
 const promptRoot = resolve(projectRoot, 'art-source/h3-pilot/prompts')
 
@@ -110,9 +111,34 @@ function resolveInside(root, candidate, label) {
   return resolved
 }
 
+function resolveVideoInsideActor(root, actor, candidate, label) {
+  assert.equal(typeof candidate, 'string', `${label} is a string`)
+  const normalizedCandidate = candidate.replaceAll('\\', '/')
+  const resolved = resolveInside(root, normalizedCandidate, label)
+  assert.equal(dirname(resolved), resolve(root, actor), `${label} stays inside ${actor} actor directory`)
+  assert.equal(resolved.endsWith('.mp4'), true, `${label} is an MP4 path`)
+  return resolved
+}
+
 function sortedRecord(entries) {
   return Object.fromEntries([...entries].sort(([left], [right]) => left.localeCompare(right)))
 }
+
+test('video path validation treats slash and backslash as actor directory separators', () => {
+  assert.doesNotThrow(() => resolveVideoInsideActor(projectRoot, 'qinglan', 'qinglan/idle.mp4', 'slash video'))
+  assert.doesNotThrow(() => resolveVideoInsideActor(projectRoot, 'qinglan', String.raw`qinglan\idle.mp4`, 'backslash video'))
+})
+
+test('video path validation rejects traversal through slash and backslash separators', () => {
+  assert.throws(
+    () => resolveVideoInsideActor(projectRoot, 'qinglan', 'qinglan/../outside.mp4', 'slash traversal'),
+    /actor directory/,
+  )
+  assert.throws(
+    () => resolveVideoInsideActor(projectRoot, 'qinglan', String.raw`qinglan/..\outside.mp4`, 'backslash traversal'),
+    /actor directory/,
+  )
+})
 
 test('H3 animation pilot manifest locks reproducible jobs and runtime outputs', () => {
   const pilot = JSON.parse(readFileSync(manifestPath, 'utf8'))
@@ -141,8 +167,7 @@ test('H3 animation pilot manifest locks reproducible jobs and runtime outputs', 
     const promptPath = resolveInside(projectRoot, job.prompt, `${job.id} prompt`)
     resolveInside(promptRoot, relative(promptRoot, promptPath), `${job.id} prompt relative path`)
 
-    resolveInside(projectRoot, job.video, `${job.id} video`)
-    assert.match(job.video, new RegExp(`^${job.actor}/[^/]+\\.mp4$`), `${job.id} video is in its actor directory`)
+    resolveVideoInsideActor(projectRoot, job.actor, job.video, `${job.id} video`)
 
     assert.ok(Array.isArray(job.outputs) && job.outputs.length > 0, `${job.id} has outputs`)
     outputsByActor[job.actor] ??= {}
