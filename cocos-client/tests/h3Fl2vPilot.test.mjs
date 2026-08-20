@@ -56,6 +56,27 @@ function generateImage(
   assert.equal(result.status, 0, result.stderr)
 }
 
+function inspectImage(path) {
+  const script = [
+    'from PIL import Image',
+    'import json, sys',
+    'path = sys.argv[1]',
+    'with Image.open(path) as image:',
+    '    image.verify()',
+    'with Image.open(path) as image:',
+    '    image.load()',
+    '    print(json.dumps({"format": image.format, "mode": image.mode, "size": list(image.size)}))',
+  ].join('\n')
+  const result = spawnSync(pythonCommand, ['-c', script, path], {
+    cwd: dirname(projectRoot),
+    encoding: 'utf8',
+    env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' },
+    windowsHide: true,
+  })
+  assert.equal(result.status, 0, result.stderr)
+  return JSON.parse(result.stdout)
+}
+
 function makeFixture(t, bridgeUrl, { model = 'minimax-h3-fl2v-local', jobs } = {}) {
   const root = mkdtempSync(resolve(projectRoot, '.h3-fl2v-test-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
@@ -525,15 +546,22 @@ test('pilot manifest and prompts lock FL2V conditioning and actor identity', () 
     'moss-wolf-idle',
     'moss-wolf-run',
   ])
+  const referenceByJob = new Map([
+    ['qinglan-idle', 'art-source/h3-pilot/references/qinglan-h3.png'],
+    ['qinglan-sword-ride', 'art-source/h3-pilot/references/qinglan-motion-h3.png'],
+    ['qinglan-hand-seal', 'art-source/h3-pilot/references/qinglan-h3.png'],
+    ['qinglan-hurt', 'art-source/h3-pilot/references/qinglan-motion-h3.png'],
+    ['moss-wolf-idle', 'art-source/h3-pilot/references/moss-wolf-h3.png'],
+    ['moss-wolf-run', 'art-source/h3-pilot/references/moss-wolf-h3.png'],
+    ['moss-wolf-bite-lunge', 'art-source/h3-pilot/references/moss-wolf-h3.png'],
+    ['moss-wolf-hurt', 'art-source/h3-pilot/references/moss-wolf-h3.png'],
+    ['moss-wolf-death', 'art-source/h3-pilot/references/moss-wolf-h3.png'],
+  ])
+  const motionGuardJobs = new Set(['qinglan-sword-ride', 'qinglan-hurt'])
   assert.equal(pilot.jobs.length, 9)
   for (const job of pilot.jobs) {
     assert.equal(job.conditioning, firstLast.has(job.id) ? 'first-last' : 'first-frame')
-    assert.equal(
-      job.reference,
-      job.actor === 'qinglan'
-        ? 'art-source/h3-pilot/references/qinglan-h3.png'
-        : 'art-source/h3-pilot/references/moss-wolf-h3.png',
-    )
+    assert.equal(job.reference, referenceByJob.get(job.id), `${job.id} uses its locked reference`)
     const prompt = readFileSync(resolve(projectRoot, job.prompt), 'utf8')
     assert.match(prompt, /exact supplied first frame|exact first-frame/i)
     if (job.actor === 'qinglan') {
@@ -552,5 +580,31 @@ test('pilot manifest and prompts lock FL2V conditioning and actor identity', () 
       assert.match(prompt, /return(?:s)? to the exact supplied final pose/i)
       assert.match(prompt, /natural motion/i)
     }
+    if (motionGuardJobs.has(job.id)) {
+      assert.match(
+        prompt,
+        /full hair.*robe tails.*sleeves.*hands.*feet.*entire sword.*always visible/is,
+        `${job.id} protects the complete animated silhouette`,
+      )
+      assert.match(
+        prompt,
+        /at least 12% clear near-white margin.*every canvas edge/is,
+        `${job.id} reserves an all-edge motion margin`,
+      )
+      assert.match(prompt, /no crop/i)
+      assert.match(prompt, /no zoom/i)
+      assert.match(prompt, /no camera movement/i)
+      assert.match(prompt, /stable subject scale/i)
+    }
   }
+
+  const motionReference = resolve(
+    projectRoot,
+    'art-source/h3-pilot/references/qinglan-motion-h3.png',
+  )
+  assert.deepEqual(inspectImage(motionReference), {
+    format: 'PNG',
+    mode: 'RGBA',
+    size: [768, 1344],
+  })
 })
