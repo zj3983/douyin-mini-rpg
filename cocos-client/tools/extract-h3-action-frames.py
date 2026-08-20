@@ -29,6 +29,7 @@ REPORT_VERSION = 1
 DEFAULT_FFMPEG_TIMEOUT_SECONDS = 30.0
 TRANSACTION_JOURNAL_VERSION = 1
 FRAME_SIZE = (768, 1344)
+MINIMUM_MOTION_SAFE_MARGIN_RATIO = 0.04
 ALLOWED_ACTORS = ("qinglan", "moss-wolf")
 MATTE_CLEANUP_NONE = "none"
 MATTE_CLEANUP_DARK_SUBJECT_WHITE_MATTE = "dark-subject-white-matte"
@@ -413,6 +414,17 @@ def _validate_final_frame(image: Image.Image, label: str):
     left, top, right, bottom = bounds
     if left <= 0 or top <= 0 or right >= image.width or bottom >= image.height:
         raise ExtractionError(f"{label} subject touches the frame boundary")
+    minimum_margin = min(
+        left / image.width,
+        top / image.height,
+        (image.width - right) / image.width,
+        (image.height - bottom) / image.height,
+    )
+    if minimum_margin < MINIMUM_MOTION_SAFE_MARGIN_RATIO:
+        raise ExtractionError(
+            f"{label} has insufficient motion-safe margin: "
+            f"{minimum_margin:.4f} below {MINIMUM_MOTION_SAFE_MARGIN_RATIO:.4f}"
+        )
     return [left, top, right, bottom]
 
 

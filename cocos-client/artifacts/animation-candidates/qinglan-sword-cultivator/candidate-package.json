@@ -495,7 +495,7 @@
     },
     {
       "path": "Assets/ActorAtlases/QinglanSwordCultivator/hurt.png",
-      "sha256": "e108948106b70a2abecfd9292e61d1df0f912377e3e18c570b8912f7f66b8697"
+      "sha256": "224c582737b29022ebb376c782d464fe56cbd9a18b930113efa52cf4a48c7692"
     },
     {
       "path": "Assets/ActorAtlases/QinglanSwordCultivator/idle.png",
@@ -507,11 +507,11 @@
     },
     {
       "path": "reports/qinglan-sword-cultivator-contact-sheet.png",
-      "sha256": "b1ef88e9b745406ec0a70f002d406a450a11277fa8ff81eb52e472f9b1cb0cfb"
+      "sha256": "9f8ca2f965ae56c13e9f64128cff45321a0c99bdc5927afe781d4fb526b7fc86"
     },
     {
       "path": "reports/qinglan-sword-cultivator-report.json",
-      "sha256": "a22b28eabc9485f4cf4a44ffada96718073a986d3c1f2498a6b45efb168bbdd8"
+      "sha256": "88ceb359db96ad9cd532899ff01f67760a0ef221aaa8d04f5c2cacc820aa8056"
     }
   ],
   "folder": "QinglanSwordCultivator",

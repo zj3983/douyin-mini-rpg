@@ -359,7 +359,7 @@
     },
     {
       "path": "Assets/ActorAtlases/MossWolf/hurt.png",
-      "sha256": "6a26672a042d92dfa602510f77c29c78b4fc2195bb05b796c9c2eb9ae9f8eecc"
+      "sha256": "5151f4fecdf0c38f02391be078eb1c0cdceb704116f127fb7f7e863d2765d4d9"
     },
     {
       "path": "Assets/ActorAtlases/MossWolf/idle.png",
@@ -375,11 +375,11 @@
     },
     {
       "path": "reports/moss-wolf-contact-sheet.png",
-      "sha256": "f95d471079f848d9cf487cdafe703287faaf9c23c26d46a76051f41245d6ff6a"
+      "sha256": "c1de83345e5611f435879bd784ba3992c8b91b06572bb547b4c84587776e2992"
     },
     {
       "path": "reports/moss-wolf-report.json",
-      "sha256": "0412364771939bfbec87a18c9e13cc5f061bc800cf964c7da7ac5655584af133"
+      "sha256": "0ad2ce352c439303d0d0da7d07519aea858595cb52c1fd090180e21a1946c3bb"
     }
   ],
   "folder": "MossWolf",

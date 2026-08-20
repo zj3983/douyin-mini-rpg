@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "manifestSha256": "049d3e104c4087bfff2f850cd0c7947c69f3f047b3590fe3788be4b8e1dfc8eb",
+  "manifestSha256": "b088744b6927d8d8ec6728e2f94841738e544269d9e85fda412cde5e20f0b7da",
   "actors": [
     {
       "actor": "qinglan",
@@ -562,7 +562,7 @@
           "action": "hurt",
           "matteCleanup": "none",
           "video": "videos/qinglan/hurt.mp4",
-          "videoSha256": "096026a0a887543e969aec098e8ced9c2a090493a4097ac0ca1fed29736f74e1",
+          "videoSha256": "f75c3f323724a7f079828f678cc5e2151cf70c68f64e8f754bd0bd23f6f694c8",
           "outputs": [
             {
               "action": "hurt",
@@ -572,40 +572,40 @@
                 0.9,
                 1.3,
                 1.85,
-                2.5
+                4.6
               ],
               "frames": [
                 {
                   "index": 0,
                   "sample": 0.2,
                   "file": "00.png",
-                  "sourceVideoSha256": "096026a0a887543e969aec098e8ced9c2a090493a4097ac0ca1fed29736f74e1",
-                  "outputSha256": "8353bacfc8519be76438281f97a7dc8626a6f318b276545ecae7a3fe03ce2eaa",
+                  "sourceVideoSha256": "f75c3f323724a7f079828f678cc5e2151cf70c68f64e8f754bd0bd23f6f694c8",
+                  "outputSha256": "ab35b76371771ada1f56acfc36a4ea64960b27b064c46e941c7cc5fd7f506464",
                   "dimensions": [
                     768,
                     1344
                   ],
                   "alphaBounds": [
-                    125,
-                    256,
+                    124,
+                    255,
                     610,
-                    1068
+                    1067
                   ]
                 },
                 {
                   "index": 1,
                   "sample": 0.55,
                   "file": "01.png",
-                  "sourceVideoSha256": "096026a0a887543e969aec098e8ced9c2a090493a4097ac0ca1fed29736f74e1",
-                  "outputSha256": "b98a9c7dad3ab12b8661162f3eb2d44163ee8bf69c3a75229fab08b14279e39c",
+                  "sourceVideoSha256": "f75c3f323724a7f079828f678cc5e2151cf70c68f64e8f754bd0bd23f6f694c8",
+                  "outputSha256": "28555acae6afd9538b26b38520b6c0d01c3eb7d38e7974aeebaac7ca53ab43e4",
                   "dimensions": [
                     768,
                     1344
                   ],
                   "alphaBounds": [
-                    126,
-                    257,
-                    610,
+                    122,
+                    255,
+                    609,
                     1072
                   ]
                 },
@@ -613,68 +613,68 @@
                   "index": 2,
                   "sample": 0.9,
                   "file": "02.png",
-                  "sourceVideoSha256": "096026a0a887543e969aec098e8ced9c2a090493a4097ac0ca1fed29736f74e1",
-                  "outputSha256": "8a1d5dbebcf6df1fad47bfc33d50276c1727ceee9d9c495da2096fffddabfe57",
+                  "sourceVideoSha256": "f75c3f323724a7f079828f678cc5e2151cf70c68f64e8f754bd0bd23f6f694c8",
+                  "outputSha256": "6f6d4ec119484ed3f1bfa4b217ad0bd36b5675dabdcda02d45feb689edfd29b6",
                   "dimensions": [
                     768,
                     1344
                   ],
                   "alphaBounds": [
-                    85,
-                    292,
+                    98,
+                    264,
                     610,
-                    1082
+                    1078
                   ]
                 },
                 {
                   "index": 3,
                   "sample": 1.3,
                   "file": "03.png",
-                  "sourceVideoSha256": "096026a0a887543e969aec098e8ced9c2a090493a4097ac0ca1fed29736f74e1",
-                  "outputSha256": "c7d28f79aef1ab241a90952721141e5ef9720e2f316fb7ab75916a4ccbb5f559",
+                  "sourceVideoSha256": "f75c3f323724a7f079828f678cc5e2151cf70c68f64e8f754bd0bd23f6f694c8",
+                  "outputSha256": "0c7f46943480652ea2f78fa6fa74b0264e91ba7275d15c718e0e8f79472f04f8",
                   "dimensions": [
                     768,
                     1344
                   ],
                   "alphaBounds": [
-                    65,
-                    347,
+                    56,
+                    344,
                     612,
-                    1108
+                    1106
                   ]
                 },
                 {
                   "index": 4,
                   "sample": 1.85,
                   "file": "04.png",
-                  "sourceVideoSha256": "096026a0a887543e969aec098e8ced9c2a090493a4097ac0ca1fed29736f74e1",
-                  "outputSha256": "558b21fc078c95f07ff4304bed9f11a4961355859a66a0a27d33f736dc6e9751",
+                  "sourceVideoSha256": "f75c3f323724a7f079828f678cc5e2151cf70c68f64e8f754bd0bd23f6f694c8",
+                  "outputSha256": "ea391cbfbd019214ab8de8be95baa0f96bbd965b1f98ee2514ca27425758f9df",
                   "dimensions": [
                     768,
                     1344
                   ],
                   "alphaBounds": [
-                    26,
-                    360,
-                    612,
-                    1128
+                    51,
+                    356,
+                    613,
+                    1121
                   ]
                 },
                 {
                   "index": 5,
-                  "sample": 2.5,
+                  "sample": 4.6,
                   "file": "05.png",
-                  "sourceVideoSha256": "096026a0a887543e969aec098e8ced9c2a090493a4097ac0ca1fed29736f74e1",
-                  "outputSha256": "cae374dfb009236c242303a83355de46d66119f6cacd3f4a524708bb1d2f56dc",
+                  "sourceVideoSha256": "f75c3f323724a7f079828f678cc5e2151cf70c68f64e8f754bd0bd23f6f694c8",
+                  "outputSha256": "c6446afd24364c18c971ab43c20d7c247c7e3ba0bacb08decbafda354a428863",
                   "dimensions": [
                     768,
                     1344
                   ],
                   "alphaBounds": [
-                    10,
-                    363,
-                    612,
-                    1136
+                    70,
+                    260,
+                    610,
+                    1072
                   ]
                 }
               ]

@@ -554,7 +554,7 @@ test('pilot manifest and prompts lock FL2V conditioning and actor identity', () 
     ['moss-wolf-idle', 'art-source/h3-pilot/references/moss-wolf-motion-h3.png'],
     ['moss-wolf-run', 'art-source/h3-pilot/references/moss-wolf-motion-h3.png'],
     ['moss-wolf-bite-lunge', 'art-source/h3-pilot/references/moss-wolf-motion-h3.png'],
-    ['moss-wolf-hurt', 'art-source/h3-pilot/references/moss-wolf-h3.png'],
+    ['moss-wolf-hurt', 'art-source/h3-pilot/references/moss-wolf-motion-h3.png'],
     ['moss-wolf-death', 'art-source/h3-pilot/references/moss-wolf-motion-h3.png'],
   ])
   const motionGuardJobs = new Set(['qinglan-sword-ride', 'qinglan-hurt'])
@@ -621,7 +621,7 @@ test('pilot assigns motion references only to boundary-sensitive wolf jobs', () 
       'moss-wolf-idle': 'art-source/h3-pilot/references/moss-wolf-motion-h3.png',
       'moss-wolf-run': 'art-source/h3-pilot/references/moss-wolf-motion-h3.png',
       'moss-wolf-bite-lunge': 'art-source/h3-pilot/references/moss-wolf-motion-h3.png',
-      'moss-wolf-hurt': 'art-source/h3-pilot/references/moss-wolf-h3.png',
+      'moss-wolf-hurt': 'art-source/h3-pilot/references/moss-wolf-motion-h3.png',
       'moss-wolf-death': 'art-source/h3-pilot/references/moss-wolf-motion-h3.png',
     },
   )
@@ -645,6 +645,7 @@ test('boundary-sensitive wolf prompts lock full anatomy inside a 12 percent marg
     'moss-wolf-idle',
     'moss-wolf-run',
     'moss-wolf-bite-lunge',
+    'moss-wolf-hurt',
     'moss-wolf-death',
   ])
 

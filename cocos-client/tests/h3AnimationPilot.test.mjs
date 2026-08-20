@@ -106,7 +106,7 @@ const expectedJobs = [
     action: 'hurt',
     matteCleanup: 'dark-subject-white-matte',
     conditioning: 'first-frame',
-    reference: 'art-source/h3-pilot/references/moss-wolf-h3.png',
+    reference: 'art-source/h3-pilot/references/moss-wolf-motion-h3.png',
     prompt: 'art-source/h3-pilot/prompts/moss-wolf/hurt.txt',
     seed: 3082008,
     video: 'moss-wolf/hurt.mp4',
@@ -910,11 +910,25 @@ test('H3 animation pilot manifest locks reproducible jobs and runtime outputs', 
   const telegraph = biteLunge.outputs[0].samples
   const attack = biteLunge.outputs[1].samples
   assert.ok(telegraph.at(-1) < attack[0], 'bite-lunge telegraph samples precede attack samples')
+
+  const qinglanHurt = pilot.jobs.find(({ id }) => id === 'qinglan-hurt')
+  assert.ok(
+    qinglanHurt.outputs[0].samples.at(-1) >= 4.4,
+    'Qinglan hurt ends on a recovered motion-safe silhouette instead of the maximum robe swing',
+  )
+
+  const mossWolfHurt = pilot.jobs.find(({ id }) => id === 'moss-wolf-hurt')
+  assert.deepEqual(
+    mossWolfHurt.outputs[0].samples,
+    [0.2, 0.6, 3.8, 4.5],
+    'moss wolf hurt avoids the H3 ghosted recoil interval and ends on a clean recovered silhouette',
+  )
 })
 
 test('accepted H3 extraction reports match the final manifest and checked-in frames', () => {
   const pilot = JSON.parse(readFileSync(manifestPath, 'utf8'))
   const manifestSha256 = sha256File(manifestPath)
+  const minimumMotionSafeMargin = 0.04
   const acceptedRuns = [
     {
       actor: 'qinglan',
@@ -940,6 +954,13 @@ test('accepted H3 extraction reports match the final manifest and checked-in fra
         for (const frame of output.frames) {
           const framePath = resolve(projectRoot, 'art-source/vertical-slice', accepted.actor, output.action, frame.file)
           assert.equal(frame.outputSha256, sha256File(framePath), `${accepted.actor}/${output.action}/${frame.file}`)
+          const [width, height] = frame.dimensions
+          const [left, top, right, bottom] = frame.alphaBounds
+          const margin = Math.min(left / width, top / height, (width - right) / width, (height - bottom) / height)
+          assert.ok(
+            margin >= minimumMotionSafeMargin,
+            `${accepted.actor}/${output.action}/${frame.file} source margin ${margin.toFixed(4)} must keep the motion envelope`,
+          )
         }
       }
     }
@@ -2902,6 +2923,12 @@ ImageDraw.Draw(touching_image).rectangle((0, 240, 360, 1100), fill=(210, 44, 72)
 touching_image.save(touching)
 cases.append(("touching", touching, "touches the frame boundary"))
 
+near_edge = temp / "near-edge.png"
+near_edge_image = Image.new("RGB", module.FRAME_SIZE, (248, 248, 248))
+ImageDraw.Draw(near_edge_image).rectangle((10, 240, 500, 1100), fill=(210, 44, 72))
+near_edge_image.save(near_edge)
+cases.append(("near-edge", near_edge, "motion-safe margin"))
+
 rejected = []
 for label, path, expected in cases:
     try:
@@ -2919,7 +2946,7 @@ print(",".join(rejected))
       { cwd: suiteRoot, timeoutMs: 60_000 },
     )
     assert.equal(result.code, 0, result.stderr)
-    assert.equal(result.stdout.trim(), 'corrupt,wrong-size,wrong-mode,transparent,opaque,touching')
+    assert.equal(result.stdout.trim(), 'corrupt,wrong-size,wrong-mode,transparent,opaque,touching,near-edge')
     assert.equal(existsSync(resolve(fixture.runRoot, 'extraction-report.json')), false)
     assert.equal(existsSync(resolve(fixture.sourceRoot, 'qinglan/idle/00.png')), false)
   })

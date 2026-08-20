@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "manifestSha256": "049d3e104c4087bfff2f850cd0c7947c69f3f047b3590fe3788be4b8e1dfc8eb",
+  "manifestSha256": "b088744b6927d8d8ec6728e2f94841738e544269d9e85fda412cde5e20f0b7da",
   "actors": [
     {
       "actor": "moss-wolf",
@@ -533,83 +533,83 @@
           "action": "hurt",
           "matteCleanup": "dark-subject-white-matte",
           "video": "videos/moss-wolf/hurt.mp4",
-          "videoSha256": "b4104bf9e44ce132c43337bcd7060e20cf82a7163126da6d799fa5fd55148035",
+          "videoSha256": "59af6f88efaef5710b9f5c580e7c74926ea4ff5df0daacf4efbb545b00ee3322",
           "outputs": [
             {
               "action": "hurt",
               "samples": [
                 0.2,
                 0.6,
-                1.1,
-                1.8
+                3.8,
+                4.5
               ],
               "frames": [
                 {
                   "index": 0,
                   "sample": 0.2,
                   "file": "00.png",
-                  "sourceVideoSha256": "b4104bf9e44ce132c43337bcd7060e20cf82a7163126da6d799fa5fd55148035",
-                  "outputSha256": "849b18d8bb4c4bc2c886e3100b397110a91f956d0c6a3026319006f8b086e29f",
+                  "sourceVideoSha256": "59af6f88efaef5710b9f5c580e7c74926ea4ff5df0daacf4efbb545b00ee3322",
+                  "outputSha256": "77f2d236cb47dfba19353657865eb79b191175a9bec885a30397917efbfad4b3",
                   "dimensions": [
                     768,
                     1344
                   ],
                   "alphaBounds": [
-                    29,
-                    481,
-                    736,
-                    860
+                    107,
+                    523,
+                    659,
+                    819
                   ]
                 },
                 {
                   "index": 1,
                   "sample": 0.6,
                   "file": "01.png",
-                  "sourceVideoSha256": "b4104bf9e44ce132c43337bcd7060e20cf82a7163126da6d799fa5fd55148035",
-                  "outputSha256": "67617ad728e84874df494652db3496df328ce6b4effd456da0b206df825e93a9",
+                  "sourceVideoSha256": "59af6f88efaef5710b9f5c580e7c74926ea4ff5df0daacf4efbb545b00ee3322",
+                  "outputSha256": "ad6c8a5aa524b046512cadc2064ecf0e455e541b70d45491b6b72d2d453c4fd9",
                   "dimensions": [
                     768,
                     1344
                   ],
                   "alphaBounds": [
-                    29,
-                    481,
-                    736,
-                    860
+                    107,
+                    522,
+                    659,
+                    819
                   ]
                 },
                 {
                   "index": 2,
-                  "sample": 1.1,
+                  "sample": 3.8,
                   "file": "02.png",
-                  "sourceVideoSha256": "b4104bf9e44ce132c43337bcd7060e20cf82a7163126da6d799fa5fd55148035",
-                  "outputSha256": "592005dbaf71c514ea91121ec45bd0cffe80eb663904cfad1508003cad6488c5",
+                  "sourceVideoSha256": "59af6f88efaef5710b9f5c580e7c74926ea4ff5df0daacf4efbb545b00ee3322",
+                  "outputSha256": "452ed7ce4bf89891f0f6d5ec220ac23f389716ec9624a05055c83980bd46a313",
                   "dimensions": [
                     768,
                     1344
                   ],
                   "alphaBounds": [
-                    46,
-                    567,
-                    749,
-                    863
+                    133,
+                    562,
+                    710,
+                    819
                   ]
                 },
                 {
                   "index": 3,
-                  "sample": 1.8,
+                  "sample": 4.5,
                   "file": "03.png",
-                  "sourceVideoSha256": "b4104bf9e44ce132c43337bcd7060e20cf82a7163126da6d799fa5fd55148035",
-                  "outputSha256": "3a182a499d1d0a0a8678a6c1e8ce6efbf0057253182d697d30c71b2b56cc6b7b",
+                  "sourceVideoSha256": "59af6f88efaef5710b9f5c580e7c74926ea4ff5df0daacf4efbb545b00ee3322",
+                  "outputSha256": "1000708733cd7c625deda822c4906a59e582f19a8fb1728ef33949284bab3761",
                   "dimensions": [
                     768,
                     1344
                   ],
                   "alphaBounds": [
-                    44,
-                    560,
-                    752,
-                    862
+                    108,
+                    526,
+                    669,
+                    820
                   ]
                 }
               ]
