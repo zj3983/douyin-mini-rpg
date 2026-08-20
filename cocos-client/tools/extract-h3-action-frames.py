@@ -2,6 +2,7 @@
 """Extract deterministic RGBA action frames from completed H3 pilot videos."""
 
 import argparse
+from collections import deque
 import hashlib
 import importlib.util
 import json
@@ -29,6 +30,15 @@ DEFAULT_FFMPEG_TIMEOUT_SECONDS = 30.0
 TRANSACTION_JOURNAL_VERSION = 1
 FRAME_SIZE = (768, 1344)
 ALLOWED_ACTORS = ("qinglan", "moss-wolf")
+MATTE_CLEANUP_NONE = "none"
+MATTE_CLEANUP_DARK_SUBJECT_WHITE_MATTE = "dark-subject-white-matte"
+ALLOWED_MATTE_CLEANUP_MODES = (
+    MATTE_CLEANUP_NONE,
+    MATTE_CLEANUP_DARK_SUBJECT_WHITE_MATTE,
+)
+DARK_SUBJECT_WHITE_MINIMUM_CHANNEL = 232
+DARK_SUBJECT_WHITE_MAXIMUM_CHROMA = 18
+DARK_SUBJECT_WHITE_MINIMUM_COMPONENT_PIXELS = 128
 SAFE_ID_PATTERN = re.compile(r"^[a-z0-9]+(?:[-_][a-z0-9]+)*$")
 TRANSACTION_TOKEN_PATTERN = re.compile(r"^[0-9a-f]{16}$")
 STAGING_ROOT_PATTERN = re.compile(r"^\.h3-extraction-[A-Za-z0-9._-]+$")
@@ -267,6 +277,12 @@ def _validate_manifest(manifest: Any, run_root: Path):
             _nonempty_string(raw_job, "action", label),
             f"{label}.action",
         )
+        matte_cleanup = raw_job.get("matteCleanup", MATTE_CLEANUP_NONE)
+        if matte_cleanup not in ALLOWED_MATTE_CLEANUP_MODES:
+            raise ExtractionError(
+                f"{label}.matteCleanup must be one of: "
+                + ", ".join(ALLOWED_MATTE_CLEANUP_MODES)
+            )
         video_path, video_relative = _validate_video_path(
             run_root,
             actor,
@@ -326,6 +342,7 @@ def _validate_manifest(manifest: Any, run_root: Path):
                 "id": job_id,
                 "actor": actor,
                 "action": action,
+                "matte_cleanup": matte_cleanup,
                 "video_path": video_path,
                 "video_relative": video_relative,
                 "outputs": outputs,
@@ -399,7 +416,72 @@ def _validate_final_frame(image: Image.Image, label: str):
     return [left, top, right, bottom]
 
 
-def prepare_extracted_png(path: Path, label: str = "extracted frame"):
+def _remove_large_near_white_components(image: Image.Image) -> Image.Image:
+    source = image.copy()
+    width, height = source.size
+    pixels = source.load()
+    candidates = bytearray(width * height)
+    pixel_bytes = source.tobytes()
+    for offset in range(width * height):
+        byte_offset = offset * 4
+        red = pixel_bytes[byte_offset]
+        green = pixel_bytes[byte_offset + 1]
+        blue = pixel_bytes[byte_offset + 2]
+        alpha = pixel_bytes[byte_offset + 3]
+        if (
+            alpha > 0
+            and min(red, green, blue) >= DARK_SUBJECT_WHITE_MINIMUM_CHANNEL
+            and max(red, green, blue) - min(red, green, blue)
+            <= DARK_SUBJECT_WHITE_MAXIMUM_CHROMA
+        ):
+            candidates[offset] = 1
+
+    visited = bytearray(width * height)
+    for seed in range(width * height):
+        if visited[seed] or not candidates[seed]:
+            continue
+        visited[seed] = 1
+        queue = deque([seed])
+        component = []
+        while queue:
+            offset = queue.popleft()
+            component.append(offset)
+            x = offset % width
+            for neighbor in (
+                offset - 1 if x > 0 else None,
+                offset + 1 if x + 1 < width else None,
+                offset - width if offset >= width else None,
+                offset + width if offset + width < width * height else None,
+            ):
+                if (
+                    neighbor is not None
+                    and not visited[neighbor]
+                    and candidates[neighbor]
+                ):
+                    visited[neighbor] = 1
+                    queue.append(neighbor)
+        if len(component) >= DARK_SUBJECT_WHITE_MINIMUM_COMPONENT_PIXELS:
+            for offset in component:
+                x = offset % width
+                y = offset // width
+                red, green, blue, _alpha = pixels[x, y]
+                pixels[x, y] = (red, green, blue, 0)
+    return source
+
+
+def _apply_matte_cleanup(image: Image.Image, mode: str) -> Image.Image:
+    if mode == MATTE_CLEANUP_NONE:
+        return image
+    if mode == MATTE_CLEANUP_DARK_SUBJECT_WHITE_MATTE:
+        return _remove_large_near_white_components(image)
+    raise ExtractionError(f"unknown matte cleanup mode: {mode}")
+
+
+def prepare_extracted_png(
+    path: Path,
+    label: str = "extracted frame",
+    matte_cleanup: str = MATTE_CLEANUP_NONE,
+):
     _require_nonempty_file(path, label)
     try:
         with Image.open(path) as source:
@@ -417,6 +499,7 @@ def prepare_extracted_png(path: Path, label: str = "extracted frame"):
         raise ExtractionError(f"{label} is not a valid PNG") from error
 
     cleaned = _load_background_remover()(rgba)
+    cleaned = _apply_matte_cleanup(cleaned, matte_cleanup)
     bounds = _validate_final_frame(cleaned, label)
     processed_path = path.with_name(f".{path.name}.processed")
     try:
@@ -1373,7 +1456,11 @@ def _stage_extraction(
                         frame_label,
                         ffmpeg_timeout_seconds,
                     )
-                    bounds = prepare_extracted_png(frame_path, frame_label)
+                    bounds = prepare_extracted_png(
+                        frame_path,
+                        frame_label,
+                        matte_cleanup=job["matte_cleanup"],
+                    )
                     frame_reports.append(
                         {
                             "index": index,
@@ -1408,6 +1495,7 @@ def _stage_extraction(
                 {
                     "id": job["id"],
                     "action": job["action"],
+                    "matteCleanup": job["matte_cleanup"],
                     "video": f"videos/{job['video_relative']}",
                     "videoSha256": video_hash,
                     "outputs": output_reports,

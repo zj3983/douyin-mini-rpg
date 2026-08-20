@@ -71,6 +71,7 @@ const expectedJobs = [
     id: 'moss-wolf-idle',
     actor: 'moss-wolf',
     action: 'idle',
+    matteCleanup: 'dark-subject-white-matte',
     conditioning: 'first-last',
     reference: 'art-source/h3-pilot/references/moss-wolf-motion-h3.png',
     prompt: 'art-source/h3-pilot/prompts/moss-wolf/idle.txt',
@@ -81,6 +82,7 @@ const expectedJobs = [
     id: 'moss-wolf-run',
     actor: 'moss-wolf',
     action: 'run',
+    matteCleanup: 'dark-subject-white-matte',
     conditioning: 'first-last',
     reference: 'art-source/h3-pilot/references/moss-wolf-motion-h3.png',
     prompt: 'art-source/h3-pilot/prompts/moss-wolf/run.txt',
@@ -91,6 +93,7 @@ const expectedJobs = [
     id: 'moss-wolf-bite-lunge',
     actor: 'moss-wolf',
     action: 'bite-lunge',
+    matteCleanup: 'dark-subject-white-matte',
     conditioning: 'first-frame',
     reference: 'art-source/h3-pilot/references/moss-wolf-motion-h3.png',
     prompt: 'art-source/h3-pilot/prompts/moss-wolf/bite-lunge.txt',
@@ -101,6 +104,7 @@ const expectedJobs = [
     id: 'moss-wolf-hurt',
     actor: 'moss-wolf',
     action: 'hurt',
+    matteCleanup: 'dark-subject-white-matte',
     conditioning: 'first-frame',
     reference: 'art-source/h3-pilot/references/moss-wolf-h3.png',
     prompt: 'art-source/h3-pilot/prompts/moss-wolf/hurt.txt',
@@ -111,6 +115,7 @@ const expectedJobs = [
     id: 'moss-wolf-death',
     actor: 'moss-wolf',
     action: 'death',
+    matteCleanup: 'dark-subject-white-matte',
     conditioning: 'first-frame',
     reference: 'art-source/h3-pilot/references/moss-wolf-motion-h3.png',
     prompt: 'art-source/h3-pilot/prompts/moss-wolf/death.txt',
@@ -2023,6 +2028,76 @@ function collectReportStrings(value, result = []) {
   return result
 }
 
+test('dark-subject matte cleanup removes large white remnants and preserves small highlights', async (t) => {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'h3-dark-subject-matte-'))
+  t.after(() => rmSync(fixtureRoot, { recursive: true, force: true }))
+  const script = String.raw`
+import importlib.util
+import json
+import sys
+from pathlib import Path
+from PIL import Image, ImageDraw
+
+tool_path = Path(sys.argv[1])
+temp = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("h3_dark_subject_matte_test", tool_path)
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+
+source = Image.new("RGB", module.FRAME_SIZE, (248, 248, 248))
+draw = ImageDraw.Draw(source)
+draw.rectangle((200, 300, 567, 1000), fill=(34, 48, 42))
+draw.rectangle((300, 520, 330, 530), fill=(246, 245, 244))
+draw.rectangle((420, 440, 429, 449), fill=(250, 249, 248))
+
+default_path = temp / "default.png"
+cleaned_path = temp / "cleaned.png"
+source.save(default_path)
+source.save(cleaned_path)
+module.prepare_extracted_png(default_path, "default")
+module.prepare_extracted_png(
+    cleaned_path,
+    "dark subject",
+    matte_cleanup="dark-subject-white-matte",
+)
+
+def inspect(path):
+    with Image.open(path) as image:
+        rgba = image.convert("RGBA")
+        return {
+            "size": list(rgba.size),
+            "halo": rgba.getpixel((199, 600))[3],
+            "enclosed": rgba.getpixel((310, 525))[3],
+            "tooth": rgba.getpixel((424, 444))[3],
+            "subject": rgba.getpixel((250, 600))[3],
+        }
+
+print(json.dumps({"default": inspect(default_path), "cleaned": inspect(cleaned_path)}))
+`
+  const result = await runTask4Process(
+    pythonCommand,
+    ['-c', script, extractorPath, fixtureRoot],
+    { cwd: fixtureRoot, timeoutMs: 60_000 },
+  )
+  assert.equal(result.code, 0, result.stderr)
+  const inspected = JSON.parse(result.stdout)
+  assert.deepEqual(inspected.default, {
+    size: [768, 1344],
+    halo: 255,
+    enclosed: 255,
+    tooth: 255,
+    subject: 255,
+  })
+  assert.deepEqual(inspected.cleaned, {
+    size: [768, 1344],
+    halo: 0,
+    enclosed: 0,
+    tooth: 255,
+    subject: 255,
+  })
+})
+
 test('H3 frame extractor publishes deterministic transparent action frames transactionally', { timeout: 180_000 }, async (t) => {
   const suiteRoot = mkdtempSync(join(tmpdir(), 'h3-frame-extractor-'))
   t.after(() => rmSync(suiteRoot, { recursive: true, force: true }))
@@ -2101,6 +2176,7 @@ print(json.dumps({
         id: 'moss-wolf-run',
         actor: 'moss-wolf',
         action: 'run',
+        matteCleanup: 'dark-subject-white-matte',
         video: 'moss-wolf/clip.mp4',
         outputs: [{ action: 'move', samples: [3.25] }],
       },
@@ -2141,6 +2217,7 @@ print(json.dumps({
 
     const qinglanJob = report.actors[0].jobs[0]
     assert.equal(qinglanJob.id, 'qinglan-idle')
+    assert.equal(qinglanJob.matteCleanup, 'none')
     assert.equal(qinglanJob.video, 'videos/qinglan/clip.mp4')
     assert.equal(qinglanJob.videoSha256, sha256File(resolve(fixture.runRoot, qinglanJob.video)))
     assert.deepEqual(qinglanJob.outputs[0].samples, [0.25, 1.25, 2.25])
@@ -2152,6 +2229,7 @@ print(json.dumps({
       assert.deepEqual(frame.dimensions, [768, 1344])
       assert.deepEqual(frame.alphaBounds, inspected[index].alphaBounds)
     }
+    assert.equal(report.actors[1].jobs[0].matteCleanup, 'dark-subject-white-matte')
 
     const firstHashes = qinglanFrames.map(sha256File)
     const secondResult = await runExtractor(fixture)
@@ -2601,6 +2679,14 @@ print("journaled transaction recovery complete")
           writeExtractionManifest(fixture)
         },
         pattern: /unknown actor/i,
+      },
+      {
+        label: 'unknown matte cleanup mode',
+        setup(fixture) {
+          fixture.manifest.jobs[0].matteCleanup = 'remove-all-white'
+          writeExtractionManifest(fixture)
+        },
+        pattern: /matteCleanup|matte cleanup/i,
       },
       {
         label: 'unknown selected actor',
