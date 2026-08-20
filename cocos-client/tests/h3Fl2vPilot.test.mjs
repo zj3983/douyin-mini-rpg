@@ -551,11 +551,11 @@ test('pilot manifest and prompts lock FL2V conditioning and actor identity', () 
     ['qinglan-sword-ride', 'art-source/h3-pilot/references/qinglan-motion-h3.png'],
     ['qinglan-hand-seal', 'art-source/h3-pilot/references/qinglan-h3.png'],
     ['qinglan-hurt', 'art-source/h3-pilot/references/qinglan-motion-h3.png'],
-    ['moss-wolf-idle', 'art-source/h3-pilot/references/moss-wolf-h3.png'],
-    ['moss-wolf-run', 'art-source/h3-pilot/references/moss-wolf-h3.png'],
-    ['moss-wolf-bite-lunge', 'art-source/h3-pilot/references/moss-wolf-h3.png'],
+    ['moss-wolf-idle', 'art-source/h3-pilot/references/moss-wolf-motion-h3.png'],
+    ['moss-wolf-run', 'art-source/h3-pilot/references/moss-wolf-motion-h3.png'],
+    ['moss-wolf-bite-lunge', 'art-source/h3-pilot/references/moss-wolf-motion-h3.png'],
     ['moss-wolf-hurt', 'art-source/h3-pilot/references/moss-wolf-h3.png'],
-    ['moss-wolf-death', 'art-source/h3-pilot/references/moss-wolf-h3.png'],
+    ['moss-wolf-death', 'art-source/h3-pilot/references/moss-wolf-motion-h3.png'],
   ])
   const motionGuardJobs = new Set(['qinglan-sword-ride', 'qinglan-hurt'])
   assert.equal(pilot.jobs.length, 9)
@@ -607,4 +607,68 @@ test('pilot manifest and prompts lock FL2V conditioning and actor identity', () 
     mode: 'RGBA',
     size: [768, 1344],
   })
+})
+
+test('pilot assigns motion references only to boundary-sensitive wolf jobs', () => {
+  const pilot = JSON.parse(readFileSync(pilotPath, 'utf8'))
+  assert.deepEqual(
+    Object.fromEntries(pilot.jobs.map((job) => [job.id, job.reference])),
+    {
+      'qinglan-idle': 'art-source/h3-pilot/references/qinglan-h3.png',
+      'qinglan-sword-ride': 'art-source/h3-pilot/references/qinglan-motion-h3.png',
+      'qinglan-hand-seal': 'art-source/h3-pilot/references/qinglan-h3.png',
+      'qinglan-hurt': 'art-source/h3-pilot/references/qinglan-motion-h3.png',
+      'moss-wolf-idle': 'art-source/h3-pilot/references/moss-wolf-motion-h3.png',
+      'moss-wolf-run': 'art-source/h3-pilot/references/moss-wolf-motion-h3.png',
+      'moss-wolf-bite-lunge': 'art-source/h3-pilot/references/moss-wolf-motion-h3.png',
+      'moss-wolf-hurt': 'art-source/h3-pilot/references/moss-wolf-h3.png',
+      'moss-wolf-death': 'art-source/h3-pilot/references/moss-wolf-motion-h3.png',
+    },
+  )
+})
+
+test('wolf motion reference is an exact decodable RGBA pilot frame', () => {
+  const motionReference = resolve(
+    projectRoot,
+    'art-source/h3-pilot/references/moss-wolf-motion-h3.png',
+  )
+  assert.deepEqual(inspectImage(motionReference), {
+    format: 'PNG',
+    mode: 'RGBA',
+    size: [768, 1344],
+  })
+})
+
+test('boundary-sensitive wolf prompts lock full anatomy inside a 12 percent margin', () => {
+  const pilot = JSON.parse(readFileSync(pilotPath, 'utf8'))
+  const guardedJobs = new Set([
+    'moss-wolf-idle',
+    'moss-wolf-run',
+    'moss-wolf-bite-lunge',
+    'moss-wolf-death',
+  ])
+
+  for (const job of pilot.jobs.filter(({ id }) => guardedJobs.has(id))) {
+    const prompt = readFileSync(resolve(projectRoot, job.prompt), 'utf8')
+    assert.match(
+      prompt,
+      /full horns.*ears.*snout.*fur.*torso.*all four legs.*paws.*full tail.*always visible/is,
+      `${job.id} protects the complete wolf silhouette`,
+    )
+    assert.match(
+      prompt,
+      /at least 12% clear near-white margin.*every canvas edge/is,
+      `${job.id} reserves an all-edge motion margin`,
+    )
+    assert.match(prompt, /no crop/i)
+    assert.match(prompt, /no zoom/i)
+    assert.match(prompt, /no camera movement/i)
+    assert.match(prompt, /stable subject scale/i)
+    assert.match(prompt, /same species/i)
+    assert.match(prompt, /four complete legs/i)
+    assert.match(prompt, /no extra or missing (?:legs|limbs)/i)
+    if (job.id === 'moss-wolf-bite-lunge') {
+      assert.match(prompt, /composition guard.*both the telegraph and attack phases/is)
+    }
+  }
 })
