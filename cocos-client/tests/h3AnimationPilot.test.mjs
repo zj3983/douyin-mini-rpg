@@ -1,24 +1,30 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { createServer } from 'node:http'
 import {
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
-import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
+import { tmpdir } from 'node:os'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const projectRoot = fileURLToPath(new URL('../', import.meta.url))
 const manifestPath = resolve(projectRoot, 'art-source/h3-pilot/pilot.json')
 const promptRoot = resolve(projectRoot, 'art-source/h3-pilot/prompts')
 const clientPath = resolve(projectRoot, 'tools/generate-h3-action-videos.py')
+const extractorPath = resolve(projectRoot, 'tools/extract-h3-action-frames.py')
 const pythonCommand = process.env.PYTHON ?? (process.platform === 'win32' ? 'python' : 'python3')
+const ffmpegCommand = process.env.FFMPEG ?? 'ffmpeg'
 
 const expectedJobs = [
   {
@@ -1736,5 +1742,672 @@ test('H3 action client honors the bridge, resume, state, and secrecy contracts',
     assert.equal(existsSync(resolve(fixture.runRoot, 'jobs.json')), false)
     assertNoPrivatePayload(result)
     assert.deepEqual(findPartFiles(fixture.runRoot), [])
+  })
+})
+
+function runTask4Process(command, args, { cwd = dirname(projectRoot), timeoutMs = 60_000 } = {}) {
+  return new Promise((resolvePromise, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      env: {
+        ...process.env,
+        PYTHONIOENCODING: 'utf-8',
+        PYTHONUTF8: '1',
+      },
+      windowsHide: true,
+    })
+    const stdout = []
+    const stderr = []
+    let settled = false
+    const timer = setTimeout(() => {
+      child.kill()
+      if (!settled) {
+        settled = true
+        reject(new Error(`process timed out: ${command}`))
+      }
+    }, timeoutMs)
+
+    child.stdout.on('data', (chunk) => stdout.push(chunk))
+    child.stderr.on('data', (chunk) => stderr.push(chunk))
+    child.once('error', (error) => {
+      clearTimeout(timer)
+      if (!settled) {
+        settled = true
+        reject(error)
+      }
+    })
+    child.once('close', (code, signal) => {
+      clearTimeout(timer)
+      if (!settled) {
+        settled = true
+        resolvePromise({
+          code,
+          signal,
+          stderr: Buffer.concat(stderr).toString('utf8'),
+          stdout: Buffer.concat(stdout).toString('utf8'),
+        })
+      }
+    })
+  })
+}
+
+async function createSyntheticPilotVideo(path) {
+  mkdirSync(dirname(path), { recursive: true })
+  const colors = ['0xE63946', '0x2A9D55', '0x3066D6', '0xB23AEE', '0x1B9AAA']
+  const inputs = colors.flatMap(() => [
+    '-f', 'lavfi',
+    '-i', 'color=c=0xF8F8F8:s=384x672:r=24:d=1',
+  ])
+  const segments = colors.map((color, index) => (
+    `[${index}:v]drawbox=x=96:y=120:w=192:h=432:color=${color}:t=fill,`
+    + 'drawbox=x=112:y=170:w=32:h=280:color=0xFAFAF8:t=fill,'
+    + `setpts=PTS-STARTPTS[v${index}]`
+  ))
+  const labels = colors.map((_, index) => `[v${index}]`).join('')
+  const result = await runTask4Process(ffmpegCommand, [
+    '-hide_banner', '-loglevel', 'error',
+    ...inputs,
+    '-filter_complex', `${segments.join(';')};${labels}concat=n=5:v=1:a=0,format=yuv420p[out]`,
+    '-map', '[out]',
+    '-an',
+    '-c:v', 'libx264',
+    '-preset', 'ultrafast',
+    '-crf', '12',
+    '-r', '24',
+    '-movflags', '+faststart',
+    '-y', path,
+  ])
+  assert.equal(result.code, 0, result.stderr)
+  assert.ok(readFileSync(path).length > 0)
+}
+
+function defaultExtractionJobs() {
+  return [
+    {
+      id: 'qinglan-idle',
+      actor: 'qinglan',
+      action: 'idle',
+      video: 'qinglan/clip.mp4',
+      outputs: [{ action: 'idle', samples: [0.25, 1.25, 2.25] }],
+    },
+  ]
+}
+
+function createExtractionFixture(suiteRoot, videoPath, jobs = defaultExtractionJobs()) {
+  const root = mkdtempSync(join(suiteRoot, 'project-'))
+  const manifestPath = resolve(root, 'art-source/h3-pilot/pilot.json')
+  const runRoot = resolve(root, 'runs/h3-pilot')
+  const sourceRoot = resolve(root, 'art-source/vertical-slice')
+  const manifest = {
+    version: 1,
+    duration: 5,
+    jobs: JSON.parse(JSON.stringify(jobs)),
+  }
+
+  mkdirSync(dirname(manifestPath), { recursive: true })
+  mkdirSync(sourceRoot, { recursive: true })
+  for (const job of manifest.jobs) {
+    const target = resolve(runRoot, 'videos', job.video.replaceAll('\\', '/'))
+    mkdirSync(dirname(target), { recursive: true })
+    copyFileSync(videoPath, target)
+  }
+
+  const fixture = { manifest, manifestPath, root, runRoot, sourceRoot }
+  writeExtractionManifest(fixture)
+  return fixture
+}
+
+function writeExtractionManifest(fixture, rawText) {
+  const text = rawText ?? `${JSON.stringify(fixture.manifest, null, 2)}\n`
+  writeFileSync(fixture.manifestPath, text, 'utf8')
+}
+
+function writeActionSentinel(fixture, actor, action, value = `${actor}/${action}`) {
+  const actionRoot = resolve(fixture.sourceRoot, actor, action)
+  mkdirSync(actionRoot, { recursive: true })
+  writeFileSync(resolve(actionRoot, 'sentinel.txt'), value, 'utf8')
+  return actionRoot
+}
+
+const extractionHarness = String.raw`
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+tool_path = Path(sys.argv[1])
+config = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+spec = importlib.util.spec_from_file_location("h3_frame_extractor", tool_path)
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+try:
+    report = module.extract_action_frames(
+        Path(config["manifestPath"]),
+        Path(config["runRoot"]),
+        actors=config.get("actors"),
+        ffmpeg=config.get("ffmpeg", "ffmpeg"),
+        project_root=Path(config["projectRoot"]),
+        source_root=Path(config["sourceRoot"]),
+    )
+except Exception as error:
+    print(f"{type(error).__name__}: {error}", file=sys.stderr)
+    raise SystemExit(1)
+print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+`
+
+function runExtractor(fixture, overrides = {}) {
+  const configPath = resolve(fixture.root, 'extract-config.json')
+  writeFileSync(configPath, JSON.stringify({
+    manifestPath: overrides.manifestPath ?? fixture.manifestPath,
+    runRoot: overrides.runRoot ?? fixture.runRoot,
+    actors: overrides.actors ?? null,
+    ffmpeg: overrides.ffmpeg ?? ffmpegCommand,
+    projectRoot: overrides.projectRoot ?? fixture.root,
+    sourceRoot: overrides.sourceRoot ?? fixture.sourceRoot,
+  }), 'utf8')
+  return runTask4Process(
+    pythonCommand,
+    ['-c', extractionHarness, extractorPath, configPath],
+    { cwd: overrides.cwd ?? dirname(fixture.root), timeoutMs: 60_000 },
+  )
+}
+
+async function inspectExtractedFrames(paths) {
+  const script = String.raw`
+import json
+import sys
+from pathlib import Path
+from PIL import Image
+
+frames = []
+for raw_path in sys.argv[1:]:
+    path = Path(raw_path)
+    with Image.open(path) as image:
+        rgba = image.convert("RGBA")
+        alpha = rgba.getchannel("A")
+        frames.append({
+            "mode": image.mode,
+            "size": list(image.size),
+            "alphaBounds": list(alpha.getbbox()) if alpha.getbbox() else None,
+            "alphaExtrema": list(alpha.getextrema()),
+            "corners": [
+                rgba.getpixel((0, 0))[3],
+                rgba.getpixel((rgba.width - 1, 0))[3],
+                rgba.getpixel((0, rgba.height - 1))[3],
+                rgba.getpixel((rgba.width - 1, rgba.height - 1))[3],
+            ],
+            "center": list(rgba.getpixel((rgba.width // 2, rgba.height // 2))),
+            "whiteCostumeAlpha": rgba.getpixel((240, 500))[3],
+        })
+print(json.dumps(frames))
+`
+  const result = await runTask4Process(
+    pythonCommand,
+    ['-c', script, ...paths],
+    { cwd: tmpdir(), timeoutMs: 30_000 },
+  )
+  assert.equal(result.code, 0, result.stderr)
+  return JSON.parse(result.stdout)
+}
+
+function sha256File(path) {
+  return createHash('sha256').update(readFileSync(path)).digest('hex')
+}
+
+function collectReportStrings(value, result = []) {
+  if (typeof value === 'string') {
+    result.push(value)
+  } else if (Array.isArray(value)) {
+    for (const entry of value) {
+      collectReportStrings(entry, result)
+    }
+  } else if (value && typeof value === 'object') {
+    for (const entry of Object.values(value)) {
+      collectReportStrings(entry, result)
+    }
+  }
+  return result
+}
+
+test('H3 frame extractor publishes deterministic transparent action frames transactionally', { timeout: 180_000 }, async (t) => {
+  const suiteRoot = mkdtempSync(join(tmpdir(), 'h3-frame-extractor-'))
+  t.after(() => rmSync(suiteRoot, { recursive: true, force: true }))
+  const videoPath = resolve(suiteRoot, 'synthetic-five-second-24fps.mp4')
+  await createSyntheticPilotVideo(videoPath)
+
+  await t.test('CLI derives its project root from the tool and exposes the locked defaults', async () => {
+    const missingRunRoot = await runTask4Process(
+      pythonCommand,
+      [extractorPath],
+      { cwd: suiteRoot },
+    )
+    assert.notEqual(missingRunRoot.code, 0)
+    assert.match(missingRunRoot.stderr, /--run-root/)
+
+    const help = await runTask4Process(
+      pythonCommand,
+      [extractorPath, '--help'],
+      { cwd: suiteRoot },
+    )
+    assert.equal(help.code, 0, help.stderr)
+    assert.match(help.stdout, /--actor/)
+    assert.match(help.stdout, /--ffmpeg/)
+
+    const parserProbe = String.raw`
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("extractor", Path(sys.argv[1]))
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+defaults = module.build_parser().parse_args(["--run-root", "runs/pilot"])
+selected = module.build_parser().parse_args([
+    "--run-root", "runs/pilot", "--actor", "qinglan", "--actor", "moss-wolf"
+])
+print(json.dumps({
+    "manifest": defaults.manifest,
+    "ffmpeg": defaults.ffmpeg,
+    "actors": defaults.actors,
+    "selected": selected.actors,
+    "projectRoot": str(module.PROJECT_ROOT),
+}))
+`
+    const probe = await runTask4Process(
+      pythonCommand,
+      ['-c', parserProbe, extractorPath],
+      { cwd: suiteRoot },
+    )
+    assert.equal(probe.code, 0, probe.stderr)
+    const parsed = JSON.parse(probe.stdout)
+    assert.equal(parsed.manifest, 'art-source/h3-pilot/pilot.json')
+    assert.equal(parsed.ffmpeg, 'ffmpeg')
+    assert.deepEqual(parsed.actors, [])
+    assert.deepEqual(parsed.selected, ['qinglan', 'moss-wolf'])
+    assert.equal(resolve(parsed.projectRoot), resolve(projectRoot))
+  })
+
+  await t.test('extracts exact samples, preserves enclosed white costume, replaces sentinels, and writes a complete report', async () => {
+    const jobs = [
+      ...defaultExtractionJobs(),
+      {
+        id: 'moss-wolf-run',
+        actor: 'moss-wolf',
+        action: 'run',
+        video: 'moss-wolf/clip.mp4',
+        outputs: [{ action: 'move', samples: [3.25] }],
+      },
+    ]
+    const fixture = createExtractionFixture(suiteRoot, videoPath, jobs)
+    const qinglanAction = writeActionSentinel(fixture, 'qinglan', 'idle', 'old qinglan')
+    const wolfAction = writeActionSentinel(fixture, 'moss-wolf', 'move', 'old wolf')
+
+    const firstResult = await runExtractor(fixture)
+    assert.equal(firstResult.code, 0, firstResult.stderr)
+    assert.deepEqual(readdirSync(qinglanAction).sort(), ['00.png', '01.png', '02.png'])
+    assert.deepEqual(readdirSync(wolfAction).sort(), ['00.png'])
+
+    const qinglanFrames = ['00.png', '01.png', '02.png'].map((name) => resolve(qinglanAction, name))
+    const inspected = await inspectExtractedFrames(qinglanFrames)
+    assert.deepEqual(inspected.map((frame) => frame.mode), ['RGBA', 'RGBA', 'RGBA'])
+    assert.deepEqual(inspected.map((frame) => frame.size), [[768, 1344], [768, 1344], [768, 1344]])
+    for (const frame of inspected) {
+      assert.deepEqual(frame.alphaExtrema, [0, 255])
+      assert.deepEqual(frame.corners, [0, 0, 0, 0])
+      assert.ok(frame.whiteCostumeAlpha > 0, 'enclosed near-white costume remains visible')
+      assert.ok(frame.alphaBounds[0] > 0 && frame.alphaBounds[1] > 0)
+      assert.ok(frame.alphaBounds[2] < 768 && frame.alphaBounds[3] < 1344)
+    }
+    assert.deepEqual(
+      inspected.map((frame) => frame.center.slice(0, 3).indexOf(Math.max(...frame.center.slice(0, 3)))),
+      [0, 1, 2],
+      'sample order follows the red, green, and blue source segments',
+    )
+
+    const reportPath = resolve(fixture.runRoot, 'extraction-report.json')
+    const firstReportText = readFileSync(reportPath, 'utf8')
+    const report = JSON.parse(firstReportText)
+    assert.deepEqual(JSON.parse(firstResult.stdout), report)
+    assert.equal(report.version, 1)
+    assert.equal(report.manifestSha256, sha256File(fixture.manifestPath))
+    assert.deepEqual(report.actors.map((actor) => actor.actor), ['qinglan', 'moss-wolf'])
+
+    const qinglanJob = report.actors[0].jobs[0]
+    assert.equal(qinglanJob.id, 'qinglan-idle')
+    assert.equal(qinglanJob.video, 'videos/qinglan/clip.mp4')
+    assert.equal(qinglanJob.videoSha256, sha256File(resolve(fixture.runRoot, qinglanJob.video)))
+    assert.deepEqual(qinglanJob.outputs[0].samples, [0.25, 1.25, 2.25])
+    assert.deepEqual(qinglanJob.outputs[0].frames.map((frame) => frame.index), [0, 1, 2])
+    for (const [index, frame] of qinglanJob.outputs[0].frames.entries()) {
+      assert.equal(frame.sample, qinglanJob.outputs[0].samples[index])
+      assert.equal(frame.sourceVideoSha256, qinglanJob.videoSha256)
+      assert.equal(frame.outputSha256, sha256File(qinglanFrames[index]))
+      assert.deepEqual(frame.dimensions, [768, 1344])
+      assert.deepEqual(frame.alphaBounds, inspected[index].alphaBounds)
+    }
+
+    const firstHashes = qinglanFrames.map(sha256File)
+    const secondResult = await runExtractor(fixture)
+    assert.equal(secondResult.code, 0, secondResult.stderr)
+    assert.deepEqual(qinglanFrames.map(sha256File), firstHashes)
+    assert.equal(readFileSync(reportPath, 'utf8'), firstReportText, 'report bytes are deterministic')
+
+    for (const value of collectReportStrings(report)) {
+      assert.equal(isAbsolute(value), false, `report string is not an absolute path: ${value}`)
+      assert.doesNotMatch(value, /^[A-Za-z]:[\\/]/)
+    }
+    const videoBase64Prefix = readFileSync(videoPath).toString('base64').slice(0, 120)
+    assert.equal(firstReportText.includes(videoBase64Prefix), false, 'report excludes video content')
+    assert.doesNotMatch(firstReportText, /data:video|videoBytes/i)
+  })
+
+  await t.test('an actor filter ignores absent unselected videos and preserves unselected actions', async () => {
+    const jobs = [
+      {
+        id: 'qinglan-idle',
+        actor: 'qinglan',
+        action: 'idle',
+        video: 'qinglan/clip.mp4',
+        outputs: [{ action: 'idle', samples: [0.25] }],
+      },
+      {
+        id: 'moss-wolf-run',
+        actor: 'moss-wolf',
+        action: 'run',
+        video: 'moss-wolf/clip.mp4',
+        outputs: [{ action: 'move', samples: [1.25] }],
+      },
+    ]
+    const fixture = createExtractionFixture(suiteRoot, videoPath, jobs)
+    const qinglanAction = writeActionSentinel(fixture, 'qinglan', 'idle', 'old qinglan')
+    const wolfAction = writeActionSentinel(fixture, 'moss-wolf', 'move', 'old wolf')
+    rmSync(resolve(fixture.runRoot, 'videos/moss-wolf/clip.mp4'))
+
+    const result = await runExtractor(fixture, { actors: ['qinglan'] })
+    assert.equal(result.code, 0, result.stderr)
+    assert.deepEqual(readdirSync(qinglanAction), ['00.png'])
+    assert.deepEqual(readdirSync(wolfAction), ['sentinel.txt'])
+    assert.equal(readFileSync(resolve(wolfAction, 'sentinel.txt'), 'utf8'), 'old wolf')
+    const report = JSON.parse(readFileSync(resolve(fixture.runRoot, 'extraction-report.json'), 'utf8'))
+    assert.deepEqual(report.actors.map((actor) => actor.actor), ['qinglan'])
+  })
+
+  await t.test('a bad second output preserves both old action directories and the previous successful report', async () => {
+    const jobs = [{
+      id: 'moss-wolf-bite-lunge',
+      actor: 'moss-wolf',
+      action: 'bite-lunge',
+      video: 'moss-wolf/bite-lunge.mp4',
+      outputs: [
+        { action: 'telegraph', samples: [0.25, 0.75] },
+        { action: 'attack', samples: [1.25, 1.25] },
+      ],
+    }]
+    const fixture = createExtractionFixture(suiteRoot, videoPath, jobs)
+    const telegraph = writeActionSentinel(fixture, 'moss-wolf', 'telegraph', 'old telegraph')
+    const attack = writeActionSentinel(fixture, 'moss-wolf', 'attack', 'old attack')
+    const oldReport = '{"version":1,"status":"previous-success"}\n'
+    mkdirSync(fixture.runRoot, { recursive: true })
+    writeFileSync(resolve(fixture.runRoot, 'extraction-report.json'), oldReport, 'utf8')
+
+    const result = await runExtractor(fixture)
+    assert.notEqual(result.code, 0)
+    assert.match(result.stderr, /strictly increasing|duplicate/i)
+    assert.deepEqual(readdirSync(telegraph), ['sentinel.txt'])
+    assert.deepEqual(readdirSync(attack), ['sentinel.txt'])
+    assert.equal(readFileSync(resolve(telegraph, 'sentinel.txt'), 'utf8'), 'old telegraph')
+    assert.equal(readFileSync(resolve(attack, 'sentinel.txt'), 'utf8'), 'old attack')
+    assert.equal(readFileSync(resolve(fixture.runRoot, 'extraction-report.json'), 'utf8'), oldReport)
+  })
+
+  await t.test('rejects missing or empty videos, invalid samples/actions/actors, and ffmpeg failures without publication', async () => {
+    const cases = [
+      {
+        label: 'missing video',
+        setup(fixture) {
+          rmSync(resolve(fixture.runRoot, 'videos/qinglan/clip.mp4'))
+        },
+        pattern: /video.*does not exist|missing video/i,
+      },
+      {
+        label: 'empty video',
+        setup(fixture) {
+          writeFileSync(resolve(fixture.runRoot, 'videos/qinglan/clip.mp4'), Buffer.alloc(0))
+        },
+        pattern: /video.*empty|empty video/i,
+      },
+      {
+        label: 'non-finite sample',
+        setup(fixture) {
+          writeExtractionManifest(fixture, JSON.stringify(fixture.manifest).replace('[0.25,1.25,2.25]', '[NaN]'))
+        },
+        pattern: /finite/i,
+      },
+      {
+        label: 'negative sample',
+        setup(fixture) {
+          fixture.manifest.jobs[0].outputs[0].samples = [-0.01]
+          writeExtractionManifest(fixture)
+        },
+        pattern: /greater than or equal to zero|negative|sample/i,
+      },
+      {
+        label: 'sample at duration',
+        setup(fixture) {
+          fixture.manifest.jobs[0].outputs[0].samples = [5]
+          writeExtractionManifest(fixture)
+        },
+        pattern: /duration|less than/i,
+      },
+      {
+        label: 'duplicate sample',
+        setup(fixture) {
+          fixture.manifest.jobs[0].outputs[0].samples = [0.25, 0.25]
+          writeExtractionManifest(fixture)
+        },
+        pattern: /strictly increasing|duplicate/i,
+      },
+      {
+        label: 'reverse sample order',
+        setup(fixture) {
+          fixture.manifest.jobs[0].outputs[0].samples = [1.25, 0.25]
+          writeExtractionManifest(fixture)
+        },
+        pattern: /strictly increasing/i,
+      },
+      {
+        label: 'duplicate output action',
+        setup(fixture) {
+          fixture.manifest.jobs[0].outputs.push({ action: 'idle', samples: [3.25] })
+          writeExtractionManifest(fixture)
+        },
+        pattern: /duplicate output action/i,
+      },
+      {
+        label: 'unknown manifest actor',
+        setup(fixture) {
+          fixture.manifest.jobs[0].actor = 'unknown-actor'
+          writeExtractionManifest(fixture)
+        },
+        pattern: /unknown actor/i,
+      },
+      {
+        label: 'unknown selected actor',
+        overrides: { actors: ['unknown-actor'] },
+        pattern: /unknown actor/i,
+      },
+      {
+        label: 'missing ffmpeg',
+        overrides(fixture) {
+          return { ffmpeg: resolve(fixture.root, 'missing-ffmpeg') }
+        },
+        pattern: /ffmpeg.*not found|does not exist/i,
+      },
+      {
+        label: 'ffmpeg non-zero',
+        overrides: { ffmpeg: process.execPath },
+        pattern: /ffmpeg.*failed|non-zero/i,
+      },
+    ]
+
+    for (const testCase of cases) {
+      const fixture = createExtractionFixture(suiteRoot, videoPath)
+      const actionRoot = writeActionSentinel(fixture, 'qinglan', 'idle', testCase.label)
+      const oldReport = `{"status":${JSON.stringify(testCase.label)}}\n`
+      writeFileSync(resolve(fixture.runRoot, 'extraction-report.json'), oldReport, 'utf8')
+      testCase.setup?.(fixture)
+      const overrides = typeof testCase.overrides === 'function'
+        ? testCase.overrides(fixture)
+        : (testCase.overrides ?? {})
+      const result = await runExtractor(fixture, overrides)
+
+      assert.notEqual(result.code, 0, testCase.label)
+      assert.match(result.stderr, testCase.pattern, `${testCase.label}: ${result.stderr}`)
+      assert.deepEqual(readdirSync(actionRoot), ['sentinel.txt'], testCase.label)
+      assert.equal(readFileSync(resolve(actionRoot, 'sentinel.txt'), 'utf8'), testCase.label)
+      assert.equal(readFileSync(resolve(fixture.runRoot, 'extraction-report.json'), 'utf8'), oldReport)
+    }
+  })
+
+  await t.test('rejects manifest, run, source, video, and target escapes', async () => {
+    const cases = [
+      {
+        label: 'manifest escape',
+        setup(fixture) {
+          const outsideManifest = resolve(suiteRoot, `outside-${fixture.root.split(sep).at(-1)}.json`)
+          writeFileSync(outsideManifest, JSON.stringify(fixture.manifest), 'utf8')
+          return { manifestPath: outsideManifest }
+        },
+      },
+      {
+        label: 'run root escape',
+        setup() {
+          return { runRoot: resolve(suiteRoot, 'outside-run-root') }
+        },
+      },
+      {
+        label: 'source root escape',
+        setup() {
+          return { sourceRoot: resolve(suiteRoot, 'outside-source-root') }
+        },
+      },
+      {
+        label: 'video escape',
+        setup(fixture) {
+          fixture.manifest.jobs[0].video = 'qinglan/../../outside.mp4'
+          writeExtractionManifest(fixture)
+          return {}
+        },
+      },
+      {
+        label: 'target action escape',
+        setup(fixture) {
+          fixture.manifest.jobs[0].outputs[0].action = '../outside'
+          writeExtractionManifest(fixture)
+          return {}
+        },
+      },
+    ]
+
+    for (const testCase of cases) {
+      const fixture = createExtractionFixture(suiteRoot, videoPath)
+      const actionRoot = writeActionSentinel(fixture, 'qinglan', 'idle', testCase.label)
+      const result = await runExtractor(fixture, testCase.setup(fixture))
+      assert.notEqual(result.code, 0, testCase.label)
+      assert.match(result.stderr, /outside|escape|unsafe|traversal/i, result.stderr)
+      assert.deepEqual(readdirSync(actionRoot), ['sentinel.txt'], testCase.label)
+    }
+  })
+
+  await t.test('rejects corrupt or unsafe ffmpeg PNG outputs before publication', async () => {
+    const fixture = createExtractionFixture(suiteRoot, videoPath)
+    const script = String.raw`
+import importlib.util
+import sys
+from pathlib import Path
+from PIL import Image, ImageDraw
+
+tool_path = Path(sys.argv[1])
+temp = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("h3_frame_extractor_validation", tool_path)
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+
+cases = []
+corrupt = temp / "corrupt.png"
+corrupt.write_bytes(b"not a png")
+cases.append(("corrupt", corrupt, "valid PNG"))
+
+wrong_size = temp / "wrong-size.png"
+Image.new("RGB", (64, 64), (248, 248, 248)).save(wrong_size)
+cases.append(("wrong-size", wrong_size, "incorrect dimensions"))
+
+wrong_mode = temp / "wrong-mode.png"
+Image.new("L", module.FRAME_SIZE, 255).save(wrong_mode)
+cases.append(("wrong-mode", wrong_mode, "RGB or RGBA"))
+
+transparent = temp / "transparent.png"
+Image.new("RGBA", module.FRAME_SIZE, (0, 0, 0, 0)).save(transparent)
+cases.append(("transparent", transparent, "fully transparent"))
+
+opaque = temp / "opaque.png"
+Image.new("RGB", module.FRAME_SIZE, (32, 90, 180)).save(opaque)
+cases.append(("opaque", opaque, "no transparent background"))
+
+touching = temp / "touching.png"
+touching_image = Image.new("RGB", module.FRAME_SIZE, (248, 248, 248))
+ImageDraw.Draw(touching_image).rectangle((0, 240, 360, 1100), fill=(210, 44, 72))
+touching_image.save(touching)
+cases.append(("touching", touching, "touches the frame boundary"))
+
+rejected = []
+for label, path, expected in cases:
+    try:
+        module.prepare_extracted_png(path, label)
+    except module.ExtractionError as error:
+        assert expected.lower() in str(error).lower(), (label, str(error))
+        rejected.append(label)
+    else:
+        raise AssertionError(f"{label} output must be rejected")
+print(",".join(rejected))
+`
+    const result = await runTask4Process(
+      pythonCommand,
+      ['-c', script, extractorPath, fixture.root],
+      { cwd: suiteRoot, timeoutMs: 60_000 },
+    )
+    assert.equal(result.code, 0, result.stderr)
+    assert.equal(result.stdout.trim(), 'corrupt,wrong-size,wrong-mode,transparent,opaque,touching')
+    assert.equal(existsSync(resolve(fixture.runRoot, 'extraction-report.json')), false)
+    assert.equal(existsSync(resolve(fixture.sourceRoot, 'qinglan/idle/00.png')), false)
+  })
+
+  await t.test('rejects a target action symlink or reparse point when this platform permits creating one', async (t) => {
+    const fixture = createExtractionFixture(suiteRoot, videoPath)
+    const externalTarget = resolve(suiteRoot, 'external-action-target')
+    const actionLink = resolve(fixture.sourceRoot, 'qinglan/idle')
+    mkdirSync(externalTarget, { recursive: true })
+    mkdirSync(dirname(actionLink), { recursive: true })
+    writeFileSync(resolve(externalTarget, 'sentinel.txt'), 'external sentinel', 'utf8')
+    try {
+      symlinkSync(externalTarget, actionLink, process.platform === 'win32' ? 'junction' : 'dir')
+    } catch (error) {
+      if (['EACCES', 'EPERM', 'UNKNOWN'].includes(error.code)) {
+        t.skip(`symlink creation unavailable: ${error.code}`)
+        return
+      }
+      throw error
+    }
+
+    const result = await runExtractor(fixture)
+    assert.notEqual(result.code, 0)
+    assert.match(result.stderr, /symlink|reparse/i)
+    assert.deepEqual(readdirSync(externalTarget), ['sentinel.txt'])
+    assert.equal(readFileSync(resolve(externalTarget, 'sentinel.txt'), 'utf8'), 'external sentinel')
+    assert.equal(existsSync(resolve(externalTarget, '00.png')), false)
   })
 })
