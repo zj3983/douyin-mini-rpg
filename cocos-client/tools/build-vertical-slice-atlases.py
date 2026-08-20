@@ -14,7 +14,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 from statistics import median
 from typing import Any
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 
 SOURCE_MODES = {"layered-keyframes", "pose-video", "frame-sequence"}
@@ -33,6 +33,8 @@ DEFAULT_QUALITY = {
     "safePadding": 0.08,
 }
 ALPHA_VISIBILITY_THRESHOLD = 8
+MAX_WHITE_MATTE_FRINGE_LAYERS = 8
+POSE_VIDEO_MATTE_FRINGE_LAYERS = 3
 # Source frames may contain a handful of antialiased hair or fur pixels at an edge.
 # Treat clipping as substantive when edge pixels exceed 0.5% of the subject.
 # A long edge span is also suspicious, but only once contact exceeds 0.3%; this
@@ -178,10 +180,42 @@ def remove_isolated_alpha_components(image: Image.Image, *, maximum_gap=6, edge_
     return source
 
 
-def sanitize_runtime_frame(image: Image.Image, frame_size, *, padding_ratio=0.10, anchor=None):
+def remove_white_matte_fringe(image: Image.Image, layers=0):
+    if type(layers) is not int or not 0 <= layers <= MAX_WHITE_MATTE_FRINGE_LAYERS:
+        raise ValueError(
+            f"white matte fringe layers must be an integer in [0, {MAX_WHITE_MATTE_FRINGE_LAYERS}]"
+        )
+    source = image.convert("RGBA")
+    alpha = source.getchannel("A")
+    for _ in range(layers):
+        visible = alpha.point(lambda value: 255 if value > 0 else 0)
+        inset = visible.filter(ImageFilter.MinFilter(3))
+        if inset.getbbox() is None:
+            break
+        # White-matte transitions also contain gray pixels, so remove the narrow
+        # contaminated contour instead of matching only pure-white samples.
+        alpha = ImageChops.multiply(alpha, inset)
+    source.putalpha(alpha)
+    return source
+
+
+def sanitize_runtime_frame(
+    image: Image.Image,
+    frame_size,
+    *,
+    padding_ratio=0.10,
+    anchor=None,
+    white_matte_fringe_layers=0,
+):
     anchor = anchor or {"x": 0.5, "y": 0.86}
     cleaned = remove_isolated_alpha_components(image)
-    normalized = normalize_frame(cleaned, frame_size, padding_ratio, anchor)
+    normalized = normalize_frame(
+        cleaned,
+        frame_size,
+        padding_ratio,
+        anchor,
+        white_matte_fringe_layers=white_matte_fringe_layers,
+    )
     normalized.putalpha(normalized.getchannel("A").point(lambda alpha: alpha if alpha >= ALPHA_VISIBILITY_THRESHOLD else 0))
     return remove_isolated_alpha_components(normalized)
 
@@ -319,7 +353,14 @@ def remove_border_connected_checkerboard(
     return source
 
 
-def normalize_frame(image: Image.Image, frame_size, padding_ratio, anchor):
+def normalize_frame(
+    image: Image.Image,
+    frame_size,
+    padding_ratio,
+    anchor,
+    *,
+    white_matte_fringe_layers=0,
+):
     target_width, target_height = _as_size(list(frame_size), "frame_size")
     if not 0 <= padding_ratio < 0.4:
         raise ValueError("padding_ratio must be in [0, 0.4)")
@@ -328,7 +369,7 @@ def normalize_frame(image: Image.Image, frame_size, padding_ratio, anchor):
     if not 0 <= anchor_x <= 1 or not 0 <= anchor_y <= 1:
         raise ValueError("anchor must be normalized")
 
-    source = image.convert("RGBA")
+    source = remove_white_matte_fringe(image, white_matte_fringe_layers)
     left, top, right, bottom = _bbox_or_error(source)
     subject = source.crop((left, top, right, bottom))
     safe_width = target_width * (1 - padding_ratio * 2)
@@ -805,9 +846,25 @@ def _load_action_source_frames(action_config, source_root: Path):
     return frames
 
 
-def _normalize_action_frames(source_frames, frame_size, anchor, *, sanitize_fragments=False):
+def _normalize_action_frames(
+    source_frames,
+    frame_size,
+    anchor,
+    *,
+    sanitize_fragments=False,
+    white_matte_fringe_layers=0,
+):
     normalize = sanitize_runtime_frame if sanitize_fragments else normalize_frame
-    frames = [normalize(frame, frame_size, padding_ratio=0.10, anchor=anchor) for frame in source_frames]
+    frames = [
+        normalize(
+            frame,
+            frame_size,
+            padding_ratio=0.10,
+            anchor=anchor,
+            white_matte_fringe_layers=white_matte_fringe_layers,
+        )
+        for frame in source_frames
+    ]
     for frame in frames:
         validate_subject(frame, 0.10)
     return frames
@@ -873,6 +930,11 @@ def build_actor(source_config, source_root, output_root, report_root=None, repor
                 frame_size,
                 anchor,
                 sanitize_fragments=bool(source_config.get("sanitizeRuntimeFragments", False)),
+                white_matte_fringe_layers=(
+                    POSE_VIDEO_MATTE_FRINGE_LAYERS
+                    if action_config.get("sourceMode") == "pose-video"
+                    else 0
+                ),
             )
         except ValueError as error:
             raise ValueError(f"{context}: normalization failed: {error}") from error

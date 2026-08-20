@@ -39,6 +39,53 @@ print(frame.size, frame.getchannel("A").getbbox())
   assert.match(output, /\(256, 320\)/)
 })
 
+test('builder removes a white matte fringe without erasing enclosed costume highlights', () => {
+  const script = String.raw`
+import importlib.util
+import sys
+from pathlib import Path
+from PIL import Image, ImageDraw
+
+root = Path(sys.argv[1])
+spec = importlib.util.spec_from_file_location("builder", root / "tools/build-vertical-slice-atlases.py")
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+
+image = Image.new("RGBA", (96, 120), (255, 255, 255, 0))
+draw = ImageDraw.Draw(image)
+# Reproduce the opaque white contour left by white-background matting.
+draw.polygon(((48, 8), (86, 60), (48, 112), (10, 60)), fill=(250, 251, 252, 255))
+draw.polygon(((48, 11), (83, 60), (48, 109), (13, 60)), fill=(34, 46, 55, 255))
+draw.ellipse((40, 48, 56, 64), fill=(248, 249, 250, 255))
+frame = builder.normalize_frame(
+    image,
+    (48, 60),
+    0.10,
+    {"x": 0.5, "y": 0.86},
+    white_matte_fringe_layers=3,
+)
+pixels = frame.load()
+edge_whites = []
+enclosed_whites = []
+for y in range(frame.height):
+    for x in range(frame.width):
+        red, green, blue, alpha = pixels[x, y]
+        if alpha < 8 or min(red, green, blue) < 220:
+            continue
+        touches_transparency = any(
+            pixels[nx, ny][3] < 8
+            for nx in range(max(0, x - 1), min(frame.width, x + 2))
+            for ny in range(max(0, y - 1), min(frame.height, y + 2))
+        )
+        (edge_whites if touches_transparency else enclosed_whites).append((x, y))
+assert not edge_whites, edge_whites
+assert enclosed_whites
+print(len(enclosed_whites))
+`
+  const output = runPython(script)
+  assert.match(output, /\d+/)
+})
+
 test('builder packs synthetic actions and writes byte-identical manifests', () => {
   const tempRoot = mkdtempSync(join(tmpdir(), 'vertical-slice-atlas-'))
   try {
