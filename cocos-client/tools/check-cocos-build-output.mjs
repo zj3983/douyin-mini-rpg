@@ -70,7 +70,7 @@ function findEmbeddedAnimationManifest(value) {
   return null
 }
 
-function checkH3AnimationOutput({ projectRoot, resourcesRoot, errors }) {
+function checkH3AnimationOutput({ projectRoot, resourcesRoot, resourcesConfig, errors }) {
   const sourceManifestPath = resolve(projectRoot, 'assets/resources/Data/animation-atlas.json')
   const manifestMetaPath = `${sourceManifestPath}.meta`
   if (!existsSync(sourceManifestPath) || !existsSync(manifestMetaPath)) {
@@ -120,12 +120,33 @@ function checkH3AnimationOutput({ projectRoot, resourcesRoot, errors }) {
       continue
     }
 
-    let uuid
+    let meta
     try {
-      uuid = JSON.parse(readFileSync(metaPath, 'utf8')).uuid
+      meta = JSON.parse(readFileSync(metaPath, 'utf8'))
     } catch (error) {
       errors.push(`invalid H3 atlas meta ${atlasPath}: ${error.message}`)
       continue
+    }
+    const uuid = meta.uuid
+    if (resourcesConfig) {
+      const textureMeta = Object.values(meta.subMetas ?? {}).find(({ name }) => name === 'texture')
+      const resourcePath = atlasPath.replace(/\.png$/, '/texture')
+      if (!textureMeta?.uuid) {
+        errors.push(`missing H3 atlas texture meta: ${atlasPath}`)
+      } else {
+        const [textureAssetUuid, textureSubId] = textureMeta.uuid.split('@')
+        const expectedTextureUuid = `${compressAssetUuid(textureAssetUuid)}@${textureSubId}`
+        const pathEntry = Object.entries(resourcesConfig.paths ?? {})
+          .find(([, value]) => Array.isArray(value) && value[0] === resourcePath)
+        if (!pathEntry) {
+          errors.push(`built H3 atlas resource path is missing: ${resourcePath}`)
+        } else {
+          const actualTextureUuid = resourcesConfig.uuids?.[Number(pathEntry[0])]
+          if (actualTextureUuid !== expectedTextureUuid) {
+            errors.push(`built H3 atlas resource UUID ${actualTextureUuid ?? '<missing>'} for ${resourcePath} does not match ${expectedTextureUuid}`)
+          }
+        }
+      }
     }
     const nativeRoot = join(resourcesRoot, 'native', uuid.slice(0, 2))
     const nativeName = findBuildFile(nativeRoot, uuid, extname(sourcePath))
@@ -223,7 +244,7 @@ export function checkCocosBuildOutput({ buildRoot, projectRoot = process.cwd() }
     }
   }
 
-  checkH3AnimationOutput({ projectRoot, resourcesRoot, errors })
+  checkH3AnimationOutput({ projectRoot, resourcesRoot, resourcesConfig, errors })
 
   const sceneFile = collectFiles(join(resolvedBuildRoot, 'assets/main/import'))
     .filter((path) => path.endsWith('.json'))

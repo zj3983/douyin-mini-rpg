@@ -136,15 +136,15 @@
   "screenshots": [
     {
       "label": "balanced-entry",
-      "file": "D:\\游戏\\douyin-mini-rpg\\.worktrees\\m3-pursuit-dungeon\\artifacts\\game-agent\\2026-08-20T09-36-29-445Z\\01-balanced-entry.png"
+      "file": "docs/reports/assets/h3-gameplay-animation-pilot/portrait-entry.png"
     },
     {
       "label": "balanced-before-pursuit",
-      "file": "D:\\游戏\\douyin-mini-rpg\\.worktrees\\m3-pursuit-dungeon\\artifacts\\game-agent\\2026-08-20T09-36-29-445Z\\02-balanced-before-pursuit.png"
+      "file": "docs/reports/assets/h3-gameplay-animation-pilot/portrait-gameplay.png"
     },
     {
       "label": "balanced-settlement",
-      "file": "D:\\游戏\\douyin-mini-rpg\\.worktrees\\m3-pursuit-dungeon\\artifacts\\game-agent\\2026-08-20T09-36-29-445Z\\03-balanced-settlement.png"
+      "file": "docs/reports/assets/h3-gameplay-animation-pilot/portrait-settlement.png"
     }
   ],
   "route": {

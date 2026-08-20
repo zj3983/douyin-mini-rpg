@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -51,8 +51,15 @@ const h3AtlasAssets = [...new Set(
     .flatMap(({ actions }) => actions.map(({ atlas }) => atlas)),
 )].map((atlas) => {
   const sourcePath = resolve('assets/resources', atlas)
-  const uuid = JSON.parse(readFileSync(`${sourcePath}.meta`, 'utf8')).uuid
-  return { atlas, sourcePath, uuid }
+  const meta = JSON.parse(readFileSync(`${sourcePath}.meta`, 'utf8'))
+  const textureUuid = Object.values(meta.subMetas).find(({ name }) => name === 'texture').uuid
+  return {
+    atlas,
+    sourcePath,
+    uuid: meta.uuid,
+    textureUuid: `${compressAssetUuidFixture(textureUuid.split('@')[0])}@${textureUuid.split('@')[1]}`,
+    resourcePath: atlas.replace(/\.png$/, '/texture'),
+  }
 })
 
 function writeFixture(root, path, source) {
@@ -74,6 +81,17 @@ function writeH3AnimationFixture(root, manifest = h3Manifest) {
       readFileSync(asset.sourcePath),
     )
   }
+  const resourcesRoot = join(root, 'assets/resources')
+  const configName = readdirSync(resourcesRoot).find((name) => /^config(?:\.[^.]+)?\.json$/.test(name))
+  const configPath = join(resourcesRoot, configName)
+  const config = JSON.parse(readFileSync(configPath, 'utf8'))
+  for (const asset of h3AtlasAssets) {
+    if (Object.values(config.paths).some((value) => value[0] === asset.resourcePath)) continue
+    const index = config.uuids.length
+    config.uuids.push(asset.textureUuid)
+    config.paths[index] = [asset.resourcePath, 2, 1]
+  }
+  writeFileSync(configPath, JSON.stringify(config))
 }
 
 function reverseObjectKeys(value) {
@@ -271,6 +289,39 @@ test('build-output check rejects a promoted H3 atlas whose bytes are stale', () 
 
   assert.equal(report.ok, false)
   assert.equal(report.errors.some((error) => error.includes('H3 atlas bytes') && error.includes(stale.atlas)), true)
+})
+
+test('build-output check rejects a promoted H3 atlas omitted from the resources path index', () => {
+  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-missing-h3-path-'))
+  writeCompleteFixture(buildRoot)
+  const omitted = h3AtlasAssets.find(({ atlas }) => atlas.endsWith('/MossWolf/attack.png'))
+  const configPath = join(buildRoot, 'assets/resources/config.json')
+  const config = JSON.parse(readFileSync(configPath, 'utf8'))
+  config.paths = Object.fromEntries(
+    Object.entries(config.paths).filter(([, value]) => value[0] !== omitted.resourcePath),
+  )
+  writeFileSync(configPath, JSON.stringify(config))
+
+  const report = checkCocosBuildOutput({ buildRoot, projectRoot })
+
+  assert.equal(report.ok, false)
+  assert.equal(report.errors.some((error) => error.includes('H3 atlas resource path') && error.includes(omitted.resourcePath)), true)
+})
+
+test('build-output check rejects a promoted H3 atlas path mapped to the wrong texture UUID', () => {
+  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-wrong-h3-path-uuid-'))
+  writeCompleteFixture(buildRoot)
+  const wrong = h3AtlasAssets.find(({ atlas }) => atlas.endsWith('/MossWolf/attack.png'))
+  const configPath = join(buildRoot, 'assets/resources/config.json')
+  const config = JSON.parse(readFileSync(configPath, 'utf8'))
+  const pathEntry = Object.entries(config.paths).find(([, value]) => value[0] === wrong.resourcePath)
+  config.uuids[Number(pathEntry[0])] = 'wrong-h3-texture-uuid'
+  writeFileSync(configPath, JSON.stringify(config))
+
+  const report = checkCocosBuildOutput({ buildRoot, projectRoot })
+
+  assert.equal(report.ok, false)
+  assert.equal(report.errors.some((error) => error.includes('H3 atlas resource UUID') && error.includes(wrong.resourcePath)), true)
 })
 
 test('build-output check rejects the Cocos Map iterator spread regression', () => {

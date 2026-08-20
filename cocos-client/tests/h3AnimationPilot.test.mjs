@@ -946,19 +946,41 @@ test('accepted H3 extraction reports match the final manifest and checked-in fra
   }
 })
 
-test('accepted H3 extraction reports use portable LF checkout bytes', () => {
+test('accepted H3 hash inputs use portable LF checkout bytes', () => {
   const attributes = readFileSync(resolve(projectRoot, '.gitattributes'), 'utf8')
+  assert.match(
+    attributes,
+    /^art-source\/h3-pilot\/pilot\.json text eol=lf$/m,
+  )
   assert.match(
     attributes,
     /^artifacts\/h3-animation-pilot\/\*\/extraction-report\.json text eol=lf$/m,
   )
 
   for (const relativePath of [
+    'art-source/h3-pilot/pilot.json',
     'artifacts/h3-animation-pilot/20260820-h3-pilot-r4-qinglan-motion/extraction-report.json',
     'artifacts/h3-animation-pilot/20260820-h3-pilot-r4-wolf-motion/extraction-report.json',
   ]) {
     const bytes = readFileSync(resolve(projectRoot, relativePath))
     assert.equal(bytes.includes(Buffer.from('\r\n')), false, `${relativePath} contains CRLF bytes`)
+  }
+})
+
+test('accepted H3 browser evidence uses repository-relative screenshot paths', () => {
+  const repositoryRoot = resolve(projectRoot, '..')
+  for (const viewport of ['portrait', 'landscape']) {
+    const evidence = JSON.parse(readFileSync(resolve(
+      repositoryRoot,
+      `docs/reports/assets/h3-gameplay-animation-pilot/${viewport}-agent-evidence.json`,
+    ), 'utf8'))
+    assert.ok(evidence.screenshots.length > 0, `${viewport} evidence has screenshots`)
+    for (const screenshot of evidence.screenshots) {
+      assert.equal(isAbsolute(screenshot.file), false, `${viewport}/${screenshot.label} path is relative`)
+      const absolutePath = resolve(repositoryRoot, screenshot.file)
+      assert.equal(relative(repositoryRoot, absolutePath).startsWith('..'), false)
+      assert.equal(existsSync(absolutePath), true, `${screenshot.file} exists in the repository`)
+    }
   }
 })
 
