@@ -368,18 +368,29 @@ function delay(milliseconds) {
   return new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds))
 }
 
+function isExpectedClientDisconnect(error) {
+  return ['ECONNRESET', 'EPIPE', 'ERR_STREAM_DESTROYED'].includes(error?.code)
+}
+
 async function startFakeBridge(t, options = {}) {
   const state = {
     downloads: [],
     events: [],
     healthRequests: 0,
     posts: [],
+    serverErrors: [],
     statusAttempts: new Map(),
     statusRequests: [],
   }
   let baseUrl = ''
 
   const server = createServer((request, response) => {
+    response.on('error', (error) => {
+      if (!isExpectedClientDisconnect(error)) {
+        state.serverErrors.push(error)
+      }
+    })
+
     const handleRequest = async () => {
       const requestUrl = new URL(request.url, baseUrl)
       const path = requestUrl.pathname
@@ -489,12 +500,28 @@ async function startFakeBridge(t, options = {}) {
           if (index > 0 && customResponse.chunkDelayMs !== undefined) {
             await delay(customResponse.chunkDelayMs)
           }
-          if (response.destroyed) {
+          if (response.destroyed || response.writableEnded || !response.writable) {
             return
           }
-          response.write(chunk)
+          try {
+            response.write(chunk)
+          } catch (error) {
+            if (isExpectedClientDisconnect(error)) {
+              return
+            }
+            throw error
+          }
         }
-        response.end()
+        if (response.destroyed || response.writableEnded || !response.writable) {
+          return
+        }
+        try {
+          response.end()
+        } catch (error) {
+          if (!isExpectedClientDisconnect(error)) {
+            throw error
+          }
+        }
         return
       }
 
@@ -502,10 +529,14 @@ async function startFakeBridge(t, options = {}) {
     }
 
     handleRequest().catch((error) => {
+      if (isExpectedClientDisconnect(error)) {
+        return
+      }
+      state.serverErrors.push(error)
       if (!response.headersSent) {
         sendJson(response, 500, { error: error.message })
-      } else {
-        response.destroy(error)
+      } else if (!response.destroyed) {
+        response.destroy()
       }
     })
   })
@@ -527,6 +558,7 @@ async function startFakeBridge(t, options = {}) {
 
 function runPythonProcess(args, { cwd = dirname(projectRoot) } = {}) {
   return new Promise((resolvePromise, reject) => {
+    const startedAt = process.hrtime.bigint()
     const child = spawn(pythonCommand, args, {
       cwd,
       env: {
@@ -562,6 +594,7 @@ function runPythonProcess(args, { cwd = dirname(projectRoot) } = {}) {
         settled = true
         resolvePromise({
           code,
+          elapsedMs: Number(process.hrtime.bigint() - startedAt) / 1_000_000,
           signal,
           stderr: Buffer.concat(stderr).toString('utf8'),
           stdout: Buffer.concat(stdout).toString('utf8'),
@@ -1057,6 +1090,68 @@ test('H3 action client honors the bridge, resume, state, and secrecy contracts',
     assert.deepEqual(findPartFiles(fixture.runRoot), [])
   })
 
+  await t.test('recovers a legacy completed task with an error using the same task id', async (t) => {
+    const oldBytes = Buffer.from('legacy target that must not be trusted')
+    const replacementBytes = Buffer.from('verified replacement from legacy task')
+    const bridge = await startFakeBridge(t, {
+      videoBytes: replacementBytes,
+      statusFor: ({ baseUrl, taskId }) => ({
+        status: 'completed',
+        url: `${baseUrl}/files/${encodeURIComponent(taskId)}.mp4`,
+        metadata: { recovered: true },
+      }),
+    })
+    const fixture = createClientFixture(t, bridge.baseUrl)
+    const job = fixture.manifest.jobs[0]
+    const target = resolve(fixture.runRoot, 'videos', job.video)
+    mkdirSync(dirname(target), { recursive: true })
+    writeFileSync(target, oldBytes)
+    writeJobsState(fixture.runRoot, [stateEntry(job, 'completed', 'legacy-task', {
+      error: 'legacy download validation failed',
+    })])
+
+    const result = await runClient(clientArgs(fixture, [job.id]))
+
+    assert.equal(result.code, 0, result.stderr)
+    assert.equal(bridge.state.posts.length, 0)
+    assert.deepEqual(bridge.state.statusRequests, ['legacy-task'])
+    assert.deepEqual(bridge.state.downloads, ['legacy-task'])
+    assert.deepEqual(readFileSync(target), replacementBytes)
+    const stateText = readFileSync(resolve(fixture.runRoot, 'jobs.json'), 'utf8')
+    const [entry] = JSON.parse(stateText).jobs
+    assert.equal(entry.status, 'completed')
+    assert.equal(entry.taskId, 'legacy-task')
+    assert.equal(entry.error, null)
+    assert.equal(typeof entry.completedAt, 'string')
+    assertNoPrivatePayload(result, stateText)
+    assert.deepEqual(findPartFiles(fixture.runRoot), [])
+  })
+
+  await t.test('rejects a legacy completed task with an error but no task id', async (t) => {
+    const oldBytes = Buffer.from('legacy target without recoverable task id')
+    const bridge = await startFakeBridge(t)
+    const fixture = createClientFixture(t, bridge.baseUrl)
+    const job = fixture.manifest.jobs[0]
+    const target = resolve(fixture.runRoot, 'videos', job.video)
+    mkdirSync(dirname(target), { recursive: true })
+    writeFileSync(target, oldBytes)
+    writeJobsState(fixture.runRoot, [stateEntry(job, 'completed', null, {
+      error: 'legacy download validation failed',
+    })])
+
+    const result = await runClient(clientArgs(fixture, [job.id]))
+
+    assert.notEqual(result.code, 0)
+    assert.equal(bridge.state.posts.length, 0)
+    assert.deepEqual(bridge.state.statusRequests, [])
+    assert.deepEqual(bridge.state.downloads, [])
+    assert.deepEqual(readFileSync(target), oldBytes)
+    assert.doesNotMatch(result.stdout, /skipped completed/i)
+    const stateText = readFileSync(resolve(fixture.runRoot, 'jobs.json'), 'utf8')
+    assertNoPrivatePayload(result, stateText)
+    assert.deepEqual(findPartFiles(fixture.runRoot), [])
+  })
+
   await t.test('re-downloads a missing completed MP4 with the same task id', async (t) => {
     const videoBytes = Buffer.from('re-downloaded mp4')
     const bridge = await startFakeBridge(t, {
@@ -1430,6 +1525,32 @@ test('H3 action client honors the bridge, resume, state, and secrecy contracts',
     }
   })
 
+  await t.test('downloads and validates a normal large MP4 in multiple chunks', async (t) => {
+    const videoBytes = Buffer.alloc(256 * 1024 + 137)
+    for (let index = 0; index < videoBytes.length; index += 1) {
+      videoBytes[index] = index % 251
+    }
+    const bridge = await startFakeBridge(t, {
+      downloadResponseFor: () => ({
+        chunks: [
+          videoBytes.subarray(0, 70_000),
+          videoBytes.subarray(70_000, 150_000),
+          videoBytes.subarray(150_000),
+        ],
+        contentLength: String(videoBytes.length),
+        contentType: 'video/mp4',
+      }),
+    })
+    const fixture = createClientFixture(t, bridge.baseUrl)
+    const job = fixture.manifest.jobs[0]
+    const result = await runClient(clientArgs(fixture, [job.id]))
+
+    assert.equal(result.code, 0, result.stderr)
+    assert.deepEqual(readFileSync(resolve(fixture.runRoot, 'videos', job.video)), videoBytes)
+    assert.deepEqual(findPartFiles(fixture.runRoot), [])
+    assert.deepEqual(bridge.state.serverErrors, [])
+  })
+
   await t.test('rejects mismatched and invalid Content-Length declarations', async (t) => {
     const cases = [
       { label: 'declared 100 actual 7', contentLength: '100' },
@@ -1462,6 +1583,12 @@ test('H3 action client honors the bridge, resume, state, and secrecy contracts',
   })
 
   await t.test('enforces one monotonic deadline across poll and slow streaming download', async (t) => {
+    const timeoutSeconds = 0.08
+    const maximumElapsedMs = 300
+    const chunks = Array.from({ length: 21 }, () => Buffer.from('x'))
+    const chunkDelayMs = 25
+    const plannedStreamMs = (chunks.length - 1) * chunkDelayMs
+    assert.ok(plannedStreamMs > maximumElapsedMs)
     const bridge = await startFakeBridge(t, {
       statusFor: ({ baseUrl, taskId }) => ({
         status: 'completed',
@@ -1469,26 +1596,33 @@ test('H3 action client honors the bridge, resume, state, and secrecy contracts',
         metadata: { immediate: true },
       }),
       downloadResponseFor: () => ({
-        chunks: [Buffer.from('aaa'), Buffer.from('bbb'), Buffer.from('ccc')],
-        chunkDelayMs: 70,
+        chunks,
+        chunkDelayMs,
         contentType: 'video/mp4',
         omitContentLength: true,
       }),
     })
     const fixture = createClientFixture(t, bridge.baseUrl)
     const job = fixture.manifest.jobs[0]
+    writeJobsState(fixture.runRoot, [stateEntry(job, 'processing', 'slow-task')])
     const result = await runClient(clientArgs(fixture, [job.id], {
       pollSeconds: '0.01',
-      timeoutSeconds: '0.12',
+      timeoutSeconds: String(timeoutSeconds),
     }))
 
     const entry = assertSafeJobFailure(fixture, result, job, {
       status: 'processing',
-      taskId: 'task-1',
+      taskId: 'slow-task',
     })
     assert.match(entry.error, /timed out|deadline/i)
+    assert.ok(
+      result.elapsedMs < maximumElapsedMs,
+      `client exceeded wall-clock deadline tolerance: ${result.elapsedMs.toFixed(1)}ms`,
+    )
+    assert.equal(bridge.state.posts.length, 0)
     assert.equal(bridge.state.statusRequests.length, 1)
-    assert.deepEqual(bridge.state.downloads, ['task-1'])
+    assert.deepEqual(bridge.state.downloads, ['slow-task'])
+    assert.deepEqual(bridge.state.serverErrors, [])
   })
 
   await t.test('validates selections and unsafe manifest paths before POST', async (t) => {

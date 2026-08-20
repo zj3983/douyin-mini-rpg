@@ -457,10 +457,23 @@ def poll_task(config: dict, job: dict, task_id: str, poll_seconds: float, deadli
 
 
 def set_response_timeout(response, timeout_seconds: float) -> None:
-    raw_stream = getattr(getattr(response, "fp", None), "raw", None)
-    socket = getattr(raw_stream, "_sock", None)
-    if socket is not None:
-        socket.settimeout(bounded_http_timeout(timeout_seconds))
+    try:
+        response_file = getattr(response, "fp", None)
+        raw_stream = getattr(response_file, "raw", None)
+        response_socket = getattr(raw_stream, "_sock", None)
+        if response_socket is None:
+            response_socket = getattr(response_file, "_sock", None)
+        if response_socket is not None:
+            response_socket.settimeout(bounded_http_timeout(timeout_seconds))
+    except (AttributeError, OSError, TypeError, ValueError):
+        pass
+
+
+def read_response_chunk(response, size: int) -> bytes:
+    read_available = getattr(response, "read1", None)
+    if callable(read_available):
+        return read_available(size)
+    return response.read(size)
 
 
 def download_video(url: str, target: Path, job_id: str, deadline: float) -> None:
@@ -502,7 +515,7 @@ def download_video(url: str, target: Path, job_id: str, deadline: float) -> None
                     while True:
                         remaining = remaining_budget(deadline, operation)
                         set_response_timeout(response, remaining)
-                        chunk = response.read(64 * 1024)
+                        chunk = read_response_chunk(response, 64 * 1024)
                         remaining_budget(deadline, operation)
                         if not chunk:
                             break
@@ -673,7 +686,13 @@ def process_job(
     deadline = time.monotonic() + timeout_seconds
     target.with_name(f"{target.name}.part").unlink(missing_ok=True)
 
-    if entry is not None and entry["status"] == "completed" and target.is_file() and target.stat().st_size > 0:
+    if (
+        entry is not None
+        and entry["status"] == "completed"
+        and not entry.get("error")
+        and target.is_file()
+        and target.stat().st_size > 0
+    ):
         entry["error"] = None
         persist_entry(state_path, entries, entry)
         print(f"[{job['id']}] skipped completed video={job['state_video']}")
