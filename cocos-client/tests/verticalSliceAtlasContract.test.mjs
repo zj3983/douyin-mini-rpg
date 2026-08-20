@@ -9,11 +9,11 @@ const expectedActors = {
     runtimeFrameSize: [256, 320],
     actions: { idle: 8, sword_ride: 10, hand_seal: 10, cast: 12, hurt: 6, death: 10 },
     sourceModes: {
-      idle: 'layered-keyframes',
-      sword_ride: 'layered-keyframes',
-      hand_seal: 'layered-keyframes',
+      idle: 'pose-video',
+      sword_ride: 'pose-video',
+      hand_seal: 'pose-video',
       cast: 'layered-keyframes',
-      hurt: 'layered-keyframes',
+      hurt: 'pose-video',
       death: 'layered-keyframes',
     },
   },
@@ -26,8 +26,8 @@ const expectedActors = {
       move: 'pose-video',
       telegraph: 'pose-video',
       attack: 'pose-video',
-      hurt: 'frame-sequence',
-      death: 'frame-sequence',
+      hurt: 'pose-video',
+      death: 'pose-video',
     },
   },
   'green-wing-moth': {
@@ -117,10 +117,11 @@ test('vertical slice source manifest locks actor frame sizes anchors and action 
   })
   assert.deepEqual(source.actors['moss-wolf'].actions.death.quality, {
     maxCenterDrift: 0.14,
+    maxScaleDrift: 0.28,
   })
-  assert.deepEqual(source.actors['qinglan-sword-cultivator'].actions.hand_seal.order, [0, 0, 1, 1, 7, 7, 7, 9, 9, 9])
+  assert.equal(Object.hasOwn(source.actors['qinglan-sword-cultivator'].actions.hand_seal, 'order'), false)
   assert.deepEqual(source.actors['qinglan-sword-cultivator'].actions.cast.order, [0, 0, 1, 1, 5, 5, 6, 6, 9, 9, 10, 11])
-  assert.deepEqual(source.actors['moss-wolf'].actions.death.order, [0, 1, 2, 3, 3, 3, 3, 3])
+  assert.equal(Object.hasOwn(source.actors['moss-wolf'].actions.death, 'order'), false)
 
   const overrides = []
   for (const [actorId, actor] of Object.entries(source.actors)) {
@@ -135,6 +136,7 @@ test('vertical slice source manifest locks actor frame sizes anchors and action 
     'mist-bamboo-emperor/sweep',
     'moss-wolf/attack',
     'moss-wolf/death',
+    'moss-wolf/hurt',
     'qinglan-sword-cultivator/cast',
   ])
 })

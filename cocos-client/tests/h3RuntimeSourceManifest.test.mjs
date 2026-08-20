@@ -114,7 +114,7 @@ const EXPECTED_WOLF_ACTIONS = {
     loop: false,
     source: 'moss-wolf/death',
     sourceMode: 'pose-video',
-    quality: { maxCenterDrift: 0.14 },
+    quality: { maxCenterDrift: 0.14, maxScaleDrift: 0.28 },
   },
 };
 
@@ -159,6 +159,7 @@ function restoreLegacyAllowedFields(manifest) {
   delete wolf.attack.events;
   wolf.hurt.sourceMode = 'frame-sequence';
   delete wolf.hurt.quality;
+  delete wolf.death.quality.maxScaleDrift;
   wolf.death.sourceMode = 'frame-sequence';
   wolf.death.order = LEGACY_WOLF_DEATH_ORDER;
   return restored;
@@ -204,6 +205,7 @@ test('only the approved Qinglan and Moss Wolf action fields differ from baseline
   assert.deepEqual(collectDiffPaths(baseline, manifest), [
     'actors.moss-wolf.actions.attack.events',
     'actors.moss-wolf.actions.death.order',
+    'actors.moss-wolf.actions.death.quality.maxScaleDrift',
     'actors.moss-wolf.actions.death.sourceMode',
     'actors.moss-wolf.actions.hurt.quality',
     'actors.moss-wolf.actions.hurt.sourceMode',
