@@ -106,6 +106,7 @@ const EXPECTED_WOLF_ACTIONS = {
     loop: false,
     source: 'moss-wolf/hurt',
     sourceMode: 'pose-video',
+    quality: { maxScaleDrift: 0.14 },
   },
   death: {
     frames: 8,
@@ -157,6 +158,7 @@ function restoreLegacyAllowedFields(manifest) {
 
   delete wolf.attack.events;
   wolf.hurt.sourceMode = 'frame-sequence';
+  delete wolf.hurt.quality;
   wolf.death.sourceMode = 'frame-sequence';
   wolf.death.order = LEGACY_WOLF_DEATH_ORDER;
   return restored;
@@ -203,6 +205,7 @@ test('only the approved Qinglan and Moss Wolf action fields differ from baseline
     'actors.moss-wolf.actions.attack.events',
     'actors.moss-wolf.actions.death.order',
     'actors.moss-wolf.actions.death.sourceMode',
+    'actors.moss-wolf.actions.hurt.quality',
     'actors.moss-wolf.actions.hurt.sourceMode',
     'actors.qinglan-sword-cultivator.actions.hand_seal.order',
     'actors.qinglan-sword-cultivator.actions.hand_seal.sourceMode',

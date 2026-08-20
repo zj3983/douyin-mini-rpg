@@ -45,7 +45,7 @@
         "move": { "frames": 8, "fps": 10, "loop": true, "source": "moss-wolf/move", "sourceMode": "pose-video" },
         "telegraph": { "frames": 4, "fps": 8, "loop": false, "source": "moss-wolf/telegraph", "sourceMode": "pose-video" },
         "attack": { "frames": 8, "fps": 12, "loop": false, "source": "moss-wolf/attack", "sourceMode": "pose-video", "quality": { "maxScaleDrift": 0.20 }, "events": [{ "name": "bite-contact", "time": 0.55 }] },
-        "hurt": { "frames": 4, "fps": 10, "loop": false, "source": "moss-wolf/hurt", "sourceMode": "pose-video" },
+        "hurt": { "frames": 4, "fps": 10, "loop": false, "source": "moss-wolf/hurt", "sourceMode": "pose-video", "quality": { "maxScaleDrift": 0.14 } },
         "death": { "frames": 8, "fps": 8, "loop": false, "source": "moss-wolf/death", "sourceMode": "pose-video", "quality": { "maxCenterDrift": 0.14 } }
       }
     },
