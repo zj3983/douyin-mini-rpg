@@ -1993,6 +1993,7 @@ test('H3 frame extractor publishes deterministic transparent action frames trans
     assert.equal(help.code, 0, help.stderr)
     assert.match(help.stdout, /--actor/)
     assert.match(help.stdout, /--ffmpeg/)
+    assert.match(help.stdout, /--ffmpeg-timeout-seconds/)
 
     const parserProbe = String.raw`
 import importlib.util
@@ -2008,11 +2009,19 @@ defaults = module.build_parser().parse_args(["--run-root", "runs/pilot"])
 selected = module.build_parser().parse_args([
     "--run-root", "runs/pilot", "--actor", "qinglan", "--actor", "moss-wolf"
 ])
+def parse_exit(argv):
+    try:
+        module.build_parser().parse_args(argv)
+        return 0
+    except SystemExit as error:
+        return error.code
 print(json.dumps({
     "manifest": defaults.manifest,
     "ffmpeg": defaults.ffmpeg,
+    "ffmpegTimeout": defaults.ffmpeg_timeout_seconds,
     "actors": defaults.actors,
     "selected": selected.actors,
+    "zeroTimeout": parse_exit(["--run-root", "runs/pilot", "--ffmpeg-timeout-seconds", "0"]),
     "projectRoot": str(module.PROJECT_ROOT),
 }))
 `
@@ -2025,8 +2034,10 @@ print(json.dumps({
     const parsed = JSON.parse(probe.stdout)
     assert.equal(parsed.manifest, 'art-source/h3-pilot/pilot.json')
     assert.equal(parsed.ffmpeg, 'ffmpeg')
+    assert.equal(parsed.ffmpegTimeout, 30)
     assert.deepEqual(parsed.actors, [])
     assert.deepEqual(parsed.selected, ['qinglan', 'moss-wolf'])
+    assert.equal(parsed.zeroTimeout, 2)
     assert.equal(resolve(parsed.projectRoot), resolve(projectRoot))
   })
 
@@ -2133,6 +2144,310 @@ print(json.dumps({
     assert.equal(readFileSync(resolve(wolfAction, 'sentinel.txt'), 'utf8'), 'old wolf')
     const report = JSON.parse(readFileSync(resolve(fixture.runRoot, 'extraction-report.json'), 'utf8'))
     assert.deepEqual(report.actors.map((actor) => actor.actor), ['qinglan'])
+  })
+
+  await t.test('times out a hung ffmpeg call and preserves old actions and report', async () => {
+    const fixture = createExtractionFixture(suiteRoot, videoPath)
+    const actionRoot = writeActionSentinel(fixture, 'qinglan', 'idle', 'old timeout action')
+    const reportPath = resolve(fixture.runRoot, 'extraction-report.json')
+    const oldReport = '{"version":1,"status":"old-timeout-report"}\n'
+    writeFileSync(reportPath, oldReport, 'utf8')
+    const script = String.raw`
+import importlib.util
+import subprocess
+import sys
+from pathlib import Path
+
+tool_path = Path(sys.argv[1])
+project_root = Path(sys.argv[2])
+manifest_path = Path(sys.argv[3])
+run_root = Path(sys.argv[4])
+source_root = Path(sys.argv[5])
+ffmpeg = sys.argv[6]
+spec = importlib.util.spec_from_file_location("h3_timeout_test", tool_path)
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+
+captured = {}
+original_run = module.subprocess.run
+def hang(command, **kwargs):
+    captured["timeout"] = kwargs.get("timeout")
+    raise subprocess.TimeoutExpired(command, kwargs.get("timeout"))
+module.subprocess.run = hang
+try:
+    try:
+        module.extract_action_frames(
+            manifest_path,
+            run_root,
+            actors=["qinglan"],
+            ffmpeg=ffmpeg,
+            ffmpeg_timeout_seconds=0.125,
+            project_root=project_root,
+            source_root=source_root,
+        )
+    except module.ExtractionError as error:
+        assert "timed out" in str(error).lower(), error
+    else:
+        raise AssertionError("hung ffmpeg must time out")
+finally:
+    module.subprocess.run = original_run
+assert captured["timeout"] == 0.125
+assert not list(source_root.glob(".h3-extraction-*"))
+assert not list(source_root.glob(".*.h3-extraction-journal.json"))
+print("timeout preserved")
+`
+    const result = await runTask4Process(
+      pythonCommand,
+      [
+        '-c', script, extractorPath, fixture.root, fixture.manifestPath,
+        fixture.runRoot, fixture.sourceRoot, ffmpegCommand,
+      ],
+      { cwd: suiteRoot, timeoutMs: 30_000 },
+    )
+    assert.equal(result.code, 0, result.stderr)
+    assert.match(result.stdout, /timeout preserved/)
+    assert.deepEqual(readdirSync(actionRoot), ['sentinel.txt'])
+    assert.equal(readFileSync(resolve(actionRoot, 'sentinel.txt'), 'utf8'), 'old timeout action')
+    assert.equal(readFileSync(reportPath, 'utf8'), oldReport)
+  })
+
+  await t.test('journaled publication recovers replace faults, hard interruptions, restore faults, and cleanup warnings', async () => {
+    const transactionRoot = resolve(suiteRoot, 'journal-transactions')
+    mkdirSync(transactionRoot, { recursive: true })
+    const script = String.raw`
+import hashlib
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+tool_path = Path(sys.argv[1])
+temp = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("h3_transaction_test", tool_path)
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+
+class HardInterrupt(BaseException):
+    pass
+
+def digest(path):
+    path = Path(path)
+    if not path.exists():
+        return "missing"
+    if path.is_file():
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    result = hashlib.sha256()
+    for item in sorted(path.rglob("*"), key=lambda value: value.as_posix()):
+        if item.is_file():
+            result.update(item.relative_to(path).as_posix().encode())
+            result.update(item.read_bytes())
+    return result.hexdigest()
+
+def setup(case, actors=("qinglan",)):
+    source_root = case / "art-source/vertical-slice"
+    run_root = case / "run"
+    run_root.mkdir(parents=True)
+    staging_root = source_root / f".h3-extraction-{case.name}"
+    staged_actions = []
+    watched = []
+    new_hashes = {}
+    for actor in actors:
+        actions = ("idle", "hurt") if actor == "qinglan" else ("move", "attack")
+        for action in actions:
+            target = source_root / actor / action
+            target.mkdir(parents=True)
+            (target / "sentinel.txt").write_bytes(f"old-{actor}-{action}".encode())
+            staged = staging_root / actor / action
+            staged.mkdir(parents=True)
+            (staged / "00.png").write_bytes(f"new-{actor}-{action}".encode())
+            staged_actions.append({
+                "actor": actor, "action": action, "staged": staged, "target": target,
+            })
+            watched.append(target)
+            new_hashes[str(target)] = digest(staged)
+    report_path = run_root / module.REPORT_NAME
+    report_path.write_bytes(b'{"version":1,"status":"old-report"}\n')
+    watched.append(report_path)
+    report = {
+        "version": module.REPORT_VERSION,
+        "manifestSha256": "a" * 64,
+        "actors": [{"actor": actor, "jobs": []} for actor in actors],
+    }
+    report_candidate = module._write_report_candidate(report, run_root)
+    before = {str(path): digest(path) for path in watched}
+    return {
+        "source": source_root,
+        "run": run_root,
+        "staging": staging_root,
+        "actions": staged_actions,
+        "reportPath": report_path,
+        "reportCandidate": report_candidate,
+        "report": report,
+        "actors": list(actors),
+        "watched": watched,
+        "before": before,
+        "newHashes": new_hashes,
+    }
+
+def publish(case, hook=None):
+    return module._publish_transaction(
+        case["actions"],
+        case["reportCandidate"],
+        case["reportPath"],
+        source_root=case["source"],
+        run_root=case["run"],
+        selected_actors=case["actors"],
+        report=case["report"],
+        fault_injector=hook,
+    )
+
+def assert_old(case):
+    assert {str(path): digest(path) for path in case["watched"]} == case["before"]
+
+def assert_new(case):
+    for action in case["actions"]:
+        assert digest(action["target"]) == case["newHashes"][str(action["target"])]
+    parsed = json.loads(case["reportPath"].read_text(encoding="utf-8"))
+    assert parsed["manifestSha256"] == "a" * 64
+    return parsed
+
+def journals(case):
+    return sorted(case["source"].glob(".*.h3-extraction-journal.json"))
+
+def assert_clean(case):
+    assert not journals(case)
+    assert not list(case["source"].rglob(".*.h3-backup-*"))
+    assert not list(case["source"].glob(".h3-extraction-*"))
+    assert not list(case["run"].glob(".*.h3-backup-*"))
+
+replace_phases = ("action-backup", "action-install", "report-backup", "report-install")
+for phase in replace_phases:
+    case = setup(temp / f"caught-{phase}")
+    fired = {"done": False}
+    def fail_before(current, when, context, phase=phase):
+        if current == phase and when == "before" and not fired["done"]:
+            fired["done"] = True
+            raise OSError(f"injected {phase}")
+    try:
+        publish(case, fail_before)
+    except Exception as error:
+        assert "injected" in str(error).lower(), error
+    else:
+        raise AssertionError(f"{phase} fault did not fail publication")
+    assert_old(case)
+    assert_clean(case)
+
+for phase in replace_phases:
+    case = setup(temp / f"interrupted-{phase}")
+    fired = {"done": False}
+    def interrupt_after(current, when, context, phase=phase):
+        if current == phase and when == "after" and not fired["done"]:
+            fired["done"] = True
+            raise HardInterrupt(f"interrupted {phase}")
+    try:
+        publish(case, interrupt_after)
+    except HardInterrupt:
+        pass
+    else:
+        raise AssertionError(f"{phase} did not simulate a hard interruption")
+    assert journals(case), phase
+    module.recover_incomplete_extractions(case["source"], case["run"])
+    assert_old(case)
+    assert_clean(case)
+
+case = setup(temp / "multi-actor-interruption", actors=("qinglan", "moss-wolf"))
+def interrupt_first_actor(current, when, context):
+    if current == "action-install" and when == "after" and context.get("actor") == "qinglan":
+        raise HardInterrupt("interrupted first actor")
+try:
+    publish(case, interrupt_first_actor)
+except HardInterrupt:
+    pass
+else:
+    raise AssertionError("multi-actor interruption did not fire")
+assert len(journals(case)) == 2
+module.recover_incomplete_extractions(case["source"], case["run"])
+assert_old(case)
+assert_clean(case)
+
+case = setup(temp / "committed-interruption")
+def interrupt_committed(current, when, context):
+    if current == "commit-recorded" and when == "after":
+        raise HardInterrupt("interrupted after durable commit")
+try:
+    publish(case, interrupt_committed)
+except HardInterrupt:
+    pass
+else:
+    raise AssertionError("committed interruption did not fire")
+assert journals(case)
+module.recover_incomplete_extractions(case["source"], case["run"])
+assert_new(case)
+assert_clean(case)
+
+case = setup(temp / "post-commit-warning")
+def fail_after_commit(current, when, context):
+    if current == "commit-recorded" and when == "after":
+        raise RuntimeError("injected post-commit bookkeeping failure")
+result = publish(case, fail_after_commit)
+parsed = assert_new(case)
+assert result.get("warnings"), result
+assert parsed.get("warnings"), parsed
+assert any("commit" in warning.lower() for warning in parsed["warnings"])
+assert_clean(case)
+
+restore_cases = (
+    ("action-install", "rollback-action-restore"),
+    ("report-install", "rollback-report-restore"),
+)
+for trigger_phase, restore_phase in restore_cases:
+    case = setup(temp / f"restore-{restore_phase}")
+    state = {"triggered": False, "restoreFailed": False}
+    def fail_restore(current, when, context, trigger_phase=trigger_phase, restore_phase=restore_phase):
+        if current == trigger_phase and when == "after" and not state["triggered"]:
+            state["triggered"] = True
+            raise RuntimeError(f"trigger rollback at {trigger_phase}")
+        if current == restore_phase and when == "before" and not state["restoreFailed"]:
+            state["restoreFailed"] = True
+            raise OSError(f"injected {restore_phase}")
+    try:
+        publish(case, fail_restore)
+    except Exception as error:
+        assert "rollback" in str(error).lower() or "restore" in str(error).lower(), error
+    else:
+        raise AssertionError(f"{restore_phase} failure was not surfaced")
+    assert journals(case)
+    module.recover_incomplete_extractions(case["source"], case["run"])
+    assert_old(case)
+    assert_clean(case)
+
+case = setup(temp / "cleanup-warning")
+state = {"failed": False}
+def fail_cleanup(current, when, context):
+    if current == "cleanup-backup" and when == "before" and not state["failed"]:
+        state["failed"] = True
+        raise OSError("injected cleanup failure")
+result = publish(case, fail_cleanup)
+parsed = assert_new(case)
+assert result.get("warnings"), result
+assert parsed.get("warnings"), parsed
+assert any("cleanup" in warning.lower() for warning in parsed["warnings"])
+assert journals(case)
+assert all(json.loads(path.read_text(encoding="utf-8"))["state"] == "cleanup-pending" for path in journals(case))
+module.recover_incomplete_extractions(case["source"], case["run"])
+assert_new(case)
+assert_clean(case)
+print("journaled transaction recovery complete")
+`
+    const result = await runTask4Process(
+      pythonCommand,
+      ['-c', script, extractorPath, transactionRoot],
+      { cwd: suiteRoot, timeoutMs: 60_000 },
+    )
+    assert.equal(result.code, 0, result.stderr)
+    assert.match(result.stdout, /journaled transaction recovery complete/)
   })
 
   await t.test('a bad second output preserves both old action directories and the previous successful report', async () => {

@@ -25,14 +25,29 @@ DEFAULT_MANIFEST = "art-source/h3-pilot/pilot.json"
 DEFAULT_SOURCE_ROOT = "art-source/vertical-slice"
 REPORT_NAME = "extraction-report.json"
 REPORT_VERSION = 1
+DEFAULT_FFMPEG_TIMEOUT_SECONDS = 30.0
+TRANSACTION_JOURNAL_VERSION = 1
 FRAME_SIZE = (768, 1344)
 ALLOWED_ACTORS = ("qinglan", "moss-wolf")
 SAFE_ID_PATTERN = re.compile(r"^[a-z0-9]+(?:[-_][a-z0-9]+)*$")
+TRANSACTION_TOKEN_PATTERN = re.compile(r"^[0-9a-f]{16}$")
+STAGING_ROOT_PATTERN = re.compile(r"^\.h3-extraction-[A-Za-z0-9._-]+$")
+REPORT_CANDIDATE_PATTERN = re.compile(r"^\.extraction-report-[A-Za-z0-9._-]+\.tmp$")
 _BACKGROUND_REMOVER = None
 
 
 class ExtractionError(Exception):
     """A deterministic validation or extraction failure safe to show to users."""
+
+
+def _positive_float(raw: str) -> float:
+    try:
+        value = float(raw)
+    except (TypeError, ValueError) as error:
+        raise argparse.ArgumentTypeError("must be a number") from error
+    if not math.isfinite(value) or value <= 0:
+        raise argparse.ArgumentTypeError("must be a finite number greater than zero")
+    return value
 
 
 def build_parser():
@@ -49,6 +64,11 @@ def build_parser():
         default=[],
     )
     parser.add_argument("--ffmpeg", default="ffmpeg")
+    parser.add_argument(
+        "--ffmpeg-timeout-seconds",
+        type=_positive_float,
+        default=DEFAULT_FFMPEG_TIMEOUT_SECONDS,
+    )
     return parser
 
 
@@ -421,6 +441,7 @@ def _run_ffmpeg(
     sample: float,
     output_path: Path,
     label: str,
+    timeout_seconds: float,
 ):
     command = [
         executable,
@@ -445,8 +466,13 @@ def _run_ffmpeg(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             check=False,
+            timeout=timeout_seconds,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
+    except subprocess.TimeoutExpired as error:
+        raise ExtractionError(
+            f"ffmpeg timed out after {timeout_seconds:g} seconds for {label}"
+        ) from error
     except OSError as error:
         raise ExtractionError(f"ffmpeg failed to start for {label}") from error
     if completed.returncode != 0:
@@ -509,89 +535,804 @@ def _write_report_candidate(report: dict, run_root: Path) -> Path:
         raise
 
 
-def _rollback_publication(records: list[dict], report_record: dict | None) -> list[str]:
-    errors = []
-    if report_record is not None:
-        report_path = report_record["target"]
-        report_backup = report_record["backup"]
-        try:
-            if report_record["published"] and _lexists(report_path):
-                _remove_path(report_path)
-            if report_record["old_moved"] and _lexists(report_backup):
-                os.replace(report_backup, report_path)
-        except OSError as error:
-            errors.append(f"report rollback failed: {error}")
-    for record in reversed(records):
-        target = record["target"]
-        backup = record["backup"]
-        try:
-            if record["published"] and _lexists(target):
+def _actor_journal_path(source_root: Path, actor: str) -> Path:
+    if actor not in ALLOWED_ACTORS:
+        raise ExtractionError(f"unknown journal actor {actor}")
+    return source_root / f".{actor}.h3-extraction-journal.json"
+
+
+def _action_backup_path(target: Path, token: str) -> Path:
+    return target.with_name(f".{target.name}.h3-backup-{token}")
+
+
+def _report_backup_path(report_path: Path, token: str) -> Path:
+    return report_path.with_name(f".{REPORT_NAME}.h3-backup-{token}")
+
+
+def _inject_fault(fault_injector, phase: str, when: str, **context) -> None:
+    if fault_injector is not None:
+        fault_injector(phase, when, context)
+
+
+def _write_json_atomic(path: Path, value: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.write-{secrets.token_hex(6)}")
+    try:
+        with temporary.open("w", encoding="utf-8", newline="\n") as handle:
+            json.dump(value, handle, ensure_ascii=False, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if _lexists(temporary):
+            temporary.unlink()
+
+
+def _write_actor_journal(path: Path, journal: dict) -> None:
+    _write_json_atomic(path, journal)
+
+
+def _replace_with_fault(
+    source: Path,
+    target: Path,
+    phase: str,
+    fault_injector,
+    **context,
+) -> None:
+    _inject_fault(fault_injector, phase, "before", **context)
+    os.replace(source, target)
+    _inject_fault(fault_injector, phase, "after", **context)
+
+
+def _journal_entry_paths(source_root: Path, journal: dict, entry: dict):
+    actor = journal["actor"]
+    action = entry["action"]
+    target = _resolve_inside(
+        source_root,
+        f"{actor}/{action}",
+        f"journal target {actor}/{action}",
+        require_relative=True,
+        reject_parent_parts=True,
+    )
+    staged = _resolve_inside(
+        source_root,
+        f"{journal['stagingRoot']}/{actor}/{action}",
+        f"journal staged action {actor}/{action}",
+        require_relative=True,
+        reject_parent_parts=True,
+    )
+    backup = _resolve_inside(
+        source_root,
+        f"{actor}/.{action}.h3-backup-{journal['token']}",
+        f"journal backup {actor}/{action}",
+        require_relative=True,
+        reject_parent_parts=True,
+    )
+    return target, staged, backup
+
+
+def _journal_report_paths(run_root: Path, journal: dict):
+    report = journal["report"]
+    target = _resolve_inside(run_root, REPORT_NAME, "journal report target", require_relative=True)
+    staged = _resolve_inside(
+        run_root,
+        report["staged"],
+        "journal staged report",
+        require_relative=True,
+        reject_parent_parts=True,
+    )
+    backup = _resolve_inside(
+        run_root,
+        f".{REPORT_NAME}.h3-backup-{journal['token']}",
+        "journal report backup",
+        require_relative=True,
+        reject_parent_parts=True,
+    )
+    return target, staged, backup
+
+
+def _validate_actor_journal(journal: Any, expected_actor: str) -> dict:
+    if not isinstance(journal, dict) or journal.get("version") != TRANSACTION_JOURNAL_VERSION:
+        raise ExtractionError("invalid H3 extraction transaction journal version")
+    actor = journal.get("actor")
+    if actor != expected_actor or actor not in ALLOWED_ACTORS:
+        raise ExtractionError("H3 extraction journal actor mismatch")
+    token = journal.get("token")
+    if not isinstance(token, str) or not TRANSACTION_TOKEN_PATTERN.fullmatch(token):
+        raise ExtractionError("invalid H3 extraction transaction token")
+    selected = journal.get("selectedActors")
+    if (
+        not isinstance(selected, list)
+        or not selected
+        or len(set(selected)) != len(selected)
+        or any(value not in ALLOWED_ACTORS for value in selected)
+        or selected != [value for value in ALLOWED_ACTORS if value in selected]
+        or actor not in selected
+    ):
+        raise ExtractionError("invalid H3 extraction journal actor set")
+    if journal.get("coordinator") != selected[0]:
+        raise ExtractionError("invalid H3 extraction journal coordinator")
+    if journal.get("state") not in {
+        "prepared",
+        "installed",
+        "committed",
+        "cleanup-pending",
+        "recovery-failed",
+    }:
+        raise ExtractionError("invalid H3 extraction journal state")
+    staging_root = journal.get("stagingRoot")
+    if not isinstance(staging_root, str) or not STAGING_ROOT_PATTERN.fullmatch(staging_root):
+        raise ExtractionError("invalid H3 extraction journal staging root")
+    entries = journal.get("entries")
+    if not isinstance(entries, list) or not entries:
+        raise ExtractionError("H3 extraction journal entries must be non-empty")
+    seen_actions = set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise ExtractionError("invalid H3 extraction journal entry")
+        action = entry.get("action")
+        if (
+            not isinstance(action, str)
+            or not SAFE_ID_PATTERN.fullmatch(action)
+            or action in seen_actions
+            or type(entry.get("targetExisted")) is not bool
+            or entry.get("state") not in {
+                "prepared",
+                "backing-up",
+                "backed-up",
+                "installing",
+                "installed",
+                "rolling-back",
+                "rolled-back",
+            }
+        ):
+            raise ExtractionError("invalid H3 extraction journal entry metadata")
+        seen_actions.add(action)
+    report = journal.get("report")
+    if actor == selected[0]:
+        if (
+            not isinstance(report, dict)
+            or type(report.get("targetExisted")) is not bool
+            or report.get("state") not in {
+                "prepared",
+                "backing-up",
+                "backed-up",
+                "installing",
+                "installed",
+                "rolling-back",
+                "rolled-back",
+            }
+            or not isinstance(report.get("staged"), str)
+            or not REPORT_CANDIDATE_PATTERN.fullmatch(report["staged"])
+        ):
+            raise ExtractionError("invalid H3 extraction journal report entry")
+    elif report is not None:
+        raise ExtractionError("only the H3 extraction coordinator may own the report entry")
+    if not isinstance(journal.get("recoveryErrors", []), list):
+        raise ExtractionError("invalid H3 extraction journal recovery errors")
+    return journal
+
+
+def _read_actor_journal(path: Path, actor: str) -> dict:
+    _require_nonempty_file(path, f"{actor} extraction journal")
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ExtractionError(f"could not read {actor} extraction journal") from error
+    return _validate_actor_journal(value, actor)
+
+
+def _load_transaction_journals(source_root: Path, run_root: Path):
+    loaded = {}
+    for actor in ALLOWED_ACTORS:
+        path = _actor_journal_path(source_root, actor)
+        if _lexists(path):
+            loaded[actor] = {"path": path, "journal": _read_actor_journal(path, actor)}
+    if not loaded:
+        return {}
+
+    first = next(iter(loaded.values()))["journal"]
+    selected = first["selectedActors"]
+    token = first["token"]
+    staging_root = first["stagingRoot"]
+    coordinator = first["coordinator"]
+    for actor, record in loaded.items():
+        journal = record["journal"]
+        if (
+            journal["selectedActors"] != selected
+            or journal["token"] != token
+            or journal["stagingRoot"] != staging_root
+            or journal["coordinator"] != coordinator
+        ):
+            raise ExtractionError("conflicting H3 extraction transaction journals")
+        for entry in journal["entries"]:
+            _journal_entry_paths(source_root, journal, entry)
+        if journal["report"] is not None:
+            _journal_report_paths(run_root, journal)
+
+    if coordinator not in loaded:
+        for record in loaded.values():
+            _remove_path(record["path"])
+        orphan_staging = _resolve_inside(
+            source_root,
+            staging_root,
+            "orphan H3 staging root",
+            require_relative=True,
+            reject_parent_parts=True,
+        )
+        _remove_path(orphan_staging)
+        for candidate in run_root.glob(".extraction-report-*.tmp"):
+            _assert_no_link_chain(candidate, "orphan extraction report candidate")
+            _remove_path(candidate)
+        return {}
+    if set(loaded) != set(selected) and loaded[coordinator]["journal"]["state"] not in {
+        "committed",
+        "cleanup-pending",
+    }:
+        raise ExtractionError("incomplete H3 extraction journal set")
+    return loaded
+
+
+def _build_transaction_journals(
+    staged_actions: list[dict],
+    report_candidate: Path,
+    report_path: Path,
+    source_root: Path,
+    run_root: Path,
+    selected_actors: list[str],
+):
+    selected_actors = list(selected_actors)
+    if (
+        not selected_actors
+        or selected_actors != [actor for actor in ALLOWED_ACTORS if actor in selected_actors]
+        or len(set(selected_actors)) != len(selected_actors)
+    ):
+        raise ExtractionError("transaction actors must be unique and canonical")
+    source_root = _absolute(source_root)
+    run_root = _absolute(run_root)
+    report_candidate = _absolute(report_candidate)
+    report_path = _absolute(report_path)
+    if report_path != run_root / REPORT_NAME or report_candidate.parent != run_root:
+        raise ExtractionError("transaction report paths are outside the run root")
+    if not REPORT_CANDIDATE_PATTERN.fullmatch(report_candidate.name):
+        raise ExtractionError("transaction report candidate has an unsafe name")
+
+    staging_roots = set()
+    grouped = {actor: [] for actor in selected_actors}
+    for staged in staged_actions:
+        actor = staged.get("actor")
+        action = staged.get("action")
+        if actor not in grouped or not isinstance(action, str) or not SAFE_ID_PATTERN.fullmatch(action):
+            raise ExtractionError("transaction contains an unsafe actor action")
+        target = _absolute(Path(staged["target"]))
+        staged_path = _absolute(Path(staged["staged"]))
+        expected_target = source_root / actor / action
+        if target != expected_target or staged_path.name != action or staged_path.parent.name != actor:
+            raise ExtractionError("transaction action paths do not match actor ownership")
+        staging_root = staged_path.parent.parent
+        if staging_root.parent != source_root or not STAGING_ROOT_PATTERN.fullmatch(staging_root.name):
+            raise ExtractionError("transaction staging root is unsafe")
+        _assert_no_link_chain(target, f"transaction target {actor}/{action}")
+        _assert_no_link_chain(staged_path, f"transaction staged action {actor}/{action}")
+        staging_roots.add(staging_root)
+        grouped[actor].append({"action": action, "targetExisted": _lexists(target), "state": "prepared"})
+    if len(staging_roots) != 1 or any(not grouped[actor] for actor in selected_actors):
+        raise ExtractionError("transaction must stage every selected actor under one root")
+    staging_root = staging_roots.pop()
+    token = secrets.token_hex(8)
+    coordinator = selected_actors[0]
+    journals = {}
+    for actor in selected_actors:
+        journal = {
+            "version": TRANSACTION_JOURNAL_VERSION,
+            "token": token,
+            "actor": actor,
+            "coordinator": coordinator,
+            "selectedActors": selected_actors,
+            "state": "prepared",
+            "stagingRoot": staging_root.name,
+            "entries": grouped[actor],
+            "report": None,
+            "recoveryErrors": [],
+        }
+        if actor == coordinator:
+            journal["report"] = {
+                "staged": report_candidate.name,
+                "targetExisted": _lexists(report_path),
+                "state": "prepared",
+            }
+        path = _actor_journal_path(source_root, actor)
+        if _lexists(path):
+            raise ExtractionError(f"unfinished extraction journal already exists for {actor}")
+        journals[actor] = {"path": path, "journal": journal}
+
+    written = []
+    try:
+        for actor in [value for value in selected_actors if value != coordinator] + [coordinator]:
+            record = journals[actor]
+            _write_actor_journal(record["path"], record["journal"])
+            written.append(record["path"])
+    except Exception:
+        for path in written:
+            _remove_path(path)
+        raise
+    return journals
+
+
+def _journal_for_action(journals: dict, actor: str, action: str):
+    record = journals[actor]
+    for entry in record["journal"]["entries"]:
+        if entry["action"] == action:
+            return record, entry
+    raise ExtractionError(f"transaction journal is missing {actor}/{action}")
+
+
+def _rollback_action_entry(
+    source_root: Path,
+    record: dict,
+    entry: dict,
+    fault_injector,
+) -> None:
+    if entry["state"] == "rolled-back":
+        return
+    journal = record["journal"]
+    target, _staged, backup = _journal_entry_paths(source_root, journal, entry)
+    actor = journal["actor"]
+    action = entry["action"]
+    previous_state = entry["state"]
+    entry["state"] = "rolling-back"
+    _write_actor_journal(record["path"], journal)
+    if entry["targetExisted"]:
+        if _lexists(backup):
+            if _lexists(target):
                 _remove_path(target)
-            if record["old_moved"] and _lexists(backup):
-                os.replace(backup, target)
-        except OSError as error:
-            errors.append(f"action rollback failed: {error}")
-    return errors
+            _replace_with_fault(
+                backup,
+                target,
+                "rollback-action-restore",
+                fault_injector,
+                actor=actor,
+                action=action,
+            )
+        elif not _lexists(target) or previous_state not in {
+            "prepared",
+            "backing-up",
+            "rolling-back",
+        }:
+            raise ExtractionError(f"missing rollback backup for {actor}/{action}")
+    elif _lexists(target):
+        _remove_path(target)
+    entry["state"] = "rolled-back"
+    _write_actor_journal(record["path"], journal)
+
+
+def _rollback_report_entry(
+    run_root: Path,
+    record: dict,
+    fault_injector,
+) -> None:
+    journal = record["journal"]
+    entry = journal["report"]
+    if entry["state"] == "rolled-back":
+        return
+    target, _staged, backup = _journal_report_paths(run_root, journal)
+    previous_state = entry["state"]
+    entry["state"] = "rolling-back"
+    _write_actor_journal(record["path"], journal)
+    if entry["targetExisted"]:
+        if _lexists(backup):
+            if _lexists(target):
+                _remove_path(target)
+            _replace_with_fault(
+                backup,
+                target,
+                "rollback-report-restore",
+                fault_injector,
+                actor=journal["actor"],
+            )
+        elif not _lexists(target) or previous_state not in {
+            "prepared",
+            "backing-up",
+            "rolling-back",
+        }:
+            raise ExtractionError("missing rollback backup for extraction report")
+    elif _lexists(target):
+        _remove_path(target)
+    entry["state"] = "rolled-back"
+    _write_actor_journal(record["path"], journal)
+
+
+def _record_cleanup_warnings(report: dict, report_path: Path, warnings: list[str]) -> dict:
+    existing = report.get("warnings", [])
+    merged = list(existing) if isinstance(existing, list) else []
+    for warning in warnings:
+        if warning not in merged:
+            merged.append(warning)
+    report["warnings"] = merged
+    candidate = _write_report_candidate(report, report_path.parent)
+    try:
+        os.replace(candidate, report_path)
+    finally:
+        if _lexists(candidate):
+            candidate.unlink()
+    return report
+
+
+def _mark_cleanup_pending(journals: dict, warnings: list[str]) -> None:
+    for record in journals.values():
+        journal = record["journal"]
+        journal["state"] = "cleanup-pending"
+        journal["recoveryErrors"] = list(
+            dict.fromkeys(journal.get("recoveryErrors", []) + warnings)
+        )
+        try:
+            _write_actor_journal(record["path"], journal)
+        except Exception:
+            pass
+
+
+def _cleanup_committed_transaction(
+    source_root: Path,
+    run_root: Path,
+    journals: dict,
+    report: dict,
+    fault_injector=None,
+):
+    errors = []
+    coordinator = journals[next(iter(journals))]["journal"]["coordinator"]
+    for actor in journals[coordinator]["journal"]["selectedActors"]:
+        if actor not in journals:
+            continue
+        record = journals[actor]
+        journal = record["journal"]
+        for entry in journal["entries"]:
+            _target, staged, backup = _journal_entry_paths(source_root, journal, entry)
+            for kind, path in (("staged", staged), ("backup", backup)):
+                if not _lexists(path):
+                    continue
+                try:
+                    if kind == "backup":
+                        _inject_fault(
+                            fault_injector,
+                            "cleanup-backup",
+                            "before",
+                            actor=actor,
+                            action=entry["action"],
+                        )
+                    _remove_path(path)
+                    if kind == "backup":
+                        _inject_fault(
+                            fault_injector,
+                            "cleanup-backup",
+                            "after",
+                            actor=actor,
+                            action=entry["action"],
+                        )
+                except Exception:
+                    errors.append(f"cleanup pending for {actor}/{entry['action']} {kind}")
+    coordinator_record = journals[coordinator]
+    report_target, report_staged, report_backup = _journal_report_paths(
+        run_root,
+        coordinator_record["journal"],
+    )
+    for kind, path in (("staged report", report_staged), ("report backup", report_backup)):
+        if not _lexists(path):
+            continue
+        try:
+            if kind == "report backup":
+                _inject_fault(fault_injector, "cleanup-backup", "before", actor=coordinator, report=True)
+            _remove_path(path)
+            if kind == "report backup":
+                _inject_fault(fault_injector, "cleanup-backup", "after", actor=coordinator, report=True)
+        except Exception:
+            errors.append(f"cleanup pending for extraction {kind}")
+
+    staging_root = _resolve_inside(
+        source_root,
+        coordinator_record["journal"]["stagingRoot"],
+        "committed H3 staging root",
+        require_relative=True,
+        reject_parent_parts=True,
+    )
+    try:
+        _remove_path(staging_root)
+    except Exception:
+        errors.append("cleanup pending for extraction staging root")
+
+    if errors:
+        _mark_cleanup_pending(journals, errors)
+        try:
+            return _record_cleanup_warnings(report, report_target, errors)
+        except Exception:
+            report["warnings"] = list(dict.fromkeys(report.get("warnings", []) + errors))
+            return report
+
+    deletion_errors = []
+    ordered_records = [journals[coordinator]] + [
+        record for actor, record in journals.items() if actor != coordinator
+    ]
+    for record in ordered_records:
+        try:
+            _remove_path(record["path"])
+        except Exception:
+            deletion_errors.append(
+                f"cleanup pending for {record['journal']['actor']} transaction journal"
+            )
+    if deletion_errors:
+        _mark_cleanup_pending(
+            {
+                actor: record
+                for actor, record in journals.items()
+                if _lexists(record["path"])
+            },
+            deletion_errors,
+        )
+        try:
+            return _record_cleanup_warnings(report, report_target, deletion_errors)
+        except Exception:
+            report["warnings"] = list(
+                dict.fromkeys(report.get("warnings", []) + deletion_errors)
+            )
+    return report
+
+
+def _cleanup_orphan_staging(source_root: Path, run_root: Path) -> None:
+    for staging in source_root.glob(".h3-extraction-*"):
+        _assert_no_link_chain(staging, "orphan H3 extraction staging")
+        _remove_path(staging)
+    for candidate in run_root.glob(".extraction-report-*.tmp"):
+        _assert_no_link_chain(candidate, "orphan extraction report candidate")
+        _remove_path(candidate)
+    for actor in ALLOWED_ACTORS:
+        pattern = f"..{actor}.h3-extraction-journal.json.write-*"
+        for temporary in source_root.glob(pattern):
+            _assert_no_link_chain(temporary, "orphan extraction journal write")
+            _remove_path(temporary)
+
+
+def recover_incomplete_extractions(
+    source_root,
+    run_root,
+    *,
+    fault_injector=None,
+):
+    source_root = _absolute(Path(source_root))
+    run_root = _absolute(Path(run_root))
+    _require_directory(source_root, "source root")
+    _require_directory(run_root, "run root")
+    journals = _load_transaction_journals(source_root, run_root)
+    if not journals:
+        _cleanup_orphan_staging(source_root, run_root)
+        return []
+    first_journal = next(iter(journals.values()))["journal"]
+    coordinator = first_journal["coordinator"]
+    coordinator_record = journals[coordinator]
+    committed = coordinator_record["journal"]["state"] in {
+        "committed",
+        "cleanup-pending",
+    }
+    report_path = run_root / REPORT_NAME
+    if committed:
+        _require_nonempty_file(report_path, "committed extraction report")
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ExtractionError("committed extraction report is unreadable") from error
+        before = len(report.get("warnings", [])) if isinstance(report.get("warnings", []), list) else 0
+        report = _cleanup_committed_transaction(
+            source_root,
+            run_root,
+            journals,
+            report,
+            fault_injector,
+        )
+        return report.get("warnings", [])[before:]
+
+    errors = []
+    try:
+        _rollback_report_entry(run_root, coordinator_record, fault_injector)
+    except Exception as error:
+        errors.append(f"report rollback failed: {error}")
+    selected = coordinator_record["journal"]["selectedActors"]
+    for actor in reversed(selected):
+        record = journals[actor]
+        for entry in reversed(record["journal"]["entries"]):
+            try:
+                _rollback_action_entry(source_root, record, entry, fault_injector)
+            except Exception as error:
+                errors.append(f"{actor}/{entry['action']} rollback failed: {error}")
+    if errors:
+        for record in journals.values():
+            record["journal"]["state"] = "recovery-failed"
+            record["journal"]["recoveryErrors"] = errors
+            _write_actor_journal(record["path"], record["journal"])
+        raise ExtractionError("H3 extraction rollback incomplete: " + "; ".join(errors))
+
+    cleanup_errors = []
+    for record in journals.values():
+        journal = record["journal"]
+        for entry in journal["entries"]:
+            _target, staged, backup = _journal_entry_paths(source_root, journal, entry)
+            for label, path in (("staged", staged), ("backup", backup)):
+                try:
+                    _remove_path(path)
+                except Exception:
+                    cleanup_errors.append(f"rollback cleanup pending for {journal['actor']}/{entry['action']} {label}")
+    report_target, report_staged, report_backup = _journal_report_paths(
+        run_root,
+        coordinator_record["journal"],
+    )
+    for label, path in (("staged report", report_staged), ("report backup", report_backup)):
+        try:
+            _remove_path(path)
+        except Exception:
+            cleanup_errors.append(f"rollback cleanup pending for {label}")
+    staging_root = source_root / coordinator_record["journal"]["stagingRoot"]
+    try:
+        _remove_path(staging_root)
+    except Exception:
+        cleanup_errors.append("rollback cleanup pending for staging root")
+    if cleanup_errors:
+        for record in journals.values():
+            record["journal"]["state"] = "recovery-failed"
+            record["journal"]["recoveryErrors"] = cleanup_errors
+            _write_actor_journal(record["path"], record["journal"])
+        raise ExtractionError("H3 extraction rollback cleanup incomplete")
+    for record in journals.values():
+        _remove_path(record["path"])
+    return []
 
 
 def _publish_transaction(
     staged_actions: list[dict],
     report_candidate: Path,
     report_path: Path,
-) -> None:
-    token = secrets.token_hex(8)
-    records = []
-    report_record = None
+    *,
+    source_root: Path,
+    run_root: Path,
+    selected_actors: list[str],
+    report: dict,
+    fault_injector=None,
+):
+    journals = _build_transaction_journals(
+        staged_actions,
+        report_candidate,
+        report_path,
+        source_root,
+        run_root,
+        selected_actors,
+    )
+    coordinator = selected_actors[0]
+    commit_recorded = False
     try:
         for staged in staged_actions:
-            target = staged["target"]
-            backup = target.with_name(f".{target.name}.h3-backup-{token}")
-            if _lexists(backup):
-                raise ExtractionError("action backup collision")
-            record = {
-                "target": target,
-                "backup": backup,
-                "old_moved": False,
-                "published": False,
-            }
-            records.append(record)
+            actor = staged["actor"]
+            action = staged["action"]
+            record, entry = _journal_for_action(journals, actor, action)
+            journal = record["journal"]
+            target, staged_path, backup = _journal_entry_paths(source_root, journal, entry)
             target.parent.mkdir(parents=True, exist_ok=True)
             _assert_no_link_chain(target.parent, "target action parent")
-            if _lexists(target):
-                os.replace(target, backup)
-                record["old_moved"] = True
-            os.replace(staged["staged"], target)
-            record["published"] = True
+            if entry["targetExisted"]:
+                entry["state"] = "backing-up"
+                _write_actor_journal(record["path"], journal)
+                _replace_with_fault(
+                    target,
+                    backup,
+                    "action-backup",
+                    fault_injector,
+                    actor=actor,
+                    action=action,
+                )
+                entry["state"] = "backed-up"
+                _write_actor_journal(record["path"], journal)
+            entry["state"] = "installing"
+            _write_actor_journal(record["path"], journal)
+            _replace_with_fault(
+                staged_path,
+                target,
+                "action-install",
+                fault_injector,
+                actor=actor,
+                action=action,
+            )
+            entry["state"] = "installed"
+            _write_actor_journal(record["path"], journal)
 
-        report_backup = report_path.with_name(f".{REPORT_NAME}.h3-backup-{token}")
-        if _lexists(report_backup):
-            raise ExtractionError("report backup collision")
-        report_record = {
-            "target": report_path,
-            "backup": report_backup,
-            "old_moved": False,
-            "published": False,
-        }
-        if _lexists(report_path):
-            os.replace(report_path, report_backup)
-            report_record["old_moved"] = True
-        os.replace(report_candidate, report_path)
-        report_record["published"] = True
+        coordinator_record = journals[coordinator]
+        coordinator_journal = coordinator_record["journal"]
+        report_entry = coordinator_journal["report"]
+        report_target, report_staged, report_backup = _journal_report_paths(
+            run_root,
+            coordinator_journal,
+        )
+        if report_entry["targetExisted"]:
+            report_entry["state"] = "backing-up"
+            _write_actor_journal(coordinator_record["path"], coordinator_journal)
+            _replace_with_fault(
+                report_target,
+                report_backup,
+                "report-backup",
+                fault_injector,
+                actor=coordinator,
+            )
+            report_entry["state"] = "backed-up"
+            _write_actor_journal(coordinator_record["path"], coordinator_journal)
+        report_entry["state"] = "installing"
+        _write_actor_journal(coordinator_record["path"], coordinator_journal)
+        _replace_with_fault(
+            report_staged,
+            report_target,
+            "report-install",
+            fault_injector,
+            actor=coordinator,
+        )
+        report_entry["state"] = "installed"
+        _write_actor_journal(coordinator_record["path"], coordinator_journal)
+
+        for actor, record in journals.items():
+            record["journal"]["state"] = "installed"
+            _write_actor_journal(record["path"], record["journal"])
+        coordinator_journal["state"] = "committed"
+        _write_actor_journal(coordinator_record["path"], coordinator_journal)
+        commit_recorded = True
+        _inject_fault(fault_injector, "commit-recorded", "after", actor=coordinator)
+        for actor, record in journals.items():
+            if actor == coordinator:
+                continue
+            record["journal"]["state"] = "committed"
+            _write_actor_journal(record["path"], record["journal"])
     except Exception as error:
-        rollback_errors = _rollback_publication(records, report_record)
-        if rollback_errors:
+        if not commit_recorded:
+            try:
+                persisted = _read_actor_journal(
+                    journals[coordinator]["path"],
+                    coordinator,
+                )
+                commit_recorded = persisted["state"] in {
+                    "committed",
+                    "cleanup-pending",
+                }
+            except Exception:
+                pass
+        if commit_recorded:
+            warnings = ["post-commit transaction finalization required recovery"]
+            _mark_cleanup_pending(journals, warnings)
+            try:
+                report = _record_cleanup_warnings(report, report_path, warnings)
+            except Exception:
+                report["warnings"] = list(
+                    dict.fromkeys(report.get("warnings", []) + warnings)
+                )
+            return _cleanup_committed_transaction(
+                source_root,
+                run_root,
+                journals,
+                report,
+                fault_injector,
+            )
+        try:
+            recover_incomplete_extractions(
+                source_root,
+                run_root,
+                fault_injector=fault_injector,
+            )
+        except Exception as recovery_error:
             raise ExtractionError(
-                f"publication failed and rollback was incomplete: {'; '.join(rollback_errors)}"
+                f"atomic publication failed and rollback was incomplete: {recovery_error}"
             ) from error
-        if isinstance(error, ExtractionError):
-            raise
-        raise ExtractionError("atomic publication failed; previous actions were restored") from error
+        raise ExtractionError(
+            f"atomic publication failed and previous state was restored: {error}"
+        ) from error
 
-    for record in records:
-        if record["old_moved"] and _lexists(record["backup"]):
-            _remove_path(record["backup"])
-    if report_record["old_moved"] and _lexists(report_record["backup"]):
-        _remove_path(report_record["backup"])
+    return _cleanup_committed_transaction(
+        source_root,
+        run_root,
+        journals,
+        report,
+        fault_injector,
+    )
 
 
 def _stage_extraction(
@@ -600,6 +1341,7 @@ def _stage_extraction(
     targets: dict,
     executable: str,
     staging_root: Path,
+    ffmpeg_timeout_seconds: float,
 ):
     video_hashes = {}
     actor_reports = []
@@ -629,6 +1371,7 @@ def _stage_extraction(
                         float(sample),
                         frame_path,
                         frame_label,
+                        ffmpeg_timeout_seconds,
                     )
                     bounds = prepare_extracted_png(frame_path, frame_label)
                     frame_reports.append(
@@ -680,8 +1423,10 @@ def extract_action_frames(
     *,
     actors=None,
     ffmpeg="ffmpeg",
+    ffmpeg_timeout_seconds=DEFAULT_FFMPEG_TIMEOUT_SECONDS,
     project_root=None,
     source_root=None,
+    fault_injector=None,
 ):
     project_root = _absolute(PROJECT_ROOT if project_root is None else Path(project_root))
     _require_directory(project_root, "project root")
@@ -695,6 +1440,13 @@ def extract_action_frames(
     )
     source_root.mkdir(parents=True, exist_ok=True)
     _assert_no_link_chain(source_root, "source root")
+    recover_incomplete_extractions(source_root, run_root)
+    if any(_lexists(_actor_journal_path(source_root, actor)) for actor in ALLOWED_ACTORS):
+        raise ExtractionError("previous committed extraction cleanup is still pending")
+    try:
+        ffmpeg_timeout_seconds = _positive_float(ffmpeg_timeout_seconds)
+    except argparse.ArgumentTypeError as error:
+        raise ExtractionError("ffmpeg timeout must be a finite number greater than zero") from error
     executable = _resolve_ffmpeg(ffmpeg)
     manifest, manifest_hash = _load_manifest(manifest_path)
     jobs = _validate_manifest(manifest, run_root)
@@ -716,6 +1468,7 @@ def extract_action_frames(
             targets,
             executable,
             staging_root,
+            ffmpeg_timeout_seconds,
         )
         report = {
             "version": REPORT_VERSION,
@@ -723,14 +1476,27 @@ def extract_action_frames(
             "actors": actor_reports,
         }
         report_candidate = _write_report_candidate(report, run_root)
-        _publish_transaction(staged_actions, report_candidate, report_path)
+        report = _publish_transaction(
+            staged_actions,
+            report_candidate,
+            report_path,
+            source_root=source_root,
+            run_root=run_root,
+            selected_actors=selected,
+            report=report,
+            fault_injector=fault_injector,
+        )
         report_candidate = None
         return report
     finally:
-        if report_candidate is not None and _lexists(report_candidate):
-            report_candidate.unlink()
-        if _lexists(staging_root):
-            _remove_path(staging_root)
+        has_active_journal = any(
+            _lexists(_actor_journal_path(source_root, actor)) for actor in ALLOWED_ACTORS
+        )
+        if not has_active_journal:
+            if report_candidate is not None and _lexists(report_candidate):
+                report_candidate.unlink()
+            if _lexists(staging_root):
+                _remove_path(staging_root)
 
 
 def main(argv=None) -> int:
@@ -741,6 +1507,7 @@ def main(argv=None) -> int:
             args.run_root,
             actors=args.actors,
             ffmpeg=args.ffmpeg,
+            ffmpeg_timeout_seconds=args.ffmpeg_timeout_seconds,
             project_root=PROJECT_ROOT,
         )
     except (ExtractionError, OSError) as error:
