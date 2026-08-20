@@ -1,0 +1,20 @@
+subject_definitions:
+<Subject 1> is the Qinglan sword cultivator from the sole provided reference image, including the same face, long dark hair, layered blue-and-white cultivation costume, body proportions, and the single flying sword beneath both feet as one inseparable referenced subject.
+
+summary:
+[reference generation] Create one continuous shot, 0.00-5.00s, showing <Subject 1> in a calm, loopable flying-sword idle while preserving the reference identity and clean gameplay silhouette.
+
+retention_analysis:
+<Subject 1>: fully_preserved - identity, face, costume, body proportions, long hair, hand count, and the single flying sword remain unchanged throughout the action.
+
+detailed_description:
+The target video is a clean gameplay sprite-motion study with even neutral lighting and crisp silhouette separation.
+[Shot 1] The 0.00-5.00s timeline uses a locked side-view camera with no camera movement. <Subject 1> holds a stable standing stance with both feet planted on the flying sword. From 0.00-1.00s, the torso begins subtle breathing while the knees and ankles remain steady. From 1.00-3.60s, the chest rises and settles once; the long hair and robe hem move gently in a light breeze, with restrained secondary motion that never changes the silhouette abruptly. From 3.60-5.00s, the hair, cloth, and breathing settle back toward the initial state so the opening and ending poses nearly match for a clean loop. There is no forward travel.
+
+The only referenced visual subject is <Subject 1>; do not introduce any scenery, additional people, additional monsters, added weapons, or effects that obscure <Subject 1>. Use a plain near-white background. The subject remains fully inside frame with stable subject scale and facing. Use no cuts, zoom, pan, tilt, or shake. Identity guards: no costume change, no face change, no extra or missing hands, no extra limbs, no extra swords, and the flying sword is never removed. Motion guards: no walking, no running, and no body lunge.
+
+overall_soundscape:
+No dialogue and no generated diegetic sound; audio will be discarded downstream.
+
+non_diegetic_music:
+No music; audio will be discarded downstream.

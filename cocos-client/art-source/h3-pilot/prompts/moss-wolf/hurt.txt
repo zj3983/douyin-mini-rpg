@@ -1,0 +1,20 @@
+subject_definitions:
+<Subject 1> is the moss wolf from the sole provided reference image, including its low quadrupedal species silhouette, green moss-like markings, angular head shape, long tail shape, body proportions, and exactly four legs.
+
+summary:
+[reference generation] Create one continuous shot, 0.00-5.00s, showing <Subject 1> take one implied lateral hit, brace through all four paws, and recover its quadrupedal stance.
+
+retention_analysis:
+<Subject 1>: fully_preserved - identity, species silhouette, markings, head shape, tail shape, body proportions, and exactly four legs remain unchanged throughout the action.
+
+detailed_description:
+The target video is a clean gameplay sprite-motion study with even neutral lighting and crisp silhouette separation.
+[Shot 1] The 0.00-5.00s timeline uses a locked side-view camera with no camera movement. From 0.00-0.70s, <Subject 1> holds the alert four-paw stance. From 0.70-1.60s, an invisible impact causes a single lateral recoil opposite the facing direction, led by the shoulders and ribcage without turning the body around. From 1.60-2.70s, the paws brace beneath the body, the legs compress coherently, and the tail counters the recoil. From 2.70-4.20s, the wolf recovers the stance while keeping every limb attached and weight-bearing. From 4.20-5.00s, the head, spine, paws, and tail settle into a readable ready silhouette without a second recoil.
+
+The only referenced visual subject is <Subject 1>; do not introduce any scenery, additional people, additional monsters, added weapons, or effects that obscure <Subject 1>. Use a plain near-white background. The subject remains fully inside frame with stable subject scale and facing. Use no cuts, zoom, pan, tilt, or shake. Anatomy and motion guards: preserve exactly four legs, the species silhouette, markings, head shape, and tail shape; no detached limbs, no bipedal motion, no direction reversal, no extra or missing legs, and no frame exit.
+
+overall_soundscape:
+No dialogue and no generated diegetic sound; audio will be discarded downstream.
+
+non_diegetic_music:
+No music; audio will be discarded downstream.

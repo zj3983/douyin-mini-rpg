@@ -97,6 +97,127 @@ const expectedOutputs = {
   'moss-wolf': { attack: 8, death: 8, hurt: 4, idle: 6, move: 8, telegraph: 4 },
 }
 
+const h3Sections = [
+  'subject_definitions:',
+  'summary:',
+  'retention_analysis:',
+  'detailed_description:',
+  'overall_soundscape:',
+  'non_diegetic_music:',
+]
+
+const commonPromptRequirements = [
+  ['five-second continuous shot', /one continuous shot,\s*0\.00-5\.00s/i],
+  ['locked side-view camera', /locked side-view camera/i],
+  ['camera remains static', /no camera movement/i],
+  ['plain background', /plain near-white background/i],
+  ['subject stays in frame', /subject remains fully inside frame/i],
+  ['scale and facing stay stable', /stable subject scale and facing/i],
+  ['no edits or camera motion', /no cuts, zoom, pan, tilt, or shake/i],
+  ['no dialogue', /no dialogue/i],
+  ['no music', /no music/i],
+  ['audio is discarded', /audio (?:is|will be) discarded downstream/i],
+  [
+    'only the referenced subject appears',
+    /only referenced visual subject is <Subject 1>;\s*do not introduce any scenery, additional people, additional monsters, added weapons, or effects that obscure <Subject 1>/i,
+  ],
+  ['no scenery is introduced', /do not introduce any scenery/i],
+  ['no people are introduced', /additional people/i],
+  ['no monsters are introduced', /additional monsters/i],
+  ['no weapons are introduced', /added weapons/i],
+  ['no effects obscure the subject', /effects that obscure <Subject 1>/i],
+]
+
+const actorPromptRequirements = {
+  qinglan: [
+    ['costume stays unchanged', /no costume change/i],
+    ['face stays unchanged', /no face change/i],
+    ['hand count stays stable', /no extra or missing hands/i],
+    ['limb count stays stable', /no extra limbs/i],
+    ['sword count stays stable', /no extra swords/i],
+    ['flying sword stays present', /flying sword is never removed/i],
+    ['walking is forbidden', /no walking/i],
+    ['running is forbidden', /no running/i],
+    ['body lunges are forbidden', /no body lunge/i],
+  ],
+  'moss-wolf': [
+    ['leg count is explicit', /exactly four legs/i],
+    ['species silhouette is retained', /species silhouette/i],
+    ['markings are retained', /markings/i],
+    ['head is retained', /head shape/i],
+    ['tail is retained', /tail shape/i],
+    ['limbs stay attached', /no detached limbs/i],
+    ['motion stays quadrupedal', /no bipedal motion/i],
+    ['facing never reverses', /no direction reversal/i],
+    ['leg count cannot drift', /no extra or missing legs/i],
+    ['the wolf cannot exit frame', /no frame exit/i],
+  ],
+}
+
+const actionPromptRequirements = {
+  'qinglan-idle': [
+    ['stable sword stance', /stable standing stance with both feet planted on the flying sword/i],
+    ['breathing', /subtle breathing/i],
+    ['hair and robe breeze motion', /long hair and robe hem move gently in a light breeze/i],
+    ['loopable endpoints', /opening and ending poses? (?:nearly|closely) match/i],
+    ['no forward travel', /no forward travel/i],
+  ],
+  'qinglan-sword-ride': [
+    ['feet stay on sword', /feet stay planted on the flying sword throughout/i],
+    ['balance motion', /subtle balance compensation/i],
+    ['hair and robe trail backward', /long hair and robe fabric trail backward/i],
+    ['no screen displacement', /<Subject 1> remains centered without screen-space displacement/i],
+    ['no stepping', /no stepping/i],
+  ],
+  'qinglan-hand-seal': [
+    ['hands rise', /both hands rise/i],
+    ['readable seal', /fingers form a readable cultivation hand seal/i],
+    ['seal holds', /holds? the seal steadily/i],
+    ['arms recover', /arms (?:retract|return)/i],
+    ['feet stay on sword', /feet never leave the flying sword/i],
+    ['no forward drive', /no forward drive/i],
+  ],
+  'qinglan-hurt': [
+    ['single backward recoil', /single upper-body recoil backward/i],
+    ['secondary hair and sleeve motion', /sleeves and long hair follow through/i],
+    ['balance recovery', /recovers? balance/i],
+    ['no fall', /does not fall to the ground/i],
+    ['no dash', /no dash/i],
+  ],
+  'moss-wolf-idle': [
+    ['breathing', /subtle breathing/i],
+    ['ear reaction', /ears react/i],
+    ['tail balance', /tail counterbalances/i],
+    ['paws stay grounded', /all four paws remain planted/i],
+    ['loopable endpoints', /opening and ending poses? (?:nearly|closely) match/i],
+  ],
+  'moss-wolf-run': [
+    ['full quadrupedal gait', /complete quadrupedal run cycle/i],
+    ['coordinated leg phases', /foreleg and hind-leg phases remain coordinated/i],
+    ['body stays centered', /<Subject 1> stays centered/i],
+  ],
+  'moss-wolf-bite-lunge': [
+    ['crouched anticipation', /crouches? in anticipation/i],
+    ['hind-leg push', /hind legs push off/i],
+    ['forepaw reach', /forepaws reach forward/i],
+    ['visible bite', /mouth opens, closes in a bite/i],
+    ['recoil and recovery', /recoils? and recovers?/i],
+    ['stays in frame', /does not leave the frame/i],
+  ],
+  'moss-wolf-hurt': [
+    ['single lateral recoil', /single lateral recoil/i],
+    ['paw bracing', /paws brace/i],
+    ['stance recovery', /recovers? (?:the )?stance/i],
+  ],
+  'moss-wolf-death': [
+    ['balance loss', /loses? balance/i],
+    ['controlled fall', /controlled collapse/i],
+    ['still final pose', /final still silhouette/i],
+    ['body remains present', /body remains visible/i],
+    ['body does not vanish', /does not disappear/i],
+  ],
+}
+
 function resolveInside(root, candidate, label) {
   assert.equal(typeof candidate, 'string', `${label} is a string`)
   assert.ok(candidate.length > 0, `${label} is not empty`)
@@ -122,6 +243,29 @@ function resolveVideoInsideActor(root, actor, candidate, label) {
 
 function sortedRecord(entries) {
   return Object.fromEntries([...entries].sort(([left], [right]) => left.localeCompare(right)))
+}
+
+function assertSectionsInOrder(prompt, label) {
+  const sectionLines = prompt.match(/^[a-z_]+:$/gm) ?? []
+  assert.deepEqual(sectionLines, h3Sections, `${label} has the six Ref2V sections once and in order`)
+
+  for (const section of h3Sections) {
+    assert.equal(prompt.split(section).length - 1, 1, `${label} contains ${section} exactly once`)
+  }
+}
+
+function getPromptSection(prompt, section) {
+  const index = h3Sections.indexOf(section)
+  const start = prompt.indexOf(section) + section.length
+  const next = h3Sections[index + 1]
+  const end = next === undefined ? prompt.length : prompt.indexOf(next)
+  return prompt.slice(start, end).trim()
+}
+
+function assertPromptRequirements(prompt, requirements, label) {
+  for (const [requirement, pattern] of requirements) {
+    assert.match(prompt, pattern, `${label}: ${requirement}`)
+  }
 }
 
 test('video path validation treats slash and backslash as actor directory separators', () => {
@@ -200,4 +344,62 @@ test('H3 animation pilot manifest locks reproducible jobs and runtime outputs', 
   const telegraph = biteLunge.outputs[0].samples
   const attack = biteLunge.outputs[1].samples
   assert.ok(telegraph.at(-1) < attack[0], 'bite-lunge telegraph samples precede attack samples')
+})
+
+test('H3 animation pilot prompts are complete Ref2V single-shot action contracts', () => {
+  const pilot = JSON.parse(readFileSync(manifestPath, 'utf8'))
+  const expectedPromptPaths = expectedJobs.map(({ prompt }) => prompt)
+  const manifestPromptPaths = pilot.jobs.map(({ prompt }) => prompt)
+
+  assert.deepEqual(manifestPromptPaths, expectedPromptPaths, 'manifest prompt paths match the nine pilot jobs')
+  assert.equal(new Set(manifestPromptPaths).size, expectedPromptPaths.length, 'manifest prompt paths are unique')
+
+  const promptPaths = pilot.jobs.map((job) => ({
+    job,
+    path: resolveInside(projectRoot, job.prompt, `${job.id} prompt`),
+  }))
+  const missingPromptPaths = promptPaths
+    .filter(({ path }) => !existsSync(path))
+    .map(({ job }) => job.prompt)
+  assert.deepEqual(missingPromptPaths, [], `missing H3 prompt files:\n${missingPromptPaths.join('\n')}`)
+
+  for (const { job, path } of promptPaths) {
+    resolveInside(promptRoot, relative(promptRoot, path), `${job.id} prompt relative path`)
+    const prompt = readFileSync(path, 'utf8')
+
+    assert.ok(prompt.trim().length > 0, `${job.id} prompt is not empty`)
+    assertSectionsInOrder(prompt, job.id)
+    for (const section of h3Sections) {
+      assert.ok(getPromptSection(prompt, section).length > 0, `${job.id} ${section} is not empty`)
+    }
+
+    const shotLabels = [...prompt.matchAll(/\[Shot\s+\d+\]/gi)].map(([match]) => match.toLowerCase())
+    assert.deepEqual(shotLabels, ['[shot 1]'], `${job.id} contains exactly one [Shot 1]`)
+    assert.match(prompt, /\[Shot 1\][^\r\n]*0\.00-5\.00s/i, `${job.id} [Shot 1] spans 0.00-5.00s`)
+
+    const subjectDefinitions = getPromptSection(prompt, 'subject_definitions:')
+    const retentionAnalysis = getPromptSection(prompt, 'retention_analysis:')
+    const definedLabels = new Set(
+      [...subjectDefinitions.matchAll(/^<(?:Subject|Picture|Video|Audio)\s+\d+>/gm)].map(([label]) => label),
+    )
+    const referencedLabels = new Set(
+      [...prompt.matchAll(/<(?:Subject|Picture|Video|Audio)\s+\d+>/g)].map(([label]) => label),
+    )
+    assert.deepEqual([...definedLabels], ['<Subject 1>'], `${job.id} defines only <Subject 1>`)
+    assert.deepEqual([...referencedLabels], ['<Subject 1>'], `${job.id} has no unresolved or extra reference labels`)
+    assert.match(
+      prompt.slice(prompt.indexOf('summary:')),
+      /<Subject 1>/,
+      `${job.id} uses <Subject 1> after defining it`,
+    )
+    assert.match(
+      retentionAnalysis,
+      /<Subject 1>[^\r\n]*fully_preserved[^\r\n]*identity/i,
+      `${job.id} marks subject identity fully_preserved`,
+    )
+
+    assertPromptRequirements(prompt, commonPromptRequirements, job.id)
+    assertPromptRequirements(prompt, actorPromptRequirements[job.actor], job.id)
+    assertPromptRequirements(prompt, actionPromptRequirements[job.id], job.id)
+  }
 })

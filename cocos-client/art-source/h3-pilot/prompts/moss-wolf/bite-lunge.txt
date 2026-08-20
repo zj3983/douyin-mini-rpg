@@ -1,0 +1,20 @@
+subject_definitions:
+<Subject 1> is the moss wolf from the sole provided reference image, including its low quadrupedal species silhouette, green moss-like markings, angular head shape, long tail shape, body proportions, and exactly four legs.
+
+summary:
+[reference generation] Create one continuous shot, 0.00-5.00s, showing <Subject 1> anticipate, perform one controlled bite-lunge into empty space, recoil, and recover without leaving frame.
+
+retention_analysis:
+<Subject 1>: fully_preserved - identity, species silhouette, markings, head shape, tail shape, body proportions, and exactly four legs remain unchanged throughout the action.
+
+detailed_description:
+The target video is a clean gameplay sprite-motion study with even neutral lighting and crisp silhouette separation.
+[Shot 1] The 0.00-5.00s timeline uses a locked side-view camera with no camera movement. From 0.00-1.10s, <Subject 1> crouches in anticipation: the shoulders lower, weight shifts over the hindquarters, and all paws stay anatomically connected. From 1.10-2.00s, the hind legs push off while the forepaws reach forward and the body extends in the original facing direction. From 2.00-2.70s, the mouth opens, closes in a bite into empty space, and the head follows a short controlled contact arc. From 2.70-4.10s, the wolf recoils and recovers, drawing the forepaws under the chest as the hind paws regain support. From 4.10-5.00s, it settles into the ready quadrupedal stance. <Subject 1> does not leave the frame at any point.
+
+The only referenced visual subject is <Subject 1>; do not introduce any scenery, additional people, additional monsters, added weapons, or effects that obscure <Subject 1>. Use a plain near-white background. The subject remains fully inside frame with stable subject scale and facing. Use no cuts, zoom, pan, tilt, or shake. Anatomy and motion guards: preserve exactly four legs, the species silhouette, markings, head shape, and tail shape; no detached limbs, no bipedal motion, no direction reversal, no extra or missing legs, and no frame exit.
+
+overall_soundscape:
+No dialogue and no generated diegetic sound; audio will be discarded downstream.
+
+non_diegetic_music:
+No music; audio will be discarded downstream.
