@@ -1,0 +1,393 @@
+{
+  "actor": {
+    "actions": [
+      {
+        "atlas": "Assets/ActorAtlases/MossWolf/idle.png",
+        "fps": 6,
+        "frames": [
+          {
+            "h": 320,
+            "w": 256,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 256,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 512,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 768,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 1024,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 1280,
+            "y": 0
+          }
+        ],
+        "loop": true,
+        "name": "idle",
+        "order": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      },
+      {
+        "atlas": "Assets/ActorAtlases/MossWolf/move.png",
+        "fps": 10,
+        "frames": [
+          {
+            "h": 320,
+            "w": 256,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 256,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 512,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 768,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 1024,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 1280,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 1536,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 1792,
+            "y": 0
+          }
+        ],
+        "loop": true,
+        "name": "move",
+        "order": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      },
+      {
+        "atlas": "Assets/ActorAtlases/MossWolf/telegraph.png",
+        "fps": 8,
+        "frames": [
+          {
+            "h": 320,
+            "w": 256,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 256,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 512,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 768,
+            "y": 0
+          }
+        ],
+        "loop": false,
+        "name": "telegraph",
+        "order": [
+          0,
+          1,
+          2,
+          3
+        ]
+      },
+      {
+        "atlas": "Assets/ActorAtlases/MossWolf/attack.png",
+        "events": [
+          {
+            "at": 0.55,
+            "name": "bite-contact"
+          }
+        ],
+        "fps": 12,
+        "frames": [
+          {
+            "h": 320,
+            "w": 256,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 256,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 512,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 768,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 1024,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 1280,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 1536,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 1792,
+            "y": 0
+          }
+        ],
+        "loop": false,
+        "name": "attack",
+        "order": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      },
+      {
+        "atlas": "Assets/ActorAtlases/MossWolf/hurt.png",
+        "fps": 10,
+        "frames": [
+          {
+            "h": 320,
+            "w": 256,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 256,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 512,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 768,
+            "y": 0
+          }
+        ],
+        "loop": false,
+        "name": "hurt",
+        "order": [
+          0,
+          1,
+          2,
+          3
+        ]
+      },
+      {
+        "atlas": "Assets/ActorAtlases/MossWolf/death.png",
+        "fps": 8,
+        "frames": [
+          {
+            "h": 320,
+            "w": 256,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 256,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 512,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 768,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 1024,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 1280,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 1536,
+            "y": 0
+          },
+          {
+            "h": 320,
+            "w": 256,
+            "x": 1792,
+            "y": 0
+          }
+        ],
+        "loop": false,
+        "name": "death",
+        "order": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      }
+    ],
+    "anchor": {
+      "x": 0.5,
+      "y": 0.82
+    },
+    "atlas": "Assets/ActorAtlases/MossWolf/idle.png",
+    "frameSize": {
+      "h": 320,
+      "w": 256
+    },
+    "id": "moss-wolf",
+    "type": "monster"
+  },
+  "actorConfigFingerprint": "5e25fa17800d60ae93622282a0bad2f2b61490390cffbbf419c19e2c1c284618",
+  "actorId": "moss-wolf",
+  "files": [
+    {
+      "path": "Assets/ActorAtlases/MossWolf/attack.png",
+      "sha256": "5699010c862ab9682904db66fa057fd5fc97e5fd63cea0f891728880b813960e"
+    },
+    {
+      "path": "Assets/ActorAtlases/MossWolf/death.png",
+      "sha256": "e6661b22d625af80fd2656aae1f19fc1cdb4249900e16966c3e96715a2acb97e"
+    },
+    {
+      "path": "Assets/ActorAtlases/MossWolf/hurt.png",
+      "sha256": "6a26672a042d92dfa602510f77c29c78b4fc2195bb05b796c9c2eb9ae9f8eecc"
+    },
+    {
+      "path": "Assets/ActorAtlases/MossWolf/idle.png",
+      "sha256": "182321855f20cca6b44c7a1eccb2892994bfa32ace2fa691f9ca5cdf8e1d962a"
+    },
+    {
+      "path": "Assets/ActorAtlases/MossWolf/move.png",
+      "sha256": "2b1ade8af729a2907a2131292bf24bc5e824606e5ee2b9a2dd2d275f82677d9a"
+    },
+    {
+      "path": "Assets/ActorAtlases/MossWolf/telegraph.png",
+      "sha256": "966546210603c9f7c85ca5fb20bb7832f964e4a5b28b83a9fcdc154756861d3d"
+    },
+    {
+      "path": "reports/moss-wolf-contact-sheet.png",
+      "sha256": "f95d471079f848d9cf487cdafe703287faaf9c23c26d46a76051f41245d6ff6a"
+    },
+    {
+      "path": "reports/moss-wolf-report.json",
+      "sha256": "04b13d9a31789b34652e30efbcf6abc18af3f260f5e24de13d892869c8298c91"
+    }
+  ],
+  "folder": "MossWolf",
+  "report": {
+    "path": "reports/moss-wolf-report.json",
+    "status": "candidate"
+  },
+  "sourceManifestFingerprint": "2174dd954a23fd0b88e4ebb6a79e994a33613ecf3aa29083523de2386bed96c3",
+  "status": "candidate",
+  "version": 1
+}
