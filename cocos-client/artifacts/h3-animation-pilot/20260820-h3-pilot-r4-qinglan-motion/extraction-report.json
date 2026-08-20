@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "manifestSha256": "cb0cc42ea9907135c9f540dce9d18b194d09f1f8ba567ce2c8ae5732b568e52f",
+  "manifestSha256": "049d3e104c4087bfff2f850cd0c7947c69f3f047b3590fe3788be4b8e1dfc8eb",
   "actors": [
     {
       "actor": "qinglan",
@@ -8,6 +8,7 @@
         {
           "id": "qinglan-idle",
           "action": "idle",
+          "matteCleanup": "none",
           "video": "videos/qinglan/idle.mp4",
           "videoSha256": "94be0dfff315d938dfad345b194be4169b4fafc833da7bdbc48689a6329a530b",
           "outputs": [
@@ -167,6 +168,7 @@
         {
           "id": "qinglan-sword-ride",
           "action": "sword_ride",
+          "matteCleanup": "none",
           "video": "videos/qinglan/sword-ride.mp4",
           "videoSha256": "57bdc76cb5b13b6b066a1af43e1756c92dccbd02749c0bd891a5851dd05f88ab",
           "outputs": [
@@ -362,6 +364,7 @@
         {
           "id": "qinglan-hand-seal",
           "action": "hand_seal",
+          "matteCleanup": "none",
           "video": "videos/qinglan/hand-seal.mp4",
           "videoSha256": "18e485b0a0bf7e146c73a048d55dc0dd406f07e579a7f89180e844da141c285f",
           "outputs": [
@@ -557,6 +560,7 @@
         {
           "id": "qinglan-hurt",
           "action": "hurt",
+          "matteCleanup": "none",
           "video": "videos/qinglan/hurt.mp4",
           "videoSha256": "096026a0a887543e969aec098e8ced9c2a090493a4097ac0ca1fed29736f74e1",
           "outputs": [

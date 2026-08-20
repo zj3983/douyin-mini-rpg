@@ -912,6 +912,40 @@ test('H3 animation pilot manifest locks reproducible jobs and runtime outputs', 
   assert.ok(telegraph.at(-1) < attack[0], 'bite-lunge telegraph samples precede attack samples')
 })
 
+test('accepted H3 extraction reports match the final manifest and checked-in frames', () => {
+  const pilot = JSON.parse(readFileSync(manifestPath, 'utf8'))
+  const manifestSha256 = sha256File(manifestPath)
+  const acceptedRuns = [
+    {
+      actor: 'qinglan',
+      report: 'artifacts/h3-animation-pilot/20260820-h3-pilot-r4-qinglan-motion/extraction-report.json',
+    },
+    {
+      actor: 'moss-wolf',
+      report: 'artifacts/h3-animation-pilot/20260820-h3-pilot-r4-wolf-motion/extraction-report.json',
+    },
+  ]
+
+  for (const accepted of acceptedRuns) {
+    const report = JSON.parse(readFileSync(resolve(projectRoot, accepted.report), 'utf8'))
+    assert.equal(report.manifestSha256, manifestSha256, `${accepted.actor} report uses the final pilot manifest`)
+    assert.deepEqual(report.actors.map(({ actor }) => actor), [accepted.actor])
+
+    const actorReport = report.actors[0]
+    const expectedJobIds = pilot.jobs.filter(({ actor }) => actor === accepted.actor).map(({ id }) => id)
+    assert.deepEqual(actorReport.jobs.map(({ id }) => id), expectedJobIds)
+
+    for (const job of actorReport.jobs) {
+      for (const output of job.outputs) {
+        for (const frame of output.frames) {
+          const framePath = resolve(projectRoot, 'art-source/vertical-slice', accepted.actor, output.action, frame.file)
+          assert.equal(frame.outputSha256, sha256File(framePath), `${accepted.actor}/${output.action}/${frame.file}`)
+        }
+      }
+    }
+  }
+})
+
 test('H3 animation pilot prompts are complete conditioned single-shot action contracts', () => {
   const pilot = JSON.parse(readFileSync(manifestPath, 'utf8'))
   const expectedPromptPaths = expectedJobs.map(({ prompt }) => prompt)
