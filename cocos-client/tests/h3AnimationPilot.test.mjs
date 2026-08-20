@@ -2050,6 +2050,9 @@ draw = ImageDraw.Draw(source)
 draw.rectangle((200, 300, 567, 1000), fill=(34, 48, 42))
 draw.rectangle((300, 520, 330, 530), fill=(246, 245, 244))
 draw.rectangle((420, 440, 429, 449), fill=(250, 249, 248))
+draw.rectangle((340, 600, 355, 607), fill=(244, 243, 242))
+draw.rectangle((400, 700, 407, 707), fill=(247, 246, 245))
+draw.rectangle((408, 708, 415, 715), fill=(247, 246, 245))
 
 default_path = temp / "default.png"
 cleaned_path = temp / "cleaned.png"
@@ -2070,6 +2073,9 @@ def inspect(path):
             "halo": rgba.getpixel((199, 600))[3],
             "enclosed": rgba.getpixel((310, 525))[3],
             "tooth": rgba.getpixel((424, 444))[3],
+            "exact128": rgba.getpixel((347, 603))[3],
+            "diagonal64A": rgba.getpixel((403, 703))[3],
+            "diagonal64B": rgba.getpixel((411, 711))[3],
             "subject": rgba.getpixel((250, 600))[3],
         }
 
@@ -2087,6 +2093,9 @@ print(json.dumps({"default": inspect(default_path), "cleaned": inspect(cleaned_p
     halo: 255,
     enclosed: 255,
     tooth: 255,
+    exact128: 255,
+    diagonal64A: 255,
+    diagonal64B: 255,
     subject: 255,
   })
   assert.deepEqual(inspected.cleaned, {
@@ -2094,6 +2103,9 @@ print(json.dumps({"default": inspect(default_path), "cleaned": inspect(cleaned_p
     halo: 0,
     enclosed: 0,
     tooth: 255,
+    exact128: 0,
+    diagonal64A: 255,
+    diagonal64B: 255,
     subject: 255,
   })
 })
