@@ -1,0 +1,683 @@
+{
+  "version": 1,
+  "manifestSha256": "cb0cc42ea9907135c9f540dce9d18b194d09f1f8ba567ce2c8ae5732b568e52f",
+  "actors": [
+    {
+      "actor": "qinglan",
+      "jobs": [
+        {
+          "id": "qinglan-idle",
+          "action": "idle",
+          "video": "videos/qinglan/idle.mp4",
+          "videoSha256": "94be0dfff315d938dfad345b194be4169b4fafc833da7bdbc48689a6329a530b",
+          "outputs": [
+            {
+              "action": "idle",
+              "samples": [
+                0.2,
+                0.8,
+                1.4,
+                2.0,
+                2.6,
+                3.2,
+                3.8,
+                4.4
+              ],
+              "frames": [
+                {
+                  "index": 0,
+                  "sample": 0.2,
+                  "file": "00.png",
+                  "sourceVideoSha256": "94be0dfff315d938dfad345b194be4169b4fafc833da7bdbc48689a6329a530b",
+                  "outputSha256": "44ec15a89cd57d2f920d651a874443b650a6f640c8a267aa9f004b30d39692f7",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    61,
+                    158,
+                    662,
+                    1162
+                  ]
+                },
+                {
+                  "index": 1,
+                  "sample": 0.8,
+                  "file": "01.png",
+                  "sourceVideoSha256": "94be0dfff315d938dfad345b194be4169b4fafc833da7bdbc48689a6329a530b",
+                  "outputSha256": "caa02c93e766b53be29cfc61e0d5541b775da1ac47aea3b0c6839f476ed02a72",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    51,
+                    165,
+                    662,
+                    1168
+                  ]
+                },
+                {
+                  "index": 2,
+                  "sample": 1.4,
+                  "file": "02.png",
+                  "sourceVideoSha256": "94be0dfff315d938dfad345b194be4169b4fafc833da7bdbc48689a6329a530b",
+                  "outputSha256": "4c43ab120308f77d6a868651ac147cf254bb26ed07ce966e2308536375294bc3",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    61,
+                    168,
+                    662,
+                    1175
+                  ]
+                },
+                {
+                  "index": 3,
+                  "sample": 2.0,
+                  "file": "03.png",
+                  "sourceVideoSha256": "94be0dfff315d938dfad345b194be4169b4fafc833da7bdbc48689a6329a530b",
+                  "outputSha256": "15f775fff692bb6b42c853e8aaefa093f352666fa03890adec2c9db18272a54e",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    69,
+                    167,
+                    662,
+                    1176
+                  ]
+                },
+                {
+                  "index": 4,
+                  "sample": 2.6,
+                  "file": "04.png",
+                  "sourceVideoSha256": "94be0dfff315d938dfad345b194be4169b4fafc833da7bdbc48689a6329a530b",
+                  "outputSha256": "7a1eeec083954c71ee4085667f1393c00f2a7dc6f2f7dcca8c37504ae109f7e2",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    64,
+                    160,
+                    662,
+                    1167
+                  ]
+                },
+                {
+                  "index": 5,
+                  "sample": 3.2,
+                  "file": "05.png",
+                  "sourceVideoSha256": "94be0dfff315d938dfad345b194be4169b4fafc833da7bdbc48689a6329a530b",
+                  "outputSha256": "eeca43cb349a8926b8c078f40152d62699d8cea81b934d2101370da0c7e88471",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    57,
+                    156,
+                    662,
+                    1161
+                  ]
+                },
+                {
+                  "index": 6,
+                  "sample": 3.8,
+                  "file": "06.png",
+                  "sourceVideoSha256": "94be0dfff315d938dfad345b194be4169b4fafc833da7bdbc48689a6329a530b",
+                  "outputSha256": "af028f0bdc9f089d812246fd3508bbca2a6de77ef1b866a9e5e9a56bec0bc238",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    62,
+                    155,
+                    662,
+                    1161
+                  ]
+                },
+                {
+                  "index": 7,
+                  "sample": 4.4,
+                  "file": "07.png",
+                  "sourceVideoSha256": "94be0dfff315d938dfad345b194be4169b4fafc833da7bdbc48689a6329a530b",
+                  "outputSha256": "fbb25af6fd83949ff49ad695ff38511401262b9a9c9d873797f4d6f2759fd4d9",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    62,
+                    156,
+                    662,
+                    1161
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "qinglan-sword-ride",
+          "action": "sword_ride",
+          "video": "videos/qinglan/sword-ride.mp4",
+          "videoSha256": "57bdc76cb5b13b6b066a1af43e1756c92dccbd02749c0bd891a5851dd05f88ab",
+          "outputs": [
+            {
+              "action": "sword_ride",
+              "samples": [
+                0.15,
+                0.6,
+                1.05,
+                1.5,
+                1.95,
+                2.4,
+                2.85,
+                3.3,
+                3.75,
+                4.2
+              ],
+              "frames": [
+                {
+                  "index": 0,
+                  "sample": 0.15,
+                  "file": "00.png",
+                  "sourceVideoSha256": "57bdc76cb5b13b6b066a1af43e1756c92dccbd02749c0bd891a5851dd05f88ab",
+                  "outputSha256": "ec7699564d0ed9aed41313a53914e3ca29692dae1724a87ee769f92294f37474",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    124,
+                    255,
+                    609,
+                    1066
+                  ]
+                },
+                {
+                  "index": 1,
+                  "sample": 0.6,
+                  "file": "01.png",
+                  "sourceVideoSha256": "57bdc76cb5b13b6b066a1af43e1756c92dccbd02749c0bd891a5851dd05f88ab",
+                  "outputSha256": "7bded8245b6d79954abcdc342dcbd858c26b5e61dd0264b845c91ef3baadfd8e",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    123,
+                    261,
+                    609,
+                    1065
+                  ]
+                },
+                {
+                  "index": 2,
+                  "sample": 1.05,
+                  "file": "02.png",
+                  "sourceVideoSha256": "57bdc76cb5b13b6b066a1af43e1756c92dccbd02749c0bd891a5851dd05f88ab",
+                  "outputSha256": "c8256767b33c87cb8e2a40715b1484525a16075e99dae032f0ed1cd2fabe26fd",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    110,
+                    293,
+                    609,
+                    1062
+                  ]
+                },
+                {
+                  "index": 3,
+                  "sample": 1.5,
+                  "file": "03.png",
+                  "sourceVideoSha256": "57bdc76cb5b13b6b066a1af43e1756c92dccbd02749c0bd891a5851dd05f88ab",
+                  "outputSha256": "da103a17e02e9215a0625c5094c7475e9ec687a62260f35a572eabb61a2cafcd",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    99,
+                    322,
+                    609,
+                    1067
+                  ]
+                },
+                {
+                  "index": 4,
+                  "sample": 1.95,
+                  "file": "04.png",
+                  "sourceVideoSha256": "57bdc76cb5b13b6b066a1af43e1756c92dccbd02749c0bd891a5851dd05f88ab",
+                  "outputSha256": "92ff2054af5080d84549b981d4dd90984c3c63497e4fc82eeb2f04488a64543b",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    75,
+                    343,
+                    609,
+                    1070
+                  ]
+                },
+                {
+                  "index": 5,
+                  "sample": 2.4,
+                  "file": "05.png",
+                  "sourceVideoSha256": "57bdc76cb5b13b6b066a1af43e1756c92dccbd02749c0bd891a5851dd05f88ab",
+                  "outputSha256": "97ac9188b3f4a8c20cd890d73491133f5142fb7b84222ec2bc27d654a71effcd",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    72,
+                    349,
+                    609,
+                    1065
+                  ]
+                },
+                {
+                  "index": 6,
+                  "sample": 2.85,
+                  "file": "06.png",
+                  "sourceVideoSha256": "57bdc76cb5b13b6b066a1af43e1756c92dccbd02749c0bd891a5851dd05f88ab",
+                  "outputSha256": "3f95b2f1a68de3858ee1ea42cb00a693b9cde1391059a8f87bc26dff0f242d95",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    93,
+                    346,
+                    609,
+                    1061
+                  ]
+                },
+                {
+                  "index": 7,
+                  "sample": 3.3,
+                  "file": "07.png",
+                  "sourceVideoSha256": "57bdc76cb5b13b6b066a1af43e1756c92dccbd02749c0bd891a5851dd05f88ab",
+                  "outputSha256": "7c7bbf9e6f5d8870cc96df79c3a6e297da492e8a0ab273e5b657aaf5da699930",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    100,
+                    318,
+                    609,
+                    1066
+                  ]
+                },
+                {
+                  "index": 8,
+                  "sample": 3.75,
+                  "file": "08.png",
+                  "sourceVideoSha256": "57bdc76cb5b13b6b066a1af43e1756c92dccbd02749c0bd891a5851dd05f88ab",
+                  "outputSha256": "e22af5d10cecfb46636b109162a023b1c2121d4c2a798816db0915581e00c5b2",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    110,
+                    281,
+                    609,
+                    1068
+                  ]
+                },
+                {
+                  "index": 9,
+                  "sample": 4.2,
+                  "file": "09.png",
+                  "sourceVideoSha256": "57bdc76cb5b13b6b066a1af43e1756c92dccbd02749c0bd891a5851dd05f88ab",
+                  "outputSha256": "5749bb92db75845fcc2dfb88c0ce5b7dadf5baaff5693c9782e89c6a418afad9",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    124,
+                    255,
+                    609,
+                    1067
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "qinglan-hand-seal",
+          "action": "hand_seal",
+          "video": "videos/qinglan/hand-seal.mp4",
+          "videoSha256": "18e485b0a0bf7e146c73a048d55dc0dd406f07e579a7f89180e844da141c285f",
+          "outputs": [
+            {
+              "action": "hand_seal",
+              "samples": [
+                0.2,
+                0.55,
+                0.9,
+                1.25,
+                1.6,
+                2.0,
+                2.4,
+                2.85,
+                3.35,
+                4.0
+              ],
+              "frames": [
+                {
+                  "index": 0,
+                  "sample": 0.2,
+                  "file": "00.png",
+                  "sourceVideoSha256": "18e485b0a0bf7e146c73a048d55dc0dd406f07e579a7f89180e844da141c285f",
+                  "outputSha256": "88dade57866a519d8ed67503d08da593ac01e7254646053f18536a2d0334ed3b",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    62,
+                    156,
+                    662,
+                    1163
+                  ]
+                },
+                {
+                  "index": 1,
+                  "sample": 0.55,
+                  "file": "01.png",
+                  "sourceVideoSha256": "18e485b0a0bf7e146c73a048d55dc0dd406f07e579a7f89180e844da141c285f",
+                  "outputSha256": "b9c5c7ad9753eb3941100102c0e97fe57bc50a0272da6b16e26974f82738174e",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    51,
+                    158,
+                    662,
+                    1169
+                  ]
+                },
+                {
+                  "index": 2,
+                  "sample": 0.9,
+                  "file": "02.png",
+                  "sourceVideoSha256": "18e485b0a0bf7e146c73a048d55dc0dd406f07e579a7f89180e844da141c285f",
+                  "outputSha256": "ff8d0776182f529bc8b9458ed5c28b7c34479e5f57f094f988f133dd06a9fefe",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    48,
+                    162,
+                    662,
+                    1169
+                  ]
+                },
+                {
+                  "index": 3,
+                  "sample": 1.25,
+                  "file": "03.png",
+                  "sourceVideoSha256": "18e485b0a0bf7e146c73a048d55dc0dd406f07e579a7f89180e844da141c285f",
+                  "outputSha256": "146d606edbf524690fa71c320300d1c1ecc41b9f23327a279ed05eb2fb7fd5da",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    47,
+                    163,
+                    664,
+                    1168
+                  ]
+                },
+                {
+                  "index": 4,
+                  "sample": 1.6,
+                  "file": "04.png",
+                  "sourceVideoSha256": "18e485b0a0bf7e146c73a048d55dc0dd406f07e579a7f89180e844da141c285f",
+                  "outputSha256": "4209f51e48a90cd106950906f6ee41fbbbfbe2aefe971a6d8e4be471be3dc91c",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    55,
+                    162,
+                    662,
+                    1170
+                  ]
+                },
+                {
+                  "index": 5,
+                  "sample": 2.0,
+                  "file": "05.png",
+                  "sourceVideoSha256": "18e485b0a0bf7e146c73a048d55dc0dd406f07e579a7f89180e844da141c285f",
+                  "outputSha256": "6dac403c38f0e3166221081068111b2f770dadd8075f615e34e307fd9380a802",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    70,
+                    158,
+                    662,
+                    1173
+                  ]
+                },
+                {
+                  "index": 6,
+                  "sample": 2.4,
+                  "file": "06.png",
+                  "sourceVideoSha256": "18e485b0a0bf7e146c73a048d55dc0dd406f07e579a7f89180e844da141c285f",
+                  "outputSha256": "d56830c456c8e2ac6ac24672893ce2162cccd5fa48918bc5db012052b29d6d88",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    68,
+                    155,
+                    662,
+                    1164
+                  ]
+                },
+                {
+                  "index": 7,
+                  "sample": 2.85,
+                  "file": "07.png",
+                  "sourceVideoSha256": "18e485b0a0bf7e146c73a048d55dc0dd406f07e579a7f89180e844da141c285f",
+                  "outputSha256": "e1b952802fdaed627ee8aea2308e0b3e57db0bc0cc3391fc70c34831a6b9925b",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    54,
+                    153,
+                    662,
+                    1160
+                  ]
+                },
+                {
+                  "index": 8,
+                  "sample": 3.35,
+                  "file": "08.png",
+                  "sourceVideoSha256": "18e485b0a0bf7e146c73a048d55dc0dd406f07e579a7f89180e844da141c285f",
+                  "outputSha256": "2731fbb451ed303d3736e27b4fec0c81bfca310ff086ab28c34de1ea982048e7",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    52,
+                    158,
+                    662,
+                    1167
+                  ]
+                },
+                {
+                  "index": 9,
+                  "sample": 4.0,
+                  "file": "09.png",
+                  "sourceVideoSha256": "18e485b0a0bf7e146c73a048d55dc0dd406f07e579a7f89180e844da141c285f",
+                  "outputSha256": "beeda78104f4224bb56d5ef73d2f5f526eb8275b47de7e45e401bf879427c8d0",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    53,
+                    163,
+                    662,
+                    1168
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "qinglan-hurt",
+          "action": "hurt",
+          "video": "videos/qinglan/hurt.mp4",
+          "videoSha256": "096026a0a887543e969aec098e8ced9c2a090493a4097ac0ca1fed29736f74e1",
+          "outputs": [
+            {
+              "action": "hurt",
+              "samples": [
+                0.2,
+                0.55,
+                0.9,
+                1.3,
+                1.85,
+                2.5
+              ],
+              "frames": [
+                {
+                  "index": 0,
+                  "sample": 0.2,
+                  "file": "00.png",
+                  "sourceVideoSha256": "096026a0a887543e969aec098e8ced9c2a090493a4097ac0ca1fed29736f74e1",
+                  "outputSha256": "8353bacfc8519be76438281f97a7dc8626a6f318b276545ecae7a3fe03ce2eaa",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    125,
+                    256,
+                    610,
+                    1068
+                  ]
+                },
+                {
+                  "index": 1,
+                  "sample": 0.55,
+                  "file": "01.png",
+                  "sourceVideoSha256": "096026a0a887543e969aec098e8ced9c2a090493a4097ac0ca1fed29736f74e1",
+                  "outputSha256": "b98a9c7dad3ab12b8661162f3eb2d44163ee8bf69c3a75229fab08b14279e39c",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    126,
+                    257,
+                    610,
+                    1072
+                  ]
+                },
+                {
+                  "index": 2,
+                  "sample": 0.9,
+                  "file": "02.png",
+                  "sourceVideoSha256": "096026a0a887543e969aec098e8ced9c2a090493a4097ac0ca1fed29736f74e1",
+                  "outputSha256": "8a1d5dbebcf6df1fad47bfc33d50276c1727ceee9d9c495da2096fffddabfe57",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    85,
+                    292,
+                    610,
+                    1082
+                  ]
+                },
+                {
+                  "index": 3,
+                  "sample": 1.3,
+                  "file": "03.png",
+                  "sourceVideoSha256": "096026a0a887543e969aec098e8ced9c2a090493a4097ac0ca1fed29736f74e1",
+                  "outputSha256": "c7d28f79aef1ab241a90952721141e5ef9720e2f316fb7ab75916a4ccbb5f559",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    65,
+                    347,
+                    612,
+                    1108
+                  ]
+                },
+                {
+                  "index": 4,
+                  "sample": 1.85,
+                  "file": "04.png",
+                  "sourceVideoSha256": "096026a0a887543e969aec098e8ced9c2a090493a4097ac0ca1fed29736f74e1",
+                  "outputSha256": "558b21fc078c95f07ff4304bed9f11a4961355859a66a0a27d33f736dc6e9751",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    26,
+                    360,
+                    612,
+                    1128
+                  ]
+                },
+                {
+                  "index": 5,
+                  "sample": 2.5,
+                  "file": "05.png",
+                  "sourceVideoSha256": "096026a0a887543e969aec098e8ced9c2a090493a4097ac0ca1fed29736f74e1",
+                  "outputSha256": "cae374dfb009236c242303a83355de46d66119f6cacd3f4a524708bb1d2f56dc",
+                  "dimensions": [
+                    768,
+                    1344
+                  ],
+                  "alphaBounds": [
+                    10,
+                    363,
+                    612,
+                    1136
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
