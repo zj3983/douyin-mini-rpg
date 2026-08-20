@@ -269,6 +269,25 @@ function assertPromptRequirements(prompt, requirements, label) {
   }
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function assertNoAffirmativeInPlaceMovement(prompt, label) {
+  const movementCue = /\b(?:travels?|traveling|moves?|moving|movement|crosses?|leaves?|exits?)\b[^.!?\r\n]*\b(?:forward|backward|across (?:the )?(?:screen|frame|image)|(?:the )?frame)\b/i
+  const negationCue = /\b(?:no|not|never|without|rather than|does not|do not|cannot|remains? centered|stays? centered)\b/i
+  const affirmativeSentences = prompt
+    .split(/(?<=[.!?])\s+|\r?\n/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => movementCue.test(sentence) && !negationCue.test(sentence))
+
+  assert.deepEqual(
+    affirmativeSentences,
+    [],
+    `${label} has no affirmative travel, screen-crossing, or frame-exit motion`,
+  )
+}
+
 test('video path validation treats slash and backslash as actor directory separators', () => {
   assert.doesNotThrow(() => resolveVideoInsideActor(projectRoot, 'qinglan', 'qinglan/idle.mp4', 'slash video'))
   assert.doesNotThrow(() => resolveVideoInsideActor(projectRoot, 'qinglan', String.raw`qinglan\idle.mp4`, 'backslash video'))
@@ -403,4 +422,71 @@ test('H3 animation pilot prompts are complete Ref2V single-shot action contracts
     assertPromptRequirements(prompt, actorPromptRequirements[job.actor], job.id)
     assertPromptRequirements(prompt, actionPromptRequirements[job.id], job.id)
   }
+})
+
+test('loop and bite prompt phases align with manifest sampling boundaries', () => {
+  const pilot = JSON.parse(readFileSync(manifestPath, 'utf8'))
+  const loopContracts = [
+    { jobId: 'qinglan-idle', outputAction: 'idle' },
+    { jobId: 'qinglan-sword-ride', outputAction: 'sword_ride' },
+    { jobId: 'moss-wolf-idle', outputAction: 'idle' },
+    { jobId: 'moss-wolf-run', outputAction: 'move' },
+  ]
+
+  for (const { jobId, outputAction } of loopContracts) {
+    const job = pilot.jobs.find(({ id }) => id === jobId)
+    assert.ok(job, `${jobId} exists in the manifest`)
+    const output = job.outputs.find(({ action }) => action === outputAction)
+    assert.ok(output, `${jobId} has ${outputAction} samples`)
+
+    const finalSample = output.samples.at(-1)
+    assert.ok(Number.isFinite(finalSample), `${jobId} has a finite final sample`)
+    const finalSampleText = finalSample.toFixed(2)
+    const escapedFinalSample = escapeRegExp(finalSampleText)
+    const prompt = readFileSync(resolveInside(projectRoot, job.prompt, `${jobId} prompt`), 'utf8')
+    const restoredOpeningPhase = new RegExp(
+      `(?:opening sampled (?:pose|balance pose|stance|gait phase)[^.!?\\r\\n]*(?:is restored|returns?)[^.!?\\r\\n]*${escapedFinalSample}s|${escapedFinalSample}s[^.!?\\r\\n]*(?:is restored|returns?)[^.!?\\r\\n]*opening sampled (?:pose|balance pose|stance|gait phase))`,
+      'i',
+    )
+
+    assert.match(
+      prompt,
+      restoredOpeningPhase,
+      `${jobId} restores its opening sampled phase by manifest sample ${finalSampleText}s`,
+    )
+    assert.match(
+      prompt,
+      new RegExp(`From ${escapedFinalSample}-5\\.00s,[^\\r\\n]*(?:continues?|continuing|next|seamless)`, 'i'),
+      `${jobId} continues looping naturally after manifest sample ${finalSampleText}s`,
+    )
+    assertNoAffirmativeInPlaceMovement(prompt, jobId)
+  }
+
+  const biteJob = pilot.jobs.find(({ id }) => id === 'moss-wolf-bite-lunge')
+  assert.ok(biteJob, 'moss-wolf-bite-lunge exists in the manifest')
+  const telegraph = biteJob.outputs.find(({ action }) => action === 'telegraph')
+  const attack = biteJob.outputs.find(({ action }) => action === 'attack')
+  assert.ok(telegraph && attack, 'bite-lunge has telegraph and attack samples')
+
+  const telegraphEnd = telegraph.samples.at(-1)
+  const attackStart = attack.samples[0]
+  const telegraphEndText = telegraphEnd.toFixed(2)
+  const attackStartText = attackStart.toFixed(2)
+  const bitePrompt = readFileSync(resolveInside(projectRoot, biteJob.prompt, 'moss-wolf-bite-lunge prompt'), 'utf8')
+
+  assert.match(
+    bitePrompt,
+    new RegExp(`pure anticipation holds through the telegraph end at ${escapeRegExp(telegraphEndText)}s`, 'i'),
+    `bite-lunge remains pure anticipation through telegraph sample ${telegraphEndText}s`,
+  )
+  const pushStartMatch = bitePrompt.match(/At (\d+\.\d{2})s, the hind-leg push begins after the telegraph end/i)
+  assert.ok(pushStartMatch, 'bite-lunge declares a two-decimal hind-leg push start after telegraph end')
+  const pushStart = Number(pushStartMatch[1])
+  assert.ok(pushStart > telegraphEnd, 'bite-lunge push starts after the final telegraph sample')
+  assert.ok(pushStart <= attackStart, 'bite-lunge push starts no later than the first attack sample')
+  assert.match(
+    bitePrompt,
+    new RegExp(`By the attack start at ${escapeRegExp(attackStartText)}s,[^.!?\\r\\n]*already[^.!?\\r\\n]*push`, 'i'),
+    `bite-lunge is already pushing by attack sample ${attackStartText}s`,
+  )
 })
