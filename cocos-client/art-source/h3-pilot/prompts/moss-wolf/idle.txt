@@ -1,13 +1,14 @@
 subject_definitions:
-<Subject 1> is the moss wolf from the sole provided reference image, including its low quadrupedal species silhouette, green moss-like markings, angular head shape, long tail shape, body proportions, and exactly four legs.
+<Subject 1> is the moss wolf in the exact supplied first frame. Preserve the same species, same low quadrupedal silhouette, green moss-like markings, angular head shape, long tail shape, body proportions, and four complete legs. There are no extra or missing legs or limbs.
 
 summary:
-[reference generation] Create one continuous shot, 0.00-5.00s, showing <Subject 1> in an alert, loopable quadrupedal idle while preserving the complete referenced anatomy and markings.
+[first-and-last-frame generation] Create one continuous shot, 0.00-5.00s, showing <Subject 1> in an alert, loopable quadrupedal idle while preserving the exact supplied first frame anatomy and markings.
 
 retention_analysis:
 <Subject 1>: fully_preserved - identity, species silhouette, markings, head shape, tail shape, body proportions, and exactly four legs remain unchanged throughout the action.
 
 detailed_description:
+Use the supplied image as both first and final conditioning. Begin from the exact supplied first-frame species, silhouette, markings, anatomy, scale, facing, and pose. After restrained natural motion, return to the exact supplied final pose without freezing early.
 The target video is a clean gameplay sprite-motion study with even neutral lighting and crisp silhouette separation.
 [Shot 1] The 0.00-5.00s timeline uses a locked side-view camera with no camera movement. <Subject 1> begins in a balanced quadrupedal stance while all four paws remain planted under the body. From 0.00-0.25s, the wolf settles into the authored idle phase. At 0.25s, <Subject 1> is in the opening sampled stance, and that same sampled stance is restored at 4.00s. From 0.25-1.20s, subtle breathing expands and settles the ribcage without shifting paw contact. From 1.20-2.20s, the ears react with one small alert turn and return. From 2.20-3.20s, the tail counterbalances with a restrained sway while the head remains oriented in the original facing direction. From 3.20-4.00s, breathing, ears, and tail naturally return to that sampled stance so the opening and ending poses nearly match at the authored sample boundary. From 4.00-5.00s, the next seamless idle cycle continues with quiet breathing, a small ear response, and living tail balance rather than a frozen hold.
 

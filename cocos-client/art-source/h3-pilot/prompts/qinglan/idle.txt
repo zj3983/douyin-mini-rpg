@@ -1,13 +1,14 @@
 subject_definitions:
-<Subject 1> is the Qinglan sword cultivator from the sole provided reference image, including the same face, long dark hair, layered blue-and-white cultivation costume, body proportions, and the single flying sword beneath both feet as one inseparable referenced subject.
+<Subject 1> is the adult Chinese MAN in the exact supplied first frame: the same adult male Qinglan sword cultivator with the exact first-frame face and costume, masculine face and body, long dark hair, layered blue-and-white cultivation costume, body proportions, and the single flying sword beneath both feet as one inseparable subject. Keep the same gender; never feminize or change gender.
 
 summary:
-[reference generation] Create one continuous shot, 0.00-5.00s, showing <Subject 1> in a calm, loopable flying-sword idle while preserving the reference identity and clean gameplay silhouette.
+[first-and-last-frame generation] Create one continuous shot, 0.00-5.00s, showing <Subject 1> in a calm, loopable flying-sword idle while preserving the exact supplied first frame and clean gameplay silhouette.
 
 retention_analysis:
 <Subject 1>: fully_preserved - identity, face, costume, body proportions, long hair, hand count, and the single flying sword remain unchanged throughout the action.
 
 detailed_description:
+Use the supplied image as both first and final conditioning. Begin from the exact supplied first-frame face, costume, anatomy, sword, scale, and pose. After restrained natural motion, return to the exact supplied final pose without freezing early.
 The target video is a clean gameplay sprite-motion study with even neutral lighting and crisp silhouette separation.
 [Shot 1] The 0.00-5.00s timeline uses a locked side-view camera with no camera movement. <Subject 1> holds a stable standing stance with both feet planted on the flying sword. From 0.00-0.20s, the figure settles into the authored idle phase. At 0.20s, <Subject 1> is in the opening sampled pose, and that same sampled pose is restored at 4.40s. From 0.20-1.00s, the torso begins subtle breathing while the knees and ankles remain steady. From 1.00-3.20s, the chest rises and settles once; the long hair and robe hem move gently in a light breeze, with restrained secondary motion that never changes the silhouette abruptly. From 3.20-4.40s, the breathing, hair, and cloth naturally return to that sampled pose so the opening and ending poses nearly match at the authored sample boundary. From 4.40-5.00s, subtle breathing and gentle hair-and-robe motion continue into the next seamless idle loop while the restored stance stays alive rather than freezing. There is no forward travel.
 

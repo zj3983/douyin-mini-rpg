@@ -1,13 +1,14 @@
 subject_definitions:
-<Subject 1> is the Qinglan sword cultivator from the sole provided reference image, including the same face, long dark hair, layered blue-and-white cultivation costume, body proportions, and the single flying sword beneath both feet as one inseparable referenced subject.
+<Subject 1> is the adult Chinese MAN in the exact supplied first frame: the same adult male Qinglan sword cultivator with the exact first-frame face and costume, masculine face and body, long dark hair, layered blue-and-white cultivation costume, body proportions, and the single flying sword beneath both feet as one inseparable subject. Keep the same gender; never feminize or change gender.
 
 summary:
-[reference generation] Create one continuous shot, 0.00-5.00s, showing <Subject 1> absorb one implied hit, recoil backward through the upper body, and recover balance on the flying sword.
+[first-frame generation] Create one continuous shot, 0.00-5.00s, showing <Subject 1> absorb one implied hit, recoil backward through the upper body, and recover balance on the flying sword while retaining the exact supplied first frame identity.
 
 retention_analysis:
 <Subject 1>: fully_preserved - identity, face, costume, body proportions, long hair, hand count, and the single flying sword remain unchanged throughout the action.
 
 detailed_description:
+Begin from the exact supplied first-frame face and costume, anatomy, sword, scale, facing, and pose. Preserve that identity through the full motion; the ending is motion-authored and is not conditioned by a supplied final frame.
 The target video is a clean gameplay sprite-motion study with even neutral lighting and crisp silhouette separation.
 [Shot 1] The 0.00-5.00s timeline uses a locked side-view camera with no camera movement. <Subject 1> starts balanced with both feet fixed on the flying sword. From 0.00-0.70s, the body holds the neutral stance. From 0.70-1.50s, an invisible impact causes a single upper-body recoil backward: the shoulders and chest lean back once while the hips and feet continue to anchor the pose. From 1.50-2.50s, the sleeves and long hair follow through with delayed motion, without an impact flash or visible attacker. From 2.50-4.20s, <Subject 1> recovers balance through the torso and knees. From 4.20-5.00s, the figure settles upright. The subject does not fall to the ground, and there is no dash.
 

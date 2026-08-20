@@ -1,13 +1,14 @@
 subject_definitions:
-<Subject 1> is the Qinglan sword cultivator from the sole provided reference image, including the same face, long dark hair, layered blue-and-white cultivation costume, body proportions, and the single flying sword beneath both feet as one inseparable referenced subject.
+<Subject 1> is the adult Chinese MAN in the exact supplied first frame: the same adult male Qinglan sword cultivator with the exact first-frame face and costume, masculine face and body, long dark hair, layered blue-and-white cultivation costume, body proportions, and the single flying sword beneath both feet as one inseparable subject. Keep the same gender; never feminize or change gender.
 
 summary:
-[reference generation] Create one continuous shot, 0.00-5.00s, showing <Subject 1> perform one readable two-handed cultivation seal and return to the stable flying-sword stance.
+[first-frame generation] Create one continuous shot, 0.00-5.00s, showing <Subject 1> perform one readable two-handed cultivation seal and return to the stable flying-sword stance while retaining the exact supplied first frame identity.
 
 retention_analysis:
 <Subject 1>: fully_preserved - identity, face, costume, body proportions, long hair, two complete hands, and the single flying sword remain unchanged throughout the action.
 
 detailed_description:
+Begin from the exact supplied first-frame face and costume, anatomy, sword, scale, facing, and pose. Preserve that identity through the full motion; the ending is motion-authored and is not conditioned by a supplied final frame.
 The target video is a clean gameplay sprite-motion study with even neutral lighting and crisp silhouette separation.
 [Shot 1] The 0.00-5.00s timeline uses a locked side-view camera with no camera movement. <Subject 1> begins upright with both arms relaxed and the feet never leave the flying sword. From 0.00-1.20s, both hands rise smoothly in front of the torso, with elbows separating enough to keep both hands readable. From 1.20-2.20s, the fingers form a readable cultivation hand seal with anatomically coherent articulation and a clear silhouette. From 2.20-3.40s, <Subject 1> holds the seal steadily without glowing energy, particles, or any visual overlay. From 3.40-5.00s, the arms return along the same controlled path to the neutral stance while the feet and sword remain stable. There is no forward drive.
 

@@ -3,6 +3,7 @@
 
 import argparse
 import base64
+import hashlib
 import json
 import math
 import mimetypes
@@ -32,6 +33,10 @@ DATA_URI_PATTERN = re.compile(
 LONG_BASE64_PATTERN = re.compile(r"[A-Za-z0-9+/]{80,}={0,2}")
 VALID_STATES = {"submitting", "processing", "completed", "failed"}
 VIDEO_CONTENT_TYPES = {"video/mp4", "application/octet-stream"}
+MODEL_CONDITIONING = {
+    "minimax-h3-fl2v-local": {"first-frame", "first-last"},
+    "minimax-h3-ref2v-local": {"reference"},
+}
 
 
 class ClientError(Exception):
@@ -76,7 +81,7 @@ def positive_float(raw: str) -> float:
 
 def build_parser():
     parser = argparse.ArgumentParser(
-        description="Generate resumable H3 Ref2V action videos through a local bridge."
+        description="Generate resumable H3 conditioned action videos through a local bridge."
     )
     parser.add_argument("--manifest", default=DEFAULT_MANIFEST)
     parser.add_argument("--run-root", required=True)
@@ -152,6 +157,39 @@ def require_nonempty_string(record: dict, key: str, label: str) -> str:
     return value
 
 
+def build_request_fingerprint(
+    *,
+    model: str,
+    prompt_bytes: bytes,
+    reference_bytes: bytes,
+    reference_mime: str,
+    seed: int,
+    width: int,
+    height: int,
+    duration,
+    conditioning: str,
+) -> str:
+    descriptor = {
+        "conditioning": conditioning,
+        "duration": duration,
+        "height": height,
+        "model": model,
+        "n": 1,
+        "promptSha256": hashlib.sha256(prompt_bytes).hexdigest(),
+        "referenceSha256": hashlib.sha256(reference_bytes).hexdigest(),
+        "referenceMime": reference_mime,
+        "seed": seed,
+        "width": width,
+    }
+    canonical = json.dumps(
+        descriptor,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
 def validate_bridge_url(raw) -> str:
     if not isinstance(raw, str) or not raw:
         raise ClientError("manifest.bridgeUrl must be a non-empty HTTP URL")
@@ -191,6 +229,8 @@ def validate_manifest(manifest, run_root: Path):
 
     bridge_url = validate_bridge_url(manifest.get("bridgeUrl"))
     model = require_nonempty_string(manifest, "model", "manifest")
+    if model not in MODEL_CONDITIONING:
+        raise ClientError("manifest.model is not a supported H3 conditioning model")
     width = manifest.get("width")
     height = manifest.get("height")
     duration = manifest.get("duration")
@@ -230,6 +270,12 @@ def validate_manifest(manifest, run_root: Path):
         if type(seed) is not int:
             raise ClientError(f"{label}.seed must be an integer")
 
+        conditioning = require_nonempty_string(raw_job, "conditioning", label)
+        if conditioning not in MODEL_CONDITIONING[model]:
+            raise ClientError(
+                f"{label}.conditioning is incompatible with manifest.model"
+            )
+
         reference_raw = require_nonempty_string(raw_job, "reference", label)
         reference_path = resolve_inside(
             CLIENT_ROOT,
@@ -242,6 +288,10 @@ def validate_manifest(manifest, run_root: Path):
         reference_mime, _encoding = mimetypes.guess_type(reference_path.name)
         if not reference_mime or not reference_mime.startswith("image/"):
             raise ClientError(f"{job_id} reference does not have a recognized image MIME type")
+        try:
+            reference_bytes = reference_path.read_bytes()
+        except OSError as error:
+            raise ClientError(f"could not read {job_id} reference") from error
 
         prompt_raw = require_nonempty_string(raw_job, "prompt", label)
         prompt_path = resolve_inside(
@@ -253,7 +303,8 @@ def validate_manifest(manifest, run_root: Path):
         )
         require_file(prompt_path, f"{job_id} prompt")
         try:
-            prompt_text = prompt_path.read_bytes().decode("utf-8")
+            prompt_bytes = prompt_path.read_bytes()
+            prompt_text = prompt_bytes.decode("utf-8")
         except UnicodeDecodeError as error:
             raise ClientError(f"{job_id} prompt is not valid UTF-8") from error
         except OSError as error:
@@ -281,9 +332,25 @@ def validate_manifest(manifest, run_root: Path):
             {
                 "id": job_id,
                 "seed": seed,
+                "conditioning": conditioning,
                 "reference_path": reference_path,
                 "reference_mime": reference_mime,
+                "reference_data_url": (
+                    f"data:{reference_mime};base64,"
+                    f"{base64.b64encode(reference_bytes).decode('ascii')}"
+                ),
                 "prompt_text": prompt_text,
+                "request_fingerprint": build_request_fingerprint(
+                    model=model,
+                    prompt_bytes=prompt_bytes,
+                    reference_bytes=reference_bytes,
+                    reference_mime=reference_mime,
+                    seed=seed,
+                    width=width,
+                    height=height,
+                    duration=duration,
+                    conditioning=conditioning,
+                ),
                 "target_path": target_path,
                 "manifest_video": portable_video,
                 "state_video": target_path.relative_to(run_root).as_posix(),
@@ -397,14 +464,6 @@ def validate_task_id(raw) -> str:
     return raw
 
 
-def encode_reference(path: Path, mime_type: str) -> str:
-    try:
-        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
-    except OSError as error:
-        raise ClientError("could not read a job reference image") from error
-    return f"data:{mime_type};base64,{encoded}"
-
-
 def submit_job(config: dict, job: dict, deadline: float) -> str:
     payload = {
         "model": config["model"],
@@ -414,8 +473,13 @@ def submit_job(config: dict, job: dict, deadline: float) -> str:
         "duration": config["duration"],
         "n": 1,
         "seed": job["seed"],
-        "reference_images": [encode_reference(job["reference_path"], job["reference_mime"])],
     }
+    if config["model"] == "minimax-h3-fl2v-local":
+        payload["image"] = job["reference_data_url"]
+        if job["conditioning"] == "first-last":
+            payload["last_image"] = job["reference_data_url"]
+    else:
+        payload["reference_images"] = [job["reference_data_url"]]
     response = request_json(
         "POST",
         f"{config['bridge_url']}/v1/video/generations",
@@ -562,6 +626,10 @@ def normalize_state_entry(raw_entry, jobs_by_id: dict[str, dict]) -> dict:
         raise ClientError(f"jobs.json seed does not match manifest for {job_id}")
     if raw_entry.get("video") not in {job["state_video"], job["manifest_video"]}:
         raise ClientError(f"jobs.json video does not match manifest for {job_id}")
+    if raw_entry.get("requestFingerprint") != job["request_fingerprint"]:
+        raise ClientError(
+            f"{job_id} has a stale task because its generation request changed"
+        )
 
     status = raw_entry.get("status")
     if status not in VALID_STATES:
@@ -589,6 +657,7 @@ def normalize_state_entry(raw_entry, jobs_by_id: dict[str, dict]) -> dict:
         "taskId": task_id,
         "status": status,
         "seed": job["seed"],
+        "requestFingerprint": job["request_fingerprint"],
         "video": job["state_video"],
         "startedAt": started_at,
         "completedAt": completed_at,
@@ -660,6 +729,7 @@ def new_state_entry(job: dict) -> dict:
         "taskId": None,
         "status": "submitting",
         "seed": job["seed"],
+        "requestFingerprint": job["request_fingerprint"],
         "video": job["state_video"],
         "startedAt": utc_now(),
         "completedAt": None,
