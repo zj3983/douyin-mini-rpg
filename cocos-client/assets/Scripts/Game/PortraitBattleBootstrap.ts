@@ -348,7 +348,7 @@ export class PortraitBattleBootstrap extends Component {
     this.createFlyingSword(effectLayer, runtime, controller, visibleHeight)
     this.attachSharedCombatRoot(worldRoot)
 
-    player.setSiblingIndex(0)
+    player.setSiblingIndex(actorLayer.children.length - 1)
   }
 
   private relayoutVisibleArea(metrics: Readonly<ViewportMetrics>) {

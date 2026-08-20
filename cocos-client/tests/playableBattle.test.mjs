@@ -599,6 +599,13 @@ test('runtime-created enemies contain sprite animation combat and pool component
   }
 })
 
+test('player actor renders above the enemy pool so overlapping monsters cannot hide it', () => {
+  const source = read('assets/Scripts/Game/PortraitBattleBootstrap.ts')
+
+  assert.match(source, /player\.setSiblingIndex\(actorLayer\.children\.length - 1\)/)
+  assert.doesNotMatch(source, /player\.setSiblingIndex\(0\)/)
+})
+
 test('promoted moss wolf attack crosses its single bite contact marker once', () => {
   const manifest = JSON.parse(read('assets/resources/Data/animation-atlas.json'))
   const mossWolf = manifest.actors.find((actor) => actor.id === 'moss-wolf')
