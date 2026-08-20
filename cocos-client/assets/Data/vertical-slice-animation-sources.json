@@ -21,7 +21,7 @@
         "idle": { "frames": 8, "fps": 6, "loop": true, "source": "qinglan/idle", "sourceMode": "pose-video" },
         "sword_ride": { "frames": 10, "fps": 8, "loop": true, "source": "qinglan/sword_ride", "sourceMode": "pose-video" },
         "hand_seal": { "frames": 10, "fps": 10, "loop": false, "source": "qinglan/hand_seal", "sourceMode": "pose-video", "events": [{ "name": "seal-formed", "time": 0.6 }] },
-        "cast": { "frames": 12, "fps": 12, "loop": false, "source": "qinglan/cast", "sourceMode": "layered-keyframes", "order": [0, 0, 1, 1, 5, 5, 6, 6, 9, 9, 10, 11], "quality": { "maxScaleDrift": 0.17 }, "events": [{ "name": "sword-release", "time": 0.42 }] },
+        "cast": { "frames": 12, "fps": 12, "loop": false, "source": "qinglan/cast", "sourceMode": "pose-video", "quality": { "maxScaleDrift": 0.17 }, "events": [{ "name": "sword-release", "time": 0.42 }] },
         "hurt": { "frames": 6, "fps": 10, "loop": false, "source": "qinglan/hurt", "sourceMode": "pose-video" },
         "death": { "frames": 10, "fps": 8, "loop": false, "source": "qinglan/death", "sourceMode": "layered-keyframes" }
       }

@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url'
 
 const projectRoot = fileURLToPath(new URL('../', import.meta.url))
 const manifestPath = resolve(projectRoot, 'art-source/h3-pilot/pilot.json')
+const castRepairManifestPath = resolve(projectRoot, 'art-source/h3-pilot/qinglan-cast-repair.json')
 const promptRoot = resolve(projectRoot, 'art-source/h3-pilot/prompts')
 const clientPath = resolve(projectRoot, 'tools/generate-h3-action-videos.py')
 const extractorPath = resolve(projectRoot, 'tools/extract-h3-action-frames.py')
@@ -923,6 +924,60 @@ test('H3 animation pilot manifest locks reproducible jobs and runtime outputs', 
     [0.2, 0.6, 3.8, 4.5],
     'moss wolf hurt avoids the H3 ghosted recoil interval and ends on a clean recovered silhouette',
   )
+})
+
+test('Qinglan cast repair keeps the complete robe and sword inside a reproducible H3 shot', () => {
+  const repair = JSON.parse(readFileSync(castRepairManifestPath, 'utf8'))
+
+  assert.equal(repair.version, 1)
+  assert.equal(repair.bridgeUrl, 'http://127.0.0.1:8900')
+  assert.equal(repair.model, 'minimax-h3-fl2v-local')
+  assert.deepEqual([repair.width, repair.height, repair.duration, repair.fps], [768, 1344, 5, 24])
+  assert.equal(repair.jobs.length, 1)
+
+  const job = repair.jobs[0]
+  assert.deepEqual(
+    {
+      id: job.id,
+      actor: job.actor,
+      action: job.action,
+      conditioning: job.conditioning,
+      reference: job.reference,
+      prompt: job.prompt,
+      seed: job.seed,
+      video: job.video,
+    },
+    {
+      id: 'qinglan-cast-repair',
+      actor: 'qinglan',
+      action: 'cast',
+      conditioning: 'first-last',
+      reference: 'art-source/h3-pilot/references/qinglan-motion-h3.png',
+      prompt: 'art-source/h3-pilot/prompts/qinglan/cast.txt',
+      seed: 3082010,
+      video: 'qinglan/cast.mp4',
+    },
+  )
+  assert.equal(existsSync(resolveInside(projectRoot, job.reference, 'cast repair reference')), true)
+  resolveVideoInsideActor(projectRoot, job.actor, job.video, 'cast repair video')
+  assert.deepEqual(job.outputs.map(({ action }) => action), ['cast'])
+  assert.equal(job.outputs[0].samples.length, 12)
+  for (const [index, sample] of job.outputs[0].samples.entries()) {
+    assert.ok(Number.isFinite(sample) && sample >= 0 && sample < repair.duration)
+    if (index > 0) assert.ok(sample > job.outputs[0].samples[index - 1])
+  }
+
+  const promptPath = resolveInside(projectRoot, job.prompt, 'cast repair prompt')
+  const prompt = readFileSync(promptPath, 'utf8')
+  assertSectionsInOrder(prompt, job.id)
+  assertPromptRequirements(prompt, commonPromptRequirements, job.id)
+  assertPromptRequirements(prompt, actorPromptRequirements.qinglan, job.id)
+  assert.match(prompt, /at least 15% clear near-white margin/i)
+  assert.match(prompt, /full hair, robe tails, sleeves, both hands, both feet, and the entire sword are always visible/i)
+  assert.match(prompt, /robe tails[^.]*never[^.]*canvas edge/i)
+  assert.match(prompt, /controlled (?:two-handed )?(?:sword-finger|cultivation hand-seal)/i)
+  assert.match(prompt, /no projectile|no generated projectile/i)
+  assert.match(prompt, /no forward drive/i)
 })
 
 test('accepted H3 extraction reports match the final manifest and checked-in frames', () => {

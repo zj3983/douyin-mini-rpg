@@ -1,0 +1,21 @@
+subject_definitions:
+<Subject 1> is the adult Chinese MAN in the exact supplied first frame: the same adult male Qinglan sword cultivator with the exact first-frame face and costume, masculine face and body, long dark hair, layered blue-and-white cultivation costume, complete long robe tails, body proportions, and the single flying sword beneath both feet as one inseparable subject. Keep the same gender; never feminize or change gender.
+
+summary:
+[first-and-last-frame generation] Create one continuous shot, 0.00-5.00s, showing <Subject 1> perform one elegant flying-sword casting gesture in place and return to the stable sword-riding stance while preserving the exact supplied first and last frame identity.
+
+retention_analysis:
+<Subject 1>: fully_preserved - identity, face, costume, body proportions, complete long hair, complete robe tails, two complete hands, both feet, and the single complete flying sword remain unchanged and fully visible throughout the action.
+
+detailed_description:
+Use the supplied image as both first and final conditioning. Begin from the exact supplied first-frame face, costume, anatomy, sword, scale, facing, and pose. After the casting motion, return naturally to the exact supplied final pose without freezing early.
+The target video is a clean gameplay sprite-motion study with even neutral lighting, crisp silhouette separation, and generous empty space around the entire moving silhouette.
+[Shot 1] The 0.00-5.00s timeline uses a locked side-view camera with no camera movement. <Subject 1> stays balanced in place with both feet planted on the single flying sword. From 0.00-0.80s, the right forearm rises smoothly while the left hand settles near the chest. From 0.80-1.80s, both hands form a controlled two-handed cultivation hand-seal: the right hand extends a readable sword-finger gesture toward the target direction while the left hand supports the seal near the sternum. From 1.80-2.60s, <Subject 1> holds the completed sword-finger pose with clear hand silhouettes. From 2.60-4.20s, the hands withdraw along the same elegant path and the upper body settles. From 4.20-5.00s, <Subject 1> returns to the exact neutral sword-riding pose. Long sleeves, hair, and robe tails follow the arm motion with restrained wind response, then settle naturally. The robe tails remain complete and never touch or cross any canvas edge. There is no forward drive, no step, and no body displacement.
+
+The only referenced visual subject is <Subject 1>; do not introduce any scenery, additional people, additional monsters, added weapons, or effects that obscure <Subject 1>. Use a plain near-white background. The subject remains fully inside frame. Composition guard: the full hair, robe tails, sleeves, both hands, both feet, and the entire sword are always visible. Keep at least 15% clear near-white margin between every part of <Subject 1> and every canvas edge throughout. No crop, no zoom, and no camera movement; maintain stable subject scale and facing. Use no cuts, zoom, pan, tilt, or shake. Identity guards: no costume change, no face change, no extra or missing hands, no extra limbs and no missing limbs, no extra swords, and the flying sword is never removed. Motion guards: no walking, no running, no body lunge, no stepping, no projectile, no generated projectile, no energy beam, and no visual effect; the separate gameplay effect will be added downstream.
+
+overall_soundscape:
+No dialogue and no generated diegetic sound; audio will be discarded downstream.
+
+non_diegetic_music:
+No music; audio will be discarded downstream.

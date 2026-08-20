@@ -12,7 +12,7 @@ const expectedActors = {
       idle: 'pose-video',
       sword_ride: 'pose-video',
       hand_seal: 'pose-video',
-      cast: 'layered-keyframes',
+      cast: 'pose-video',
       hurt: 'pose-video',
       death: 'layered-keyframes',
     },
@@ -120,7 +120,7 @@ test('vertical slice source manifest locks actor frame sizes anchors and action 
     maxScaleDrift: 0.29,
   })
   assert.equal(Object.hasOwn(source.actors['qinglan-sword-cultivator'].actions.hand_seal, 'order'), false)
-  assert.deepEqual(source.actors['qinglan-sword-cultivator'].actions.cast.order, [0, 0, 1, 1, 5, 5, 6, 6, 9, 9, 10, 11])
+  assert.equal(Object.hasOwn(source.actors['qinglan-sword-cultivator'].actions.cast, 'order'), false)
   assert.equal(Object.hasOwn(source.actors['moss-wolf'].actions.death, 'order'), false)
 
   const overrides = []

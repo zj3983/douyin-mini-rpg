@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "bridgeUrl": "http://127.0.0.1:8900",
+  "model": "minimax-h3-fl2v-local",
+  "width": 768,
+  "height": 1344,
+  "duration": 5,
+  "fps": 24,
+  "jobs": [
+    {
+      "id": "qinglan-cast-repair",
+      "actor": "qinglan",
+      "action": "cast",
+      "conditioning": "first-last",
+      "reference": "art-source/h3-pilot/references/qinglan-motion-h3.png",
+      "prompt": "art-source/h3-pilot/prompts/qinglan/cast.txt",
+      "seed": 3082010,
+      "video": "qinglan/cast.mp4",
+      "outputs": [
+        {
+          "action": "cast",
+          "samples": [0.2, 0.55, 0.9, 1.25, 1.6, 2.0, 2.4, 2.8, 3.2, 3.6, 4.1, 4.65]
+        }
+      ]
+    }
+  ]
+}

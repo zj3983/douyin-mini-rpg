@@ -16,6 +16,7 @@ const MANIFEST_PATH = path.resolve(
 );
 
 const LEGACY_HAND_SEAL_ORDER = [0, 0, 1, 1, 7, 7, 7, 9, 9, 9];
+const LEGACY_CAST_ORDER = [0, 0, 1, 1, 5, 5, 6, 6, 9, 9, 10, 11];
 const LEGACY_WOLF_DEATH_ORDER = [0, 1, 2, 3, 3, 3, 3, 3];
 const PROTECTED_BASELINE_SHA256 =
   'be67508211bb100545829346825ad98d5d91201eb7180cdc6fb1fcf2402161df';
@@ -48,8 +49,7 @@ const EXPECTED_QINGLAN_ACTIONS = {
     fps: 12,
     loop: false,
     source: 'qinglan/cast',
-    sourceMode: 'layered-keyframes',
-    order: [0, 0, 1, 1, 5, 5, 6, 6, 9, 9, 10, 11],
+    sourceMode: 'pose-video',
     quality: { maxScaleDrift: 0.17 },
     events: [{ name: 'sword-release', time: 0.42 }],
   },
@@ -154,6 +154,8 @@ function restoreLegacyAllowedFields(manifest) {
   qinglan.sword_ride.sourceMode = 'layered-keyframes';
   qinglan.hand_seal.sourceMode = 'layered-keyframes';
   qinglan.hand_seal.order = LEGACY_HAND_SEAL_ORDER;
+  qinglan.cast.sourceMode = 'layered-keyframes';
+  qinglan.cast.order = LEGACY_CAST_ORDER;
   qinglan.hurt.sourceMode = 'layered-keyframes';
 
   delete wolf.attack.events;
@@ -209,6 +211,8 @@ test('only the approved Qinglan and Moss Wolf action fields differ from baseline
     'actors.moss-wolf.actions.death.sourceMode',
     'actors.moss-wolf.actions.hurt.quality',
     'actors.moss-wolf.actions.hurt.sourceMode',
+    'actors.qinglan-sword-cultivator.actions.cast.order',
+    'actors.qinglan-sword-cultivator.actions.cast.sourceMode',
     'actors.qinglan-sword-cultivator.actions.hand_seal.order',
     'actors.qinglan-sword-cultivator.actions.hand_seal.sourceMode',
     'actors.qinglan-sword-cultivator.actions.hurt.sourceMode',
@@ -217,13 +221,13 @@ test('only the approved Qinglan and Moss Wolf action fields differ from baseline
   ]);
 });
 
-test('H3 chronological actions use natural order while cast keeps authored order', () => {
+test('H3 chronological actions use natural frame order', () => {
   const manifest = readManifest();
   const qinglan = manifest.actors['qinglan-sword-cultivator'].actions;
   const wolf = manifest.actors['moss-wolf'].actions;
 
   assert.equal(Object.hasOwn(qinglan.hand_seal, 'order'), false);
+  assert.equal(Object.hasOwn(qinglan.cast, 'order'), false);
   assert.equal(Object.hasOwn(wolf.death, 'order'), false);
-  assert.deepEqual(qinglan.cast.order, [0, 0, 1, 1, 5, 5, 6, 6, 9, 9, 10, 11]);
   assert.deepEqual(wolf.attack.events, [{ name: 'bite-contact', time: 0.55 }]);
 });
