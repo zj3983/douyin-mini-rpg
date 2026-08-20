@@ -11,6 +11,11 @@ function runPython(script, args = []) {
   return result.stdout
 }
 
+test('candidate JSON is checked out with portable LF newlines', () => {
+  const attributes = readFileSync(resolve('.gitattributes'), 'utf8')
+  assert.match(attributes, /^artifacts\/animation-candidates\/\*\*\/\*\.json text eol=lf$/m)
+})
+
 test('builder normalizes a subject into a 4:5 frame without touching the safe edge', () => {
   const script = String.raw`
 import importlib.util
@@ -1231,6 +1236,9 @@ for path in (source_manifest, resource_manifest):
 write_frame((50, 120, 220, 255))
 builder.build_candidate_actors(data, ["alpha"], temp / "source", candidate_root)
 package_path = candidate_root / "alpha/candidate-package.json"
+report_path = candidate_root / "alpha/reports/alpha-report.json"
+assert b"\r\n" not in report_path.read_bytes(), "candidate report must use portable LF newlines"
+assert b"\r\n" not in package_path.read_bytes(), "candidate package must use portable LF newlines"
 package = json.loads(package_path.read_text(encoding="utf-8"))
 candidate_png = candidate_root / "alpha/Assets/ActorAtlases/Alpha/idle.png"
 candidate_bytes = candidate_png.read_bytes()
@@ -1244,7 +1252,7 @@ assert package["sourceManifestFingerprint"]
 assert package["actorConfigFingerprint"]
 listed = {entry["path"]: entry["sha256"] for entry in package["files"]}
 assert listed["Assets/ActorAtlases/Alpha/idle.png"] == hashlib.sha256(candidate_bytes).hexdigest()
-assert listed["reports/alpha-report.json"] == hashlib.sha256((candidate_root / "alpha/reports/alpha-report.json").read_bytes()).hexdigest()
+assert listed["reports/alpha-report.json"] == hashlib.sha256(report_path.read_bytes()).hexdigest()
 
 write_frame((230, 60, 50, 255))
 builder.promote_selected_actors(

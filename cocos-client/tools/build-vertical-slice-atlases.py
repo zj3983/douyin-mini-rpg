@@ -64,6 +64,11 @@ class PromotionInterrupted(BaseException):
     pass
 
 
+def _write_json_lf(path: Path, value):
+    payload = (json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    Path(path).write_bytes(payload)
+
+
 def _as_size(value: Any, label: str) -> tuple[int, int]:
     if not isinstance(value, list) or len(value) != 2:
         raise ValueError(f"{label} must be [width, height]")
@@ -759,10 +764,7 @@ def write_actor_report(
         "contactSheet": contact_sheet_name,
     }
     report_path = _report_output_path(report_root, f"{actor_id}-report.json")
-    report_path.write_text(
-        json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    _write_json_lf(report_path, report)
     return report
 
 
@@ -1755,10 +1757,7 @@ def _write_candidate_package(data, actor_id, actor_root, runtime_actor, status="
         "report": {"path": report_relative, "status": status},
         "files": _candidate_files(actor_root),
     }
-    (actor_root / "candidate-package.json").write_text(
-        json.dumps(package, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    _write_json_lf(actor_root / "candidate-package.json", package)
     return package
 
 
@@ -1834,10 +1833,7 @@ def _approve_candidate_copy(data, actor_id, actor_root, runtime_actor):
     report_path = Path(actor_root) / "reports" / f"{actor_id}-report.json"
     report = json.loads(report_path.read_text(encoding="utf-8"))
     report["status"] = "approved"
-    report_path.write_text(
-        json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    _write_json_lf(report_path, report)
     return _write_candidate_package(data, actor_id, actor_root, runtime_actor, status="approved")
 
 
