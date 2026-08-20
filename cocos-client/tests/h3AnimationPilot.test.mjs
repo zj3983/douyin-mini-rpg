@@ -274,10 +274,26 @@ function escapeRegExp(value) {
 }
 
 function assertNoAffirmativeInPlaceMovement(prompt, label) {
-  const subjectMovement = /(?:<Subject 1>|The subject)\s+(?:(does not|never)\s+)?(?:travels?|traveling|moves?|moving|slides?|sliding|walks?|walking|runs?|running)\b[^.!?\r\n]*?\b(?:across|through)\s+(?:the\s+)?(?:screen|frame|image)\b/gi
-  const affirmativeMovements = [...prompt.matchAll(subjectMovement)]
-    .filter((match) => match[1] === undefined)
-    .map(([movement]) => movement)
+  const subject = String.raw`(?:<Subject 1>|The subject)`
+  const negationOrFuture = String.raw`(?:(does not|do not|will not|never|cannot|can't)\s+|will\s+)?`
+  const pathVerb = String.raw`(?:travels?|traveled|travelled|traveling|moves?|moved|moving|slides?|slid|sliding|walks?|walked|walking|runs?|ran|running)`
+  const boundaryVerb = String.raw`(?:exits?|exited|exiting|leaves?|left|leaving|crosses?|crossed|crossing)`
+  const destination = String.raw`(?:screen|frame|image)`
+  const movementPatterns = [
+    new RegExp(
+      `${subject}\\s+${negationOrFuture}${pathVerb}\\b[^.!?\\r\\n]*?\\b(?:across|through|out\\s+of|outside)\\s+(?:the\\s+)?${destination}\\b`,
+      'gi',
+    ),
+    new RegExp(
+      `${subject}\\s+${negationOrFuture}${boundaryVerb}\\b[^.!?\\r\\n]*?(?:the\\s+)?${destination}\\b`,
+      'gi',
+    ),
+  ]
+  const affirmativeMovements = movementPatterns.flatMap((pattern) =>
+    [...prompt.matchAll(pattern)]
+      .filter((match) => match[1] === undefined)
+      .map(([movement]) => movement),
+  )
 
   assert.deepEqual(
     affirmativeMovements,
@@ -332,6 +348,28 @@ test('in-place movement guard scopes motion and negation to the referenced subje
     ),
   )
 })
+
+for (const [label, prompt] of [
+  ['direct frame exit', '<Subject 1> exits the frame.'],
+  ['direct screen crossing', 'The subject crosses the screen.'],
+  ['future screen travel', 'The subject will move across the screen.'],
+]) {
+  test(`in-place movement guard rejects ${label}`, () => {
+    assert.throws(
+      () => assertNoAffirmativeInPlaceMovement(prompt, label),
+      /affirmative travel/,
+    )
+  })
+}
+
+for (const [label, prompt] of [
+  ['negated future screen travel', 'The subject will not move across the screen.'],
+  ['never exits frame', 'The subject never exits the frame.'],
+]) {
+  test(`in-place movement guard allows ${label}`, () => {
+    assert.doesNotThrow(() => assertNoAffirmativeInPlaceMovement(prompt, label))
+  })
+}
 
 test('H3 animation pilot manifest locks reproducible jobs and runtime outputs', () => {
   const pilot = JSON.parse(readFileSync(manifestPath, 'utf8'))
