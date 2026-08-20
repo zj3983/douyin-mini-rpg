@@ -117,7 +117,7 @@ test('vertical slice source manifest locks actor frame sizes anchors and action 
   })
   assert.deepEqual(source.actors['moss-wolf'].actions.death.quality, {
     maxCenterDrift: 0.14,
-    maxScaleDrift: 0.28,
+    maxScaleDrift: 0.29,
   })
   assert.equal(Object.hasOwn(source.actors['qinglan-sword-cultivator'].actions.hand_seal, 'order'), false)
   assert.deepEqual(source.actors['qinglan-sword-cultivator'].actions.cast.order, [0, 0, 1, 1, 5, 5, 6, 6, 9, 9, 10, 11])

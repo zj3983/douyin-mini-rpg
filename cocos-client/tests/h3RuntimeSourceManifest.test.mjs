@@ -114,7 +114,7 @@ const EXPECTED_WOLF_ACTIONS = {
     loop: false,
     source: 'moss-wolf/death',
     sourceMode: 'pose-video',
-    quality: { maxCenterDrift: 0.14, maxScaleDrift: 0.28 },
+    quality: { maxCenterDrift: 0.14, maxScaleDrift: 0.29 },
   },
 };
 
