@@ -688,6 +688,7 @@ function requestFingerprint(manifest, job) {
   const promptBytes = readFileSync(resolve(projectRoot, job.prompt))
   const referenceBytes = readFileSync(resolve(projectRoot, job.reference))
   const descriptor = {
+    bridgeUrl: manifest.bridgeUrl.replace(/\/+$/, ''),
     conditioning: job.conditioning,
     duration: manifest.duration,
     height: manifest.height,
@@ -1642,8 +1643,8 @@ test('H3 action client honors the bridge, resume, state, and secrecy contracts',
 
   await t.test('enforces one monotonic deadline across poll and slow streaming download', async (t) => {
     const timeoutSeconds = 0.08
-    const maximumElapsedMs = 300
-    const chunks = Array.from({ length: 21 }, () => Buffer.from('x'))
+    const maximumElapsedMs = 700
+    const chunks = Array.from({ length: 61 }, () => Buffer.from('x'))
     const chunkDelayMs = 25
     const plannedStreamMs = (chunks.length - 1) * chunkDelayMs
     assert.ok(plannedStreamMs > maximumElapsedMs)

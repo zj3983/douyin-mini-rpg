@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { createServer } from 'node:http'
 import {
   mkdirSync,
@@ -26,6 +26,36 @@ function writeJson(path, value) {
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
 }
 
+function generateImage(
+  path,
+  {
+    width = 768,
+    height = 1344,
+    format = 'PNG',
+    mode = format === 'JPEG' ? 'RGB' : 'RGBA',
+    color = mode === 'RGBA' ? '42,96,138,255' : '42,96,138',
+  } = {},
+) {
+  const script = [
+    'from PIL import Image',
+    'import sys',
+    'path, width, height, image_format, mode, color = sys.argv[1:]',
+    'channels = tuple(int(value) for value in color.split(","))',
+    'Image.new(mode, (int(width), int(height)), channels).save(path, format=image_format)',
+  ].join('\n')
+  const result = spawnSync(
+    pythonCommand,
+    ['-c', script, path, String(width), String(height), format, mode, color],
+    {
+      cwd: dirname(projectRoot),
+      encoding: 'utf8',
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' },
+      windowsHide: true,
+    },
+  )
+  assert.equal(result.status, 0, result.stderr)
+}
+
 function makeFixture(t, bridgeUrl, { model = 'minimax-h3-fl2v-local', jobs } = {}) {
   const root = mkdtempSync(resolve(projectRoot, '.h3-fl2v-test-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
@@ -34,7 +64,7 @@ function makeFixture(t, bridgeUrl, { model = 'minimax-h3-fl2v-local', jobs } = {
   const manifestPath = resolve(root, 'pilot.json')
   const runRoot = resolve(root, 'run')
   writeFileSync(promptPath, 'first prompt bytes\n', 'utf8')
-  writeFileSync(referencePath, Buffer.from('fake png reference bytes'))
+  generateImage(referencePath)
   const manifest = {
     version: 1,
     bridgeUrl,
@@ -171,8 +201,29 @@ function readFingerprint(fixture) {
   return state.jobs[0].requestFingerprint
 }
 
-async function generateFingerprint(t, mutate = () => {}) {
-  const bridge = await startBridge(t)
+function requestCounts(state) {
+  return {
+    downloads: state.downloads,
+    health: state.health,
+    polls: state.polls,
+    posts: state.posts.length,
+  }
+}
+
+function assertNoNetworkMutation(bridge, result, fixture) {
+  assert.deepEqual(requestCounts(bridge.state), {
+    downloads: 0,
+    health: 0,
+    polls: 0,
+    posts: 0,
+  })
+  assert.doesNotMatch(
+    `${result.stdout}\n${result.stderr}`,
+    new RegExp(fixture.root.replaceAll('\\', '\\\\'), 'i'),
+  )
+}
+
+async function generateFingerprint(t, bridge, mutate = () => {}) {
   const fixture = makeFixture(t, bridge.baseUrl)
   mutate(fixture)
   writeJson(fixture.manifestPath, fixture.manifest)
@@ -272,22 +323,28 @@ test('rejects invalid model and conditioning combinations before submission', as
 })
 
 test('request fingerprint is stable and covers generation-significant input', async (t) => {
-  const base = await generateFingerprint(t)
-  const same = await generateFingerprint(t)
+  const bridge = await startBridge(t)
+  const base = await generateFingerprint(t, bridge)
+  const same = await generateFingerprint(t, bridge)
   assert.equal(base, same)
 
   const changed = {
-    prompt: await generateFingerprint(t, ({ promptPath }) => writeFileSync(promptPath, 'changed prompt\n')),
-    reference: await generateFingerprint(t, ({ referencePath }) => writeFileSync(referencePath, 'changed png bytes')),
-    model: await generateFingerprint(t, ({ manifest }) => {
+    prompt: await generateFingerprint(t, bridge, ({ promptPath }) => writeFileSync(promptPath, 'changed prompt\n')),
+    reference: await generateFingerprint(t, bridge, ({ referencePath }) => {
+      generateImage(referencePath, { color: '43,97,139,255' })
+    }),
+    model: await generateFingerprint(t, bridge, ({ manifest }) => {
       manifest.model = 'minimax-h3-ref2v-local'
       manifest.jobs[0].conditioning = 'reference'
     }),
-    conditioning: await generateFingerprint(t, ({ manifest }) => {
+    conditioning: await generateFingerprint(t, bridge, ({ manifest }) => {
       manifest.jobs[0].conditioning = 'first-last'
     }),
-    seed: await generateFingerprint(t, ({ manifest }) => { manifest.jobs[0].seed += 1 }),
-    dimensions: await generateFingerprint(t, ({ manifest }) => { manifest.width += 1 }),
+    seed: await generateFingerprint(t, bridge, ({ manifest }) => { manifest.jobs[0].seed += 1 }),
+    dimensions: await generateFingerprint(t, bridge, ({ manifest, referencePath }) => {
+      manifest.width += 1
+      generateImage(referencePath, { width: manifest.width, height: manifest.height })
+    }),
   }
   for (const [field, fingerprint] of Object.entries(changed)) {
     assert.notEqual(fingerprint, base, `${field} changes the request fingerprint`)
@@ -313,6 +370,124 @@ test('stale resumed task fails closed before poll, download, or submit', async (
   assert.equal(bridge.state.polls, counts.polls)
   assert.equal(bridge.state.downloads, counts.downloads)
   assert.doesNotMatch(`${stale.stdout}\n${stale.stderr}`, new RegExp(fixture.root.replaceAll('\\', '\\\\'), 'i'))
+})
+
+test('bridge URL normalization is stable and service origin changes are stale', async (t) => {
+  await t.test('a trailing slash preserves the request identity', async (t) => {
+    const bridge = await startBridge(t)
+    const fixture = makeFixture(t, bridge.baseUrl)
+    const first = await runClient(fixture)
+    assert.equal(first.code, 0, first.stderr)
+    const fingerprint = readFingerprint(fixture)
+    const counts = requestCounts(bridge.state)
+
+    fixture.manifest.bridgeUrl = `${bridge.baseUrl}/`
+    writeJson(fixture.manifestPath, fixture.manifest)
+    const equivalent = await runClient(fixture)
+
+    assert.equal(equivalent.code, 0, equivalent.stderr)
+    assert.equal(readFingerprint(fixture), fingerprint)
+    assert.equal(bridge.state.posts.length, counts.posts)
+    assert.equal(bridge.state.polls, counts.polls)
+    assert.equal(bridge.state.downloads, counts.downloads)
+  })
+
+  await t.test('a port change rejects the retained task before mutation', async (t) => {
+    const originalBridge = await startBridge(t)
+    const changedBridge = await startBridge(t)
+    const fixture = makeFixture(t, originalBridge.baseUrl)
+    const first = await runClient(fixture)
+    assert.equal(first.code, 0, first.stderr)
+
+    fixture.manifest.bridgeUrl = changedBridge.baseUrl
+    writeJson(fixture.manifestPath, fixture.manifest)
+    const stale = await runClient(fixture)
+
+    assert.notEqual(stale.code, 0)
+    assert.match(stale.stderr, /stale task|generation request changed|fingerprint/i)
+    assert.equal(changedBridge.state.posts.length, 0)
+    assert.equal(changedBridge.state.polls, 0)
+    assert.equal(changedBridge.state.downloads, 0)
+  })
+
+  await t.test('a host spelling change rejects the retained task before mutation', async (t) => {
+    const bridge = await startBridge(t)
+    const fixture = makeFixture(t, bridge.baseUrl)
+    const first = await runClient(fixture)
+    assert.equal(first.code, 0, first.stderr)
+    const counts = requestCounts(bridge.state)
+
+    fixture.manifest.bridgeUrl = bridge.baseUrl.replace('127.0.0.1', 'localhost')
+    writeJson(fixture.manifestPath, fixture.manifest)
+    const stale = await runClient(fixture)
+
+    assert.notEqual(stale.code, 0)
+    assert.match(stale.stderr, /stale task|generation request changed|fingerprint/i)
+    assert.equal(bridge.state.posts.length, counts.posts)
+    assert.equal(bridge.state.polls, counts.polls)
+    assert.equal(bridge.state.downloads, counts.downloads)
+  })
+})
+
+test('reference images are decoded and bounded before any network request', async (t) => {
+  async function expectRejected(label, mutate, { model = 'minimax-h3-fl2v-local' } = {}) {
+    await t.test(label, async (t) => {
+      const bridge = await startBridge(t)
+      const fixture = makeFixture(t, bridge.baseUrl, { model })
+      if (model === 'minimax-h3-ref2v-local') {
+        fixture.manifest.jobs[0].conditioning = 'reference'
+      }
+      mutate(fixture)
+      writeJson(fixture.manifestPath, fixture.manifest)
+
+      const result = await runClient(fixture)
+
+      assert.notEqual(result.code, 0)
+      assert.match(result.stderr, /reference|image|dimension|pixel|format/i)
+      assertNoNetworkMutation(bridge, result, fixture)
+    })
+  }
+
+  await expectRejected('rejects corrupt PNG bytes', ({ referencePath }) => {
+    writeFileSync(referencePath, Buffer.from('not a decodable PNG'))
+  })
+  await expectRejected('rejects a JPEG disguised with a PNG extension', ({ referencePath }) => {
+    generateImage(referencePath, { format: 'JPEG' })
+  })
+  await expectRejected('rejects a truncated PNG', ({ referencePath }) => {
+    const complete = readFileSync(referencePath)
+    writeFileSync(referencePath, complete.subarray(0, Math.floor(complete.length / 2)))
+  })
+  await expectRejected('rejects wrong FL2V frame dimensions', ({ referencePath }) => {
+    generateImage(referencePath, { width: 64, height: 64 })
+  })
+  await expectRejected('rejects an excessive Ref2V dimension', ({ referencePath }) => {
+    generateImage(referencePath, { width: 5000, height: 2 })
+  }, { model: 'minimax-h3-ref2v-local' })
+  await expectRejected('rejects a Ref2V image above the pixel budget', ({ referencePath }) => {
+    generateImage(referencePath, { width: 3000, height: 3000 })
+  }, { model: 'minimax-h3-ref2v-local' })
+})
+
+test('valid decoded references retain FL2V and Ref2V compatibility', async (t) => {
+  await t.test('accepts a valid exact-size RGBA PNG for FL2V', async (t) => {
+    const bridge = await startBridge(t)
+    const fixture = makeFixture(t, bridge.baseUrl)
+    const result = await runClient(fixture)
+    assert.equal(result.code, 0, result.stderr)
+    assert.equal(bridge.state.posts.length, 1)
+  })
+
+  await t.test('accepts a smaller decoded RGBA PNG for Ref2V', async (t) => {
+    const bridge = await startBridge(t)
+    const fixture = makeFixture(t, bridge.baseUrl, { model: 'minimax-h3-ref2v-local' })
+    fixture.manifest.jobs[0].conditioning = 'reference'
+    generateImage(fixture.referencePath, { width: 320, height: 240 })
+    writeJson(fixture.manifestPath, fixture.manifest)
+    const result = await runClient(fixture)
+    assert.equal(result.code, 0, result.stderr)
+    assert.equal(bridge.state.posts.length, 1)
+  })
 })
 
 test('dry-run validates FL2V jobs without a generation POST', async (t) => {

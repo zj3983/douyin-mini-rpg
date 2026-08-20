@@ -4,19 +4,22 @@
 import argparse
 import base64
 import hashlib
+import io
 import json
 import math
-import mimetypes
 import re
 import sys
 import tempfile
 import time
+import warnings
 from datetime import datetime, timezone
 from http.client import HTTPException, IncompleteRead
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import Request, urlopen
+
+from PIL import Image, UnidentifiedImageError
 
 
 CLIENT_ROOT = Path(__file__).resolve().parent.parent
@@ -37,6 +40,15 @@ MODEL_CONDITIONING = {
     "minimax-h3-fl2v-local": {"first-frame", "first-last"},
     "minimax-h3-ref2v-local": {"reference"},
 }
+REFERENCE_FORMATS = {
+    ".jpeg": ("JPEG", "image/jpeg"),
+    ".jpg": ("JPEG", "image/jpeg"),
+    ".png": ("PNG", "image/png"),
+    ".webp": ("WEBP", "image/webp"),
+}
+MAX_REFERENCE_FILE_BYTES = 32 * 1024 * 1024
+MAX_REFERENCE_DIMENSION = 4096
+MAX_REFERENCE_PIXELS = 8 * 1024 * 1024
 
 
 class ClientError(Exception):
@@ -159,6 +171,7 @@ def require_nonempty_string(record: dict, key: str, label: str) -> str:
 
 def build_request_fingerprint(
     *,
+    bridge_url: str,
     model: str,
     prompt_bytes: bytes,
     reference_bytes: bytes,
@@ -170,6 +183,7 @@ def build_request_fingerprint(
     conditioning: str,
 ) -> str:
     descriptor = {
+        "bridgeUrl": bridge_url,
         "conditioning": conditioning,
         "duration": duration,
         "height": height,
@@ -219,6 +233,77 @@ def validate_download_url(raw) -> str:
     ):
         raise ClientError("completed task returned an invalid download URL")
     return raw
+
+
+def validate_reference_image(
+    path: Path,
+    job_id: str,
+    model: str,
+    required_width: int,
+    required_height: int,
+) -> tuple[bytes, str]:
+    expected = REFERENCE_FORMATS.get(path.suffix.lower())
+    if expected is None:
+        raise ClientError(f"{job_id} reference has an unsupported image extension")
+    expected_format, reference_mime = expected
+
+    try:
+        file_size = path.stat().st_size
+    except OSError as error:
+        raise ClientError(f"could not inspect {job_id} reference") from error
+    if file_size > MAX_REFERENCE_FILE_BYTES:
+        raise ClientError(f"{job_id} reference exceeds the encoded image byte limit")
+    try:
+        reference_bytes = path.read_bytes()
+    except OSError as error:
+        raise ClientError(f"could not read {job_id} reference") from error
+
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(reference_bytes)) as image:
+                actual_format = image.format
+                image_width, image_height = image.size
+                if actual_format != expected_format:
+                    raise ClientError(
+                        f"{job_id} reference image format does not match its extension"
+                    )
+                if image_width <= 0 or image_height <= 0:
+                    raise ClientError(f"{job_id} reference has invalid image dimensions")
+                if (
+                    image_width > MAX_REFERENCE_DIMENSION
+                    or image_height > MAX_REFERENCE_DIMENSION
+                    or image_width * image_height > MAX_REFERENCE_PIXELS
+                ):
+                    raise ClientError(f"{job_id} reference exceeds the image dimension or pixel limit")
+                if (
+                    model == "minimax-h3-fl2v-local"
+                    and (image_width, image_height) != (required_width, required_height)
+                ):
+                    raise ClientError(
+                        f"{job_id} FL2V reference dimensions must match the configured frame"
+                    )
+                image.verify()
+
+            with Image.open(io.BytesIO(reference_bytes)) as decoded:
+                if decoded.format != expected_format:
+                    raise ClientError(
+                        f"{job_id} reference image format does not match its extension"
+                    )
+                decoded.load()
+    except ClientError:
+        raise
+    except (
+        Image.DecompressionBombError,
+        Image.DecompressionBombWarning,
+        UnidentifiedImageError,
+        OSError,
+        SyntaxError,
+        ValueError,
+    ) as error:
+        raise ClientError(f"{job_id} reference is not a complete decodable image") from error
+
+    return reference_bytes, reference_mime
 
 
 def validate_manifest(manifest, run_root: Path):
@@ -285,13 +370,13 @@ def validate_manifest(manifest, run_root: Path):
             reject_parent_parts=True,
         )
         require_file(reference_path, f"{job_id} reference")
-        reference_mime, _encoding = mimetypes.guess_type(reference_path.name)
-        if not reference_mime or not reference_mime.startswith("image/"):
-            raise ClientError(f"{job_id} reference does not have a recognized image MIME type")
-        try:
-            reference_bytes = reference_path.read_bytes()
-        except OSError as error:
-            raise ClientError(f"could not read {job_id} reference") from error
+        reference_bytes, reference_mime = validate_reference_image(
+            reference_path,
+            job_id,
+            model,
+            width,
+            height,
+        )
 
         prompt_raw = require_nonempty_string(raw_job, "prompt", label)
         prompt_path = resolve_inside(
@@ -341,6 +426,7 @@ def validate_manifest(manifest, run_root: Path):
                 ),
                 "prompt_text": prompt_text,
                 "request_fingerprint": build_request_fingerprint(
+                    bridge_url=bridge_url,
                     model=model,
                     prompt_bytes=prompt_bytes,
                     reference_bytes=reference_bytes,
