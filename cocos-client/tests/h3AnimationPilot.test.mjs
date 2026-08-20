@@ -1,12 +1,24 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync } from 'node:fs'
+import { spawn } from 'node:child_process'
+import { createServer } from 'node:http'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const projectRoot = fileURLToPath(new URL('../', import.meta.url))
 const manifestPath = resolve(projectRoot, 'art-source/h3-pilot/pilot.json')
 const promptRoot = resolve(projectRoot, 'art-source/h3-pilot/prompts')
+const clientPath = resolve(projectRoot, 'tools/generate-h3-action-videos.py')
+const pythonCommand = process.env.PYTHON ?? (process.platform === 'win32' ? 'python' : 'python3')
 
 const expectedJobs = [
   {
@@ -302,6 +314,266 @@ function assertNoAffirmativeInPlaceMovement(prompt, label) {
   )
 }
 
+function projectRelativePath(path) {
+  return relative(projectRoot, path).split(sep).join('/')
+}
+
+function createClientFixture(t, bridgeUrl, mutateManifest = () => {}) {
+  const fixtureRoot = mkdtempSync(resolve(projectRoot, '.h3-action-client-test-'))
+  t.after(() => rmSync(fixtureRoot, { recursive: true, force: true }))
+
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+  manifest.bridgeUrl = bridgeUrl
+  mutateManifest(manifest)
+
+  const fixtureManifestPath = resolve(fixtureRoot, 'pilot.json')
+  const runRoot = resolve(fixtureRoot, 'run')
+  writeFileSync(fixtureManifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
+
+  return {
+    manifest,
+    manifestArg: projectRelativePath(fixtureManifestPath),
+    runRoot,
+    runRootArg: projectRelativePath(runRoot),
+  }
+}
+
+function sendJson(response, statusCode, value) {
+  const body = Buffer.from(JSON.stringify(value))
+  response.writeHead(statusCode, {
+    'Content-Type': 'application/json',
+    'Content-Length': body.length,
+  })
+  response.end(body)
+}
+
+async function readRequestBody(request) {
+  const chunks = []
+  for await (const chunk of request) {
+    chunks.push(chunk)
+  }
+  return Buffer.concat(chunks).toString('utf8')
+}
+
+async function startFakeBridge(t, options = {}) {
+  const state = {
+    downloads: [],
+    events: [],
+    healthRequests: 0,
+    posts: [],
+    statusAttempts: new Map(),
+    statusRequests: [],
+  }
+  let baseUrl = ''
+
+  const server = createServer((request, response) => {
+    const handleRequest = async () => {
+      const requestUrl = new URL(request.url, baseUrl)
+      const path = requestUrl.pathname
+
+      if (request.method === 'GET' && path === '/health') {
+        state.healthRequests += 1
+        state.events.push('health')
+        sendJson(response, 200, {
+          status: options.healthStatus ?? 'ready',
+          version: 'fake-h3-bridge/1',
+        })
+        return
+      }
+
+      if (request.method === 'POST' && path === '/v1/video/generations') {
+        const body = await readRequestBody(request)
+        const payload = JSON.parse(body)
+        state.posts.push(payload)
+        const taskId = options.taskIdForPost?.(state.posts.length, payload) ?? `task-${state.posts.length}`
+        state.events.push(`post:${taskId}`)
+        sendJson(response, 200, { task_id: taskId })
+        return
+      }
+
+      const statusPrefix = '/v1/video/generations/'
+      if (request.method === 'GET' && path.startsWith(statusPrefix)) {
+        const taskId = decodeURIComponent(path.slice(statusPrefix.length))
+        const attempt = state.statusAttempts.get(taskId) ?? 0
+        state.statusAttempts.set(taskId, attempt + 1)
+        state.statusRequests.push(taskId)
+        state.events.push(`status:${taskId}:${attempt}`)
+
+        const status = options.statusFor?.({ attempt, baseUrl, taskId })
+          ?? (attempt === 0
+            ? { status: 'processing' }
+            : {
+                status: 'completed',
+                url: `${baseUrl}/files/${encodeURIComponent(taskId)}.mp4`,
+                metadata: { source: 'fake-bridge' },
+              })
+        sendJson(response, 200, status)
+        return
+      }
+
+      const downloadPrefix = '/files/'
+      if (request.method === 'GET' && path.startsWith(downloadPrefix)) {
+        const taskId = decodeURIComponent(path.slice(downloadPrefix.length, -'.mp4'.length))
+        const body = options.videoBytes ?? Buffer.from('fake mp4 bytes')
+        state.downloads.push(taskId)
+        state.events.push(`download:${taskId}`)
+        response.writeHead(200, {
+          'Content-Type': options.videoContentType ?? 'video/mp4',
+          'Content-Length': body.length,
+        })
+        response.end(body)
+        return
+      }
+
+      sendJson(response, 404, { error: 'not found' })
+    }
+
+    handleRequest().catch((error) => {
+      if (!response.headersSent) {
+        sendJson(response, 500, { error: error.message })
+      } else {
+        response.destroy(error)
+      }
+    })
+  })
+
+  await new Promise((resolvePromise, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', resolvePromise)
+  })
+  const address = server.address()
+  assert.ok(address && typeof address === 'object')
+  baseUrl = `http://127.0.0.1:${address.port}`
+
+  t.after(async () => {
+    await new Promise((resolvePromise) => server.close(resolvePromise))
+  })
+
+  return { baseUrl, state }
+}
+
+function runClient(args, { cwd = dirname(projectRoot) } = {}) {
+  return new Promise((resolvePromise, reject) => {
+    const child = spawn(pythonCommand, [clientPath, ...args], {
+      cwd,
+      env: {
+        ...process.env,
+        PYTHONIOENCODING: 'utf-8',
+        PYTHONUTF8: '1',
+      },
+      windowsHide: true,
+    })
+    const stdout = []
+    const stderr = []
+    let settled = false
+    const timer = setTimeout(() => {
+      child.kill()
+      if (!settled) {
+        settled = true
+        reject(new Error(`H3 client timed out; stdout=${Buffer.concat(stdout)} stderr=${Buffer.concat(stderr)}`))
+      }
+    }, 20_000)
+
+    child.stdout.on('data', (chunk) => stdout.push(chunk))
+    child.stderr.on('data', (chunk) => stderr.push(chunk))
+    child.once('error', (error) => {
+      clearTimeout(timer)
+      if (!settled) {
+        settled = true
+        reject(error)
+      }
+    })
+    child.once('close', (code, signal) => {
+      clearTimeout(timer)
+      if (!settled) {
+        settled = true
+        resolvePromise({
+          code,
+          signal,
+          stderr: Buffer.concat(stderr).toString('utf8'),
+          stdout: Buffer.concat(stdout).toString('utf8'),
+        })
+      }
+    })
+  })
+}
+
+function clientArgs(fixture, jobIds, extra = []) {
+  const jobs = jobIds.flatMap((jobId) => ['--job', jobId])
+  return [
+    '--manifest', fixture.manifestArg,
+    '--run-root', fixture.runRootArg,
+    ...jobs,
+    '--poll-seconds', '0',
+    '--timeout-seconds', '2',
+    ...extra,
+  ]
+}
+
+function expectedGenerationPayload(manifest, job) {
+  const referenceBytes = readFileSync(resolve(projectRoot, job.reference))
+  return {
+    model: manifest.model,
+    prompt: readFileSync(resolve(projectRoot, job.prompt), 'utf8'),
+    width: manifest.width,
+    height: manifest.height,
+    duration: manifest.duration,
+    n: 1,
+    seed: job.seed,
+    reference_images: [`data:image/png;base64,${referenceBytes.toString('base64')}`],
+  }
+}
+
+function stateEntry(job, status, taskId, overrides = {}) {
+  return {
+    id: job.id,
+    taskId,
+    status,
+    seed: job.seed,
+    video: `videos/${job.video}`,
+    startedAt: '2026-08-20T00:00:00Z',
+    completedAt: status === 'completed' ? '2026-08-20T00:01:00Z' : null,
+    error: null,
+    ...overrides,
+  }
+}
+
+function writeJobsState(runRoot, entries) {
+  mkdirSync(runRoot, { recursive: true })
+  writeFileSync(
+    resolve(runRoot, 'jobs.json'),
+    `${JSON.stringify({ version: 1, jobs: entries }, null, 2)}\n`,
+    'utf8',
+  )
+}
+
+function readJobsState(runRoot) {
+  return JSON.parse(readFileSync(resolve(runRoot, 'jobs.json'), 'utf8'))
+}
+
+function findPartFiles(root) {
+  if (!existsSync(root)) {
+    return []
+  }
+
+  const matches = []
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const path = resolve(root, entry.name)
+    if (entry.isDirectory()) {
+      matches.push(...findPartFiles(path))
+    } else if (entry.name.endsWith('.part')) {
+      matches.push(path)
+    }
+  }
+  return matches
+}
+
+function assertNoPrivatePayload(result, stateText = '') {
+  const publicText = `${result.stdout}\n${result.stderr}\n${stateText}`
+  assert.equal(publicText.includes('data:image/'), false, 'data URIs never appear in output or state')
+  assert.equal(publicText.includes(';base64,'), false, 'base64 payloads never appear in output or state')
+}
+
 test('video path validation treats slash and backslash as actor directory separators', () => {
   assert.doesNotThrow(() => resolveVideoInsideActor(projectRoot, 'qinglan', 'qinglan/idle.mp4', 'slash video'))
   assert.doesNotThrow(() => resolveVideoInsideActor(projectRoot, 'qinglan', String.raw`qinglan\idle.mp4`, 'backslash video'))
@@ -573,4 +845,206 @@ test('loop and bite prompt phases align with manifest sampling boundaries', () =
     new RegExp(`By the attack start at ${escapeRegExp(attackStartText)}s,[^.!?\\r\\n]*already[^.!?\\r\\n]*push`, 'i'),
     `bite-lunge is already pushing by attack sample ${attackStartText}s`,
   )
+})
+
+test('H3 action client honors the bridge, resume, state, and secrecy contracts', { timeout: 120_000 }, async (t) => {
+  await t.test('refuses a non-ready bridge before submitting', async (t) => {
+    const bridge = await startFakeBridge(t, { healthStatus: 'starting' })
+    const fixture = createClientFixture(t, bridge.baseUrl)
+    const result = await runClient(clientArgs(fixture, ['qinglan-idle']))
+
+    assert.notEqual(result.code, 0)
+    assert.equal(bridge.state.healthRequests, 1)
+    assert.equal(bridge.state.posts.length, 0)
+    assertNoPrivatePayload(result)
+  })
+
+  await t.test('submits exact Ref2V payloads sequentially and downloads completed MP4s', async (t) => {
+    const videoBytes = Buffer.from('sequential fake mp4')
+    const bridge = await startFakeBridge(t, { videoBytes })
+    const fixture = createClientFixture(t, bridge.baseUrl)
+    const selectedJobs = fixture.manifest.jobs.slice(0, 2)
+    const result = await runClient(clientArgs(fixture, selectedJobs.map(({ id }) => id)))
+
+    assert.equal(result.code, 0, result.stderr)
+    assert.equal(bridge.state.posts.length, 2)
+    for (const [index, job] of selectedJobs.entries()) {
+      assert.deepEqual(bridge.state.posts[index], expectedGenerationPayload(fixture.manifest, job))
+      assert.deepEqual(
+        readFileSync(resolve(fixture.runRoot, 'videos', job.video)),
+        videoBytes,
+      )
+    }
+    assert.deepEqual(bridge.state.events, [
+      'health',
+      'post:task-1',
+      'status:task-1:0',
+      'status:task-1:1',
+      'download:task-1',
+      'post:task-2',
+      'status:task-2:0',
+      'status:task-2:1',
+      'download:task-2',
+    ])
+
+    const stateText = readFileSync(resolve(fixture.runRoot, 'jobs.json'), 'utf8')
+    const state = JSON.parse(stateText)
+    assert.deepEqual(state.jobs.map(({ id, status }) => ({ id, status })), [
+      { id: selectedJobs[0].id, status: 'completed' },
+      { id: selectedJobs[1].id, status: 'completed' },
+    ])
+    for (const [index, entry] of state.jobs.entries()) {
+      assert.equal(entry.taskId, `task-${index + 1}`)
+      assert.equal(entry.seed, selectedJobs[index].seed)
+      assert.equal(entry.video, `videos/${selectedJobs[index].video}`)
+      assert.equal(typeof entry.startedAt, 'string')
+      assert.equal(typeof entry.completedAt, 'string')
+      assert.equal(entry.error, null)
+      assert.equal('prompt' in entry, false)
+      assert.equal('reference' in entry, false)
+    }
+    assertNoPrivatePayload(result, stateText)
+    assert.deepEqual(findPartFiles(fixture.runRoot), [])
+  })
+
+  await t.test('resumes a processing task without another POST', async (t) => {
+    const bridge = await startFakeBridge(t)
+    const fixture = createClientFixture(t, bridge.baseUrl)
+    const job = fixture.manifest.jobs[0]
+    writeJobsState(fixture.runRoot, [stateEntry(job, 'processing', 'resume-task')])
+
+    const result = await runClient(clientArgs(fixture, [job.id]))
+
+    assert.equal(result.code, 0, result.stderr)
+    assert.equal(bridge.state.posts.length, 0)
+    assert.deepEqual(bridge.state.statusRequests, ['resume-task', 'resume-task'])
+    assert.deepEqual(bridge.state.downloads, ['resume-task'])
+    const stateText = readFileSync(resolve(fixture.runRoot, 'jobs.json'), 'utf8')
+    const [entry] = JSON.parse(stateText).jobs
+    assert.equal(entry.taskId, 'resume-task')
+    assert.equal(entry.status, 'completed')
+    assertNoPrivatePayload(result, stateText)
+    assert.deepEqual(findPartFiles(fixture.runRoot), [])
+  })
+
+  await t.test('skips a completed task when its non-empty MP4 exists', async (t) => {
+    const bridge = await startFakeBridge(t)
+    const fixture = createClientFixture(t, bridge.baseUrl)
+    const job = fixture.manifest.jobs[0]
+    const target = resolve(fixture.runRoot, 'videos', job.video)
+    mkdirSync(dirname(target), { recursive: true })
+    writeFileSync(target, Buffer.from('existing mp4'))
+    writeJobsState(fixture.runRoot, [stateEntry(job, 'completed', 'completed-task')])
+
+    const result = await runClient(clientArgs(fixture, [job.id]))
+
+    assert.equal(result.code, 0, result.stderr)
+    assert.equal(bridge.state.posts.length, 0)
+    assert.deepEqual(bridge.state.statusRequests, [])
+    assert.deepEqual(bridge.state.downloads, [])
+    assert.deepEqual(readFileSync(target), Buffer.from('existing mp4'))
+    assertNoPrivatePayload(result, readFileSync(resolve(fixture.runRoot, 'jobs.json'), 'utf8'))
+    assert.deepEqual(findPartFiles(fixture.runRoot), [])
+  })
+
+  await t.test('re-downloads a missing completed MP4 with the same task id', async (t) => {
+    const videoBytes = Buffer.from('re-downloaded mp4')
+    const bridge = await startFakeBridge(t, {
+      videoBytes,
+      statusFor: ({ baseUrl, taskId }) => ({
+        status: 'completed',
+        url: `${baseUrl}/files/${encodeURIComponent(taskId)}.mp4`,
+        metadata: { resumed: true },
+      }),
+    })
+    const fixture = createClientFixture(t, bridge.baseUrl)
+    const job = fixture.manifest.jobs[0]
+    writeJobsState(fixture.runRoot, [stateEntry(job, 'completed', 'download-task')])
+
+    const result = await runClient(clientArgs(fixture, [job.id]))
+
+    assert.equal(result.code, 0, result.stderr)
+    assert.equal(bridge.state.posts.length, 0)
+    assert.deepEqual(bridge.state.statusRequests, ['download-task'])
+    assert.deepEqual(bridge.state.downloads, ['download-task'])
+    assert.deepEqual(readFileSync(resolve(fixture.runRoot, 'videos', job.video)), videoBytes)
+    assertNoPrivatePayload(result, readFileSync(resolve(fixture.runRoot, 'jobs.json'), 'utf8'))
+    assert.deepEqual(findPartFiles(fixture.runRoot), [])
+  })
+
+  await t.test('returns nonzero and safely retains a failed task', async (t) => {
+    const bridge = await startFakeBridge(t, {
+      statusFor: () => ({
+        status: 'failed',
+        error: 'backend rejected data:image/png;base64,DO-NOT-LEAK',
+      }),
+    })
+    const fixture = createClientFixture(t, bridge.baseUrl)
+    const job = fixture.manifest.jobs[0]
+
+    const result = await runClient(clientArgs(fixture, [job.id]))
+
+    assert.notEqual(result.code, 0)
+    assert.equal(bridge.state.posts.length, 1)
+    const stateText = readFileSync(resolve(fixture.runRoot, 'jobs.json'), 'utf8')
+    const state = JSON.parse(stateText)
+    assert.equal(state.jobs.length, 1)
+    assert.equal(state.jobs[0].id, job.id)
+    assert.equal(state.jobs[0].taskId, 'task-1')
+    assert.equal(state.jobs[0].status, 'failed')
+    assert.equal(typeof state.jobs[0].error, 'string')
+    assert.equal(state.jobs[0].error.includes('data:image/'), false)
+    assertNoPrivatePayload(result, stateText)
+    assert.deepEqual(findPartFiles(fixture.runRoot), [])
+  })
+
+  await t.test('validates selections and unsafe manifest paths before POST', async (t) => {
+    const bridge = await startFakeBridge(t)
+    const invalidCases = [
+      ['duplicate job id', (manifest) => { manifest.jobs[1].id = manifest.jobs[0].id }],
+      ['unsafe job id', (manifest) => { manifest.jobs[0].id = '../unsafe' }],
+      ['missing reference', (manifest) => { manifest.jobs[0].reference = 'art-source/h3-pilot/missing.png' }],
+      ['missing prompt', (manifest) => { manifest.jobs[0].prompt = 'art-source/h3-pilot/missing.txt' }],
+      ['escaping reference', (manifest) => { manifest.jobs[0].reference = '../outside.png' }],
+      ['unsafe video', (manifest) => { manifest.jobs[0].video = '../outside.mp4' }],
+    ]
+
+    for (const [label, mutateManifest] of invalidCases) {
+      const fixture = createClientFixture(t, bridge.baseUrl, mutateManifest)
+      const result = await runClient(clientArgs(fixture, []))
+      assert.notEqual(result.code, 0, label)
+      assertNoPrivatePayload(result)
+    }
+
+    const validFixture = createClientFixture(t, bridge.baseUrl)
+    const unknownJob = await runClient(clientArgs(validFixture, ['not-a-pilot-job']))
+    assert.notEqual(unknownJob.code, 0)
+    assertNoPrivatePayload(unknownJob)
+
+    const outsideRun = projectRelativePath(resolve(projectRoot, '..', 'outside-h3-run'))
+    const outsideResult = await runClient([
+      '--manifest', validFixture.manifestArg,
+      '--run-root', outsideRun,
+      '--job', 'qinglan-idle',
+    ])
+    assert.notEqual(outsideResult.code, 0)
+    assertNoPrivatePayload(outsideResult)
+    assert.equal(bridge.state.posts.length, 0)
+  })
+
+  await t.test('dry-run validates all nine jobs without state or submissions', async (t) => {
+    const bridge = await startFakeBridge(t)
+    const fixture = createClientFixture(t, bridge.baseUrl)
+    const result = await runClient(clientArgs(fixture, [], ['--dry-run']))
+
+    assert.equal(result.code, 0, result.stderr)
+    assert.equal(bridge.state.healthRequests, 1)
+    assert.equal(bridge.state.posts.length, 0)
+    assert.deepEqual(bridge.state.statusRequests, [])
+    assert.match(result.stdout, /selected jobs=9/i)
+    assert.match(result.stdout, /submissions=0/i)
+    assert.equal(existsSync(resolve(fixture.runRoot, 'jobs.json')), false)
+    assertNoPrivatePayload(result)
+    assert.deepEqual(findPartFiles(fixture.runRoot), [])
+  })
 })
