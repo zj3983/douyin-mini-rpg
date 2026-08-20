@@ -11,6 +11,7 @@ import sys
 import tempfile
 import time
 from datetime import datetime, timezone
+from http.client import HTTPException, IncompleteRead
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
@@ -73,17 +74,21 @@ def positive_float(raw: str) -> float:
     return value
 
 
-def parse_args(argv=None):
+def build_parser():
     parser = argparse.ArgumentParser(
         description="Generate resumable H3 Ref2V action videos through a local bridge."
     )
     parser.add_argument("--manifest", default=DEFAULT_MANIFEST)
     parser.add_argument("--run-root", required=True)
     parser.add_argument("--job", action="append", dest="job_ids")
-    parser.add_argument("--poll-seconds", type=nonnegative_float, default=15.0)
+    parser.add_argument("--poll-seconds", type=positive_float, default=15.0)
     parser.add_argument("--timeout-seconds", type=positive_float, default=10800.0)
     parser.add_argument("--dry-run", action="store_true")
-    return parser.parse_args(argv)
+    return parser
+
+
+def parse_args(argv=None):
+    return build_parser().parse_args(argv)
 
 
 def normalized_path(raw, label: str) -> str:
@@ -311,10 +316,29 @@ def select_jobs(jobs: list[dict], requested_ids):
 def bounded_http_timeout(limit: float | None = None) -> float:
     if limit is None:
         return HTTP_TIMEOUT_CAP_SECONDS
-    return max(0.05, min(HTTP_TIMEOUT_CAP_SECONDS, limit))
+    if limit <= 0:
+        raise ClientError("HTTP deadline expired")
+    return min(HTTP_TIMEOUT_CAP_SECONDS, limit)
 
 
-def request_json(method: str, url: str, operation: str, *, payload=None, timeout=None):
+def remaining_budget(deadline: float, operation: str) -> float:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise ClientError(f"{operation} timed out")
+    return remaining
+
+
+def request_json(
+    method: str,
+    url: str,
+    operation: str,
+    *,
+    payload=None,
+    deadline: float | None = None,
+    timeout: float | None = None,
+):
+    if deadline is None:
+        deadline = time.monotonic() + (timeout or HTTP_TIMEOUT_CAP_SECONDS)
     body = None
     headers = {"Accept": "application/json"}
     if payload is not None:
@@ -323,15 +347,22 @@ def request_json(method: str, url: str, operation: str, *, payload=None, timeout
     request = Request(url, data=body, headers=headers, method=method)
 
     try:
-        with urlopen(request, timeout=bounded_http_timeout(timeout)) as response:
+        with urlopen(
+            request,
+            timeout=bounded_http_timeout(remaining_budget(deadline, operation)),
+        ) as response:
             content_type = response.headers.get_content_type().lower()
             if content_type != "application/json" and not content_type.endswith("+json"):
                 raise ClientError(f"{operation} returned non-JSON content")
+            remaining_budget(deadline, operation)
             response_body = response.read(MAX_JSON_RESPONSE_BYTES + 1)
+            remaining_budget(deadline, operation)
     except HTTPError as error:
         error.close()
         raise ClientError(f"{operation} returned HTTP {error.code}") from error
-    except (URLError, TimeoutError, OSError) as error:
+    except (URLError, TimeoutError, OSError, HTTPException) as error:
+        if time.monotonic() >= deadline:
+            raise ClientError(f"{operation} timed out") from error
         raise ClientError(f"{operation} request failed") from error
 
     if len(response_body) > MAX_JSON_RESPONSE_BYTES:
@@ -374,7 +405,7 @@ def encode_reference(path: Path, mime_type: str) -> str:
     return f"data:{mime_type};base64,{encoded}"
 
 
-def submit_job(config: dict, job: dict, timeout_seconds: float) -> str:
+def submit_job(config: dict, job: dict, deadline: float) -> str:
     payload = {
         "model": config["model"],
         "prompt": job["prompt_text"],
@@ -390,33 +421,29 @@ def submit_job(config: dict, job: dict, timeout_seconds: float) -> str:
         f"{config['bridge_url']}/v1/video/generations",
         f"{job['id']} submission",
         payload=payload,
-        timeout=timeout_seconds,
+        deadline=deadline,
     )
     return validate_task_id(response.get("task_id"))
 
 
-def poll_task(config: dict, job: dict, task_id: str, poll_seconds: float, timeout_seconds: float) -> str:
-    deadline = time.monotonic() + timeout_seconds
+def poll_task(config: dict, job: dict, task_id: str, poll_seconds: float, deadline: float) -> str:
     reported_processing = False
     status_url = f"{config['bridge_url']}/v1/video/generations/{quote(task_id, safe='')}"
     while True:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise ClientError(f"{job['id']} timed out waiting for task completion")
+        operation = f"{job['id']} status poll"
+        remaining_budget(deadline, operation)
         status_response = request_json(
             "GET",
             status_url,
-            f"{job['id']} status poll",
-            timeout=remaining,
+            operation,
+            deadline=deadline,
         )
         status = status_response.get("status")
         if status == "processing":
             if not reported_processing:
                 print(f"[{job['id']}] processing")
                 reported_processing = True
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise ClientError(f"{job['id']} timed out waiting for task completion")
+            remaining = remaining_budget(deadline, operation)
             time.sleep(min(poll_seconds, remaining))
             continue
         if status == "completed":
@@ -429,40 +456,86 @@ def poll_task(config: dict, job: dict, task_id: str, poll_seconds: float, timeou
         raise ClientError(f"{job['id']} status response has an invalid status")
 
 
-def download_video(url: str, target: Path, job_id: str, timeout_seconds: float) -> None:
+def set_response_timeout(response, timeout_seconds: float) -> None:
+    raw_stream = getattr(getattr(response, "fp", None), "raw", None)
+    socket = getattr(raw_stream, "_sock", None)
+    if socket is not None:
+        socket.settimeout(bounded_http_timeout(timeout_seconds))
+
+
+def download_video(url: str, target: Path, job_id: str, deadline: float) -> None:
     validate_download_url(url)
-    target.parent.mkdir(parents=True, exist_ok=True)
     part_path = target.with_name(f"{target.name}.part")
-    part_path.unlink(missing_ok=True)
     installed = False
-    request = Request(url, headers={"Accept": "video/mp4"}, method="GET")
+    operation = f"{job_id} download"
     try:
         try:
-            with urlopen(request, timeout=bounded_http_timeout(timeout_seconds)) as response:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            part_path.unlink(missing_ok=True)
+        except OSError as error:
+            raise ClientError(f"{job_id} could not prepare download path") from error
+
+        request = Request(url, headers={"Accept": "video/mp4"}, method="GET")
+        expected_length = None
+        actual_length = 0
+        try:
+            with urlopen(
+                request,
+                timeout=bounded_http_timeout(remaining_budget(deadline, operation)),
+            ) as response:
                 final_url = response.geturl()
                 validate_download_url(final_url)
                 content_type = response.headers.get_content_type().lower()
                 if content_type not in VIDEO_CONTENT_TYPES:
                     raise ClientError(f"{job_id} download returned an invalid Content-Type")
+
+                content_length = response.headers.get("Content-Length")
+                if content_length is not None:
+                    normalized_length = content_length.strip()
+                    if not re.fullmatch(r"[0-9]+", normalized_length):
+                        raise ClientError(f"{job_id} download returned an invalid Content-Length")
+                    expected_length = int(normalized_length)
+                    if expected_length <= 0:
+                        raise ClientError(f"{job_id} download returned a non-positive Content-Length")
+
                 with part_path.open("wb") as output:
                     while True:
-                        chunk = response.read(1024 * 1024)
+                        remaining = remaining_budget(deadline, operation)
+                        set_response_timeout(response, remaining)
+                        chunk = response.read(64 * 1024)
+                        remaining_budget(deadline, operation)
                         if not chunk:
                             break
                         output.write(chunk)
+                        actual_length += len(chunk)
         except HTTPError as error:
             error.close()
             raise ClientError(f"{job_id} download returned HTTP {error.code}") from error
-        except (URLError, TimeoutError, OSError) as error:
+        except IncompleteRead as error:
+            raise ClientError(f"{job_id} download length did not match Content-Length") from error
+        except (URLError, TimeoutError, OSError, HTTPException) as error:
+            if time.monotonic() >= deadline:
+                raise ClientError(f"{job_id} download timed out") from error
             raise ClientError(f"{job_id} download failed") from error
 
-        if not part_path.is_file() or part_path.stat().st_size <= 0:
+        if actual_length <= 0:
             raise ClientError(f"{job_id} download was empty")
-        part_path.replace(target)
+        if expected_length is not None and actual_length != expected_length:
+            raise ClientError(f"{job_id} download length did not match Content-Length")
+        remaining_budget(deadline, operation)
+        try:
+            if not part_path.is_file() or part_path.stat().st_size != actual_length:
+                raise ClientError(f"{job_id} download file size validation failed")
+            part_path.replace(target)
+        except OSError as error:
+            raise ClientError(f"{job_id} could not install downloaded video") from error
         installed = True
     finally:
         if not installed:
-            part_path.unlink(missing_ok=True)
+            try:
+                part_path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def normalize_state_entry(raw_entry, jobs_by_id: dict[str, dict]) -> dict:
@@ -597,6 +670,7 @@ def process_job(
     entries_by_id = {entry["id"]: entry for entry in entries}
     entry = entries_by_id.get(job["id"])
     target = job["target_path"]
+    deadline = time.monotonic() + timeout_seconds
     target.with_name(f"{target.name}.part").unlink(missing_ok=True)
 
     if entry is not None and entry["status"] == "completed" and target.is_file() and target.stat().st_size > 0:
@@ -610,7 +684,7 @@ def process_job(
         entry = new_state_entry(job)
         persist_entry(state_path, entries, entry)
         try:
-            task_id = submit_job(config, job, timeout_seconds)
+            task_id = submit_job(config, job, deadline)
         except ClientError as error:
             entry["status"] = "failed"
             entry["completedAt"] = utc_now()
@@ -628,11 +702,15 @@ def process_job(
             raise ClientError(f"{job['id']} has a retained failed task")
         if entry["status"] == "submitting" or entry["taskId"] is None:
             raise ClientError(f"{job['id']} cannot safely resume without a taskId")
+        if entry["status"] == "completed":
+            entry["status"] = "processing"
+            entry["completedAt"] = None
+            persist_entry(state_path, entries, entry)
         task_id = entry["taskId"]
         print(f"[{job['id']}] resuming taskId={task_id}")
 
     try:
-        download_url = poll_task(config, job, task_id, poll_seconds, timeout_seconds)
+        download_url = poll_task(config, job, task_id, poll_seconds, deadline)
     except RemoteTaskFailed as error:
         entry["status"] = "failed"
         entry["completedAt"] = utc_now()
@@ -640,23 +718,23 @@ def process_job(
         persist_entry(state_path, entries, entry)
         raise
     except ClientError as error:
-        entry["status"] = "failed"
-        entry["completedAt"] = utc_now()
+        entry["status"] = "processing"
+        entry["completedAt"] = None
+        entry["error"] = safe_message(error)
+        persist_entry(state_path, entries, entry)
+        raise
+
+    try:
+        download_video(download_url, target, job["id"], deadline)
+    except ClientError as error:
+        entry["status"] = "processing"
+        entry["completedAt"] = None
         entry["error"] = safe_message(error)
         persist_entry(state_path, entries, entry)
         raise
 
     entry["status"] = "completed"
     entry["completedAt"] = utc_now()
-    entry["error"] = None
-    persist_entry(state_path, entries, entry)
-    try:
-        download_video(download_url, target, job["id"], timeout_seconds)
-    except ClientError as error:
-        entry["error"] = safe_message(error)
-        persist_entry(state_path, entries, entry)
-        raise
-
     entry["error"] = None
     persist_entry(state_path, entries, entry)
     print(f"[{job['id']}] completed video={job['state_video']}")

@@ -364,6 +364,10 @@ async function readRequestBody(request) {
   return Buffer.concat(chunks).toString('utf8')
 }
 
+function delay(milliseconds) {
+  return new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds))
+}
+
 async function startFakeBridge(t, options = {}) {
   const state = {
     downloads: [],
@@ -427,34 +431,70 @@ async function startFakeBridge(t, options = {}) {
         state.statusRequests.push(taskId)
         state.events.push(`status:${taskId}:${attempt}`)
 
-        const status = options.statusFor?.({ attempt, baseUrl, taskId })
-          ?? (attempt === 0
-            ? { status: 'processing' }
-            : {
-                status: 'completed',
-                url: `${baseUrl}/files/${encodeURIComponent(taskId)}.mp4`,
-                metadata: { source: 'fake-bridge' },
-              })
-        sendJson(response, 200, status)
+        const completedStatus = {
+          status: 'completed',
+          url: `${baseUrl}/files/${encodeURIComponent(taskId)}.mp4`,
+          metadata: { source: 'fake-bridge' },
+        }
+        const customResponse = options.statusResponseFor?.({ attempt, baseUrl, taskId })
+        if (customResponse?.delayMs !== undefined) {
+          await delay(customResponse.delayMs)
+        }
+        if (response.destroyed) {
+          return
+        }
+        if (customResponse?.rawBody !== undefined) {
+          sendRaw(
+            response,
+            customResponse.statusCode ?? 200,
+            customResponse.contentType ?? 'application/json',
+            customResponse.rawBody,
+          )
+        } else {
+          const status = customResponse?.json
+            ?? options.statusFor?.({ attempt, baseUrl, taskId })
+            ?? (attempt === 0 ? { status: 'processing' } : completedStatus)
+          sendJson(response, customResponse?.statusCode ?? 200, status)
+        }
         return
       }
 
       const downloadPrefix = '/files/'
       if (request.method === 'GET' && path.startsWith(downloadPrefix)) {
         const taskId = decodeURIComponent(path.slice(downloadPrefix.length, -'.mp4'.length))
-        const body = typeof options.videoBytes === 'function'
-          ? options.videoBytes(taskId)
-          : (options.videoBytes ?? Buffer.from('fake mp4 bytes'))
-        const contentType = typeof options.videoContentType === 'function'
-          ? options.videoContentType(taskId)
-          : (options.videoContentType ?? 'video/mp4')
+        const attempt = state.downloads.length
+        const customResponse = options.downloadResponseFor?.({ attempt, baseUrl, taskId }) ?? {}
+        const body = customResponse.body
+          ?? (typeof options.videoBytes === 'function'
+            ? options.videoBytes(taskId)
+            : (options.videoBytes ?? Buffer.from('fake mp4 bytes')))
+        const chunks = customResponse.chunks ?? [body]
+        const contentType = customResponse.contentType
+          ?? (typeof options.videoContentType === 'function'
+            ? options.videoContentType(taskId)
+            : (options.videoContentType ?? 'video/mp4'))
         state.downloads.push(taskId)
         state.events.push(`download:${taskId}`)
-        response.writeHead(200, {
+        const headers = {
           'Content-Type': contentType,
-          'Content-Length': body.length,
-        })
-        response.end(body)
+        }
+        if (!customResponse.omitContentLength) {
+          headers['Content-Length'] = customResponse.contentLength ?? Buffer.concat(chunks).length
+        }
+        if (customResponse.closeConnection) {
+          headers.Connection = 'close'
+        }
+        response.writeHead(customResponse.statusCode ?? 200, headers)
+        for (const [index, chunk] of chunks.entries()) {
+          if (index > 0 && customResponse.chunkDelayMs !== undefined) {
+            await delay(customResponse.chunkDelayMs)
+          }
+          if (response.destroyed) {
+            return
+          }
+          response.write(chunk)
+        }
+        response.end()
         return
       }
 
@@ -472,7 +512,7 @@ async function startFakeBridge(t, options = {}) {
 
   await new Promise((resolvePromise, reject) => {
     server.once('error', reject)
-    server.listen(options.port ?? 0, '127.0.0.1', resolvePromise)
+    server.listen(0, '127.0.0.1', resolvePromise)
   })
   const address = server.address()
   assert.ok(address && typeof address === 'object')
@@ -541,7 +581,7 @@ function clientArgs(
   {
     extra = [],
     includeTimingOverrides = true,
-    pollSeconds = '0',
+    pollSeconds = '0.01',
     timeoutSeconds = '2',
   } = {},
 ) {
@@ -1068,30 +1108,56 @@ test('H3 action client honors the bridge, resume, state, and secrecy contracts',
     assert.deepEqual(findPartFiles(fixture.runRoot), [])
   })
 
-  await t.test('times out a perpetually processing task with failed state and retained task id', async (t) => {
+  await t.test('keeps a timed-out processing task resumable and rate-limited', async (t) => {
+    let complete = false
     const bridge = await startFakeBridge(t, {
-      statusFor: () => ({
-        status: 'processing',
-        debug: 'data:image/png;base64,DO-NOT-LEAK',
-      }),
+      statusFor: ({ baseUrl, taskId }) => complete
+        ? {
+            status: 'completed',
+            url: `${baseUrl}/files/${encodeURIComponent(taskId)}.mp4`,
+            metadata: { resumed: true },
+          }
+        : {
+            status: 'processing',
+            debug: 'data:image/png;base64,DO-NOT-LEAK',
+          },
     })
     const fixture = createClientFixture(t, bridge.baseUrl)
     const job = fixture.manifest.jobs[0]
-    const result = await runClient(clientArgs(fixture, [job.id], {
-      pollSeconds: '0',
-      timeoutSeconds: '0.05',
+    const firstResult = await runClient(clientArgs(fixture, [job.id], {
+      pollSeconds: '0.01',
+      timeoutSeconds: '0.08',
     }))
 
-    const entry = assertSafeJobFailure(fixture, result, job, {
-      status: 'failed',
+    const entry = assertSafeJobFailure(fixture, firstResult, job, {
+      status: 'processing',
       taskId: 'task-1',
     })
     assert.match(entry.error, /timed out/i)
     assert.equal(bridge.state.posts.length, 1)
     assert.ok(bridge.state.statusRequests.length > 0)
+    assert.ok(
+      bridge.state.statusRequests.length <= 20,
+      `positive poll interval bounds request count; actual=${bridge.state.statusRequests.length}`,
+    )
+
+    complete = true
+    const resumedResult = await runClient(clientArgs(fixture, [job.id], {
+      pollSeconds: '0.01',
+      timeoutSeconds: '1',
+    }))
+    assert.equal(resumedResult.code, 0, resumedResult.stderr)
+    assert.equal(bridge.state.posts.length, 1, 'resume performs zero additional POSTs')
+    const resumedStateText = readFileSync(resolve(fixture.runRoot, 'jobs.json'), 'utf8')
+    const [resumedEntry] = JSON.parse(resumedStateText).jobs
+    assert.equal(resumedEntry.taskId, 'task-1')
+    assert.equal(resumedEntry.status, 'completed')
+    assert.equal(resumedEntry.error, null)
+    assertNoPrivatePayload(resumedResult, resumedStateText)
+    assert.deepEqual(findPartFiles(fixture.runRoot), [])
   })
 
-  await t.test('persists safe failures for malformed POST and poll protocols', async (t) => {
+  await t.test('persists failed state when POST errors before task_id exists', async (t) => {
     const cases = [
       {
         label: 'POST invalid JSON',
@@ -1113,27 +1179,6 @@ test('H3 action client honors the bridge, resume, state, and secrecy contracts',
         expectedTaskId: null,
         expectedStatusRequests: 0,
       },
-      {
-        label: 'poll unknown status',
-        bridgeOptions: {
-          statusFor: () => ({
-            status: 'queued-forever',
-            debug: 'data:image/png;base64,DO-NOT-LEAK',
-          }),
-        },
-        expectedTaskId: 'task-1',
-        expectedStatusRequests: 1,
-      },
-      {
-        label: 'poll missing status',
-        bridgeOptions: {
-          statusFor: () => ({
-            debug: 'data:image/png;base64,DO-NOT-LEAK',
-          }),
-        },
-        expectedTaskId: 'task-1',
-        expectedStatusRequests: 1,
-      },
     ]
 
     for (const testCase of cases) {
@@ -1148,6 +1193,94 @@ test('H3 action client honors the bridge, resume, state, and secrecy contracts',
       })
       assert.equal(bridge.state.posts.length, 1, testCase.label)
       assert.equal(bridge.state.statusRequests.length, testCase.expectedStatusRequests, testCase.label)
+    }
+  })
+
+  await t.test('keeps transient poll failures processing and resumes the same task with zero POSTs', async (t) => {
+    const completedResponse = (baseUrl, taskId) => ({
+      json: {
+        status: 'completed',
+        url: `${baseUrl}/files/${encodeURIComponent(taskId)}.mp4`,
+        metadata: { resumed: true },
+      },
+    })
+    const cases = [
+      {
+        label: 'HTTP 503',
+        firstResponse: {
+          statusCode: 503,
+          json: { error: 'data:image/png;base64,DO-NOT-LEAK' },
+        },
+        timeoutSeconds: '0.5',
+      },
+      {
+        label: 'network timeout',
+        firstResponse: {
+          delayMs: 150,
+          json: { status: 'processing' },
+        },
+        timeoutSeconds: '0.05',
+      },
+      {
+        label: 'invalid JSON',
+        firstResponse: {
+          rawBody: '{"status": data:image/png;base64,DO-NOT-LEAK',
+        },
+        timeoutSeconds: '0.5',
+      },
+      {
+        label: 'unknown status',
+        firstResponse: {
+          json: {
+            status: 'queued-forever',
+            debug: 'data:image/png;base64,DO-NOT-LEAK',
+          },
+        },
+        timeoutSeconds: '0.5',
+      },
+      {
+        label: 'missing status',
+        firstResponse: {
+          json: { debug: 'data:image/png;base64,DO-NOT-LEAK' },
+        },
+        timeoutSeconds: '0.5',
+      },
+    ]
+
+    for (const testCase of cases) {
+      const bridge = await startFakeBridge(t, {
+        statusResponseFor: ({ attempt, baseUrl, taskId }) => (
+          attempt === 0 ? testCase.firstResponse : completedResponse(baseUrl, taskId)
+        ),
+      })
+      const fixture = createClientFixture(t, bridge.baseUrl)
+      const job = fixture.manifest.jobs[0]
+      const firstResult = await runClient(clientArgs(fixture, [job.id], {
+        pollSeconds: '0.01',
+        timeoutSeconds: testCase.timeoutSeconds,
+      }))
+
+      const firstEntry = assertSafeJobFailure(fixture, firstResult, job, {
+        status: 'processing',
+        taskId: 'task-1',
+      })
+      assert.equal(firstEntry.completedAt, null, testCase.label)
+      assert.equal(bridge.state.posts.length, 1, testCase.label)
+
+      const resumedResult = await runClient(clientArgs(fixture, [job.id], {
+        pollSeconds: '0.01',
+        timeoutSeconds: '1',
+      }))
+      assert.equal(resumedResult.code, 0, `${testCase.label}: ${resumedResult.stderr}`)
+      assert.equal(bridge.state.posts.length, 1, `${testCase.label}: resume performs zero POSTs`)
+      assert.deepEqual(bridge.state.downloads, ['task-1'], testCase.label)
+      const resumedStateText = readFileSync(resolve(fixture.runRoot, 'jobs.json'), 'utf8')
+      const [resumedEntry] = JSON.parse(resumedStateText).jobs
+      assert.equal(resumedEntry.status, 'completed', testCase.label)
+      assert.equal(resumedEntry.taskId, 'task-1', testCase.label)
+      assert.equal(resumedEntry.error, null, testCase.label)
+      assertNoPrivatePayload(resumedResult, resumedStateText)
+      assert.deepEqual(findPartFiles(fixture.runRoot), [])
     }
   })
 
@@ -1198,18 +1331,34 @@ test('H3 action client honors the bridge, resume, state, and secrecy contracts',
       const result = await runClient(clientArgs(fixture, [job.id]))
 
       assertSafeJobFailure(fixture, result, job, {
-        status: 'completed',
+        status: 'processing',
         taskId: 'task-1',
       })
       assert.deepEqual(bridge.state.downloads, ['task-1'], testCase.label)
     }
   })
 
-  await t.test('keeps an existing target intact when a replacement download fails', async (t) => {
+  await t.test('keeps an old target on failure, then resumes and replaces it with zero POSTs', async (t) => {
     const existingBytes = Buffer.from('known good existing mp4')
+    const replacementBytes = Buffer.from('new verified replacement mp4')
     const bridge = await startFakeBridge(t, {
-      videoBytes: Buffer.from('<html>bad replacement</html>'),
-      videoContentType: 'text/html',
+      statusFor: ({ baseUrl, taskId }) => ({
+        status: 'completed',
+        url: `${baseUrl}/files/${encodeURIComponent(taskId)}.mp4`,
+        metadata: { reusable: true },
+      }),
+      downloadResponseFor: ({ attempt }) => attempt === 0
+        ? {
+            body: Buffer.from('partial'),
+            contentLength: '100',
+            contentType: 'video/mp4',
+            closeConnection: true,
+          }
+        : {
+            body: replacementBytes,
+            contentLength: String(replacementBytes.length),
+            contentType: 'video/mp4',
+          },
     })
     const fixture = createClientFixture(t, bridge.baseUrl)
     const job = fixture.manifest.jobs[0]
@@ -1217,16 +1366,129 @@ test('H3 action client honors the bridge, resume, state, and secrecy contracts',
     mkdirSync(dirname(target), { recursive: true })
     writeFileSync(target, existingBytes)
 
-    const result = await runClient(clientArgs(fixture, [job.id]))
+    const firstResult = await runClient(clientArgs(fixture, [job.id]))
 
-    assert.notEqual(result.code, 0)
+    assert.notEqual(firstResult.code, 0)
     assert.deepEqual(readFileSync(target), existingBytes)
-    const stateText = readFileSync(resolve(fixture.runRoot, 'jobs.json'), 'utf8')
-    const [entry] = JSON.parse(stateText).jobs
-    assert.equal(entry.status, 'completed')
-    assert.equal(typeof entry.error, 'string')
-    assertNoPrivatePayload(result, stateText)
+    const firstStateText = readFileSync(resolve(fixture.runRoot, 'jobs.json'), 'utf8')
+    const [firstEntry] = JSON.parse(firstStateText).jobs
+    assert.equal(firstEntry.status, 'processing')
+    assert.equal(firstEntry.taskId, 'task-1')
+    assert.equal(firstEntry.completedAt, null)
+    assert.equal(typeof firstEntry.error, 'string')
+    assertNoPrivatePayload(firstResult, firstStateText)
     assert.deepEqual(findPartFiles(fixture.runRoot), [])
+
+    const resumedResult = await runClient(clientArgs(fixture, [job.id]))
+    assert.equal(resumedResult.code, 0, resumedResult.stderr)
+    assert.equal(bridge.state.posts.length, 1, 'download retry reuses taskId without another POST')
+    assert.deepEqual(bridge.state.downloads, ['task-1', 'task-1'])
+    assert.deepEqual(readFileSync(target), replacementBytes)
+    const resumedStateText = readFileSync(resolve(fixture.runRoot, 'jobs.json'), 'utf8')
+    const [resumedEntry] = JSON.parse(resumedStateText).jobs
+    assert.equal(resumedEntry.status, 'completed')
+    assert.equal(resumedEntry.taskId, 'task-1')
+    assert.equal(typeof resumedEntry.completedAt, 'string')
+    assert.equal(resumedEntry.error, null)
+    assertNoPrivatePayload(resumedResult, resumedStateText)
+    assert.deepEqual(findPartFiles(fixture.runRoot), [])
+  })
+
+  await t.test('accepts matching or absent Content-Length on non-empty MP4 downloads', async (t) => {
+    const cases = [
+      {
+        label: 'matching Content-Length',
+        response: (bytes) => ({
+          body: bytes,
+          contentLength: String(bytes.length),
+          contentType: 'video/mp4',
+        }),
+      },
+      {
+        label: 'missing Content-Length',
+        response: (bytes) => ({
+          body: bytes,
+          contentType: 'video/mp4',
+          omitContentLength: true,
+        }),
+      },
+    ]
+
+    for (const testCase of cases) {
+      const videoBytes = Buffer.from(`${testCase.label} bytes`)
+      const bridge = await startFakeBridge(t, {
+        downloadResponseFor: () => testCase.response(videoBytes),
+      })
+      const fixture = createClientFixture(t, bridge.baseUrl)
+      const job = fixture.manifest.jobs[0]
+      const result = await runClient(clientArgs(fixture, [job.id]))
+
+      assert.equal(result.code, 0, `${testCase.label}: ${result.stderr}`)
+      assert.deepEqual(readFileSync(resolve(fixture.runRoot, 'videos', job.video)), videoBytes)
+      assert.deepEqual(findPartFiles(fixture.runRoot), [])
+      assertNoPrivatePayload(result, readFileSync(resolve(fixture.runRoot, 'jobs.json'), 'utf8'))
+    }
+  })
+
+  await t.test('rejects mismatched and invalid Content-Length declarations', async (t) => {
+    const cases = [
+      { label: 'declared 100 actual 7', contentLength: '100' },
+      { label: 'zero', contentLength: '0' },
+      { label: 'negative', contentLength: '-1' },
+      { label: 'non-numeric', contentLength: 'not-a-number' },
+    ]
+
+    for (const testCase of cases) {
+      const bridge = await startFakeBridge(t, {
+        downloadResponseFor: () => ({
+          body: Buffer.from('1234567'),
+          contentLength: testCase.contentLength,
+          contentType: 'video/mp4',
+          closeConnection: true,
+        }),
+      })
+      const fixture = createClientFixture(t, bridge.baseUrl)
+      const job = fixture.manifest.jobs[0]
+      const result = await runClient(clientArgs(fixture, [job.id], {
+        timeoutSeconds: '0.5',
+      }))
+
+      assertSafeJobFailure(fixture, result, job, {
+        status: 'processing',
+        taskId: 'task-1',
+      })
+      assert.deepEqual(bridge.state.downloads, ['task-1'], testCase.label)
+    }
+  })
+
+  await t.test('enforces one monotonic deadline across poll and slow streaming download', async (t) => {
+    const bridge = await startFakeBridge(t, {
+      statusFor: ({ baseUrl, taskId }) => ({
+        status: 'completed',
+        url: `${baseUrl}/files/${encodeURIComponent(taskId)}.mp4`,
+        metadata: { immediate: true },
+      }),
+      downloadResponseFor: () => ({
+        chunks: [Buffer.from('aaa'), Buffer.from('bbb'), Buffer.from('ccc')],
+        chunkDelayMs: 70,
+        contentType: 'video/mp4',
+        omitContentLength: true,
+      }),
+    })
+    const fixture = createClientFixture(t, bridge.baseUrl)
+    const job = fixture.manifest.jobs[0]
+    const result = await runClient(clientArgs(fixture, [job.id], {
+      pollSeconds: '0.01',
+      timeoutSeconds: '0.12',
+    }))
+
+    const entry = assertSafeJobFailure(fixture, result, job, {
+      status: 'processing',
+      taskId: 'task-1',
+    })
+    assert.match(entry.error, /timed out|deadline/i)
+    assert.equal(bridge.state.statusRequests.length, 1)
+    assert.deepEqual(bridge.state.downloads, ['task-1'])
   })
 
   await t.test('validates selections and unsafe manifest paths before POST', async (t) => {
@@ -1278,7 +1540,7 @@ test('H3 action client honors the bridge, resume, state, and secrecy contracts',
     assert.equal(bridge.state.posts.length, 0)
   })
 
-  await t.test('requires run-root and exposes the documented parser defaults without waiting', async (t) => {
+  await t.test('build_parser exposes defaults, requires run-root, and rejects non-positive polling', async (t) => {
     const missingRunRoot = await runClient([], { cwd: projectRoot })
     assert.notEqual(missingRunRoot.code, 0)
     assert.match(missingRunRoot.stderr, /--run-root/)
@@ -1289,8 +1551,16 @@ test('H3 action client honors the bridge, resume, state, and secrecy contracts',
       `spec = importlib.util.spec_from_file_location("h3_client", ${JSON.stringify(clientPath)})`,
       'module = importlib.util.module_from_spec(spec)',
       'spec.loader.exec_module(module)',
-      'args = module.parse_args(["--run-root", "artifacts/parser-default-probe"])',
-      'print(json.dumps({"manifest": args.manifest, "poll": args.poll_seconds, "timeout": args.timeout_seconds}))',
+      'parser = module.build_parser()',
+      'args = parser.parse_args(["--run-root", "artifacts/parser-default-probe"])',
+      'def parse_exit(argv):',
+      '    try:',
+      '        parser.parse_args(argv)',
+      '        return 0',
+      '    except SystemExit as error:',
+      '        return error.code',
+      'small = parser.parse_args(["--run-root", "artifacts/parser-default-probe", "--poll-seconds", "0.01"])',
+      'print(json.dumps({"manifest": args.manifest, "poll": args.poll_seconds, "timeout": args.timeout_seconds, "required": parse_exit([]), "zero": parse_exit(["--run-root", "x", "--poll-seconds", "0"]), "negative": parse_exit(["--run-root", "x", "--poll-seconds", "-0.01"]), "small": small.poll_seconds}))',
     ].join('\n')
     const probe = await runPythonProcess(['-c', parserProbe], { cwd: projectRoot })
     assert.equal(probe.code, 0, probe.stderr)
@@ -1298,6 +1568,10 @@ test('H3 action client honors the bridge, resume, state, and secrecy contracts',
       manifest: 'art-source/h3-pilot/pilot.json',
       poll: 15,
       timeout: 10800,
+      required: 2,
+      zero: 2,
+      negative: 2,
+      small: 0.01,
     })
 
     const bridge = await startFakeBridge(t)
@@ -1312,34 +1586,6 @@ test('H3 action client honors the bridge, resume, state, and secrecy contracts',
     assert.equal(noTimingOverride.code, 0, noTimingOverride.stderr)
     assert.equal(bridge.state.healthRequests, 1)
     assert.equal(bridge.state.posts.length, 0)
-  })
-
-  await t.test('uses the default manifest from cocos-client with only run-root and dry-run arguments', async (t) => {
-    let defaultBridge = null
-    try {
-      defaultBridge = await startFakeBridge(t, { port: 8900 })
-    } catch (error) {
-      if (error.code !== 'EADDRINUSE') {
-        throw error
-      }
-    }
-
-    const defaultRunRoot = mkdtempSync(resolve(projectRoot, '.h3-default-cli-test-'))
-    t.after(() => rmSync(defaultRunRoot, { recursive: true, force: true }))
-    const result = await runClient([
-      '--run-root', projectRelativePath(defaultRunRoot),
-      '--dry-run',
-    ], { cwd: projectRoot })
-
-    assert.equal(result.code, 0, result.stderr)
-    assert.match(result.stdout, /selected jobs=9/i)
-    assert.match(result.stdout, /submissions=0/i)
-    assert.equal(existsSync(resolve(defaultRunRoot, 'jobs.json')), false)
-    assertNoPrivatePayload(result)
-    if (defaultBridge !== null) {
-      assert.equal(defaultBridge.state.healthRequests, 1)
-      assert.equal(defaultBridge.state.posts.length, 0)
-    }
   })
 
   await t.test('dry-run validates all nine jobs without state or submissions', async (t) => {
