@@ -15,7 +15,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const projectRoot = fileURLToPath(new URL('../', import.meta.url))
@@ -31,7 +31,8 @@ const expectedJobs = [
     id: 'qinglan-idle',
     actor: 'qinglan',
     action: 'idle',
-    reference: 'art-source/vertical-slice/qinglan/reference-chroma.png',
+    conditioning: 'first-last',
+    reference: 'art-source/h3-pilot/references/qinglan-h3.png',
     prompt: 'art-source/h3-pilot/prompts/qinglan/idle.txt',
     seed: 3082001,
     video: 'qinglan/idle.mp4',
@@ -40,7 +41,8 @@ const expectedJobs = [
     id: 'qinglan-sword-ride',
     actor: 'qinglan',
     action: 'sword_ride',
-    reference: 'art-source/vertical-slice/qinglan/reference-chroma.png',
+    conditioning: 'first-last',
+    reference: 'art-source/h3-pilot/references/qinglan-h3.png',
     prompt: 'art-source/h3-pilot/prompts/qinglan/sword-ride.txt',
     seed: 3082002,
     video: 'qinglan/sword-ride.mp4',
@@ -49,7 +51,8 @@ const expectedJobs = [
     id: 'qinglan-hand-seal',
     actor: 'qinglan',
     action: 'hand_seal',
-    reference: 'art-source/vertical-slice/qinglan/reference-chroma.png',
+    conditioning: 'first-frame',
+    reference: 'art-source/h3-pilot/references/qinglan-h3.png',
     prompt: 'art-source/h3-pilot/prompts/qinglan/hand-seal.txt',
     seed: 3082003,
     video: 'qinglan/hand-seal.mp4',
@@ -58,7 +61,8 @@ const expectedJobs = [
     id: 'qinglan-hurt',
     actor: 'qinglan',
     action: 'hurt',
-    reference: 'art-source/vertical-slice/qinglan/reference-chroma.png',
+    conditioning: 'first-frame',
+    reference: 'art-source/h3-pilot/references/qinglan-h3.png',
     prompt: 'art-source/h3-pilot/prompts/qinglan/hurt.txt',
     seed: 3082004,
     video: 'qinglan/hurt.mp4',
@@ -67,7 +71,8 @@ const expectedJobs = [
     id: 'moss-wolf-idle',
     actor: 'moss-wolf',
     action: 'idle',
-    reference: 'art-source/vertical-slice/moss-wolf/reference.png',
+    conditioning: 'first-last',
+    reference: 'art-source/h3-pilot/references/moss-wolf-h3.png',
     prompt: 'art-source/h3-pilot/prompts/moss-wolf/idle.txt',
     seed: 3082005,
     video: 'moss-wolf/idle.mp4',
@@ -76,7 +81,8 @@ const expectedJobs = [
     id: 'moss-wolf-run',
     actor: 'moss-wolf',
     action: 'run',
-    reference: 'art-source/vertical-slice/moss-wolf/reference.png',
+    conditioning: 'first-last',
+    reference: 'art-source/h3-pilot/references/moss-wolf-h3.png',
     prompt: 'art-source/h3-pilot/prompts/moss-wolf/run.txt',
     seed: 3082006,
     video: 'moss-wolf/run.mp4',
@@ -85,7 +91,8 @@ const expectedJobs = [
     id: 'moss-wolf-bite-lunge',
     actor: 'moss-wolf',
     action: 'bite-lunge',
-    reference: 'art-source/vertical-slice/moss-wolf/reference.png',
+    conditioning: 'first-frame',
+    reference: 'art-source/h3-pilot/references/moss-wolf-h3.png',
     prompt: 'art-source/h3-pilot/prompts/moss-wolf/bite-lunge.txt',
     seed: 3082007,
     video: 'moss-wolf/bite-lunge.mp4',
@@ -94,7 +101,8 @@ const expectedJobs = [
     id: 'moss-wolf-hurt',
     actor: 'moss-wolf',
     action: 'hurt',
-    reference: 'art-source/vertical-slice/moss-wolf/reference.png',
+    conditioning: 'first-frame',
+    reference: 'art-source/h3-pilot/references/moss-wolf-h3.png',
     prompt: 'art-source/h3-pilot/prompts/moss-wolf/hurt.txt',
     seed: 3082008,
     video: 'moss-wolf/hurt.mp4',
@@ -103,7 +111,8 @@ const expectedJobs = [
     id: 'moss-wolf-death',
     actor: 'moss-wolf',
     action: 'death',
-    reference: 'art-source/vertical-slice/moss-wolf/reference.png',
+    conditioning: 'first-frame',
+    reference: 'art-source/h3-pilot/references/moss-wolf-h3.png',
     prompt: 'art-source/h3-pilot/prompts/moss-wolf/death.txt',
     seed: 3082009,
     video: 'moss-wolf/death.mp4',
@@ -639,7 +648,8 @@ function clientArgs(
 
 function expectedGenerationPayload(manifest, job) {
   const referenceBytes = readFileSync(resolve(projectRoot, job.reference))
-  return {
+  const referenceDataUrl = `data:image/png;base64,${referenceBytes.toString('base64')}`
+  const payload = {
     model: manifest.model,
     prompt: readFileSync(resolve(projectRoot, job.prompt), 'utf8'),
     width: manifest.width,
@@ -647,16 +657,58 @@ function expectedGenerationPayload(manifest, job) {
     duration: manifest.duration,
     n: 1,
     seed: job.seed,
-    reference_images: [`data:image/png;base64,${referenceBytes.toString('base64')}`],
   }
+  if (manifest.model === 'minimax-h3-fl2v-local') {
+    payload.image = referenceDataUrl
+    if (job.conditioning === 'first-last') {
+      payload.last_image = referenceDataUrl
+    }
+  } else if (manifest.model === 'minimax-h3-ref2v-local') {
+    payload.reference_images = [referenceDataUrl]
+  } else {
+    throw new Error(`unsupported test model ${manifest.model}`)
+  }
+  return payload
 }
 
-function stateEntry(job, status, taskId, overrides = {}) {
+function referenceMimeType(referencePath) {
+  const mimeByExtension = {
+    '.gif': 'image/gif',
+    '.jpeg': 'image/jpeg',
+    '.jpg': 'image/jpeg',
+    '.png': 'image/png',
+    '.webp': 'image/webp',
+  }
+  const mimeType = mimeByExtension[extname(referencePath).toLowerCase()]
+  assert.ok(mimeType, `test reference has a known MIME type: ${referencePath}`)
+  return mimeType
+}
+
+function requestFingerprint(manifest, job) {
+  const promptBytes = readFileSync(resolve(projectRoot, job.prompt))
+  const referenceBytes = readFileSync(resolve(projectRoot, job.reference))
+  const descriptor = {
+    conditioning: job.conditioning,
+    duration: manifest.duration,
+    height: manifest.height,
+    model: manifest.model,
+    n: 1,
+    promptSha256: createHash('sha256').update(promptBytes).digest('hex'),
+    referenceMime: referenceMimeType(job.reference),
+    referenceSha256: createHash('sha256').update(referenceBytes).digest('hex'),
+    seed: job.seed,
+    width: manifest.width,
+  }
+  return createHash('sha256').update(JSON.stringify(descriptor)).digest('hex')
+}
+
+function stateEntry(manifest, job, status, taskId, overrides = {}) {
   return {
     id: job.id,
     taskId,
     status,
     seed: job.seed,
+    requestFingerprint: requestFingerprint(manifest, job),
     video: `videos/${job.video}`,
     startedAt: '2026-08-20T00:00:00Z',
     completedAt: status === 'completed' ? '2026-08-20T00:01:00Z' : null,
@@ -797,7 +849,7 @@ test('H3 animation pilot manifest locks reproducible jobs and runtime outputs', 
 
   assert.equal(pilot.version, 1)
   assert.equal(pilot.bridgeUrl, 'http://127.0.0.1:8900')
-  assert.equal(pilot.model, 'minimax-h3-ref2v-local')
+  assert.equal(pilot.model, 'minimax-h3-fl2v-local')
   assert.deepEqual([pilot.width, pilot.height, pilot.duration, pilot.fps], [768, 1344, 5, 24])
   assert.equal(pilot.jobs.length, 9)
 
@@ -854,7 +906,7 @@ test('H3 animation pilot manifest locks reproducible jobs and runtime outputs', 
   assert.ok(telegraph.at(-1) < attack[0], 'bite-lunge telegraph samples precede attack samples')
 })
 
-test('H3 animation pilot prompts are complete Ref2V single-shot action contracts', () => {
+test('H3 animation pilot prompts are complete conditioned single-shot action contracts', () => {
   const pilot = JSON.parse(readFileSync(manifestPath, 'utf8'))
   const expectedPromptPaths = expectedJobs.map(({ prompt }) => prompt)
   const manifestPromptPaths = pilot.jobs.map(({ prompt }) => prompt)
@@ -1008,7 +1060,7 @@ test('H3 action client honors the bridge, resume, state, and secrecy contracts',
     assertNoPrivatePayload(result)
   })
 
-  await t.test('submits exact Ref2V payloads sequentially and downloads completed MP4s', async (t) => {
+  await t.test('submits exact conditioned payloads sequentially and downloads completed MP4s', async (t) => {
     const videoBytes = Buffer.from('sequential fake mp4')
     const bridge = await startFakeBridge(t, { videoBytes })
     const fixture = createClientFixture(t, bridge.baseUrl)
@@ -1060,7 +1112,7 @@ test('H3 action client honors the bridge, resume, state, and secrecy contracts',
     const bridge = await startFakeBridge(t)
     const fixture = createClientFixture(t, bridge.baseUrl)
     const job = fixture.manifest.jobs[0]
-    writeJobsState(fixture.runRoot, [stateEntry(job, 'processing', 'resume-task')])
+    writeJobsState(fixture.runRoot, [stateEntry(fixture.manifest, job, 'processing', 'resume-task')])
 
     const result = await runClient(clientArgs(fixture, [job.id]))
 
@@ -1083,7 +1135,7 @@ test('H3 action client honors the bridge, resume, state, and secrecy contracts',
     const target = resolve(fixture.runRoot, 'videos', job.video)
     mkdirSync(dirname(target), { recursive: true })
     writeFileSync(target, Buffer.from('existing mp4'))
-    writeJobsState(fixture.runRoot, [stateEntry(job, 'completed', 'completed-task')])
+    writeJobsState(fixture.runRoot, [stateEntry(fixture.manifest, job, 'completed', 'completed-task')])
 
     const result = await runClient(clientArgs(fixture, [job.id]))
 
@@ -1112,7 +1164,7 @@ test('H3 action client honors the bridge, resume, state, and secrecy contracts',
     const target = resolve(fixture.runRoot, 'videos', job.video)
     mkdirSync(dirname(target), { recursive: true })
     writeFileSync(target, oldBytes)
-    writeJobsState(fixture.runRoot, [stateEntry(job, 'completed', 'legacy-task', {
+    writeJobsState(fixture.runRoot, [stateEntry(fixture.manifest, job, 'completed', 'legacy-task', {
       error: 'legacy download validation failed',
     })])
 
@@ -1141,7 +1193,7 @@ test('H3 action client honors the bridge, resume, state, and secrecy contracts',
     const target = resolve(fixture.runRoot, 'videos', job.video)
     mkdirSync(dirname(target), { recursive: true })
     writeFileSync(target, oldBytes)
-    writeJobsState(fixture.runRoot, [stateEntry(job, 'completed', null, {
+    writeJobsState(fixture.runRoot, [stateEntry(fixture.manifest, job, 'completed', null, {
       error: 'legacy download validation failed',
     })])
 
@@ -1170,7 +1222,7 @@ test('H3 action client honors the bridge, resume, state, and secrecy contracts',
     })
     const fixture = createClientFixture(t, bridge.baseUrl)
     const job = fixture.manifest.jobs[0]
-    writeJobsState(fixture.runRoot, [stateEntry(job, 'completed', 'download-task')])
+    writeJobsState(fixture.runRoot, [stateEntry(fixture.manifest, job, 'completed', 'download-task')])
 
     const result = await runClient(clientArgs(fixture, [job.id]))
 
@@ -1610,7 +1662,7 @@ test('H3 action client honors the bridge, resume, state, and secrecy contracts',
     })
     const fixture = createClientFixture(t, bridge.baseUrl)
     const job = fixture.manifest.jobs[0]
-    writeJobsState(fixture.runRoot, [stateEntry(job, 'processing', 'slow-task')])
+    writeJobsState(fixture.runRoot, [stateEntry(fixture.manifest, job, 'processing', 'slow-task')])
     const result = await runClient(clientArgs(fixture, [job.id], {
       pollSeconds: '0.01',
       timeoutSeconds: String(timeoutSeconds),
