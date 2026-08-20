@@ -225,14 +225,14 @@
           "name": "hand_seal",
           "order": [
             0,
-            0,
             1,
-            1,
+            2,
+            3,
+            4,
+            5,
+            6,
             7,
-            7,
-            7,
-            9,
-            9,
+            8,
             9
           ]
         },
@@ -1130,6 +1130,12 @@
         },
         {
           "atlas": "Assets/ActorAtlases/MossWolf/attack.png",
+          "events": [
+            {
+              "at": 0.55,
+              "name": "bite-contact"
+            }
+          ],
           "fps": 12,
           "frames": [
             {
@@ -1292,10 +1298,10 @@
             1,
             2,
             3,
-            3,
-            3,
-            3,
-            3
+            4,
+            5,
+            6,
+            7
           ]
         }
       ],

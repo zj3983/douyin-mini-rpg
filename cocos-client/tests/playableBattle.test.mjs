@@ -599,6 +599,26 @@ test('runtime-created enemies contain sprite animation combat and pool component
   }
 })
 
+test('promoted moss wolf attack crosses its single bite contact marker once', () => {
+  const manifest = JSON.parse(read('assets/resources/Data/animation-atlas.json'))
+  const mossWolf = manifest.actors.find((actor) => actor.id === 'moss-wolf')
+  const attack = mossWolf?.actions.find((action) => action.name === 'attack')
+
+  assert.deepEqual(attack?.events, [{ name: 'bite-contact', at: 0.55 }])
+
+  const duration = actionDuration(attack.frames.length, attack.fps)
+  const crossed = markersCrossed({
+    markers: attack.events,
+    previousElapsed: duration * 0.54,
+    elapsed: duration * 0.56,
+    duration,
+    loop: attack.loop,
+    maxCatchUpCycles: 2,
+  })
+
+  assert.deepEqual(crossed, [{ name: 'bite-contact', at: 0.55 }])
+})
+
 test('portrait bootstrap does not special-case the player atlas texture path', () => {
   const source = read('assets/Scripts/Game/PortraitBattleBootstrap.ts')
   assert.doesNotMatch(source, /actor\.atlas\s*=/)

@@ -379,15 +379,15 @@
     },
     {
       "path": "reports/moss-wolf-report.json",
-      "sha256": "c7683e307eafe4e4fa2f25fcf9393196e7743962811d0803d3e82d2468a7474d"
+      "sha256": "0412364771939bfbec87a18c9e13cc5f061bc800cf964c7da7ac5655584af133"
     }
   ],
   "folder": "MossWolf",
   "report": {
     "path": "reports/moss-wolf-report.json",
-    "status": "candidate"
+    "status": "approved"
   },
   "sourceManifestFingerprint": "2174dd954a23fd0b88e4ebb6a79e994a33613ecf3aa29083523de2386bed96c3",
-  "status": "candidate",
+  "status": "approved",
   "version": 1
 }

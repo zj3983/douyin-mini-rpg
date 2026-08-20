@@ -511,15 +511,15 @@
     },
     {
       "path": "reports/qinglan-sword-cultivator-report.json",
-      "sha256": "d725519e47a677d4b85546292b78d23287e19940c8aa00a1a913767b2998a38f"
+      "sha256": "a22b28eabc9485f4cf4a44ffada96718073a986d3c1f2498a6b45efb168bbdd8"
     }
   ],
   "folder": "QinglanSwordCultivator",
   "report": {
     "path": "reports/qinglan-sword-cultivator-report.json",
-    "status": "candidate"
+    "status": "approved"
   },
   "sourceManifestFingerprint": "2174dd954a23fd0b88e4ebb6a79e994a33613ecf3aa29083523de2386bed96c3",
-  "status": "candidate",
+  "status": "approved",
   "version": 1
 }
