@@ -26,6 +26,12 @@ export class BossHazardPoolInvariantError extends Error {
 
 type ActiveHitboxCommand = Extract<EnemyCommand, { readonly type: 'activate-hitbox' }>
 
+interface BossVisualDanger {
+  readonly kind: EnemyDangerDescriptor['kind']
+  readonly sector?: string
+  readonly waveIndex?: number
+}
+
 interface CachedVisualLayers {
   readonly layerMask: number
   readonly controller: BossHazardVisualController | null
@@ -185,18 +191,34 @@ function centerAndSize(area: EnemyTelegraphDelivery['area'] | ActiveHitboxComman
   }
 }
 
-function dangerKindForAttack(attackId: string): string {
+function dangerKindForAttack(attackId: string): EnemyDangerDescriptor['kind'] {
   if (attackId.startsWith('ground-spikes:')) return 'spike'
   if (attackId.startsWith('mountain-roar:')) return 'roar-sector'
   return 'sweep'
 }
 
+function roarSectorForAttack(attackId: string): string | undefined {
+  if (!attackId.startsWith('mountain-roar:')) return undefined
+  return /(?:^|:)sector:(top|bottom|right|left-upper|left-lower)(?::|$)/.exec(attackId)?.[1]
+}
+
+function visualDangerForAttack(
+  attackId: string,
+  danger: Readonly<EnemyDangerDescriptor> | undefined,
+): Readonly<BossVisualDanger> {
+  if (danger) return danger
+  const kind = dangerKindForAttack(attackId)
+  return kind === 'roar-sector'
+    ? { kind, sector: roarSectorForAttack(attackId) }
+    : { kind }
+}
+
 function usesVerticalSector(
   profile: BossTelegraphVisualProfile,
-  danger: Readonly<EnemyDangerDescriptor> | undefined,
+  danger: Readonly<BossVisualDanger>,
 ): boolean {
   return profile.layout.axis === 'sector'
-    && danger?.kind === 'roar-sector'
+    && danger.kind === 'roar-sector'
     && typeof danger.sector === 'string'
     && (danger.sector === 'right' || danger.sector.startsWith('left'))
 }
@@ -389,11 +411,12 @@ export class BossTelegraphPresenter extends Component {
     if (delivery.generation < this.generation) return false
     if (delivery.generation > this.generation) this.resetGeneration(delivery.generation)
     const node = this.acquireHazardNode(delivery.attackId)
-    const profile = resolveBossTelegraphVisual(delivery.danger)
+    const danger = visualDangerForAttack(delivery.attackId, delivery.danger)
+    const profile = resolveBossTelegraphVisual(danger)
     const identity = bossAttackIdentity(delivery.attackId)
     const phase = createPhaseOutput()
     const colors = createVisualColors(profile.spirit)
-    const layers = this.drawTelegraph(node, delivery.area, profile, delivery.danger, quality)
+    const layers = this.drawTelegraph(node, delivery.area, profile, danger, quality)
     const visual: TelegraphVisual = {
       node,
       attackId: delivery.attackId,
@@ -402,7 +425,7 @@ export class BossTelegraphPresenter extends Component {
       profile,
       quality,
       phase,
-      waveIndex: safeWaveIndex(delivery.attackId, delivery.danger),
+      waveIndex: safeWaveIndex(delivery.attackId, danger),
       remaining: delivery.duration,
       ...layers,
       ...colors,
@@ -525,7 +548,7 @@ export class BossTelegraphPresenter extends Component {
     quality: VfxQuality,
   ): void {
     const node = this.acquireHazardNode(command.attackId)
-    const danger = command.danger ?? { kind: dangerKindForAttack(command.attackId) }
+    const danger = visualDangerForAttack(command.attackId, command.danger)
     const profile = resolveBossTelegraphVisual(danger)
     const authorityId = commandAuthority(command)
     const identity = bossAttackIdentity(command.attackId)
@@ -558,7 +581,7 @@ export class BossTelegraphPresenter extends Component {
     node: Node,
     area: EnemyTelegraphDelivery['area'],
     profile: BossTelegraphVisualProfile,
-    danger: Readonly<EnemyDangerDescriptor> | undefined,
+    danger: Readonly<BossVisualDanger>,
     quality: VfxQuality,
   ): PreparedVisualNode {
     const geometry = centerAndSize(area)
@@ -605,7 +628,7 @@ export class BossTelegraphPresenter extends Component {
     node: Node,
     area: EnemyTelegraphDelivery['area'],
     profile: BossTelegraphVisualProfile,
-    danger: Readonly<EnemyDangerDescriptor> | undefined,
+    danger: Readonly<BossVisualDanger>,
     quality: VfxQuality,
   ): PreparedVisualNode {
     const geometry = centerAndSize(area)
@@ -645,7 +668,7 @@ export class BossTelegraphPresenter extends Component {
     node: Node,
     geometry: ReturnType<typeof centerAndSize>,
     profile: BossTelegraphVisualProfile,
-    danger: Readonly<EnemyDangerDescriptor> | undefined,
+    danger: Readonly<BossVisualDanger>,
     impact: boolean,
     quality: VfxQuality,
   ): PreparedVisualNode {

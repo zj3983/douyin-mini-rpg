@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import test from 'node:test'
 import ts from 'typescript'
 
@@ -8,6 +9,7 @@ import {
   setBossHealthRatio,
   stepBambooWarden,
 } from '../assets/Scripts/Combat/BossBrain.ts'
+import { findCreatorCommand, findCreatorTypeDeclarations } from '../tools/check-cocos-build-readiness.mjs'
 
 const LAYER_FIELDS = Object.freeze(['mainShape', 'accent', 'particleNear', 'particleFar'])
 const RESOURCE_PATHS = Object.freeze([
@@ -60,6 +62,36 @@ const PROFILE_CASES = Object.freeze([
     ]),
   }),
 ])
+
+const creatorCommand = process.env.COCOS_CREATOR_PATH ?? findCreatorCommand()
+const creatorCcPath = findCreatorTypeDeclarations(creatorCommand)
+
+function creatorSemanticDiagnostics() {
+  const presenterPath = resolve('assets/Scripts/Game/BossTelegraphPresenter.ts')
+  const options = {
+    allowImportingTsExtensions: true,
+    experimentalDecorators: true,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    noEmit: true,
+    skipLibCheck: true,
+    strict: false,
+    strictNullChecks: false,
+    target: ts.ScriptTarget.ES2022,
+  }
+  const host = ts.createCompilerHost(options)
+  host.resolveModuleNames = (moduleNames, containingFile) => moduleNames.map((moduleName) => {
+    if (moduleName === 'cc') return { resolvedFileName: creatorCcPath, extension: ts.Extension.Dts }
+    return ts.resolveModuleName(moduleName, containingFile, options, host).resolvedModule
+  })
+  const program = ts.createProgram([presenterPath], options, host)
+  return ts.getPreEmitDiagnostics(program)
+    .filter((diagnostic) => diagnostic.file && resolve(diagnostic.file.fileName) === presenterPath)
+    .map((diagnostic) => ({
+      code: diagnostic.code,
+      message: ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'),
+    }))
+}
 
 const ccSource = `
 export const _decorator = {
@@ -660,6 +692,12 @@ function primeImpactAuthority(presenter, entry, authorityId, quality = 'full') {
   assert.equal(presenter.visibleImpactCount, 0, `${entry.id} bootstrap impact expires`)
 }
 
+test('Boss telegraph presenter passes Creator semantic TypeScript compilation', {
+  skip: creatorCcPath ? false : 'Cocos Creator declarations are not installed',
+}, () => {
+  assert.deepEqual(creatorSemanticDiagnostics(), [])
+})
+
 test('visible VFX snapshot preserves the actual first phase-two cast when lastAttack is already the second', async () => {
   const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
   const presenter = new BossTelegraphPresenter()
@@ -833,6 +871,54 @@ test('roar sector layout keeps top and bottom horizontal and rotates left and ri
   assert.deepEqual(nodes.map((node) => node.mainShape.node.eulerAngles.z), [0, 0, 90, 90])
   assert.ok(nodes[0].mainShape.node.size.width > nodes[0].mainShape.node.size.height)
   assert.ok(nodes[2].mainShape.node.size.width > nodes[2].mainShape.node.size.height, 'vertical sector uses a horizontal source before rotation')
+})
+
+test('no-danger right and left roar impacts recover vertical layout and retain the safe gap', async () => {
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
+  const { presenter } = createPresenterScenario(BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY)
+  presenter.onLoad()
+  const radius = 80
+  const gapHalf = radius * 0.34
+  const areas = {
+    right: { minX: radius - 21, maxX: radius + 21, minY: -radius, maxY: radius },
+    'left-upper': { minX: -radius - 21, maxX: -radius + 21, minY: gapHalf, maxY: radius },
+    'left-lower': { minX: -radius - 21, maxX: -radius + 21, minY: -radius, maxY: -gapHalf },
+  }
+
+  for (const [sector, area] of Object.entries(areas)) {
+    const authorityId = `mountain-roar:7:11:sector:${sector}`
+    presenter.present(telegraph(authorityId, area, {
+      kind: 'roar-sector',
+      waveIndex: -1,
+      radius,
+      sector,
+      safeGap: { sector: 'left', centerAngle: Math.PI, width: Math.PI / 3 },
+    }, authorityId))
+    presenter.activate(3, 7, {
+      type: 'activate-hitbox',
+      attackId: `mountain-roar:7:11:wave:0:sector:${sector}`,
+      telegraphId: authorityId,
+      area,
+      damage: 6,
+      duration: 0.12,
+    })
+  }
+  presenter.update(0.8)
+
+  const impacts = Object.fromEntries(presenter.impacts.map((impact) => [impact.attackId.split(':').at(-1), impact]))
+  for (const sector of Object.keys(areas)) {
+    const impact = impacts[sector]
+    assert.ok(impact, `${sector} impact`)
+    assert.equal(impact.node.controller.layoutCalls.at(-1).vertical, true, `${sector} vertical layout`)
+    assert.equal(impact.node.mainShape.node.eulerAngles.z, 90, `${sector} vertical orientation`)
+  }
+  const authorityRoots = presenter.impacts.map((impact) => rootAndGraphics(impact.node))
+  assertVisibleSafeGap(impacts['left-upper'].node, impacts['left-lower'].node, 'no-danger impact initial')
+  presenter.update(0.001)
+  for (const deltaTime of [0.03, 0.03, 0.03, 0.029999]) presenter.update(deltaTime)
+  assertVisibleSafeGap(impacts['left-upper'].node, impacts['left-lower'].node, 'no-danger impact peak')
+  assert.deepEqual(presenter.impacts.map((impact) => rootAndGraphics(impact.node)), authorityRoots)
+  assert.ok(presenter.impacts.every((impact) => impact.phase.progress === 1), 'all impacts reach the 1.18 peak envelope')
 })
 
 test('real Boss roar child rectangles preserve the left safe gap through warning and impact peak', async () => {
