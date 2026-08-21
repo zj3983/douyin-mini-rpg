@@ -386,6 +386,38 @@ function layerGeometry(node) {
   }))
 }
 
+function layerColors(node) {
+  return Object.fromEntries(LAYER_FIELDS.map((field) => {
+    const { r, g, b, a } = node.layers[field].color
+    return [field, { r, g, b, a }]
+  }))
+}
+
+function rootAndGraphics(node) {
+  return {
+    position: { ...node.position },
+    size: { ...node.transform.size },
+    graphics: structuredClone(node.graphics.calls),
+  }
+}
+
+function pooledVisualState(node) {
+  return {
+    colors: layerColors(node),
+    frames: frameIds(node),
+    geometry: layerGeometry(node),
+    root: rootAndGraphics(node),
+    visibility: layerVisibility(node),
+  }
+}
+
+function assertNear(actual, expected, tolerance = 1e-6, message = '') {
+  assert.ok(
+    Math.abs(actual - expected) <= tolerance,
+    `${message || 'value'}: expected ${expected} +/- ${tolerance}, received ${actual}`,
+  )
+}
+
 function commandAttack(command) {
   if (!('attackId' in command)) return null
   if (command.attackId.startsWith('mountain-roar:')) return 'mountain-roar'
@@ -549,6 +581,65 @@ test('preloads seven unique resources once and maps all profile layers for warni
   }
 })
 
+test('warning motion becomes critical with distinct skill transforms while root geometry and Graphics stay static', async () => {
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
+  const presenter = new BossTelegraphPresenter()
+  const pool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
+  presenter.telegraphPool = pool
+  presenter.onLoad()
+
+  for (const entry of PROFILE_CASES) {
+    assert.equal(presenter.present(telegraph(entry.attackId, entry.area, entry.danger), 'full'), true)
+  }
+
+  const visuals = [...presenter.groups.values()].map((group) => group.visuals[0])
+  const nodes = visuals.map((visual) => visual.node)
+  const staticStates = nodes.map(rootAndGraphics)
+  const initialGeometry = nodes.map(layerGeometry)
+  const initialAlpha = nodes.map((node) => node.mainShape.color.a)
+  assert.ok(visuals.every((visual) => visual.phase.progress === 0 && visual.phase.phase === 'warning'))
+
+  const [sweepInitial, spikeInitial, roarInitial] = initialGeometry
+  const sweepWidth = PROFILE_CASES[0].area.maxX - PROFILE_CASES[0].area.minX
+  const spikeHeight = PROFILE_CASES[1].area.maxY - PROFILE_CASES[1].area.minY
+  assertNear(sweepInitial.mainShape.position.x, sweepWidth * -0.08, 1e-6, 'sweep warning starts gathered left')
+  assertNear(sweepInitial.mainShape.scale.x, 0.86, 1e-6, 'sweep warning starts narrow')
+  assert.ok(sweepInitial.accent.position.x < sweepInitial.mainShape.position.x, 'sweep accent starts behind the blade')
+  assertNear(spikeInitial.mainShape.position.y, spikeHeight * -0.12, 1e-6, 'spike warning starts below ground line')
+  assertNear(spikeInitial.accent.scale.x, 0.72, 1e-6, 'spike dust starts gathered')
+  assertNear(roarInitial.mainShape.scale.x, 0.9, 1e-6, 'roar pressure starts compressed')
+  assert.ok(roarInitial.particleNear.eulerAngles.z < 0 && roarInitial.particleFar.eulerAngles.z > 0)
+
+  presenter.update(0.52)
+  const warningGeometry = nodes.map(layerGeometry)
+  const warningAlpha = nodes.map((node) => node.mainShape.color.a)
+  assert.ok(visuals.every((visual) => visual.phase.progress === 0.65 && visual.phase.phase === 'warning'))
+
+  presenter.update(0.08)
+  const criticalGeometry = nodes.map(layerGeometry)
+  assert.ok(visuals.every((visual) => visual.phase.progress === 0.75 && visual.phase.phase === 'critical'))
+
+  for (const [index, node] of nodes.entries()) {
+    assert.deepEqual(rootAndGraphics(node), staticStates[index], `${PROFILE_CASES[index].id} static authority geometry`)
+    assert.notDeepEqual(warningGeometry[index], initialGeometry[index], `${PROFILE_CASES[index].id} moves during warning`)
+    assert.notDeepEqual(criticalGeometry[index], warningGeometry[index], `${PROFILE_CASES[index].id} intensifies at critical`)
+    assert.ok(warningAlpha[index] > initialAlpha[index], `${PROFILE_CASES[index].id} warning alpha rises`)
+    assert.ok(node.mainShape.color.a > warningAlpha[index], `${PROFILE_CASES[index].id} critical alpha rises visibly`)
+  }
+
+  assert.ok(criticalGeometry[0].mainShape.position.x > warningGeometry[0].mainShape.position.x)
+  assert.ok(criticalGeometry[0].mainShape.scale.x > warningGeometry[0].mainShape.scale.x)
+  assert.ok(criticalGeometry[0].particleNear.position.x > warningGeometry[0].particleNear.position.x)
+  assert.ok(criticalGeometry[0].particleFar.position.x < warningGeometry[0].particleFar.position.x)
+  assert.ok(criticalGeometry[1].mainShape.position.y > warningGeometry[1].mainShape.position.y)
+  assert.ok(criticalGeometry[1].accent.scale.x > warningGeometry[1].accent.scale.x)
+  assert.ok(criticalGeometry[1].particleNear.position.y > warningGeometry[1].particleNear.position.y)
+  assert.ok(criticalGeometry[2].mainShape.scale.x > warningGeometry[2].mainShape.scale.x)
+  assert.ok(criticalGeometry[2].accent.scale.x > warningGeometry[2].accent.scale.x)
+  assert.ok(criticalGeometry[2].particleNear.eulerAngles.z < warningGeometry[2].particleNear.eulerAngles.z)
+  assert.ok(criticalGeometry[2].particleFar.eulerAngles.z > warningGeometry[2].particleFar.eulerAngles.z)
+})
+
 test('full reduced and minimal quality select the required four-layer visibility', async () => {
   const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
   const presenter = new BossTelegraphPresenter()
@@ -586,6 +677,13 @@ test('full reduced and minimal quality select the required four-layer visibility
     assert.ok(node.mainShape.spriteFrame)
   }
   const warningVisibility = [full, reduced, minimal].map((node) => structuredClone(layerVisibility(node)))
+  const warningGeometry = [full, reduced, minimal].map(layerGeometry)
+
+  presenter.update(0.4)
+  assert.deepEqual([full, reduced, minimal].map((node) => layerVisibility(node)), warningVisibility)
+  for (const [index, node] of [full, reduced, minimal].entries()) {
+    assert.notDeepEqual(layerGeometry(node), warningGeometry[index], `${qualities[index]} hidden warning layers may still transform`)
+  }
 
   for (const [index, quality] of qualities.entries()) {
     const entry = PROFILE_CASES[index]
@@ -599,11 +697,19 @@ test('full reduced and minimal quality select the required four-layer visibility
       danger: entry.danger,
     }, quality)
   }
-  presenter.update(0.8)
+  presenter.update(0.4)
   const impacts = [...pool.active]
   assert.equal(presenter.visibleImpactCount, 3)
   assert.deepEqual(impacts.map((node) => layerVisibility(node)), warningVisibility)
   assert.ok(impacts.every((node) => node.graphics.calls.some((call) => call.type === 'stroke')))
+  const impactGeometry = impacts.map(layerGeometry)
+  presenter.update(0.03)
+  assert.deepEqual(impacts.map(layerGeometry), impactGeometry, 'fresh impact frame does not advance motion')
+  presenter.update(0.03)
+  assert.deepEqual(impacts.map((node) => layerVisibility(node)), warningVisibility)
+  for (const [index, node] of impacts.entries()) {
+    assert.notDeepEqual(layerGeometry(node), impactGeometry[index], `${qualities[index]} hidden impact layers may still transform`)
+  }
 })
 
 test('steady-state phase updates avoid Color construction resource loads and component lookups while reusing cached objects', async () => {
@@ -619,6 +725,11 @@ test('steady-state phase updates avoid Color construction resource loads and com
   const visual = [...presenter.groups.values()][0].visuals[0]
   const phaseOutput = visual.phase
   const reusableColors = LAYER_FIELDS.map((field) => node.layers[field].lastAssignedInput)
+  const reusableVectors = LAYER_FIELDS.map((field) => ({
+    position: node.layers[field].node.position,
+    rotation: node.layers[field].node.eulerAngles,
+    scale: node.layers[field].node.scale,
+  }))
   const before = {
     alpha: node.mainShape.color.a,
     colorAllocations: globalThis.__bossColorAllocations,
@@ -645,6 +756,9 @@ test('steady-state phase updates avoid Color construction resource loads and com
 
   for (const [index, field] of LAYER_FIELDS.entries()) {
     assert.strictEqual(node.layers[field].lastAssignedInput, reusableColors[index], `${field} color identity`)
+    assert.strictEqual(node.layers[field].node.position, reusableVectors[index].position, `${field} position identity`)
+    assert.strictEqual(node.layers[field].node.eulerAngles, reusableVectors[index].rotation, `${field} rotation identity`)
+    assert.strictEqual(node.layers[field].node.scale, reusableVectors[index].scale, `${field} scale identity`)
   }
   assert.equal(globalThis.__bossColorAllocations, before.colorAllocations)
   assert.equal(loadedPaths.length, before.loadedPathCount)
@@ -652,8 +766,328 @@ test('steady-state phase updates avoid Color construction resource loads and com
   assert.deepEqual({ ...node.graphics.strokeColor }, before.stroke)
   assert.deepEqual(node.position, before.position)
   assert.deepEqual(node.transform.size, before.size)
-  assert.deepEqual(layerGeometry(node), before.layerGeometry)
+  assert.notDeepEqual(layerGeometry(node), before.layerGeometry)
   assert.deepEqual(node.graphics.calls, before.graphics)
+})
+
+test('sweep impact crosses 82 percent of the area with a trailing accent and end dissipation', async () => {
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
+  const presenter = new BossTelegraphPresenter()
+  const pool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
+  presenter.telegraphPool = pool
+  presenter.onLoad()
+  const entry = PROFILE_CASES[0]
+  const authorityId = 'bamboo-sweep:7:motion'
+  const warning = telegraph(authorityId, entry.area, entry.danger, authorityId)
+
+  presenter.present(warning)
+  presenter.activate(3, 7, {
+    type: 'activate-hitbox',
+    attackId: authorityId,
+    telegraphId: authorityId,
+    area: entry.area,
+    damage: 8,
+    duration: 1,
+    danger: entry.danger,
+  })
+  presenter.update(0.8)
+
+  const impact = presenter.impacts[0]
+  const node = impact.node
+  const width = entry.area.maxX - entry.area.minX
+  const staticState = rootAndGraphics(node)
+  const start = layerGeometry(node)
+  assert.deepEqual(impact.phase, { progress: 0, phase: 'warning', intensity: 0.32, travel: 0 })
+  assert.equal(impact.remaining, 1)
+  assertNear(impact.width, width)
+  assertNear(start.mainShape.position.x, width * -0.41, 1e-6, 'sweep impact start')
+  assertNear(start.accent.position.x, start.mainShape.position.x - width * 0.12, 1e-6, 'sweep accent trails')
+
+  presenter.update(0.4)
+  assert.equal(impact.remaining, 1, 'fresh impact keeps its initial progress for one presenter update')
+  assert.deepEqual(layerGeometry(node), start)
+
+  presenter.update(0.5)
+  const middle = layerGeometry(node)
+  const middleAlpha = node.mainShape.color.a
+  assertNear(middle.mainShape.position.x, 0, 1e-6, 'sweep impact midpoint')
+  assertNear(middle.accent.position.x, width * -0.12, 1e-6, 'sweep midpoint accent trail')
+  assert.ok(middle.particleNear.position.x < start.particleNear.position.x)
+  assert.ok(middle.particleFar.position.x < start.particleFar.position.x)
+
+  presenter.update(0.4999)
+  const end = layerGeometry(node)
+  assert.equal(impact.phase.progress, 1)
+  assertNear(end.mainShape.position.x, width * 0.41, 1e-6, 'sweep impact end')
+  assertNear(end.accent.position.x, end.mainShape.position.x - width * 0.12, 1e-6, 'sweep end accent trail')
+  assert.ok(node.mainShape.color.a < middleAlpha, 'sweep alpha dissipates near the end')
+  assert.ok(end.mainShape.scale.x < middle.mainShape.scale.x, 'sweep scale dissipates near the end')
+  assert.deepEqual(rootAndGraphics(node), staticState)
+  assert.equal(presenter.visibleImpactCount, 1)
+
+  presenter.update(0.001)
+  assert.equal(presenter.visibleImpactCount, 0, 'sweep keeps the existing post-fresh expiry')
+})
+
+test('spike impact rises with eased dust expansion and two scale beats', async () => {
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
+  const presenter = new BossTelegraphPresenter()
+  const pool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
+  presenter.telegraphPool = pool
+  presenter.onLoad()
+  const entry = PROFILE_CASES[1]
+  const authorityId = 'ground-spikes:7:motion:marker:0'
+  const warning = telegraph(authorityId, entry.area, entry.danger, authorityId)
+
+  presenter.present(warning)
+  presenter.activate(3, 7, {
+    type: 'activate-hitbox',
+    attackId: authorityId,
+    telegraphId: authorityId,
+    area: entry.area,
+    damage: 8,
+    duration: 1,
+    danger: entry.danger,
+  })
+  presenter.update(0.8)
+
+  const impact = presenter.impacts[0]
+  const node = impact.node
+  const height = entry.area.maxY - entry.area.minY
+  const staticState = rootAndGraphics(node)
+  const start = layerGeometry(node)
+  assert.deepEqual(impact.phase, { progress: 0, phase: 'warning', intensity: 0.32, travel: 0 })
+  assertNear(impact.height, height)
+  assertNear(start.mainShape.position.y, height * -0.38, 1e-6, 'spike impact start')
+  assertNear(start.accent.scale.x, 0.55, 1e-6, 'spike dust start width')
+
+  presenter.update(0.2)
+  assert.deepEqual(layerGeometry(node), start, 'fresh spike frame is stable')
+  presenter.update(0.25)
+  const firstBeat = layerGeometry(node)
+  presenter.update(0.25)
+  const valley = layerGeometry(node)
+  presenter.update(0.25)
+  const secondBeat = layerGeometry(node)
+
+  assert.ok(firstBeat.mainShape.scale.y > valley.mainShape.scale.y, 'first eruption beat resolves before midpoint')
+  assert.ok(secondBeat.mainShape.scale.y > valley.mainShape.scale.y, 'second eruption beat follows midpoint')
+  assert.ok(valley.mainShape.position.y > height * (-0.38 + 0.46 * 0.5), 'spike rise uses an ease-out curve')
+  assert.ok(secondBeat.particleNear.position.x < 0 && secondBeat.particleFar.position.x > 0)
+  assert.ok(secondBeat.particleNear.position.y > start.particleNear.position.y)
+  assert.ok(secondBeat.particleFar.position.y > start.particleFar.position.y)
+
+  presenter.update(0.2499)
+  const end = layerGeometry(node)
+  assert.equal(impact.phase.progress, 1)
+  assertNear(end.mainShape.position.y, height * 0.08, 1e-6, 'spike impact end')
+  assertNear(end.accent.scale.x, 1.2, 1e-6, 'spike dust end width')
+  assert.deepEqual(rootAndGraphics(node), staticState)
+  assert.equal(presenter.visibleImpactCount, 1)
+})
+
+test('roar impacts expand from .72 to 1.18 with parsed wave signatures and staggered fading', async () => {
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
+  const presenter = new BossTelegraphPresenter()
+  const pool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
+  presenter.telegraphPool = pool
+  presenter.onLoad()
+  const entry = PROFILE_CASES[2]
+  const authorityId = 'mountain-roar:7:motion'
+  const warning = telegraph(`${authorityId}:sector:top`, entry.area, entry.danger, authorityId)
+  const impactCommand = (wave) => ({
+    type: 'activate-hitbox',
+    attackId: `${authorityId}:wave:${wave}:sector:top`,
+    telegraphId: authorityId,
+    area: entry.area,
+    damage: 6,
+    duration: 1,
+  })
+
+  presenter.present(warning)
+  presenter.activate(3, 7, impactCommand(0))
+  presenter.update(0.8)
+  presenter.activate(3, 7, impactCommand(1))
+  presenter.activate(3, 7, impactCommand(2))
+  presenter.activate(3, 7, impactCommand('not-a-number'))
+
+  const impacts = presenter.impacts
+  const nodes = impacts.map((impact) => impact.node)
+  const staticStates = nodes.map(rootAndGraphics)
+  const initialGeometry = nodes.map(layerGeometry)
+  assert.deepEqual(impacts.map((impact) => impact.waveIndex), [0, 1, 2, 0])
+  assert.ok(impacts.every((impact) => impact.phase.progress === 0))
+  for (const geometry of initialGeometry) {
+    assertNear(geometry.mainShape.scale.x, 0.72, 1e-6, 'roar main initial expansion')
+    assertNear(geometry.accent.scale.x, 0.72, 1e-6, 'roar accent initial expansion')
+  }
+
+  presenter.update(0.2)
+  assert.deepEqual(nodes.map(layerGeometry), initialGeometry, 'all fresh roar waves keep progress zero')
+  presenter.update(0.5)
+
+  const moving = nodes.map(layerGeometry)
+  const alphas = nodes.map((node) => node.mainShape.color.a)
+  assert.ok(alphas[0] < alphas[1] && alphas[1] < alphas[2], 'older roar waves fade faster at equal progress')
+  assert.equal(alphas[3], alphas[0], 'invalid wave index uses the safe wave-zero fallback')
+  assert.deepEqual(moving[3], moving[0], 'fallback motion matches wave zero')
+  assert.equal(new Set(moving.slice(0, 3).map((geometry) => JSON.stringify({
+    near: geometry.particleNear,
+    far: geometry.particleFar,
+    mainRotation: geometry.mainShape.eulerAngles.z,
+  }))).size, 3, 'wave 0, 1, and 2 have distinct motion signatures')
+  for (const geometry of moving) {
+    assert.ok(geometry.particleNear.eulerAngles.z * geometry.particleFar.eulerAngles.z < 0)
+    assert.ok(geometry.particleNear.position.x < 0 && geometry.particleFar.position.x > 0)
+  }
+
+  presenter.update(0.4999)
+  for (const [index, node] of nodes.entries()) {
+    const end = layerGeometry(node)
+    assertNear(end.mainShape.scale.x, 1.18, 1e-6, `roar ${index} main end expansion`)
+    assertNear(end.accent.scale.x, 1.18, 1e-6, `roar ${index} accent end expansion`)
+    assert.deepEqual(rootAndGraphics(node), staticStates[index])
+    assert.equal(node.graphics.calls.some((call) => call.type === 'circle'), false)
+  }
+  assert.equal(presenter.visibleImpactCount, 4)
+})
+
+test('warning and impact steady-state updates reuse phase colors and layer vectors without runtime lookups', async () => {
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY, loadedPaths } = await loadPresenter()
+  const presenter = new BossTelegraphPresenter()
+  const pool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
+  presenter.telegraphPool = pool
+  presenter.onLoad()
+  const sweep = PROFILE_CASES[0]
+  const spike = PROFILE_CASES[1]
+  const authorityId = 'bamboo-sweep:7:steady-impact'
+
+  presenter.present(telegraph(authorityId, sweep.area, sweep.danger, authorityId))
+  presenter.activate(3, 7, {
+    type: 'activate-hitbox',
+    attackId: authorityId,
+    telegraphId: authorityId,
+    area: sweep.area,
+    damage: 8,
+    duration: 0.18,
+    danger: sweep.danger,
+  })
+  presenter.update(0.8)
+  presenter.present(telegraph('ground-spikes:7:steady-warning', spike.area, spike.danger))
+
+  const visualStates = [presenter.impacts[0], [...presenter.groups.values()][0].visuals[0]]
+  const nodes = visualStates.map((visual) => visual.node)
+  const phases = visualStates.map((visual) => visual.phase)
+  const colors = nodes.map((node) => LAYER_FIELDS.map((field) => node.layers[field].lastAssignedInput))
+  const vectors = nodes.map((node) => LAYER_FIELDS.map((field) => ({
+    position: node.layers[field].node.position,
+    rotation: node.layers[field].node.eulerAngles,
+    scale: node.layers[field].node.scale,
+  })))
+  const staticStates = nodes.map(rootAndGraphics)
+  const before = {
+    colorAllocations: globalThis.__bossColorAllocations,
+    loadedPathCount: loadedPaths.length,
+    lookups: nodes.map((node) => node.componentLookups),
+  }
+
+  for (let index = 0; index < 120; index += 1) presenter.update(0.0005)
+
+  for (const [visualIndex, visual] of visualStates.entries()) {
+    assert.strictEqual(visual.phase, phases[visualIndex], `visual ${visualIndex} phase identity`)
+    assert.deepEqual(rootAndGraphics(nodes[visualIndex]), staticStates[visualIndex])
+    assert.equal(nodes[visualIndex].componentLookups, before.lookups[visualIndex])
+    for (const [layerIndex, field] of LAYER_FIELDS.entries()) {
+      assert.strictEqual(nodes[visualIndex].layers[field].lastAssignedInput, colors[visualIndex][layerIndex], `${field} color identity`)
+      assert.strictEqual(nodes[visualIndex].layers[field].node.position, vectors[visualIndex][layerIndex].position, `${field} position identity`)
+      assert.strictEqual(nodes[visualIndex].layers[field].node.eulerAngles, vectors[visualIndex][layerIndex].rotation, `${field} rotation identity`)
+      assert.strictEqual(nodes[visualIndex].layers[field].node.scale, vectors[visualIndex][layerIndex].scale, `${field} scale identity`)
+    }
+  }
+  assert.equal(globalThis.__bossColorAllocations, before.colorAllocations)
+  assert.equal(loadedPaths.length, before.loadedPathCount)
+  assert.ok(visualStates[0].phase.progress > 0, 'impact phase advances after its fresh update')
+  assert.ok(visualStates[1].phase.progress > 0, 'warning phase advances')
+})
+
+test('twenty-seven mixed warning impact pool cycles restore every transform color and frame state', async () => {
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
+  const presenter = new BossTelegraphPresenter()
+  const pool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
+  presenter.telegraphPool = pool
+  presenter.onLoad()
+  const qualities = ['full', 'reduced', 'minimal']
+  const warningBaselines = new Map()
+  const impactBaselines = new Map()
+
+  for (let cycle = 0; cycle < 27; cycle += 1) {
+    const entry = PROFILE_CASES[cycle % PROFILE_CASES.length]
+    const quality = qualities[Math.floor(cycle / PROFILE_CASES.length) % qualities.length]
+    const authorityId = `${entry.attackId}:pool-cycle:${cycle}`
+    const warning = telegraph(authorityId, entry.area, entry.danger, authorityId)
+    assert.equal(presenter.present(warning, quality), true)
+
+    const warningVisual = [...presenter.groups.values()][0].visuals[0]
+    const warningNode = warningVisual.node
+    const warningKey = `${entry.id}:${quality}`
+    const warningState = pooledVisualState(warningNode)
+    assert.equal(warningVisual.phase.progress, 0)
+    assert.notDeepEqual(warningState.geometry.mainShape, {
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1, z: 1 },
+      eulerAngles: { x: 0, y: 0, z: 0 },
+      size: warningState.geometry.mainShape.size,
+    }, `${warningKey} warning receives a motion pose`)
+    if (warningBaselines.has(warningKey)) assert.deepEqual(warningState, warningBaselines.get(warningKey), `${warningKey} warning state`)
+    else warningBaselines.set(warningKey, warningState)
+
+    presenter.update(0.2)
+    const impactAttackId = entry.id === 'roar-wave'
+      ? `${authorityId}:wave:0:sector:top`
+      : authorityId
+    presenter.activate(3, 7, {
+      type: 'activate-hitbox',
+      attackId: impactAttackId,
+      telegraphId: authorityId,
+      area: entry.area,
+      damage: 8,
+      duration: 0.18,
+      danger: entry.danger,
+    }, quality)
+    presenter.update(0.6)
+
+    const impactVisual = presenter.impacts[0]
+    const impactNode = impactVisual.node
+    const impactState = pooledVisualState(impactNode)
+    const impactKey = `${entry.id}:${quality}`
+    assert.equal(impactVisual.phase.progress, 0)
+    assert.notDeepEqual(impactState.geometry.mainShape, {
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1, z: 1 },
+      eulerAngles: { x: 0, y: 0, z: 0 },
+      size: impactState.geometry.mainShape.size,
+    }, `${impactKey} impact receives a motion pose`)
+    if (impactBaselines.has(impactKey)) assert.deepEqual(impactState, impactBaselines.get(impactKey), `${impactKey} impact state`)
+    else impactBaselines.set(impactKey, impactState)
+
+    presenter.update(0.03)
+    presenter.update(0.03)
+    presenter.cancelEnemy(3, 7)
+    assert.equal(pool.active.size, 0, `cycle ${cycle} active pool`)
+    assert.equal(presenter.visibleTelegraphCount, 0, `cycle ${cycle} telegraphs`)
+    assert.equal(presenter.visibleImpactCount, 0, `cycle ${cycle} impacts`)
+    assert.deepEqual(frameIds(impactNode), [null, null, null, null], `cycle ${cycle} reset frames`)
+    for (const field of LAYER_FIELDS) {
+      assert.deepEqual(impactNode.layers[field].node.position, { x: 0, y: 0, z: 0 }, `cycle ${cycle} ${field} position`)
+      assert.deepEqual(impactNode.layers[field].node.scale, { x: 1, y: 1, z: 1 }, `cycle ${cycle} ${field} scale`)
+      assert.deepEqual(impactNode.layers[field].node.eulerAngles, { x: 0, y: 0, z: 0 }, `cycle ${cycle} ${field} rotation`)
+      assert.equal(impactNode.layers[field].color.a, 0, `cycle ${cycle} ${field} alpha`)
+    }
+  }
+
+  assert.equal(warningBaselines.size, 9)
+  assert.equal(impactBaselines.size, 9)
+  assert.equal(pool.nodes.length, 1, 'the same pooled node survives every mixed cycle')
 })
 
 test('deferred preload affects subsequent warnings only and never retrofits an active warning', async () => {
