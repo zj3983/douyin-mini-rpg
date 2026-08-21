@@ -1,11 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import {
   checkCocosBuildOutput,
+  compressAssetUuid,
   compressScriptUuid,
   verifyCocosBuildOutput,
 } from '../tools/check-cocos-build-output.mjs'
@@ -50,14 +51,17 @@ const retiredBossRuntimeReferences = [
   'talisman_roar',
 ]
 const bossVfxAssets = bossVfxNames.map((name) => {
-  const sourceMeta = JSON.parse(
-    readFileSync(resolve(`assets/resources/Assets/Skills/BossDomain/${name}.png.meta`), 'utf8'),
-  )
-  const spriteFrameUuid = sourceMeta.subMetas?.f9941?.uuid
+  const sourcePath = resolve(`assets/resources/Assets/Skills/BossDomain/${name}.png`)
+  const sourceMeta = JSON.parse(readFileSync(`${sourcePath}.meta`, 'utf8'))
+  const spriteFrameMeta = sourceMeta.subMetas?.f9941
+  const spriteFrameUuid = spriteFrameMeta?.uuid
   assert.equal(typeof spriteFrameUuid, 'string', `${name} should expose an @f9941 spriteFrame UUID`)
   const [spriteFrameAssetUuid, spriteFrameSubId] = spriteFrameUuid.split('@')
   return {
     name,
+    sourcePath,
+    sourceMeta,
+    spriteFrameMeta,
     assetUuid: sourceMeta.uuid,
     spriteFrameUuid,
     builtSpriteFrameUuid: `${compressAssetUuidFixture(spriteFrameAssetUuid)}@${spriteFrameSubId}`,
@@ -92,6 +96,69 @@ function writeFixture(root, path, source) {
   writeFileSync(target, source)
 }
 
+function toVec3([x, y, z]) {
+  return { x, y, z }
+}
+
+function createBossVfxImport(asset) {
+  const frame = asset.spriteFrameMeta
+  const data = frame.userData
+  const [textureAssetUuid, textureSubId] = data.imageUuidOrDatabaseUri.split('@')
+  return [
+    1,
+    [`${compressAssetUuidFixture(textureAssetUuid)}@${textureSubId}`],
+    ['_textureSource'],
+    ['cc.SpriteFrame'],
+    0,
+    [{
+      name: frame.displayName,
+      rect: { x: data.trimX, y: data.trimY, width: data.width, height: data.height },
+      offset: { x: data.offsetX, y: data.offsetY },
+      originalSize: { width: data.rawWidth, height: data.rawHeight },
+      rotated: data.rotated,
+      capInsets: [data.borderLeft, data.borderBottom, data.borderRight, data.borderTop],
+      vertices: {
+        rawPosition: [...data.vertices.rawPosition],
+        indexes: [...data.vertices.indexes],
+        uv: [...data.vertices.uv],
+        nuv: [...data.vertices.nuv],
+        minPos: toVec3(data.vertices.minPos),
+        maxPos: toVec3(data.vertices.maxPos),
+      },
+      packable: data.packable,
+      pixelsToUnit: data.pixelsToUnit,
+      pivot: { x: data.pivotX, y: data.pivotY },
+      meshType: data.meshType,
+    }],
+    [0],
+    0,
+    [0],
+    [0],
+    [0],
+  ]
+}
+
+function writeBossVfxProjectFixture(root, targetName, mutateMeta) {
+  writeFixture(
+    root,
+    'assets/Scripts/Game/PortraitBattleBootstrap.ts.meta',
+    readFileSync(resolve('assets/Scripts/Game/PortraitBattleBootstrap.ts.meta')),
+  )
+  for (const asset of bossVfxAssets) {
+    const meta = structuredClone(asset.sourceMeta)
+    writeFixture(
+      root,
+      `assets/resources/Assets/Skills/BossDomain/${asset.name}.png.meta`,
+      JSON.stringify(asset.name === targetName ? mutateMeta(meta) : meta),
+    )
+    writeFixture(
+      root,
+      `assets/resources/Assets/Skills/BossDomain/${asset.name}.png`,
+      readFileSync(asset.sourcePath),
+    )
+  }
+}
+
 function writeH3AnimationFixture(root, manifest = h3Manifest) {
   writeFixture(
     root,
@@ -106,7 +173,11 @@ function writeH3AnimationFixture(root, manifest = h3Manifest) {
     )
   }
   const resourcesRoot = join(root, 'assets/resources')
-  const configName = readdirSync(resourcesRoot).find((name) => /^config(?:\.[^.]+)?\.json$/.test(name))
+  const configNames = readdirSync(resourcesRoot)
+  const configName = configNames.includes('config.json')
+    ? 'config.json'
+    : configNames.find((name) => /^config\.[0-9a-f]{5,32}\.json$/.test(name))
+  assert.ok(configName, 'fixture should contain one exact or Cocos-hashed resources config')
   const configPath = join(resourcesRoot, configName)
   const config = JSON.parse(readFileSync(configPath, 'utf8'))
   for (const asset of h3AtlasAssets) {
@@ -133,6 +204,8 @@ function writeBossVfxFixture(root, {
   omitNative = null,
   retiredPath = null,
   hashed = false,
+  importOverrides = {},
+  nativeOverrides = {},
 } = {}) {
   const uuids = []
   const paths = {}
@@ -145,14 +218,18 @@ function writeBossVfxFixture(root, {
       writeFixture(
         root,
         `assets/resources/import/${asset.spriteFrameUuid.slice(0, 2)}/${asset.spriteFrameUuid}${hashed ? '.a1b2c' : ''}.json`,
-        `{"name":"${asset.name}"}`,
+        Object.hasOwn(importOverrides, asset.name)
+          ? importOverrides[asset.name]
+          : JSON.stringify(createBossVfxImport(asset)),
       )
     }
     if (asset.name !== omitNative) {
       writeFixture(
         root,
         `assets/resources/native/${asset.assetUuid.slice(0, 2)}/${asset.assetUuid}${hashed ? '.d3e4f' : ''}.png`,
-        'png-fixture',
+        Object.hasOwn(nativeOverrides, asset.name)
+          ? nativeOverrides[asset.name]
+          : readFileSync(asset.sourcePath),
       )
     }
   }
@@ -177,6 +254,33 @@ function writeCompleteFixture(root, mainIndex = validMainIndex, bossVfxOptions =
   writeH3AnimationFixture(root)
 }
 
+const spriteFramePayloadCorruptions = [
+  ['name', (frame) => { frame.name = 'stale-name' }],
+  ['rect', (frame) => { frame.rect.x += 1 }],
+  ['offset', (frame) => { frame.offset.y += 1 }],
+  ['originalSize', (frame) => { frame.originalSize.width += 1 }],
+  ['rotated', (frame) => { frame.rotated = !frame.rotated }],
+  ['capInsets', (frame) => { frame.capInsets[0] += 1 }],
+  ['vertices.rawPosition', (frame) => { frame.vertices.rawPosition[0] += 1 }],
+  ['vertices.indexes', (frame) => { frame.vertices.indexes[0] += 1 }],
+  ['vertices.uv', (frame) => { frame.vertices.uv[0] += 1 }],
+  ['vertices.nuv', (frame) => { frame.vertices.nuv[0] += 0.01 }],
+  ['vertices.minPos', (frame) => { frame.vertices.minPos.x += 1 }],
+  ['vertices.maxPos', (frame) => { frame.vertices.maxPos.x += 1 }],
+  ['packable', (frame) => { frame.packable = !frame.packable }],
+  ['pixelsToUnit', (frame) => { frame.pixelsToUnit += 1 }],
+  ['pivot', (frame) => { frame.pivot.x += 0.1 }],
+  ['meshType', (frame) => { frame.meshType += 1 }],
+]
+
+test('asset UUID compression matches a tracked Cocos config golden vector', () => {
+  assert.equal(
+    compressAssetUuid('01b722d2-e2e6-4b71-baa7-d9e6996f0168'),
+    '01tyLS4uZLcbqn2eaZbwFo',
+  )
+  assert.throws(() => compressAssetUuid('not-a-uuid'), /canonical asset UUID/)
+})
+
 test('build-output check accepts Cocos production filename hashes', () => {
   const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-hashed-'))
   writeFixture(buildRoot, 'assets/main/index.a1b2c.js', validMainIndex)
@@ -188,6 +292,103 @@ test('build-output check accepts Cocos production filename hashes', () => {
   const report = checkCocosBuildOutput({ buildRoot, projectRoot })
 
   assert.equal(report.ok, true, report.errors.join('\n'))
+})
+
+test('build-output check gives exact filenames precedence over hashed candidates', () => {
+  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-exact-precedence-'))
+  writeCompleteFixture(buildRoot)
+  const asset = bossVfxAssets[0]
+
+  for (const hash of ['a1b2c', 'c3d4e']) {
+    writeFixture(buildRoot, `assets/main/index.${hash}.js`, `${validMainIndex} talisman`)
+    writeFixture(buildRoot, `assets/resources/config.${hash}.json`, '{')
+    writeFixture(
+      buildRoot,
+      `assets/resources/import/${asset.spriteFrameUuid.slice(0, 2)}/${asset.spriteFrameUuid}.${hash}.json`,
+      '',
+    )
+    writeFixture(
+      buildRoot,
+      `assets/resources/native/${asset.assetUuid.slice(0, 2)}/${asset.assetUuid}.${hash}.png`,
+      'stale-native',
+    )
+  }
+
+  const report = checkCocosBuildOutput({ buildRoot, projectRoot })
+
+  assert.equal(report.ok, true, report.errors.join('\n'))
+})
+
+for (const [label, suffix] of [
+  ['backup word', 'backup'],
+  ['old word', 'old'],
+  ['non-hex word', 'abcxy'],
+  ['four hex characters', 'abcd'],
+  ['more than a full hex digest', 'a'.repeat(33)],
+]) {
+  test(`build-output check rejects ${label} as a filename hash`, () => {
+    const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-invalid-hash-'))
+    writeCompleteFixture(buildRoot)
+    renameSync(
+      join(buildRoot, 'assets/main/index.js'),
+      join(buildRoot, `assets/main/index.${suffix}.js`),
+    )
+    renameSync(
+      join(buildRoot, 'assets/resources/config.json'),
+      join(buildRoot, `assets/resources/config.${suffix}.json`),
+    )
+
+    const report = checkCocosBuildOutput({ buildRoot, projectRoot })
+
+    assert.equal(report.ok, false)
+    assert.equal(report.errors.some((error) => error.includes('missing built main index')), true)
+    assert.equal(report.errors.some((error) => error.includes('missing built resources config')), true)
+  })
+}
+
+test('build-output check rejects ambiguous hashed main indexes and resources configs', () => {
+  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-ambiguous-hashes-'))
+  writeCompleteFixture(buildRoot)
+  const configPath = join(buildRoot, 'assets/resources/config.json')
+  const configSource = readFileSync(configPath)
+  renameSync(join(buildRoot, 'assets/main/index.js'), join(buildRoot, 'assets/main/index.a1b2c.js'))
+  writeFixture(buildRoot, 'assets/main/index.c3d4e.js', validMainIndex)
+  renameSync(configPath, join(buildRoot, 'assets/resources/config.a1b2c.json'))
+  writeFixture(buildRoot, 'assets/resources/config.c3d4e.json', configSource)
+
+  const report = checkCocosBuildOutput({ buildRoot, projectRoot })
+
+  assert.equal(report.ok, false)
+  assert.equal(report.errors.some((error) => error.includes('ambiguous built main index')), true)
+  assert.equal(report.errors.some((error) => error.includes('ambiguous built resources config')), true)
+})
+
+test('build-output check rejects ambiguous hashed boss VFX import and native artifacts', () => {
+  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-ambiguous-boss-vfx-'))
+  writeCompleteFixture(buildRoot, validMainIndex, { hashed: true })
+  const asset = bossVfxAssets[0]
+  writeFixture(
+    buildRoot,
+    `assets/resources/import/${asset.spriteFrameUuid.slice(0, 2)}/${asset.spriteFrameUuid}.c3d4e.json`,
+    JSON.stringify(createBossVfxImport(asset)),
+  )
+  writeFixture(
+    buildRoot,
+    `assets/resources/native/${asset.assetUuid.slice(0, 2)}/${asset.assetUuid}.c3d4e.png`,
+    readFileSync(asset.sourcePath),
+  )
+
+  const report = checkCocosBuildOutput({ buildRoot, projectRoot })
+
+  assert.equal(report.ok, false)
+  assert.equal(
+    report.errors.some((error) => error.includes('ambiguous') && error.includes('sweep_arc import')),
+    true,
+  )
+  assert.equal(
+    report.errors.some((error) => error.includes('ambiguous') && error.includes('sweep_arc native')),
+    true,
+  )
 })
 
 test('build-output check fails when the compiled bootstrap is missing', () => {
@@ -257,6 +458,77 @@ test('build-output check rejects a layered boss VFX resource path mapped to the 
   assert.equal(report.errors.some((error) => error.includes('roar_wave') && error.includes('UUID')), true)
 })
 
+test('build-output check validates canonical layered boss VFX source meta UUID relationships', () => {
+  const asset = bossVfxAssets.find(({ name }) => name === 'roar_wave')
+  const otherAsset = bossVfxAssets.find(({ name }) => name === 'sweep_arc')
+  const cases = [
+    [
+      'malformed top-level UUID',
+      (meta) => ({ ...meta, uuid: 'not-a-uuid' }),
+      'invalid top-level asset UUID',
+    ],
+    [
+      'cross-asset spriteFrame UUID',
+      (meta) => ({
+        ...meta,
+        subMetas: {
+          ...meta.subMetas,
+          f9941: { ...meta.subMetas.f9941, uuid: `${otherAsset.assetUuid}@f9941` },
+        },
+      }),
+      'must use spriteFrame UUID',
+    ],
+    [
+      'extra spriteFrame UUID suffix',
+      (meta) => ({
+        ...meta,
+        subMetas: {
+          ...meta.subMetas,
+          f9941: { ...meta.subMetas.f9941, uuid: `${meta.uuid}@f9941@extra` },
+        },
+      }),
+      'must use spriteFrame UUID',
+    ],
+    [
+      'wrong spriteFrame importer',
+      (meta) => ({
+        ...meta,
+        subMetas: {
+          ...meta.subMetas,
+          f9941: { ...meta.subMetas.f9941, importer: 'texture' },
+        },
+      }),
+      'must use importer sprite-frame and name spriteFrame',
+    ],
+    [
+      'wrong spriteFrame name',
+      (meta) => ({
+        ...meta,
+        subMetas: {
+          ...meta.subMetas,
+          f9941: { ...meta.subMetas.f9941, name: asset.name },
+        },
+      }),
+      'must use importer sprite-frame and name spriteFrame',
+    ],
+  ]
+
+  for (const [name, mutate, expected] of cases) {
+    const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-invalid-boss-meta-'))
+    const sourceRoot = mkdtempSync(join(tmpdir(), 'cocos-source-invalid-boss-meta-'))
+    writeCompleteFixture(buildRoot)
+    writeBossVfxProjectFixture(sourceRoot, asset.name, mutate)
+
+    const report = checkCocosBuildOutput({ buildRoot, projectRoot: sourceRoot })
+
+    assert.equal(
+      report.errors.some((error) => error.includes(asset.name) && error.includes(expected)),
+      true,
+      `${name}: ${report.errors.join('\n')}`,
+    )
+  }
+})
+
 test('build-output check rejects missing layered boss VFX import and native artifacts', () => {
   const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-missing-boss-vfx-artifacts-'))
   writeFixture(buildRoot, 'assets/main/index.js', validMainIndex)
@@ -268,6 +540,64 @@ test('build-output check rejects missing layered boss VFX import and native arti
   assert.equal(report.ok, false)
   assert.equal(report.errors.some((error) => error.includes('sweep_arc') && error.includes('import')), true)
   assert.equal(report.errors.some((error) => error.includes('spike_cluster') && error.includes('native')), true)
+})
+
+for (const [label, source, expected] of [
+  ['empty', '', 'is empty'],
+  ['malformed', '{', 'contains malformed JSON'],
+]) {
+  test(`build-output check rejects ${label} layered boss VFX import JSON`, () => {
+    const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-corrupt-boss-import-'))
+    writeCompleteFixture(buildRoot, validMainIndex, {
+      importOverrides: { sweep_arc: source },
+    })
+
+    const report = checkCocosBuildOutput({ buildRoot, projectRoot })
+
+    assert.equal(report.ok, false)
+    assert.equal(
+      report.errors.some((error) => error.includes('sweep_arc import artifact') && error.includes(expected)),
+      true,
+      report.errors.join('\n'),
+    )
+  })
+}
+
+for (const [field, mutate] of spriteFramePayloadCorruptions) {
+  test(`build-output check rejects stale layered boss VFX import payload field ${field}`, () => {
+    const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-stale-boss-import-'))
+    const asset = bossVfxAssets.find(({ name }) => name === 'roar_wave')
+    const payload = createBossVfxImport(asset)
+    mutate(payload[5][0])
+    writeCompleteFixture(buildRoot, validMainIndex, {
+      importOverrides: { [asset.name]: JSON.stringify(payload) },
+    })
+
+    const report = checkCocosBuildOutput({ buildRoot, projectRoot })
+
+    assert.equal(report.ok, false, field)
+    assert.equal(
+      report.errors.some((error) => error.includes(asset.name) && error.includes(`field ${field}`)),
+      true,
+      report.errors.join('\n'),
+    )
+  })
+}
+
+test('build-output check rejects stale layered boss VFX native PNG bytes', () => {
+  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-stale-boss-native-'))
+  writeCompleteFixture(buildRoot, validMainIndex, {
+    nativeOverrides: { impact_spark: 'stale-native-png' },
+  })
+
+  const report = checkCocosBuildOutput({ buildRoot, projectRoot })
+
+  assert.equal(report.ok, false)
+  assert.equal(
+    report.errors.some((error) => error.includes('impact_spark native PNG bytes differ')),
+    true,
+    report.errors.join('\n'),
+  )
 })
 
 test('build-output check rejects retired boss talisman resource settings paths', () => {
@@ -298,6 +628,17 @@ for (const reference of retiredBossRuntimeReferences) {
       true,
       report.errors.join('\n'),
     )
+  })
+}
+
+for (const allowedReference of ['TalismanCatalog', 'talismanicTheme']) {
+  test(`build-output check allows non-retired near-match ${allowedReference}`, () => {
+    const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-talisman-near-match-'))
+    writeCompleteFixture(buildRoot, `${validMainIndex} ${allowedReference}`)
+
+    const report = checkCocosBuildOutput({ buildRoot, projectRoot })
+
+    assert.equal(report.ok, true, report.errors.join('\n'))
   })
 }
 

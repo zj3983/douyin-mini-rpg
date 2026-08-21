@@ -2,7 +2,10 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
-import { checkCocosBuildReadiness } from './check-cocos-build-readiness.mjs'
+import {
+  checkCocosBuildReadiness,
+  isCanonicalAssetUuid,
+} from './check-cocos-build-readiness.mjs'
 
 const base64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 const bossVfxNames = [
@@ -20,7 +23,9 @@ const bossVfxCompiledMarkers = [
   'BossHazardVisualController',
 ]
 const retiredBossResourcePathPrefix = 'Assets/Skills/BossDomain/talisman_'
-const retiredBossCompiledReferencePattern = /[A-Za-z0-9_$]*talisman[A-Za-z0-9_$]*/i
+const retiredBossCompiledReferencePattern = /(?:^|[^A-Za-z0-9_$])(setTalisman|talismanFrames|talismanPath|talismanPulse|talisman_sweep|talisman_spike|talisman_roar|Talisman|talisman)(?![A-Za-z0-9_$])/
+const cocosBuildHashMinLength = 5
+const cocosBuildHashMaxLength = 32
 const dungeonCompiledMarkers = [
   'DungeonPressureRuntime',
   'PursuitBossRuntime',
@@ -44,6 +49,9 @@ export function compressScriptUuid(uuid) {
 }
 
 export function compressAssetUuid(uuid) {
+  if (!isCanonicalAssetUuid(uuid)) {
+    throw new TypeError(`compressAssetUuid expected a canonical asset UUID, received ${JSON.stringify(uuid)}`)
+  }
   return compressUuid(uuid, 2)
 }
 
@@ -55,22 +63,35 @@ function collectFiles(root) {
   })
 }
 
-function findBuildFile(directory, basename, extension) {
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function findBuildFile(directory, basename, extension, errors, description) {
   if (!existsSync(directory)) return null
   const exactName = `${basename}${extension}`
-  const hashedPrefix = `${basename}.`
-  return readdirSync(directory, { withFileTypes: true })
+  const names = readdirSync(directory, { withFileTypes: true })
     .filter((entry) => entry.isFile())
     .map((entry) => entry.name)
-    .find((name) => name === exactName || (name.startsWith(hashedPrefix) && name.endsWith(extension)))
-    ?? null
+  if (names.includes(exactName)) return exactName
+
+  const hashedNamePattern = new RegExp(
+    `^${escapeRegExp(basename)}\\.[0-9a-f]{${cocosBuildHashMinLength},${cocosBuildHashMaxLength}}${escapeRegExp(extension)}$`,
+  )
+  const hashedNames = names.filter((name) => hashedNamePattern.test(name)).sort()
+  if (hashedNames.length > 1) {
+    errors.push(`ambiguous ${description} in: ${directory}: ${hashedNames.join(', ')}`)
+    return undefined
+  }
+  return hashedNames[0] ?? null
 }
 
 function readBossVfxMeta(projectRoot, name, errors) {
-  const metaPath = resolve(
+  const sourceImagePath = resolve(
     projectRoot,
-    `assets/resources/Assets/Skills/BossDomain/${name}.png.meta`,
+    `assets/resources/Assets/Skills/BossDomain/${name}.png`,
   )
+  const metaPath = `${sourceImagePath}.meta`
   if (!existsSync(metaPath)) {
     errors.push(`missing layered boss VFX image meta for ${name}: ${metaPath}`)
     return null
@@ -85,17 +106,125 @@ function readBossVfxMeta(projectRoot, name, errors) {
   }
 
   const assetUuid = meta.uuid
-  const spriteFrameUuid = meta.subMetas?.f9941?.uuid
-  if (typeof assetUuid !== 'string' || assetUuid.length === 0) {
-    errors.push(`layered boss VFX image meta for ${name} has no top-level asset UUID: ${metaPath}`)
-    return null
+  const spriteFrameMeta = meta.subMetas?.f9941
+  let valid = true
+  if (!isCanonicalAssetUuid(assetUuid)) {
+    errors.push(`layered boss VFX image meta for ${name} has invalid top-level asset UUID: ${metaPath}`)
+    valid = false
   }
-  if (typeof spriteFrameUuid !== 'string' || !spriteFrameUuid.endsWith('@f9941')) {
-    errors.push(`layered boss VFX image meta for ${name} has no @f9941 spriteFrame UUID: ${metaPath}`)
-    return null
+  if (spriteFrameMeta?.importer !== 'sprite-frame' || spriteFrameMeta?.name !== 'spriteFrame') {
+    errors.push(`layered boss VFX image meta for ${name} must use importer sprite-frame and name spriteFrame: ${metaPath}`)
+    valid = false
+  }
+  if (
+    isCanonicalAssetUuid(assetUuid)
+    && spriteFrameMeta?.uuid !== `${assetUuid}@f9941`
+  ) {
+    errors.push(`layered boss VFX image meta for ${name} must use spriteFrame UUID ${assetUuid}@f9941: ${metaPath}`)
+    valid = false
+  }
+  if (!valid) return null
+
+  return {
+    assetUuid,
+    spriteFrameUuid: spriteFrameMeta.uuid,
+    spriteFrameMeta,
+    sourceImagePath,
+  }
+}
+
+function toVec3(value) {
+  if (!Array.isArray(value)) return value
+  return { x: value[0], y: value[1], z: value[2] }
+}
+
+function expectedBossVfxSpriteFramePayload(spriteFrameMeta) {
+  const data = spriteFrameMeta.userData ?? {}
+  const vertices = data.vertices ?? {}
+  return {
+    name: spriteFrameMeta.displayName,
+    rect: { x: data.trimX, y: data.trimY, width: data.width, height: data.height },
+    offset: { x: data.offsetX, y: data.offsetY },
+    originalSize: { width: data.rawWidth, height: data.rawHeight },
+    rotated: data.rotated,
+    capInsets: [data.borderLeft, data.borderBottom, data.borderRight, data.borderTop],
+    vertices: {
+      rawPosition: vertices.rawPosition,
+      indexes: vertices.indexes,
+      uv: vertices.uv,
+      nuv: vertices.nuv,
+      minPos: toVec3(vertices.minPos),
+      maxPos: toVec3(vertices.maxPos),
+    },
+    packable: data.packable,
+    pixelsToUnit: data.pixelsToUnit,
+    pivot: { x: data.pivotX, y: data.pivotY },
+    meshType: data.meshType,
+  }
+}
+
+const bossVfxSpriteFramePayloadFields = [
+  'name',
+  'rect',
+  'offset',
+  'originalSize',
+  'rotated',
+  'capInsets',
+  'vertices.rawPosition',
+  'vertices.indexes',
+  'vertices.uv',
+  'vertices.nuv',
+  'vertices.minPos',
+  'vertices.maxPos',
+  'packable',
+  'pixelsToUnit',
+  'pivot',
+  'meshType',
+]
+
+function readPath(value, path) {
+  return path.split('.').reduce((current, key) => current?.[key], value)
+}
+
+function findCocosSpriteFramePayload(importArtifact) {
+  if (
+    !Array.isArray(importArtifact)
+    || !Array.isArray(importArtifact[3])
+    || !importArtifact[3].includes('cc.SpriteFrame')
+    || !Array.isArray(importArtifact[5])
+  ) return null
+  return importArtifact[5].find((value) => (
+    value !== null && typeof value === 'object' && !Array.isArray(value)
+  )) ?? null
+}
+
+function validateBossVfxImport(importPath, name, spriteFrameMeta, errors) {
+  const source = readFileSync(importPath, 'utf8')
+  if (source.trim() === '') {
+    errors.push(`built layered boss VFX ${name} import artifact is empty: ${importPath}`)
+    return
   }
 
-  return { assetUuid, spriteFrameUuid }
+  let importArtifact
+  try {
+    importArtifact = JSON.parse(source)
+  } catch (error) {
+    errors.push(`built layered boss VFX ${name} import artifact contains malformed JSON: ${importPath}: ${error.message}`)
+    return
+  }
+
+  const payload = findCocosSpriteFramePayload(importArtifact)
+  if (!payload) {
+    errors.push(`built layered boss VFX ${name} import artifact omits a cc.SpriteFrame payload: ${importPath}`)
+    return
+  }
+
+  const expectedPayload = expectedBossVfxSpriteFramePayload(spriteFrameMeta)
+  for (const field of bossVfxSpriteFramePayloadFields) {
+    if (!isDeepStrictEqual(readPath(payload, field), readPath(expectedPayload, field))) {
+      errors.push(`built layered boss VFX ${name} import payload field ${field} differs from source meta: ${importPath}`)
+    }
+  }
 }
 
 function findEmbeddedAnimationManifest(value) {
@@ -131,11 +260,17 @@ function checkH3AnimationOutput({ projectRoot, resourcesRoot, resourcesConfig, e
   }
 
   const manifestImportRoot = join(resourcesRoot, 'import', manifestUuid.slice(0, 2))
-  const manifestImportName = findBuildFile(manifestImportRoot, manifestUuid, '.json')
+  const manifestImportName = findBuildFile(
+    manifestImportRoot,
+    manifestUuid,
+    '.json',
+    errors,
+    'built H3 animation manifest',
+  )
   let builtManifest = null
-  if (!manifestImportName) {
+  if (manifestImportName === null) {
     errors.push(`built H3 animation manifest is missing in: ${manifestImportRoot}`)
-  } else {
+  } else if (manifestImportName) {
     try {
       builtManifest = findEmbeddedAnimationManifest(
         JSON.parse(readFileSync(join(manifestImportRoot, manifestImportName), 'utf8')),
@@ -191,11 +326,18 @@ function checkH3AnimationOutput({ projectRoot, resourcesRoot, resourcesConfig, e
       }
     }
     const nativeRoot = join(resourcesRoot, 'native', uuid.slice(0, 2))
-    const nativeName = findBuildFile(nativeRoot, uuid, extname(sourcePath))
-    if (!nativeName) {
+    const nativeName = findBuildFile(
+      nativeRoot,
+      uuid,
+      extname(sourcePath),
+      errors,
+      `built H3 atlas ${atlasPath}`,
+    )
+    if (nativeName === null) {
       errors.push(`built H3 atlas is missing: ${atlasPath}`)
       continue
     }
+    if (!nativeName) continue
     if (!readFileSync(sourcePath).equals(readFileSync(join(nativeRoot, nativeName)))) {
       errors.push(`built H3 atlas bytes differ from source: ${atlasPath}`)
     }
@@ -212,11 +354,11 @@ export function checkCocosBuildOutput({ buildRoot, projectRoot = process.cwd() }
 
   const classId = compressScriptUuid(JSON.parse(readFileSync(metaPath, 'utf8')).uuid)
   const mainRoot = join(resolvedBuildRoot, 'assets/main')
-  const mainIndexName = findBuildFile(mainRoot, 'index', '.js')
+  const mainIndexName = findBuildFile(mainRoot, 'index', '.js', errors, 'built main index')
   const mainIndexPath = mainIndexName ? join(mainRoot, mainIndexName) : null
-  if (!mainIndexPath) {
+  if (mainIndexName === null) {
     errors.push(`missing built main index in: ${mainRoot}`)
-  } else {
+  } else if (mainIndexPath) {
     const mainIndex = readFileSync(mainIndexPath, 'utf8')
     if (!mainIndex.includes('PortraitBattleBootstrap')) errors.push('built main index omits PortraitBattleBootstrap')
     if (!mainIndex.includes(classId)) errors.push(`built main index omits class ID ${classId}`)
@@ -225,7 +367,7 @@ export function checkCocosBuildOutput({ buildRoot, projectRoot = process.cwd() }
     if (missingBossVfxMarkers.length > 0) {
       errors.push(`built main index omits layered boss VFX compiled feature markers: ${missingBossVfxMarkers.join(', ')}`)
     }
-    const retiredBossReference = mainIndex.match(retiredBossCompiledReferencePattern)?.[0]
+    const retiredBossReference = mainIndex.match(retiredBossCompiledReferencePattern)?.[1]
     if (retiredBossReference) {
       errors.push(`built main index contains retired boss talisman runtime reference: ${retiredBossReference}`)
     }
@@ -242,12 +384,18 @@ export function checkCocosBuildOutput({ buildRoot, projectRoot = process.cwd() }
   }
 
   const resourcesRoot = join(resolvedBuildRoot, 'assets/resources')
-  const resourcesConfigName = findBuildFile(resourcesRoot, 'config', '.json')
+  const resourcesConfigName = findBuildFile(
+    resourcesRoot,
+    'config',
+    '.json',
+    errors,
+    'built resources config',
+  )
   const resourcesConfigPath = resourcesConfigName ? join(resourcesRoot, resourcesConfigName) : null
   let resourcesConfig = null
-  if (!resourcesConfigPath) {
+  if (resourcesConfigName === null) {
     errors.push(`missing built resources config in: ${resourcesRoot}`)
-  } else {
+  } else if (resourcesConfigPath) {
     try {
       resourcesConfig = JSON.parse(readFileSync(resourcesConfigPath, 'utf8'))
     } catch (error) {
@@ -259,7 +407,7 @@ export function checkCocosBuildOutput({ buildRoot, projectRoot = process.cwd() }
     const resourcePaths = Object.values(resourcesConfig.paths ?? {})
       .filter((value) => Array.isArray(value) && typeof value[0] === 'string')
       .map((value) => value[0])
-    for (const path of resourcePaths.filter((path) => path.includes(retiredBossResourcePathPrefix))) {
+    for (const path of resourcePaths.filter((path) => path.startsWith(retiredBossResourcePathPrefix))) {
       errors.push(`built resources contain retired boss talisman resource path: ${path}`)
     }
 
@@ -268,9 +416,13 @@ export function checkCocosBuildOutput({ buildRoot, projectRoot = process.cwd() }
       const sourceMeta = readBossVfxMeta(projectRoot, name, errors)
       if (!sourceMeta) continue
 
-      const { assetUuid, spriteFrameUuid } = sourceMeta
-      const [spriteFrameAssetUuid, spriteFrameSubId] = spriteFrameUuid.split('@')
-      const expectedSpriteFrameUuid = `${compressAssetUuid(spriteFrameAssetUuid)}@${spriteFrameSubId}`
+      const {
+        assetUuid,
+        spriteFrameUuid,
+        spriteFrameMeta,
+        sourceImagePath,
+      } = sourceMeta
+      const expectedSpriteFrameUuid = `${compressAssetUuid(assetUuid)}@f9941`
       const pathEntry = Object.entries(resourcesConfig.paths ?? {})
         .find(([, value]) => Array.isArray(value) && value[0] === resourcePath)
       if (!pathEntry) {
@@ -282,12 +434,36 @@ export function checkCocosBuildOutput({ buildRoot, projectRoot = process.cwd() }
         }
       }
 
-      const importRoot = join(resourcesRoot, 'import', spriteFrameAssetUuid.slice(0, 2))
-      const importName = findBuildFile(importRoot, spriteFrameUuid, '.json')
-      if (!importName) errors.push(`built layered boss VFX ${name} import artifact is missing in: ${importRoot}`)
+      const importRoot = join(resourcesRoot, 'import', assetUuid.slice(0, 2))
+      const importName = findBuildFile(
+        importRoot,
+        spriteFrameUuid,
+        '.json',
+        errors,
+        `built layered boss VFX ${name} import artifacts`,
+      )
+      if (importName === null) {
+        errors.push(`built layered boss VFX ${name} import artifact is missing in: ${importRoot}`)
+      } else if (importName) {
+        validateBossVfxImport(join(importRoot, importName), name, spriteFrameMeta, errors)
+      }
       const nativeRoot = join(resourcesRoot, 'native', assetUuid.slice(0, 2))
-      const nativeName = findBuildFile(nativeRoot, assetUuid, '.png')
-      if (!nativeName) errors.push(`built layered boss VFX ${name} native artifact is missing in: ${nativeRoot}`)
+      const nativeName = findBuildFile(
+        nativeRoot,
+        assetUuid,
+        '.png',
+        errors,
+        `built layered boss VFX ${name} native artifacts`,
+      )
+      if (nativeName === null) {
+        errors.push(`built layered boss VFX ${name} native artifact is missing in: ${nativeRoot}`)
+      } else if (nativeName) {
+        if (!existsSync(sourceImagePath)) {
+          errors.push(`missing layered boss VFX source PNG for ${name}: ${sourceImagePath}`)
+        } else if (!readFileSync(sourceImagePath).equals(readFileSync(join(nativeRoot, nativeName)))) {
+          errors.push(`built layered boss VFX ${name} native PNG bytes differ from source: ${sourceImagePath}`)
+        }
+      }
     }
   }
 

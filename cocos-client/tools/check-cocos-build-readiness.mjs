@@ -112,6 +112,12 @@ export const requiredDualModeAssets = [
 ]
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const REQUIRED_BOSS_VFX_META_PATHS = new Set(
+  requiredDualModeAssets.filter((asset) => (
+    asset.startsWith('assets/resources/Assets/Skills/BossDomain/')
+    && asset.endsWith('.png.meta')
+  )),
+)
 const REQUIRED_SCENE_NODES = [
   'SharedCombatRoot',
   'SharedActorLayer',
@@ -139,6 +145,10 @@ function metaConvention(path) {
   if (path.endsWith('.json.meta')) return { importer: 'json', ver: '2.0.1' }
   if (path.endsWith('.ts.meta')) return { importer: 'typescript', ver: '4.0.24' }
   return { importer: 'directory', ver: '1.2.0' }
+}
+
+export function isCanonicalAssetUuid(value) {
+  return typeof value === 'string' && UUID_PATTERN.test(value)
 }
 
 export function checkCocosBuildReadiness(options = {}) {
@@ -189,7 +199,7 @@ export function checkCocosBuildReadiness(options = {}) {
   for (const asset of discoverAssetMetaPaths(projectRoot, files)) {
     const parsed = parseJsonAsset(asset, readFile, blockers)
     if (parsed === undefined) continue
-    if (typeof parsed.uuid !== 'string' || !UUID_PATTERN.test(parsed.uuid)) {
+    if (!isCanonicalAssetUuid(parsed.uuid)) {
       blockers.push(`${asset} has a missing or invalid UUID.`)
     } else if (metaUuidOwners.has(parsed.uuid)) {
       blockers.push(`${asset} has duplicate asset meta UUID ${parsed.uuid} also used by ${metaUuidOwners.get(parsed.uuid)}.`)
@@ -207,6 +217,18 @@ export function checkCocosBuildReadiness(options = {}) {
           : []
         if (!subMetas.some((subMeta) => subMeta?.importer === 'sprite-frame')) {
           blockers.push(`${asset} must contain at least one sprite-frame subMeta.`)
+        }
+        if (REQUIRED_BOSS_VFX_META_PATHS.has(asset)) {
+          const spriteFrameMeta = parsed.subMetas?.f9941
+          if (spriteFrameMeta?.importer !== 'sprite-frame' || spriteFrameMeta?.name !== 'spriteFrame') {
+            blockers.push(`${asset} f9941 must use importer sprite-frame and name spriteFrame.`)
+          }
+          if (
+            isCanonicalAssetUuid(parsed.uuid)
+            && spriteFrameMeta?.uuid !== `${parsed.uuid}@f9941`
+          ) {
+            blockers.push(`${asset} must use spriteFrame UUID ${parsed.uuid}@f9941.`)
+          }
         }
       }
     }

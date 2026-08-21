@@ -17,12 +17,21 @@ function validRequiredContents() {
   for (const path of requiredDualModeAssets) {
     if (path.endsWith('.meta')) {
       const convention = metaConvention(path)
+      const uuid = `00000000-0000-4000-8000-${String(uuidIndex).padStart(12, '0')}`
       contents.set(path, JSON.stringify({
         ...convention,
         imported: true,
-        uuid: `00000000-0000-4000-8000-${String(uuidIndex).padStart(12, '0')}`,
+        uuid,
         ...(path.endsWith('.png.meta') || path.endsWith('.webp.meta')
-          ? { subMetas: { f9941: { importer: 'sprite-frame', name: 'spriteFrame' } } }
+          ? {
+              subMetas: {
+                f9941: {
+                  importer: 'sprite-frame',
+                  name: 'spriteFrame',
+                  uuid: `${uuid}@f9941`,
+                },
+              },
+            }
           : {}),
       }))
       uuidIndex += 1
@@ -282,6 +291,79 @@ test('build readiness blocks malformed required PNG metadata', () => {
     })
 
     assert.ok(report.blockers.some((blocker) => blocker.includes(expectedBlocker)), name)
+  }
+})
+
+test('build readiness validates the exact layered boss VFX spriteFrame UUID contract', () => {
+  const metaPath = 'assets/resources/Assets/Skills/BossDomain/roar_wave.png.meta'
+  const otherUuid = '11111111-1111-4111-8111-111111111111'
+  const cases = [
+    [
+      'malformed top-level UUID',
+      (meta) => ({ ...meta, uuid: 'not-a-uuid' }),
+      'missing or invalid UUID',
+    ],
+    [
+      'cross-asset spriteFrame UUID',
+      (meta) => ({
+        ...meta,
+        subMetas: {
+          ...meta.subMetas,
+          f9941: { ...meta.subMetas.f9941, uuid: `${otherUuid}@f9941` },
+        },
+      }),
+      'must use spriteFrame UUID',
+    ],
+    [
+      'extra spriteFrame UUID suffix',
+      (meta) => ({
+        ...meta,
+        subMetas: {
+          ...meta.subMetas,
+          f9941: { ...meta.subMetas.f9941, uuid: `${meta.uuid}@f9941@extra` },
+        },
+      }),
+      'must use spriteFrame UUID',
+    ],
+    [
+      'wrong spriteFrame importer',
+      (meta) => ({
+        ...meta,
+        subMetas: {
+          ...meta.subMetas,
+          f9941: { ...meta.subMetas.f9941, importer: 'texture' },
+        },
+      }),
+      'must use importer sprite-frame and name spriteFrame',
+    ],
+    [
+      'wrong spriteFrame name',
+      (meta) => ({
+        ...meta,
+        subMetas: {
+          ...meta.subMetas,
+          f9941: { ...meta.subMetas.f9941, name: 'roar_wave' },
+        },
+      }),
+      'must use importer sprite-frame and name spriteFrame',
+    ],
+  ]
+
+  for (const [name, mutate, expected] of cases) {
+    const contents = validRequiredContents()
+    contents.set(metaPath, JSON.stringify(mutate(JSON.parse(contents.get(metaPath)))))
+    const report = checkCocosBuildReadiness({
+      projectRoot: process.cwd(),
+      creatorCommand: 'D:/CocosCreator/3.8.8/CocosCreator.exe',
+      files: new Set([...requiredDualModeAssets, 'settings/v2/packages/builder.json']),
+      readFile: (path) => contents.get(path),
+    })
+
+    assert.equal(
+      report.blockers.some((blocker) => blocker.includes(metaPath) && blocker.includes(expected)),
+      true,
+      `${name}: ${report.blockers.join('\n')}`,
+    )
   }
 })
 
