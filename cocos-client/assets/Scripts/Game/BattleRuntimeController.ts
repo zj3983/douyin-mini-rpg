@@ -803,7 +803,9 @@ export class BattleRuntimeController extends Component {
 
   private onEnemyHitboxActive(enemyId: number, command: Extract<EnemyCommand, { type: 'activate-hitbox' }>) {
     consumeEnemyCombatCommand(this.enemyCombatResolver, this.stageGeneration, enemyId, command)
-    if (command.danger) this.bossTelegraphPresenter?.activate(this.stageGeneration, enemyId, command)
+    if (command.danger) {
+      this.bossTelegraphPresenter?.activate(this.stageGeneration, enemyId, command, this.currentVfxQuality)
+    }
   }
 
   private onEnemyProjectileSpawned(enemyId: number, command: Extract<EnemyCommand, { type: 'spawn-projectile' }>) {
@@ -862,7 +864,7 @@ export class BattleRuntimeController extends Component {
 
   private presentQueuedEnemyTelegraphs() {
     for (const telegraph of drainEnemyTelegraphs(this.enemyCombatResolver)) {
-      if (telegraph.danger) this.bossTelegraphPresenter?.present(telegraph)
+      if (telegraph.danger) this.bossTelegraphPresenter?.present(telegraph, this.currentVfxQuality)
       this.node.emit('enemy-telegraph-presented', telegraph)
     }
   }

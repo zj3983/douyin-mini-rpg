@@ -1,11 +1,12 @@
 import { _decorator, Color, Component, Graphics, Node, resources, Sprite, SpriteFrame, UITransform } from 'cc'
 import { BOSS_HAZARD_POOL_CAPACITY } from '../Combat/BossBrain.ts'
 import type { EnemyCommand } from '../Combat/EnemyBrain.ts'
+import type { VfxQuality } from '../Combat/PerformanceBudget.ts'
 import {
+  bossVfxPhase,
   resolveBossTelegraphVisual,
-  talismanPulse,
   type BossTelegraphVisualProfile,
-  type TalismanPulseOutput,
+  type BossVfxPhaseOutput,
 } from '../Core/BossTelegraphVisualProfile.ts'
 import { BossHazardVisualController } from './BossHazardVisualController'
 import type { EnemyTelegraphDelivery } from './EnemyCombatResolverAdapter.ts'
@@ -24,15 +25,37 @@ export class BossHazardPoolInvariantError extends Error {
 
 type ActiveHitboxCommand = Extract<EnemyCommand, { readonly type: 'activate-hitbox' }>
 
-interface TelegraphVisual {
+interface CachedVisualLayers {
+  readonly controller: BossHazardVisualController | null
+  readonly mainShape: Sprite | null
+  readonly accent: Sprite | null
+  readonly particleNear: Sprite | null
+  readonly particleFar: Sprite | null
+}
+
+interface PreparedVisualNode extends CachedVisualLayers {
+  readonly graphics: Graphics | null
+}
+
+interface CachedVisualColors {
+  readonly mainColor: Color
+  readonly accentColor: Color
+  readonly particleNearColor: Color
+  readonly particleFarColor: Color
+}
+
+interface TelegraphVisual extends PreparedVisualNode, CachedVisualColors {
   readonly node: Node
   readonly duration: number
   readonly profile: BossTelegraphVisualProfile
-  readonly controller: BossHazardVisualController | null
-  readonly talisman: Sprite | null
-  readonly pulse: TalismanPulseOutput
-  readonly pulseColor: Color
+  readonly quality: VfxQuality
+  readonly phase: BossVfxPhaseOutput
   remaining: number
+}
+
+interface PendingActivation {
+  readonly command: ActiveHitboxCommand
+  readonly quality: VfxQuality
 }
 
 interface TelegraphGroup {
@@ -40,15 +63,65 @@ interface TelegraphGroup {
   readonly enemyId: number
   readonly authorityId: string
   readonly visuals: TelegraphVisual[]
-  readonly pending: ActiveHitboxCommand[]
+  readonly pending: PendingActivation[]
 }
 
-interface ImpactVisual {
+interface ImpactVisual extends PreparedVisualNode, CachedVisualColors {
   readonly node: Node
   readonly generation: number
   readonly enemyId: number
+  readonly duration: number
+  readonly profile: BossTelegraphVisualProfile
+  readonly quality: VfxQuality
+  readonly phase: BossVfxPhaseOutput
   fresh: boolean
   remaining: number
+}
+
+type ProfileColor = BossTelegraphVisualProfile['spirit']
+
+const BOSS_VFX_RESOURCE_PATHS = (() => {
+  const paths: string[] = []
+  const seen = new Set<string>()
+  for (const kind of ['sweep', 'spike', 'roar-sector'] as const) {
+    const profile = resolveBossTelegraphVisual({ kind })
+    for (const path of [profile.resources.main, profile.resources.accent, profile.resources.particle]) {
+      if (seen.has(path)) continue
+      seen.add(path)
+      paths.push(path)
+    }
+  }
+  return Object.freeze(paths)
+})()
+
+function createPhaseOutput(): BossVfxPhaseOutput {
+  return { progress: 0, phase: 'warning', intensity: 0, travel: 0 }
+}
+
+function createVisualColors(color: ProfileColor): CachedVisualColors {
+  return {
+    mainColor: new Color(...color),
+    accentColor: new Color(...color),
+    particleNearColor: new Color(...color),
+    particleFarColor: new Color(...color),
+  }
+}
+
+function setLayerVisibility(sprite: Sprite | null, visible: boolean): void {
+  if (!sprite) return
+  sprite.enabled = visible
+  sprite.node.active = visible
+}
+
+function setLayerColor(
+  sprite: Sprite | null,
+  target: Color,
+  source: ProfileColor,
+  alphaScale: number,
+): void {
+  if (!sprite) return
+  target.set(source[0], source[1], source[2], Math.round(source[3] * alphaScale))
+  sprite.color = target
 }
 
 function authorityKey(generation: number, enemyId: number, authorityId: string): string {
@@ -90,17 +163,18 @@ export class BossTelegraphPresenter extends Component {
   private generation = 0
   private readonly groups = new Map<string, TelegraphGroup>()
   private readonly impacts: ImpactVisual[] = []
-  private readonly earlyActivations = new Map<string, ActiveHitboxCommand[]>()
+  private readonly earlyActivations = new Map<string, PendingActivation[]>()
   private readonly activatedAuthorities = new Set<string>()
-  private readonly talismanFrames = new Map<string, SpriteFrame>()
+  private readonly vfxFrames = new Map<string, SpriteFrame>()
   private destroyed = false
+  private preloadStarted = false
   private loadGeneration = 0
 
   onLoad(): void {
-    if (this.destroyed || !this.isValid || !this.node?.isValid) return
+    if (this.destroyed || this.preloadStarted || !this.isValid || !this.node?.isValid) return
+    this.preloadStarted = true
     const loadGeneration = ++this.loadGeneration
-    for (const kind of ['sweep', 'spike', 'roar-sector'] as const) {
-      const path = resolveBossTelegraphVisual({ kind }).talismanPath
+    for (const path of BOSS_VFX_RESOURCE_PATHS) {
       resources.load(path, SpriteFrame, (error, frame) => {
         if (error || !(frame instanceof SpriteFrame)) return
         if (
@@ -113,9 +187,9 @@ export class BossTelegraphPresenter extends Component {
           frame.decRef(true)
           return
         }
-        const previousFrame = this.talismanFrames.get(path)
+        const previousFrame = this.vfxFrames.get(path)
         frame.addRef()
-        this.talismanFrames.set(path, frame)
+        this.vfxFrames.set(path, frame)
         previousFrame?.decRef(true)
       })
     }
@@ -138,8 +212,8 @@ export class BossTelegraphPresenter extends Component {
   onDestroy(): void {
     this.destroyed = true
     this.loadGeneration += 1
-    for (const frame of this.talismanFrames.values()) frame.decRef(true)
-    this.talismanFrames.clear()
+    for (const frame of this.vfxFrames.values()) frame.decRef(true)
+    this.vfxFrames.clear()
     this.hideAll()
   }
 
@@ -159,28 +233,33 @@ export class BossTelegraphPresenter extends Component {
       let ready = group.pending.length > 0
       for (const visual of group.visuals) {
         visual.remaining -= deltaSeconds
-        this.updateTelegraphPulse(visual)
+        this.updateTelegraphPhase(visual)
         if (visual.remaining > 1e-9) ready = false
       }
       if (ready) this.activateGroup(group)
     }
   }
 
-  present(delivery: EnemyTelegraphDelivery): boolean {
+  present(delivery: EnemyTelegraphDelivery, quality: VfxQuality = 'full'): boolean {
     if (this.destroyed || !this.isValid || !this.node?.isValid) return false
     if (delivery.generation < this.generation) return false
     if (delivery.generation > this.generation) this.resetGeneration(delivery.generation)
     const node = this.acquireHazardNode(delivery.attackId)
     const profile = resolveBossTelegraphVisual(delivery.danger)
-    const pulse: TalismanPulseOutput = { progress: 0, alpha: 0, hot: false }
-    talismanPulse(delivery.duration, delivery.duration, pulse)
-    const pulseColor = new Color(
-      profile.spirit[0],
-      profile.spirit[1],
-      profile.spirit[2],
-      Math.round(profile.spirit[3] * pulse.alpha),
-    )
-    const controller = this.drawTelegraph(node, delivery.area, profile, pulseColor)
+    const phase = createPhaseOutput()
+    const colors = createVisualColors(profile.spirit)
+    const layers = this.drawTelegraph(node, delivery.area, profile, quality)
+    const visual: TelegraphVisual = {
+      node,
+      duration: delivery.duration,
+      profile,
+      quality,
+      phase,
+      remaining: delivery.duration,
+      ...layers,
+      ...colors,
+    }
+    this.updateTelegraphPhase(visual)
     this.telegraphPool?.activateNode(node)
 
     const key = authorityKey(delivery.generation, delivery.enemyId, delivery.telegraphId)
@@ -196,38 +275,29 @@ export class BossTelegraphPresenter extends Component {
       this.earlyActivations.delete(key)
       this.groups.set(key, group)
     }
-    group.visuals.push({
-      node,
-      duration: delivery.duration,
-      profile,
-      controller,
-      talisman: controller?.talisman ?? null,
-      pulse,
-      pulseColor,
-      remaining: delivery.duration,
-    })
+    group.visuals.push(visual)
     return true
   }
 
-  activate(generation: number, enemyId: number, command: ActiveHitboxCommand): void {
+  activate(generation: number, enemyId: number, command: ActiveHitboxCommand, quality: VfxQuality = 'full'): void {
     if (generation !== this.generation) return
     const key = authorityKey(generation, enemyId, commandAuthority(command))
     const group = this.groups.get(key)
     if (!group) {
       if (this.activatedAuthorities.has(key)) {
-        this.showImpact(generation, enemyId, command)
+        this.showImpact(generation, enemyId, command, quality)
         return
       }
       const pending = this.earlyActivations.get(key) ?? []
-      pending.push(command)
+      pending.push({ command, quality })
       this.earlyActivations.set(key, pending)
       return
     }
     if (group.visuals.some((visual) => visual.remaining > 1e-9)) {
-      group.pending.push(command)
+      group.pending.push({ command, quality })
       return
     }
-    group.pending.push(command)
+    group.pending.push({ command, quality })
     this.activateGroup(group)
   }
 
@@ -272,7 +342,9 @@ export class BossTelegraphPresenter extends Component {
     const key = authorityKey(group.generation, group.enemyId, group.authorityId)
     this.activatedAuthorities.add(key)
     this.removeGroup(key, group)
-    for (const command of group.pending) this.showImpact(group.generation, group.enemyId, command)
+    for (const pending of group.pending) {
+      this.showImpact(group.generation, group.enemyId, pending.command, pending.quality)
+    }
   }
 
   private acquireHazardNode(attackId: string): Node {
@@ -298,46 +370,65 @@ export class BossTelegraphPresenter extends Component {
     return node
   }
 
-  private showImpact(generation: number, enemyId: number, command: ActiveHitboxCommand): void {
+  private showImpact(
+    generation: number,
+    enemyId: number,
+    command: ActiveHitboxCommand,
+    quality: VfxQuality,
+  ): void {
     const node = this.acquireHazardNode(command.attackId)
     const danger = command.danger ?? { kind: dangerKindForAttack(command.attackId) }
-    this.drawImpact(node, command.area, resolveBossTelegraphVisual(danger))
+    const profile = resolveBossTelegraphVisual(danger)
+    const phase = createPhaseOutput()
+    bossVfxPhase(command.duration, 0, phase)
+    const colors = createVisualColors(profile.impact)
+    const layers = this.drawImpact(node, command.area, profile, quality)
+    const impact: ImpactVisual = {
+      node,
+      generation,
+      enemyId,
+      duration: command.duration,
+      profile,
+      quality,
+      phase,
+      fresh: true,
+      remaining: command.duration,
+      ...layers,
+      ...colors,
+    }
+    this.applyLayerColors(impact, profile.impact, 1)
     this.telegraphPool?.activateNode(node)
-    this.impacts.push({ node, generation, enemyId, fresh: true, remaining: command.duration })
+    this.impacts.push(impact)
   }
 
   private drawTelegraph(
     node: Node,
     area: EnemyTelegraphDelivery['area'],
     profile: BossTelegraphVisualProfile,
-    pulseColor: Color,
-  ): BossHazardVisualController | null {
+    quality: VfxQuality,
+  ): PreparedVisualNode {
     const geometry = centerAndSize(area)
-    const controller = this.prepareVisualNode(node, geometry, profile, false, pulseColor)
-    const graphics = node.getComponent(Graphics)
-    if (!graphics) return controller
+    const prepared = this.prepareVisualNode(node, geometry, profile, false, quality)
+    const graphics = prepared.graphics
+    if (!graphics) return prepared
 
     const halfWidth = geometry.width * 0.5
     const halfHeight = geometry.height * 0.5
-    if (profile.id === 'sweep-seal') {
+    if (profile.id === 'sweep-arc') {
       drawBrokenRail(graphics, -halfWidth * 0.9, halfWidth * 0.9, -halfHeight * 0.3)
       drawBrokenRail(graphics, -halfWidth * 0.9, halfWidth * 0.9, halfHeight * 0.3)
       for (const offset of [-0.42, 0, 0.42]) {
         graphics.moveTo(halfWidth * offset - halfHeight * 0.22, halfHeight * 0.62)
         graphics.lineTo(halfWidth * offset + halfHeight * 0.22, -halfHeight * 0.62)
       }
-    } else if (profile.id === 'spike-seal') {
-      const radius = Math.min(halfWidth, halfHeight) * 0.68
-      graphics.moveTo(0, radius)
-      graphics.lineTo(radius * 0.72, 0)
-      graphics.lineTo(0, -radius)
-      graphics.lineTo(-radius * 0.72, 0)
-      graphics.lineTo(0, radius)
-      graphics.moveTo(-radius, 0)
-      graphics.lineTo(radius, 0)
-      graphics.moveTo(0, radius * 0.72)
-      graphics.lineTo(0, -radius)
-      graphics.circle(0, -radius * 0.42, Math.max(2, radius * 0.1))
+    } else if (profile.id === 'spike-eruption') {
+      drawBrokenRail(graphics, -halfWidth * 0.78, halfWidth * 0.78, -halfHeight * 0.68)
+      for (const offset of [-0.48, 0, 0.48]) {
+        const x = halfWidth * offset
+        graphics.moveTo(x - halfWidth * 0.16, -halfHeight * 0.72)
+        graphics.lineTo(x, halfHeight * 0.82)
+        graphics.lineTo(x + halfWidth * 0.13, -halfHeight * 0.18)
+      }
     } else {
       drawBrokenRail(graphics, -halfWidth * 0.86, halfWidth * 0.86, halfHeight * 0.58)
       graphics.moveTo(-halfWidth * 0.78, -halfHeight * 0.5)
@@ -353,28 +444,28 @@ export class BossTelegraphPresenter extends Component {
       graphics.lineTo(halfWidth * 0.62, -halfHeight * 0.64)
     }
     graphics.stroke()
-    return controller
+    return prepared
   }
 
   private drawImpact(
     node: Node,
     area: EnemyTelegraphDelivery['area'],
     profile: BossTelegraphVisualProfile,
-  ): void {
+    quality: VfxQuality,
+  ): PreparedVisualNode {
     const geometry = centerAndSize(area)
-    const impactColor = new Color(...profile.impact)
-    this.prepareVisualNode(node, geometry, profile, true, impactColor)
-    const graphics = node.getComponent(Graphics)
-    if (!graphics) return
+    const prepared = this.prepareVisualNode(node, geometry, profile, true, quality)
+    const graphics = prepared.graphics
+    if (!graphics) return prepared
 
     const halfWidth = geometry.width * 0.5
     const halfHeight = geometry.height * 0.5
-    if (profile.id === 'sweep-seal') {
+    if (profile.id === 'sweep-arc') {
       for (const offset of [-0.5, 0, 0.5]) {
         graphics.moveTo(-halfWidth * 0.82, halfHeight * offset)
         graphics.lineTo(halfWidth * 0.82, halfHeight * (offset - 0.32))
       }
-    } else if (profile.id === 'spike-seal') {
+    } else if (profile.id === 'spike-eruption') {
       graphics.moveTo(0, halfHeight * 0.9)
       graphics.lineTo(0, -halfHeight * 0.9)
       graphics.moveTo(-halfWidth * 0.7, 0)
@@ -392,6 +483,7 @@ export class BossTelegraphPresenter extends Component {
       graphics.lineTo(halfWidth * 0.88, halfHeight * 0.54)
     }
     graphics.stroke()
+    return prepared
   }
 
   private prepareVisualNode(
@@ -399,8 +491,8 @@ export class BossTelegraphPresenter extends Component {
     geometry: ReturnType<typeof centerAndSize>,
     profile: BossTelegraphVisualProfile,
     impact: boolean,
-    talismanColor: Color,
-  ): BossHazardVisualController | null {
+    quality: VfxQuality,
+  ): PreparedVisualNode {
     node.setPosition(geometry.x, geometry.y, 0)
     node.getComponent(UITransform)?.setContentSize(geometry.width, geometry.height)
     const controller = node.getComponent(BossHazardVisualController)
@@ -412,25 +504,57 @@ export class BossTelegraphPresenter extends Component {
       graphics.strokeColor = new Color(...color)
       graphics.lineWidth = impact ? 4 : 3
     }
-    controller?.setTalisman(
-      this.talismanFrames.get(profile.talismanPath) ?? null,
-      talismanColor,
-      geometry.width,
-      geometry.height,
+    controller?.setLayerFrames(
+      this.vfxFrames.get(profile.resources.main) ?? null,
+      this.vfxFrames.get(profile.resources.accent) ?? null,
+      this.vfxFrames.get(profile.resources.particle) ?? null,
     )
-    return controller
+    controller?.setLayerSizes(geometry.width, geometry.height)
+    const prepared: PreparedVisualNode = {
+      controller,
+      graphics,
+      mainShape: controller?.mainShape ?? null,
+      accent: controller?.accent ?? null,
+      particleNear: controller?.particleNear ?? null,
+      particleFar: controller?.particleFar ?? null,
+    }
+    this.applyQuality(prepared, profile, quality)
+    return prepared
   }
 
-  private updateTelegraphPulse(visual: TelegraphVisual): void {
-    talismanPulse(visual.duration, visual.remaining, visual.pulse)
-    if (!visual.talisman) return
-    visual.pulseColor.set(
-      visual.profile.spirit[0],
-      visual.profile.spirit[1],
-      visual.profile.spirit[2],
-      Math.round(visual.profile.spirit[3] * visual.pulse.alpha),
+  private applyQuality(
+    visual: CachedVisualLayers,
+    profile: BossTelegraphVisualProfile,
+    quality: VfxQuality,
+  ): void {
+    setLayerVisibility(visual.mainShape, true)
+    setLayerVisibility(
+      visual.accent,
+      quality === 'full' || (quality === 'reduced' && profile.quality.reducedAccent),
     )
-    visual.talisman.color = visual.pulseColor
+    setLayerVisibility(
+      visual.particleNear,
+      quality !== 'minimal' || profile.quality.minimalParticles,
+    )
+    setLayerVisibility(visual.particleFar, quality === 'full')
+  }
+
+  private applyLayerColors(
+    visual: CachedVisualLayers & CachedVisualColors,
+    color: ProfileColor,
+    alphaScale: number,
+  ): void {
+    const safeAlpha = Math.min(1, Math.max(0, alphaScale))
+    setLayerColor(visual.mainShape, visual.mainColor, color, safeAlpha)
+    setLayerColor(visual.accent, visual.accentColor, color, safeAlpha * 0.9)
+    setLayerColor(visual.particleNear, visual.particleNearColor, color, safeAlpha * 0.72)
+    setLayerColor(visual.particleFar, visual.particleFarColor, color, safeAlpha * 0.55)
+  }
+
+  private updateTelegraphPhase(visual: TelegraphVisual): void {
+    bossVfxPhase(visual.duration, visual.remaining, visual.phase)
+    const phaseAlpha = visual.phase.intensity * (visual.phase.phase === 'critical' ? 1 : 0.82)
+    this.applyLayerColors(visual, visual.profile.spirit, phaseAlpha)
   }
 
   private removeGroup(key: string, group: TelegraphGroup): void {

@@ -9,6 +9,58 @@ import {
   stepBambooWarden,
 } from '../assets/Scripts/Combat/BossBrain.ts'
 
+const LAYER_FIELDS = Object.freeze(['mainShape', 'accent', 'particleNear', 'particleFar'])
+const RESOURCE_PATHS = Object.freeze([
+  'Assets/Skills/BossDomain/sweep_arc/spriteFrame',
+  'Assets/Skills/BossDomain/sweep_trail/spriteFrame',
+  'Assets/Skills/BossDomain/leaf_particle/spriteFrame',
+  'Assets/Skills/BossDomain/spike_cluster/spriteFrame',
+  'Assets/Skills/BossDomain/ground_dust/spriteFrame',
+  'Assets/Skills/BossDomain/impact_spark/spriteFrame',
+  'Assets/Skills/BossDomain/roar_wave/spriteFrame',
+])
+const PROFILE_CASES = Object.freeze([
+  Object.freeze({
+    id: 'sweep-arc',
+    attackId: 'bamboo-sweep:7:visual',
+    area: Object.freeze({ minX: -180, maxX: 140, minY: -60, maxY: 52 }),
+    danger: Object.freeze({ kind: 'sweep', escape: 'vertical', origin: Object.freeze({ x: 210, y: 24 }), arcDegrees: 120 }),
+    paths: Object.freeze([
+      'Assets/Skills/BossDomain/sweep_arc/spriteFrame',
+      'Assets/Skills/BossDomain/sweep_trail/spriteFrame',
+      'Assets/Skills/BossDomain/leaf_particle/spriteFrame',
+    ]),
+  }),
+  Object.freeze({
+    id: 'spike-eruption',
+    attackId: 'ground-spikes:7:visual:marker:0',
+    area: Object.freeze({ minX: 20, maxX: 84, minY: -140, maxY: -76 }),
+    danger: Object.freeze({ kind: 'spike', markerIndex: 0, center: Object.freeze({ x: 52, y: -108 }) }),
+    paths: Object.freeze([
+      'Assets/Skills/BossDomain/spike_cluster/spriteFrame',
+      'Assets/Skills/BossDomain/ground_dust/spriteFrame',
+      'Assets/Skills/BossDomain/impact_spark/spriteFrame',
+    ]),
+  }),
+  Object.freeze({
+    id: 'roar-wave',
+    attackId: 'mountain-roar:7:visual:sector:top',
+    area: Object.freeze({ minX: -90, maxX: 90, minY: 120, maxY: 190 }),
+    danger: Object.freeze({
+      kind: 'roar-sector',
+      waveIndex: -1,
+      radius: 190,
+      sector: 'top',
+      safeGap: Object.freeze({ sector: 'left', centerAngle: Math.PI, width: Math.PI / 3 }),
+    }),
+    paths: Object.freeze([
+      'Assets/Skills/BossDomain/roar_wave/spriteFrame',
+      'Assets/Skills/BossDomain/ground_dust/spriteFrame',
+      'Assets/Skills/BossDomain/leaf_particle/spriteFrame',
+    ]),
+  }),
+])
+
 const ccSource = `
 export const _decorator = {
   ccclass: () => (target) => target,
@@ -57,17 +109,13 @@ export const resources = {
 const controllerSource = `
 export class BossHazardVisualController {
   resetVisual() {
-    this.talismanFrame = null
-    this.talismanColor = null
-    this.talismanSize = null
-    this.talisman = null
+    this.mainShape = null
+    this.accent = null
+    this.particleNear = null
+    this.particleFar = null
   }
-  setTalisman(frame, color, width, height) {
-    this.talismanFrame = frame
-    this.talismanColor = color
-    this.talisman = { color }
-    this.talismanSize = { width: Math.min(width, 112), height: Math.min(height, 112) }
-  }
+  setLayerFrames(main, accent, particle) {}
+  setLayerSizes(width, height) {}
 }
 `
 
@@ -134,9 +182,24 @@ async function loadPresenter({ failedPaths = [], deferred = false } = {}) {
   }
 }
 
-function createSpriteMock() {
+function createSpriteMock(name) {
   let visibleColor = { r: 255, g: 255, b: 255, a: 0 }
+  const node = {
+    name,
+    active: false,
+    position: { x: 0, y: 0, z: 0 },
+    scale: { x: 1, y: 1, z: 1 },
+    eulerAngles: { x: 0, y: 0, z: 0 },
+    size: { width: 1, height: 1 },
+    setPosition(x, y, z) { Object.assign(this.position, { x, y, z }) },
+    setScale(x, y, z) { Object.assign(this.scale, { x, y, z }) },
+    setRotationFromEuler(x, y, z) { Object.assign(this.eulerAngles, { x, y, z }) },
+  }
   return {
+    name,
+    node,
+    enabled: true,
+    spriteFrame: null,
     colorAssignments: 0,
     lastAssignedInput: null,
     previousAssignedInput: null,
@@ -170,22 +233,53 @@ class TelegraphNode {
     ellipse(x, y, radiusX, radiusY) { this.calls.push({ type: 'ellipse', x, y, radiusX, radiusY }) },
     stroke() { this.calls.push({ type: 'stroke' }) },
   }
-  sprite = createSpriteMock()
+  mainShape = createSpriteMock('MainShape')
+  accent = createSpriteMock('Accent')
+  particleNear = createSpriteMock('ParticleNear')
+  particleFar = createSpriteMock('ParticleFar')
+  layers = {
+    mainShape: this.mainShape,
+    accent: this.accent,
+    particleNear: this.particleNear,
+    particleFar: this.particleFar,
+  }
   componentLookups = 0
   controller = {
+    mainShape: this.mainShape,
+    accent: this.accent,
+    particleNear: this.particleNear,
+    particleFar: this.particleFar,
+    frameCalls: [],
+    sizeCalls: [],
     resetVisual: () => {
-      this.controller.talismanFrame = null
-      this.controller.talismanSize = null
-      this.sprite.color = { r: 255, g: 255, b: 255, a: 0 }
+      for (const layer of Object.values(this.layers)) {
+        layer.spriteFrame = null
+        layer.color = { r: 255, g: 255, b: 255, a: 0 }
+        layer.enabled = true
+        layer.node.active = false
+        layer.node.setPosition(0, 0, 0)
+        layer.node.setScale(1, 1, 1)
+        layer.node.setRotationFromEuler(0, 0, 0)
+        Object.assign(layer.node.size, { width: 1, height: 1 })
+      }
     },
-    setTalisman: (frame, color, width, height) => {
-      this.controller.talismanFrame = frame
-      this.sprite.color = color
-      this.controller.talismanSize = { width: Math.min(width, 112), height: Math.min(height, 112) }
+    setLayerFrames: (main, accent, particle) => {
+      this.mainShape.spriteFrame = main
+      this.accent.spriteFrame = accent
+      this.particleNear.spriteFrame = particle
+      this.particleFar.spriteFrame = particle
+      this.controller.frameCalls.push([main, accent, particle])
     },
-    talismanFrame: null,
-    talismanSize: null,
-    talisman: this.sprite,
+    setLayerSizes: (width, height) => {
+      const factors = { mainShape: 1, accent: 0.9, particleNear: 0.7, particleFar: 0.5 }
+      for (const field of LAYER_FIELDS) {
+        Object.assign(this.layers[field].node.size, {
+          width: width * factors[field],
+          height: height * factors[field],
+        })
+      }
+      this.controller.sizeCalls.push({ width, height })
+    },
   }
   setPosition(x, y, z) { this.position = { x, y, z } }
   getComponent(Type) {
@@ -238,10 +332,33 @@ function areaKey(area) {
 }
 
 function visualIdForFrame(frame) {
-  if (frame?.id.includes('talisman_spike')) return 'spike-seal'
-  if (frame?.id.includes('talisman_roar')) return 'roar-seal'
-  if (frame?.id.includes('talisman_sweep')) return 'sweep-seal'
+  if (frame?.id.includes('spike_cluster')) return 'spike-eruption'
+  if (frame?.id.includes('roar_wave')) return 'roar-wave'
+  if (frame?.id.includes('sweep_arc')) return 'sweep-arc'
   return null
+}
+
+function frameIds(node) {
+  return LAYER_FIELDS.map((field) => node.layers[field].spriteFrame?.id ?? null)
+}
+
+function layerVisibility(node) {
+  return Object.fromEntries(LAYER_FIELDS.map((field) => [field, {
+    active: node.layers[field].node.active,
+    enabled: node.layers[field].enabled,
+  }]))
+}
+
+function layerGeometry(node) {
+  return Object.fromEntries(LAYER_FIELDS.map((field) => {
+    const layer = node.layers[field]
+    return [field, {
+      position: { ...layer.node.position },
+      scale: { ...layer.node.scale },
+      eulerAngles: { ...layer.node.eulerAngles },
+      size: { ...layer.node.size },
+    }]
+  }))
 }
 
 function commandAttack(command) {
@@ -327,87 +444,195 @@ function telegraph(attackId, area, danger, telegraphId = attackId) {
   return { enemyId: 7, attackId, telegraphId, area, duration: 0.8, visibleAt: 0, activationNotBefore: 0.8, generation: 3, danger }
 }
 
-test('preloaded profiles render three distinct glyphless line arrays in authoritative areas and pulse without geometry drift', async () => {
-  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY, loadedPaths } = await loadPresenter()
+test('preloads seven unique resources once and maps all profile layers for warnings and impacts', async () => {
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY, frames, loadedPaths } = await loadPresenter()
   const presenter = new BossTelegraphPresenter()
   const pool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
   presenter.telegraphPool = pool
   presenter.onLoad()
+  presenter.onLoad()
 
-  const cases = [
-    {
-      id: 'sweep-seal',
-      path: 'Assets/Skills/BossDomain/talisman_sweep/spriteFrame',
-      attackId: 'bamboo-sweep:7:visual',
-      area: { minX: -180, maxX: 140, minY: -60, maxY: 52 },
-      danger: { kind: 'sweep', escape: 'vertical', origin: { x: 210, y: 24 }, arcDegrees: 120 },
-    },
-    {
-      id: 'spike-seal',
-      path: 'Assets/Skills/BossDomain/talisman_spike/spriteFrame',
-      attackId: 'ground-spikes:7:visual:marker:0',
-      area: { minX: 20, maxX: 84, minY: -140, maxY: -76 },
-      danger: { kind: 'spike', markerIndex: 0, center: { x: 52, y: -108 } },
-    },
-    {
-      id: 'roar-seal',
-      path: 'Assets/Skills/BossDomain/talisman_roar/spriteFrame',
-      attackId: 'mountain-roar:7:visual:sector:top',
-      area: { minX: -90, maxX: 90, minY: 120, maxY: 190 },
-      danger: { kind: 'roar-sector', waveIndex: -1, radius: 190, sector: 'top', safeGap: { sector: 'left', centerAngle: Math.PI, width: Math.PI / 3 } },
-    },
-  ]
+  assert.deepEqual(loadedPaths, RESOURCE_PATHS)
+  assert.equal(new Set(loadedPaths).size, 7)
+  assert.equal(frames.size, 7)
+  assert.ok([...frames.values()].every((frame) => frame.refCount === 1 && frame.addRefCalls === 1))
 
-  assert.deepEqual(loadedPaths, cases.map(({ path }) => path), 'onLoad preloads exactly the three profile paths')
-  for (const entry of cases) assert.equal(presenter.present(telegraph(entry.attackId, entry.area, entry.danger)), true, entry.id)
+  for (const entry of PROFILE_CASES) {
+    assert.equal(presenter.present(telegraph(entry.attackId, entry.area, entry.danger), 'full'), true, entry.id)
+  }
 
-  const nodes = [...pool.active]
-  assert.equal(nodes.length, 3)
-  assert.deepEqual(nodes.map((node) => visualIdForFrame(node.controller.talismanFrame)), cases.map(({ id }) => id))
-  assert.deepEqual(nodes.map((node) => node.controller.talismanFrame?.id), cases.map(({ path }) => path))
-  assert.equal(new Set(nodes.map((node) => node.controller.talismanFrame)).size, 3)
-  for (const [index, node] of nodes.entries()) {
-    const area = cases[index].area
+  const warningNodes = [...pool.active]
+  assert.equal(warningNodes.length, 3)
+  assert.deepEqual(
+    warningNodes.map((node) => visualIdForFrame(node.mainShape.spriteFrame)),
+    PROFILE_CASES.map(({ id }) => id),
+  )
+  for (const [index, node] of warningNodes.entries()) {
+    const entry = PROFILE_CASES[index]
+    assert.deepEqual(frameIds(node), [...entry.paths, entry.paths[2]], `${entry.id} warning frames`)
+    assert.deepEqual(node.controller.frameCalls.at(-1).map((frame) => frame?.id ?? null), entry.paths)
+    assert.deepEqual(node.controller.sizeCalls.at(-1), {
+      width: entry.area.maxX - entry.area.minX,
+      height: entry.area.maxY - entry.area.minY,
+    })
     assert.equal(areaKey({
       minX: node.position.x - node.transform.size.width / 2,
       maxX: node.position.x + node.transform.size.width / 2,
       minY: node.position.y - node.transform.size.height / 2,
       maxY: node.position.y + node.transform.size.height / 2,
-    }), areaKey(area), `${cases[index].id} authority geometry`)
-    assert.ok(node.graphics.calls.length > 0, `${cases[index].id} has linework`)
-    assert.equal(node.graphics.calls.some((call) => call.type === 'rect' || call.type === 'fill'), false)
+    }), areaKey(entry.area), `${entry.id} authority geometry`)
+    assert.ok(node.graphics.calls.length > 0, `${entry.id} has linework`)
+    assert.equal(
+      node.graphics.calls.some((call) => ['rect', 'fill', 'circle', 'ellipse'].includes(call.type)),
+      false,
+      `${entry.id} stays open and glyph-free`,
+    )
   }
-  const signatures = nodes.map((node) => JSON.stringify(node.graphics.calls))
-  assert.equal(new Set(signatures).size, 3, 'sweep, spike, and roar command sequences differ')
+  assert.equal(
+    new Set(warningNodes.map((node) => JSON.stringify(node.graphics.calls))).size,
+    3,
+    'sweep, spike, and roar Graphics signatures differ',
+  )
 
-  const pulsing = nodes[0]
-  const before = {
-    alpha: pulsing.sprite.color.a,
-    assignments: pulsing.sprite.colorAssignments,
-    lookups: pulsing.componentLookups,
-    colorAllocations: globalThis.__bossColorAllocations,
-    stroke: { ...pulsing.graphics.strokeColor },
-    position: { ...pulsing.position },
-    size: { ...pulsing.transform.size },
-    calls: structuredClone(pulsing.graphics.calls),
+  for (const entry of PROFILE_CASES) {
+    presenter.activate(3, 7, {
+      type: 'activate-hitbox',
+      attackId: entry.attackId,
+      telegraphId: entry.attackId,
+      area: entry.area,
+      damage: 8,
+      duration: 0.18,
+      danger: entry.danger,
+    }, 'full')
   }
-  presenter.update(0.2)
-  const reusableColor = pulsing.sprite.lastAssignedInput
-  assert.equal(pulsing.sprite.colorAssignments, before.assignments + 1)
-  assert.notEqual(pulsing.sprite.color.a, before.alpha)
-  presenter.update(0.2)
-  assert.equal(pulsing.sprite.colorAssignments, before.assignments + 2)
-  assert.strictEqual(pulsing.sprite.lastAssignedInput, reusableColor)
-  assert.deepEqual({ ...pulsing.graphics.strokeColor }, before.stroke)
-  assert.equal(pulsing.componentLookups, before.lookups)
-  assert.equal(globalThis.__bossColorAllocations, before.colorAllocations)
-  assert.deepEqual(pulsing.position, before.position)
-  assert.deepEqual(pulsing.transform.size, before.size)
-  assert.deepEqual(pulsing.graphics.calls, before.calls)
+  presenter.update(0.8)
+
+  const impactNodes = [...pool.active]
+  assert.equal(presenter.visibleTelegraphCount, 0)
+  assert.equal(presenter.visibleImpactCount, 3)
+  assert.equal(impactNodes.length, 3)
+  for (const [index, node] of impactNodes.entries()) {
+    const entry = PROFILE_CASES[index]
+    assert.deepEqual(frameIds(node), [...entry.paths, entry.paths[2]], `${entry.id} impact frames`)
+    assert.deepEqual(node.controller.frameCalls.at(-1).map((frame) => frame?.id ?? null), entry.paths)
+    assert.deepEqual(node.controller.sizeCalls.at(-1), {
+      width: entry.area.maxX - entry.area.minX,
+      height: entry.area.maxY - entry.area.minY,
+    })
+    assert.equal(node.graphics.lineWidth, 4)
+    assert.ok(node.graphics.calls.some((call) => call.type === 'stroke'))
+  }
 })
 
-test('deferred preload affects subsequent warnings only and never rewrites an active null-symbol warning', async () => {
-  const sweepPath = 'Assets/Skills/BossDomain/talisman_sweep/spriteFrame'
+test('full reduced and minimal quality select the required four-layer visibility', async () => {
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
+  const presenter = new BossTelegraphPresenter()
+  const pool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
+  presenter.telegraphPool = pool
+  presenter.onLoad()
+  const qualities = ['full', 'reduced', 'minimal']
+
+  for (const [index, quality] of qualities.entries()) {
+    const entry = PROFILE_CASES[index]
+    assert.equal(presenter.present(telegraph(entry.attackId, entry.area, entry.danger), quality), true)
+  }
+
+  const [full, reduced, minimal] = [...pool.active]
+  assert.deepEqual(layerVisibility(full), {
+    mainShape: { active: true, enabled: true },
+    accent: { active: true, enabled: true },
+    particleNear: { active: true, enabled: true },
+    particleFar: { active: true, enabled: true },
+  })
+  assert.deepEqual(layerVisibility(reduced), {
+    mainShape: { active: true, enabled: true },
+    accent: { active: true, enabled: true },
+    particleNear: { active: true, enabled: true },
+    particleFar: { active: false, enabled: false },
+  })
+  assert.deepEqual(layerVisibility(minimal), {
+    mainShape: { active: true, enabled: true },
+    accent: { active: false, enabled: false },
+    particleNear: { active: false, enabled: false },
+    particleFar: { active: false, enabled: false },
+  })
+  for (const node of [full, reduced, minimal]) {
+    assert.ok(node.graphics.calls.some((call) => call.type === 'stroke'))
+    assert.ok(node.mainShape.spriteFrame)
+  }
+  const warningVisibility = [full, reduced, minimal].map((node) => structuredClone(layerVisibility(node)))
+
+  for (const [index, quality] of qualities.entries()) {
+    const entry = PROFILE_CASES[index]
+    presenter.activate(3, 7, {
+      type: 'activate-hitbox',
+      attackId: entry.attackId,
+      telegraphId: entry.attackId,
+      area: entry.area,
+      damage: 8,
+      duration: 0.18,
+      danger: entry.danger,
+    }, quality)
+  }
+  presenter.update(0.8)
+  const impacts = [...pool.active]
+  assert.equal(presenter.visibleImpactCount, 3)
+  assert.deepEqual(impacts.map((node) => layerVisibility(node)), warningVisibility)
+  assert.ok(impacts.every((node) => node.graphics.calls.some((call) => call.type === 'stroke')))
+})
+
+test('boss phase changes cached layer alpha without geometry drift or update-time allocations and lookups', async () => {
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY, loadedPaths } = await loadPresenter()
+  const presenter = new BossTelegraphPresenter()
+  const pool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
+  presenter.telegraphPool = pool
+  presenter.onLoad()
+  const entry = PROFILE_CASES[0]
+  presenter.present(telegraph(entry.attackId, entry.area, entry.danger), 'full')
+
+  const node = [...pool.active][0]
+  const visual = [...presenter.groups.values()][0].visuals[0]
+  const phaseOutput = visual.phase
+  const reusableColors = LAYER_FIELDS.map((field) => node.layers[field].lastAssignedInput)
+  const before = {
+    alpha: node.mainShape.color.a,
+    colorAllocations: globalThis.__bossColorAllocations,
+    graphics: structuredClone(node.graphics.calls),
+    layerGeometry: layerGeometry(node),
+    loadedPathCount: loadedPaths.length,
+    lookups: node.componentLookups,
+    position: { ...node.position },
+    size: { ...node.transform.size },
+    stroke: { ...node.graphics.strokeColor },
+  }
+  assert.deepEqual(phaseOutput, { progress: 0, phase: 'warning', intensity: 0.32, travel: 0 })
+  assert.strictEqual(visual.controller, node.controller)
+  for (const field of LAYER_FIELDS) assert.strictEqual(visual[field], node.layers[field])
+
+  presenter.update(0.2)
+  assert.strictEqual(visual.phase, phaseOutput)
+  assert.deepEqual(phaseOutput, { progress: 0.25, phase: 'warning', intensity: 0.44, travel: 0 })
+  assert.notEqual(node.mainShape.color.a, before.alpha)
+  presenter.update(0.4)
+  assert.strictEqual(visual.phase, phaseOutput)
+  assert.deepEqual(phaseOutput, { progress: 0.75, phase: 'critical', intensity: 0.75, travel: 0.167 })
+  for (let index = 0; index < 120; index += 1) presenter.update(0.0005)
+
+  for (const [index, field] of LAYER_FIELDS.entries()) {
+    assert.strictEqual(node.layers[field].lastAssignedInput, reusableColors[index], `${field} color identity`)
+  }
+  assert.equal(globalThis.__bossColorAllocations, before.colorAllocations)
+  assert.equal(loadedPaths.length, before.loadedPathCount)
+  assert.equal(node.componentLookups, before.lookups)
+  assert.deepEqual({ ...node.graphics.strokeColor }, before.stroke)
+  assert.deepEqual(node.position, before.position)
+  assert.deepEqual(node.transform.size, before.size)
+  assert.deepEqual(layerGeometry(node), before.layerGeometry)
+  assert.deepEqual(node.graphics.calls, before.graphics)
+})
+
+test('deferred preload affects subsequent warnings only and never retrofits an active warning', async () => {
+  const sweepPath = RESOURCE_PATHS[0]
   const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY, completeLoad } = await loadPresenter({ deferred: true })
   const presenter = new BossTelegraphPresenter()
   const pool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
@@ -417,18 +642,17 @@ test('deferred preload affects subsequent warnings only and never rewrites an ac
 
   presenter.present(telegraph('bamboo-sweep:7:deferred:before', { minX: -80, maxX: 80, minY: -30, maxY: 30 }, danger))
   const first = [...pool.active][0]
-  assert.equal(first.controller.talismanFrame, null)
+  assert.deepEqual(frameIds(first), [null, null, null, null])
   assert.ok(first.graphics.calls.some((call) => call.type === 'stroke'))
 
   completeLoad(sweepPath)
-  assert.equal(first.controller.talismanFrame, null, 'completed preload does not retrofit an active warning')
+  assert.deepEqual(frameIds(first), [null, null, null, null], 'completed preload does not retrofit an active warning')
   presenter.present(telegraph('bamboo-sweep:7:deferred:after', { minX: -70, maxX: 70, minY: 40, maxY: 100 }, danger))
   const second = [...pool.active][1]
-  assert.equal(second.controller.talismanFrame.id, sweepPath)
+  assert.deepEqual(frameIds(second), [sweepPath, null, null, null])
 })
 
-test('deferred preload success after destruction is ignored and the destroyed presenter stays inert', async () => {
-  const sweepPath = 'Assets/Skills/BossDomain/talisman_sweep/spriteFrame'
+test('deferred success after destruction preserves another presenter ownership for all seven paths', async () => {
   const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY, completeLoad, frames, releaseCalls } = await loadPresenter({ deferred: true })
   const oldPresenter = new BossTelegraphPresenter()
   const newPresenter = new BossTelegraphPresenter()
@@ -438,71 +662,78 @@ test('deferred preload success after destruction is ignored and the destroyed pr
   newPresenter.onLoad()
 
   oldPresenter.onDestroy()
-  completeLoad(sweepPath, null, 1)
-  const sharedFrame = frames.get(sweepPath)
-  assert.equal(sharedFrame.refCount, 1, 'new presenter owns the shared frame')
-  completeLoad(sweepPath)
+  for (const path of RESOURCE_PATHS) completeLoad(path, null, 1)
+  for (const path of RESOURCE_PATHS) completeLoad(path)
 
-  assert.equal(oldPresenter.talismanFrames.size, 0)
-  assert.equal(sharedFrame.refCount, 1)
-  assert.equal(sharedFrame.destroyed, false, 'old late callback cannot destroy the new presenter resource')
+  assert.equal(oldPresenter.vfxFrames.size, 0)
+  assert.equal(newPresenter.vfxFrames.size, 7)
+  for (const path of RESOURCE_PATHS) {
+    const sharedFrame = frames.get(path)
+    assert.strictEqual(newPresenter.vfxFrames.get(path), sharedFrame)
+    assert.equal(sharedFrame.refCount, 1, `${path} new presenter ownership`)
+    assert.equal(sharedFrame.destroyed, false, `${path} late callback cannot destroy shared resource`)
+    assert.equal(sharedFrame.addRefCalls, 2, `${path} acquisition count`)
+    assert.equal(sharedFrame.decRefCalls, 1, `${path} late cleanup count`)
+  }
   assert.deepEqual(releaseCalls, [])
   assert.equal(oldPresenter.present(telegraph('bamboo-sweep:7:destroyed', { minX: -20, maxX: 20, minY: -20, maxY: 20 }, { kind: 'sweep' })), false)
 
   newPresenter.onDestroy()
-  assert.equal(sharedFrame.refCount, 0)
-  assert.equal(sharedFrame.destroyed, true)
+  for (const frame of frames.values()) {
+    assert.equal(frame.refCount, 0)
+    assert.equal(frame.destroyed, true)
+    assert.equal(frame.addRefCalls, 2)
+    assert.equal(frame.decRefCalls, 2)
+  }
 })
 
-test('late preload success with no owner is acquired and released for cache cleanup', async () => {
-  const sweepPath = 'Assets/Skills/BossDomain/talisman_sweep/spriteFrame'
+test('late preload success with no owner is safely acquired and released for all seven paths', async () => {
   const { BossTelegraphPresenter, completeLoad, frames, releaseCalls } = await loadPresenter({ deferred: true })
   const presenter = new BossTelegraphPresenter()
 
   presenter.onLoad()
   presenter.onDestroy()
-  completeLoad(sweepPath)
+  for (const path of RESOURCE_PATHS) completeLoad(path)
 
-  const frame = frames.get(sweepPath)
-  assert.equal(frame.refCount, 0)
-  assert.equal(frame.destroyed, true)
-  assert.equal(frame.addRefCalls, 1)
-  assert.equal(frame.decRefCalls, 1)
+  assert.equal(frames.size, 7)
+  for (const frame of frames.values()) {
+    assert.equal(frame.refCount, 0)
+    assert.equal(frame.destroyed, true)
+    assert.equal(frame.addRefCalls, 1)
+    assert.equal(frame.decRefCalls, 1)
+  }
   assert.deepEqual(releaseCalls, [])
 })
 
-test('two presenters acquire independent ownership of shared frames', async () => {
-  const sweepPath = 'Assets/Skills/BossDomain/talisman_sweep/spriteFrame'
+test('two presenters acquire independent ownership of all seven shared frames', async () => {
   const { BossTelegraphPresenter, frames, releaseCalls } = await loadPresenter()
   const first = new BossTelegraphPresenter()
   const second = new BossTelegraphPresenter()
 
   first.onLoad()
   second.onLoad()
-  const sharedFrame = frames.get(sweepPath)
-  assert.strictEqual(first.talismanFrames.get(sweepPath), sharedFrame)
-  assert.strictEqual(second.talismanFrames.get(sweepPath), sharedFrame)
-  assert.equal(sharedFrame.refCount, 2)
+  assert.equal(frames.size, 7)
+  for (const path of RESOURCE_PATHS) {
+    const sharedFrame = frames.get(path)
+    assert.strictEqual(first.vfxFrames.get(path), sharedFrame)
+    assert.strictEqual(second.vfxFrames.get(path), sharedFrame)
+    assert.equal(sharedFrame.refCount, 2)
+    assert.equal(sharedFrame.addRefCalls, 2)
+  }
 
   first.onDestroy()
-  assert.equal(sharedFrame.refCount, 1)
-  assert.equal(sharedFrame.destroyed, false)
+  for (const frame of frames.values()) {
+    assert.equal(frame.refCount, 1)
+    assert.equal(frame.destroyed, false)
+    assert.equal(frame.decRefCalls, 1)
+  }
 
   second.onDestroy()
-  assert.equal(sharedFrame.refCount, 0)
-  assert.equal(sharedFrame.destroyed, true)
-  assert.deepEqual(releaseCalls, [])
-})
-
-test('failed talisman preloads acquire no reference and trigger no cleanup', async () => {
-  const missingPath = 'Assets/Skills/BossDomain/talisman_spike/spriteFrame'
-  const { BossTelegraphPresenter, frames, releaseCalls } = await loadPresenter({ failedPaths: [missingPath] })
-  const presenter = new BossTelegraphPresenter()
-
-  presenter.onLoad()
-  presenter.onDestroy()
-
-  assert.equal(frames.has(missingPath), false)
+  for (const frame of frames.values()) {
+    assert.equal(frame.refCount, 0)
+    assert.equal(frame.destroyed, true)
+    assert.equal(frame.decRefCalls, 2)
+  }
   assert.deepEqual(releaseCalls, [])
 })
 
@@ -512,7 +743,7 @@ test('repeated destroy decrements each successfully held frame exactly once', as
 
   presenter.onLoad()
   const heldFrames = [...frames.values()]
-  assert.equal(heldFrames.length, 3)
+  assert.equal(heldFrames.length, 7)
   assert.ok(heldFrames.every((frame) => frame.refCount === 1))
 
   presenter.onDestroy()
@@ -523,35 +754,75 @@ test('repeated destroy decrements each successfully held frame exactly once', as
   assert.deepEqual(releaseCalls, [])
 })
 
-test('missing talisman preload keeps a glyphless warning and its normal activation and impact lifecycle', async () => {
-  const missingPath = 'Assets/Skills/BossDomain/talisman_spike/spriteFrame'
-  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter({ failedPaths: [missingPath] })
+test('missing optional frames retain Graphics and the complete warning impact lifecycle without references', async () => {
+  const missingPaths = [RESOURCE_PATHS[4], RESOURCE_PATHS[5]]
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY, frames, loadedPaths, releaseCalls } = await loadPresenter({ failedPaths: missingPaths })
   const presenter = new BossTelegraphPresenter()
   const pool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
   presenter.telegraphPool = pool
   presenter.onLoad()
+  assert.deepEqual(loadedPaths, RESOURCE_PATHS)
+  for (const path of missingPaths) assert.equal(frames.has(path), false)
   const area = { minX: -28, maxX: 28, minY: -90, maxY: -34 }
   const warning = telegraph('ground-spikes:7:missing:marker:0', area, { kind: 'spike', markerIndex: 0, center: { x: 0, y: -62 } })
 
   presenter.present(warning)
   const warningNode = [...pool.active][0]
-  assert.equal(warningNode.controller.talismanFrame, null)
+  assert.deepEqual(frameIds(warningNode), [RESOURCE_PATHS[3], null, null, null])
   assert.ok(warningNode.graphics.calls.some((call) => call.type === 'stroke'))
   presenter.activate(3, 7, { type: 'activate-hitbox', attackId: warning.attackId, telegraphId: warning.telegraphId, area, damage: 8, duration: 0.18 })
   presenter.update(0.8)
   assert.equal(presenter.visibleTelegraphCount, 0)
   assert.equal(presenter.visibleImpactCount, 1)
   const impactNode = [...pool.active][0]
-  assert.equal(impactNode.controller.talismanFrame, null)
+  assert.deepEqual(frameIds(impactNode), [RESOURCE_PATHS[3], null, null, null])
   assert.ok(impactNode.graphics.calls.some((call) => call.type === 'stroke'))
-  assert.equal(impactNode.graphics.calls.some((call) => call.type === 'rect' || call.type === 'fill'), false)
+  assert.equal(impactNode.graphics.calls.some((call) => ['rect', 'fill', 'circle', 'ellipse'].includes(call.type)), false)
   presenter.update(0.18)
   presenter.update(0.18)
   assert.equal(presenter.visibleImpactCount, 0)
+  presenter.onDestroy()
+  assert.ok([...frames.values()].every((frame) => frame.refCount === 0 && frame.decRefCalls === 1))
+  assert.deepEqual(releaseCalls, [])
+})
+
+test('activate before present preserves the pending command quality through warning activation', async () => {
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
+  const presenter = new BossTelegraphPresenter()
+  const pool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
+  presenter.telegraphPool = pool
+  presenter.onLoad()
+  presenter.resetGeneration(3)
+  const entry = PROFILE_CASES[0]
+  const warning = telegraph(entry.attackId, entry.area, entry.danger)
+
+  presenter.activate(3, 7, {
+    type: 'activate-hitbox',
+    attackId: warning.attackId,
+    telegraphId: warning.telegraphId,
+    area: warning.area,
+    damage: 8,
+    duration: 0.18,
+    danger: warning.danger,
+  }, 'minimal')
+  assert.equal(presenter.visibleImpactCount, 0)
+  assert.equal(presenter.present(warning, 'full'), true)
+  assert.equal(presenter.visibleTelegraphCount, 1)
+
+  presenter.update(0.8)
+  assert.equal(presenter.visibleTelegraphCount, 0)
+  assert.equal(presenter.visibleImpactCount, 1)
+  const impact = [...pool.active][0]
+  assert.deepEqual(layerVisibility(impact), {
+    mainShape: { active: true, enabled: true },
+    accent: { active: false, enabled: false },
+    particleNear: { active: false, enabled: false },
+    particleFar: { active: false, enabled: false },
+  })
 })
 
 test('impact danger selects the visual profile ahead of a disagreeing attack id prefix', async () => {
-  const spikePath = 'Assets/Skills/BossDomain/talisman_spike/spriteFrame'
+  const spikePath = RESOURCE_PATHS[3]
   const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
   const presenter = new BossTelegraphPresenter()
   const pool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
@@ -573,7 +844,31 @@ test('impact danger selects the visual profile ahead of a disagreeing attack id 
   presenter.update(0.8)
 
   const impact = [...pool.active][0]
-  assert.equal(impact.controller.talismanFrame.id, spikePath)
+  assert.equal(impact.mainShape.spriteFrame.id, spikePath)
+})
+
+test('presenter uses only layered phase contracts and BattleRuntime forwards adaptive quality', async () => {
+  const [presenterSource, runtimeSource] = await Promise.all([
+    readFile(new URL('../assets/Scripts/Game/BossTelegraphPresenter.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../assets/Scripts/Game/BattleRuntimeController.ts', import.meta.url), 'utf8'),
+  ])
+  const retiredTerm = new RegExp(['talis', 'man'].join(''), 'i')
+
+  assert.doesNotMatch(presenterSource, retiredTerm)
+  assert.doesNotMatch(controllerSource, retiredTerm)
+  assert.match(presenterSource, /bossVfxPhase/)
+  assert.match(presenterSource, /type BossVfxPhaseOutput/)
+  assert.match(presenterSource, /import type \{ VfxQuality \}/)
+  assert.match(presenterSource, /present\(delivery: EnemyTelegraphDelivery, quality: VfxQuality = 'full'\)/)
+  assert.match(presenterSource, /activate\(generation: number, enemyId: number, command: ActiveHitboxCommand, quality: VfxQuality = 'full'\)/)
+  assert.match(
+    runtimeSource,
+    /bossTelegraphPresenter\?\.activate\(this\.stageGeneration, enemyId, command, this\.currentVfxQuality\)/,
+  )
+  assert.match(
+    runtimeSource,
+    /bossTelegraphPresenter\?\.present\(telegraph, this\.currentVfxQuality\)/,
+  )
 })
 
 test('Cocos presenter executes show-visible-active-hidden and cancel/reset lifecycle using authoritative areas', async () => {
