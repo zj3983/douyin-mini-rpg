@@ -7,6 +7,11 @@ import * as esmRuntime from '../tools/boss-telegraph-visual-profile.mjs'
 const expectedSpirit = [141, 232, 218, 190]
 const expectedImpact = [255, 240, 189, 245]
 const expectedQuality = { reducedAccent: true, minimalParticles: false }
+const layout = (axis, mainShape, accent, particleNear, particleFar) => ({
+  axis,
+  layers: { mainShape, accent, particleNear, particleFar },
+})
+const size = (widthScale, heightScale, minWidth, minHeight) => ({ widthScale, heightScale, minWidth, minHeight })
 const expectedProfiles = {
   sweep: {
     id: 'sweep-arc',
@@ -16,6 +21,13 @@ const expectedProfiles = {
       particle: 'Assets/Skills/BossDomain/leaf_particle/spriteFrame',
     },
     quality: expectedQuality,
+    layout: layout(
+      'fixed',
+      size(1.2, 2.4, 300, 144),
+      size(1.28, 2.8, 320, 168),
+      size(0.9, 1.8, 200, 120),
+      size(0.75, 1.5, 180, 100),
+    ),
     warning: [232, 190, 88, 220],
     spirit: expectedSpirit,
     impact: expectedImpact,
@@ -28,6 +40,13 @@ const expectedProfiles = {
       particle: 'Assets/Skills/BossDomain/impact_spark/spriteFrame',
     },
     quality: expectedQuality,
+    layout: layout(
+      'fixed',
+      size(2.3, 2.7, 128, 152),
+      size(2.5, 1.3, 140, 72),
+      size(1.8, 2.4, 104, 136),
+      size(1.6, 2.7, 96, 152),
+    ),
     warning: [164, 58, 44, 220],
     spirit: expectedSpirit,
     impact: expectedImpact,
@@ -40,20 +59,27 @@ const expectedProfiles = {
       particle: 'Assets/Skills/BossDomain/leaf_particle/spriteFrame',
     },
     quality: expectedQuality,
+    layout: layout(
+      'sector',
+      size(1.3, 2.4, 180, 140),
+      size(1.4, 2.1, 190, 128),
+      size(1.2, 1.9, 160, 112),
+      size(1.05, 1.7, 150, 104),
+    ),
     warning: [232, 190, 88, 220],
     spirit: expectedSpirit,
     impact: expectedImpact,
   },
 }
 const canonicalPhaseCases = [
-  { name: 'start', args: [0.8, 0.8], expected: { progress: 0, phase: 'warning', intensity: 0.32, travel: 0 } },
-  { name: 'warning interior', args: [0.8, 0.4], expected: { progress: 0.5, phase: 'warning', intensity: 0.56, travel: 0 } },
-  { name: 'just before critical threshold', args: [0.8, 0.241], expected: { progress: 0.699, phase: 'warning', intensity: 0.656, travel: 0 } },
-  { name: 'at critical threshold', args: [0.8, 0.24], expected: { progress: 0.7, phase: 'critical', intensity: 0.7, travel: 0 } },
-  { name: 'critical interior', args: [0.8, 0.2], expected: { progress: 0.75, phase: 'critical', intensity: 0.75, travel: 0.167 } },
+  { name: 'start', args: [0.8, 0.8], expected: { progress: 0, phase: 'warning', intensity: 0.58, travel: 0 } },
+  { name: 'warning interior', args: [0.8, 0.4], expected: { progress: 0.5, phase: 'warning', intensity: 0.7, travel: 0 } },
+  { name: 'just before critical threshold', args: [0.8, 0.241], expected: { progress: 0.699, phase: 'warning', intensity: 0.748, travel: 0 } },
+  { name: 'at critical threshold', args: [0.8, 0.24], expected: { progress: 0.7, phase: 'critical', intensity: 0.75, travel: 0 } },
+  { name: 'critical interior', args: [0.8, 0.2], expected: { progress: 0.75, phase: 'critical', intensity: 0.792, travel: 0.167 } },
   { name: 'completion', args: [0.8, 0], expected: { progress: 1, phase: 'critical', intensity: 1, travel: 1 } },
-  { name: 'invalid duration', args: [Number.NaN, Number.NaN], expected: { progress: 0, phase: 'warning', intensity: 0.32, travel: 0 } },
-  { name: 'remaining above duration', args: [0.8, 2], expected: { progress: 0, phase: 'warning', intensity: 0.32, travel: 0 } },
+  { name: 'invalid duration', args: [Number.NaN, Number.NaN], expected: { progress: 0, phase: 'warning', intensity: 0.58, travel: 0 } },
+  { name: 'remaining above duration', args: [0.8, 2], expected: { progress: 0, phase: 'warning', intensity: 0.58, travel: 0 } },
   { name: 'negative remaining', args: [0.8, -1], expected: { progress: 1, phase: 'critical', intensity: 1, travel: 1 } },
 ]
 
@@ -84,7 +110,7 @@ test('boss VFX phase reuses an optional output object without changing two-argum
   const reused = esmRuntime.bossVfxPhase(0.8, 0.2, output)
 
   assert.strictEqual(reused, output)
-  assert.deepEqual(output, { progress: 0.75, phase: 'critical', intensity: 0.75, travel: 0.167 })
+  assert.deepEqual(output, { progress: 0.75, phase: 'critical', intensity: 0.792, travel: 0.167 })
   assert.notStrictEqual(esmRuntime.bossVfxPhase(0.8, 0.2), esmRuntime.bossVfxPhase(0.8, 0.2))
 })
 
@@ -94,6 +120,9 @@ test('profiles, resources, quality policies, and RGBA tuples resist runtime muta
     assert.equal(Object.isFrozen(profile), true)
     assert.equal(Object.isFrozen(profile.resources), true)
     assert.equal(Object.isFrozen(profile.quality), true)
+    assert.equal(Object.isFrozen(profile.layout), true)
+    assert.equal(Object.isFrozen(profile.layout.layers), true)
+    assert.ok(Object.values(profile.layout.layers).every(Object.isFrozen))
     assert.equal(Object.isFrozen(profile.warning), true)
     assert.equal(Object.isFrozen(profile.spirit), true)
     assert.equal(Object.isFrozen(profile.impact), true)
@@ -103,6 +132,7 @@ test('profiles, resources, quality policies, and RGBA tuples resist runtime muta
   assert.throws(() => { sweep.id = 'roar-wave' }, TypeError)
   assert.throws(() => { sweep.resources.main = 'replacement' }, TypeError)
   assert.throws(() => { sweep.quality.reducedAccent = false }, TypeError)
+  assert.throws(() => { sweep.layout.layers.mainShape.minHeight = 1 }, TypeError)
   assert.throws(() => { sweep.warning[0] = 0 }, TypeError)
   assert.throws(() => { sweep.spirit[0] = 0 }, TypeError)
   assert.throws(() => { sweep.impact[0] = 0 }, TypeError)
@@ -117,7 +147,9 @@ test('TypeScript declares the public glyph-free contract and omits retired runti
   assert.match(typeScriptSource, /export type BossVfxPhaseName = 'warning' \| 'critical'/)
   assert.match(typeScriptSource, /export interface BossVfxResources\s*\{\s*readonly main: string\s*readonly accent: string\s*readonly particle: string\s*\}/s)
   assert.match(typeScriptSource, /export interface BossVfxPhaseOutput\s*\{\s*progress: number\s*phase: BossVfxPhaseName\s*intensity: number\s*travel: number\s*\}/s)
-  assert.match(typeScriptSource, /export interface BossTelegraphVisualProfile\s*\{\s*readonly id: BossTelegraphVisualId\s*readonly resources: BossVfxResources\s*readonly quality: Readonly<\{\s*readonly reducedAccent: boolean\s*readonly minimalParticles: boolean\s*\}>\s*readonly warning: Rgba\s*readonly spirit: Rgba\s*readonly impact: Rgba\s*\}/s)
+  assert.match(typeScriptSource, /export interface BossVfxLayerLayout/)
+  assert.match(typeScriptSource, /export interface BossVfxLayout/)
+  assert.match(typeScriptSource, /readonly layout: BossVfxLayout/)
 
   for (const source of [typeScriptSource, esmSource]) {
     assert.doesNotMatch(source, /\bglyph\s*:/)
@@ -138,6 +170,8 @@ test('TypeScript source stays behaviorally consistent with the ESM mirror', asyn
     assert.equal(Object.isFrozen(profile), true)
     assert.equal(Object.isFrozen(profile.resources), true)
     assert.equal(Object.isFrozen(profile.quality), true)
+    assert.equal(Object.isFrozen(profile.layout), true)
+    assert.equal(Object.isFrozen(profile.layout.layers), true)
     assert.equal(Object.isFrozen(profile.warning), true)
     assert.equal(Object.isFrozen(profile.spirit), true)
     assert.equal(Object.isFrozen(profile.impact), true)

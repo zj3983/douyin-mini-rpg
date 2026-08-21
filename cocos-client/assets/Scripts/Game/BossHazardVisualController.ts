@@ -1,4 +1,5 @@
 import { _decorator, Color, Component, Graphics, Sprite, SpriteFrame, UITransform } from 'cc'
+import type { BossVfxLayerLayout, BossVfxLayout } from '../Core/BossTelegraphVisualProfile.ts'
 
 const { ccclass, property } = _decorator
 const DEFAULT_LAYER_SIZE = 1
@@ -24,10 +25,18 @@ function resetLayer(sprite: Sprite | null): void {
   sprite.node.setRotationFromEuler(0, 0, 0)
 }
 
-function setLayerSize(sprite: Sprite | null, width: number, height: number, factor: number): void {
+function setLayerSize(
+  sprite: Sprite | null,
+  width: number,
+  height: number,
+  spec: BossVfxLayerLayout,
+  vertical: boolean,
+): void {
+  const orientedWidth = vertical ? height : width
+  const orientedHeight = vertical ? width : height
   sprite?.node.getComponent(UITransform)?.setContentSize(
-    Math.max(MIN_LAYER_SIZE, width * factor),
-    Math.max(MIN_LAYER_SIZE, height * factor),
+    Math.max(spec.minWidth, orientedWidth * spec.widthScale),
+    Math.max(spec.minHeight, orientedHeight * spec.heightScale),
   )
 }
 
@@ -67,12 +76,12 @@ export class BossHazardVisualController extends Component {
     if (this.particleFar) this.particleFar.spriteFrame = particle
   }
 
-  setLayerSizes(width: number, height: number): void {
+  setLayerLayout(width: number, height: number, layout: BossVfxLayout, vertical: boolean): void {
     const safeWidth = positiveDimension(width)
     const safeHeight = positiveDimension(height)
-    setLayerSize(this.mainShape, safeWidth, safeHeight, 1)
-    setLayerSize(this.accent, safeWidth, safeHeight, 0.9)
-    setLayerSize(this.particleNear, safeWidth, safeHeight, 0.7)
-    setLayerSize(this.particleFar, safeWidth, safeHeight, 0.5)
+    setLayerSize(this.mainShape, safeWidth, safeHeight, layout.layers.mainShape, vertical)
+    setLayerSize(this.accent, safeWidth, safeHeight, layout.layers.accent, vertical)
+    setLayerSize(this.particleNear, safeWidth, safeHeight, layout.layers.particleNear, vertical)
+    setLayerSize(this.particleFar, safeWidth, safeHeight, layout.layers.particleFar, vertical)
   }
 }

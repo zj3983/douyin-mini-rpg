@@ -1,7 +1,7 @@
 import { _decorator, Color, Component, Graphics, Node, resources, Sprite, SpriteFrame, UITransform } from 'cc'
 import { BOSS_HAZARD_POOL_CAPACITY } from '../Combat/BossBrain.ts'
 import type { BossAttackId } from '../Combat/BossBrain.ts'
-import type { EnemyCommand } from '../Combat/EnemyBrain.ts'
+import type { EnemyCommand, EnemyDangerDescriptor } from '../Combat/EnemyBrain.ts'
 import type { VfxQuality } from '../Combat/PerformanceBudget.ts'
 import {
   bossVfxPhase,
@@ -51,6 +51,7 @@ interface PreparedVisualNode extends CachedVisualLayers {
   readonly graphics: Graphics | null
   readonly width: number
   readonly height: number
+  readonly baseRotation: number
 }
 
 interface CachedVisualColors {
@@ -187,6 +188,16 @@ function dangerKindForAttack(attackId: string): string {
   if (attackId.startsWith('ground-spikes:')) return 'spike'
   if (attackId.startsWith('mountain-roar:')) return 'roar-sector'
   return 'sweep'
+}
+
+function usesVerticalSector(
+  profile: BossTelegraphVisualProfile,
+  danger: Readonly<EnemyDangerDescriptor> | undefined,
+): boolean {
+  return profile.layout.axis === 'sector'
+    && danger?.kind === 'roar-sector'
+    && typeof danger.sector === 'string'
+    && (danger.sector === 'right' || danger.sector.startsWith('left'))
 }
 
 function bossAttackIdentity(attackId: string): {
@@ -381,7 +392,7 @@ export class BossTelegraphPresenter extends Component {
     const identity = bossAttackIdentity(delivery.attackId)
     const phase = createPhaseOutput()
     const colors = createVisualColors(profile.spirit)
-    const layers = this.drawTelegraph(node, delivery.area, profile, quality)
+    const layers = this.drawTelegraph(node, delivery.area, profile, delivery.danger, quality)
     const visual: TelegraphVisual = {
       node,
       attackId: delivery.attackId,
@@ -519,7 +530,7 @@ export class BossTelegraphPresenter extends Component {
     const identity = bossAttackIdentity(command.attackId)
     const phase = createPhaseOutput()
     const colors = createVisualColors(profile.impact)
-    const layers = this.drawImpact(node, command.area, profile, quality)
+    const layers = this.drawImpact(node, command.area, profile, danger, quality)
     const impact: ImpactVisual = {
       node,
       generation,
@@ -546,10 +557,11 @@ export class BossTelegraphPresenter extends Component {
     node: Node,
     area: EnemyTelegraphDelivery['area'],
     profile: BossTelegraphVisualProfile,
+    danger: Readonly<EnemyDangerDescriptor> | undefined,
     quality: VfxQuality,
   ): PreparedVisualNode {
     const geometry = centerAndSize(area)
-    const prepared = this.prepareVisualNode(node, geometry, profile, false, quality)
+    const prepared = this.prepareVisualNode(node, geometry, profile, danger, false, quality)
     const graphics = prepared.graphics
     if (!graphics) return prepared
 
@@ -592,10 +604,11 @@ export class BossTelegraphPresenter extends Component {
     node: Node,
     area: EnemyTelegraphDelivery['area'],
     profile: BossTelegraphVisualProfile,
+    danger: Readonly<EnemyDangerDescriptor> | undefined,
     quality: VfxQuality,
   ): PreparedVisualNode {
     const geometry = centerAndSize(area)
-    const prepared = this.prepareVisualNode(node, geometry, profile, true, quality)
+    const prepared = this.prepareVisualNode(node, geometry, profile, danger, true, quality)
     const graphics = prepared.graphics
     if (!graphics) return prepared
 
@@ -631,6 +644,7 @@ export class BossTelegraphPresenter extends Component {
     node: Node,
     geometry: ReturnType<typeof centerAndSize>,
     profile: BossTelegraphVisualProfile,
+    danger: Readonly<EnemyDangerDescriptor> | undefined,
     impact: boolean,
     quality: VfxQuality,
   ): PreparedVisualNode {
@@ -650,7 +664,8 @@ export class BossTelegraphPresenter extends Component {
       this.vfxFrames.get(profile.resources.accent) ?? null,
       this.vfxFrames.get(profile.resources.particle) ?? null,
     )
-    controller?.setLayerSizes(geometry.width, geometry.height)
+    const vertical = usesVerticalSector(profile, danger)
+    controller?.setLayerLayout(geometry.width, geometry.height, profile.layout, vertical)
     const layerMask = this.applyQuality(controller, profile, quality)
     const prepared: PreparedVisualNode = {
       layerMask,
@@ -658,6 +673,7 @@ export class BossTelegraphPresenter extends Component {
       graphics,
       width: geometry.width,
       height: geometry.height,
+      baseRotation: vertical ? 90 : 0,
       mainShape: (layerMask & MAIN_LAYER_MASK) !== 0 ? controller?.mainShape ?? null : null,
       accent: (layerMask & ACCENT_LAYER_MASK) !== 0 ? controller?.accent ?? null : null,
       particleNear: (layerMask & PARTICLE_NEAR_LAYER_MASK) !== 0 ? controller?.particleNear ?? null : null,
@@ -784,7 +800,7 @@ export class BossTelegraphPresenter extends Component {
       0,
       0.9 + progress * 0.13,
       0.9 + progress * 0.13,
-      0,
+      visual.baseRotation,
     )
     setLayerTransform(
       visual.accent,
@@ -792,7 +808,7 @@ export class BossTelegraphPresenter extends Component {
       0,
       0.86 + progress * 0.14,
       0.86 + progress * 0.14,
-      0,
+      visual.baseRotation,
     )
     setLayerTransform(
       visual.particleNear,
@@ -800,7 +816,7 @@ export class BossTelegraphPresenter extends Component {
       height * progress * 0.025,
       0.82 + progress * 0.12,
       0.82 + progress * 0.12,
-      -6 - progress * 18,
+      visual.baseRotation - 6 - progress * 18,
     )
     setLayerTransform(
       visual.particleFar,
@@ -808,7 +824,7 @@ export class BossTelegraphPresenter extends Component {
       height * progress * -0.025,
       0.78 + progress * 0.14,
       0.78 + progress * 0.14,
-      7 + progress * 19,
+      visual.baseRotation + 7 + progress * 19,
     )
   }
 
@@ -910,7 +926,7 @@ export class BossTelegraphPresenter extends Component {
       height * verticalSignature * wavePulse,
       expansion,
       expansion,
-      waveRotation * wavePulse,
+      visual.baseRotation + waveRotation * wavePulse,
     )
     setLayerTransform(
       visual.accent,
@@ -918,7 +934,7 @@ export class BossTelegraphPresenter extends Component {
       height * -verticalSignature * wavePulse,
       expansion,
       expansion,
-      waveRotation * -1.4 * wavePulse,
+      visual.baseRotation + waveRotation * -1.4 * wavePulse,
     )
     setLayerTransform(
       visual.particleNear,
@@ -926,7 +942,7 @@ export class BossTelegraphPresenter extends Component {
       height * verticalSignature * wavePulse,
       0.76 + progress * 0.28,
       0.76 + progress * 0.28,
-      turn + waveRotation * 2 * wavePulse,
+      visual.baseRotation + turn + waveRotation * 2 * wavePulse,
     )
     setLayerTransform(
       visual.particleFar,
@@ -934,7 +950,7 @@ export class BossTelegraphPresenter extends Component {
       height * -verticalSignature * wavePulse,
       0.72 + progress * 0.32,
       0.72 + progress * 0.32,
-      -turn * 0.86 + waveRotation * -2 * wavePulse,
+      visual.baseRotation - turn * 0.86 + waveRotation * -2 * wavePulse,
     )
     return Math.pow(1 - progress, 1.4 - visual.waveIndex * 0.25)
   }

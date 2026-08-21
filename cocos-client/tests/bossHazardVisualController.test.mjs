@@ -9,6 +9,15 @@ const LAYER_BINDINGS = Object.freeze([
   Object.freeze({ field: 'particleNear', name: 'ParticleNear', nodeVariable: 'particleNearNode' }),
   Object.freeze({ field: 'particleFar', name: 'ParticleFar', nodeVariable: 'particleFarNode' }),
 ])
+const TEST_LAYOUT = Object.freeze({
+  axis: 'sector',
+  layers: Object.freeze({
+    mainShape: Object.freeze({ widthScale: 1.3, heightScale: 2.4, minWidth: 180, minHeight: 140 }),
+    accent: Object.freeze({ widthScale: 1.4, heightScale: 2.1, minWidth: 190, minHeight: 128 }),
+    particleNear: Object.freeze({ widthScale: 1.2, heightScale: 1.9, minWidth: 160, minHeight: 112 }),
+    particleFar: Object.freeze({ widthScale: 1.05, heightScale: 1.7, minWidth: 150, minHeight: 104 }),
+  }),
+})
 
 const ccSource = `
 export const _decorator = {
@@ -325,7 +334,7 @@ test('twenty pool despawns reset four layers while preserving measured pooled st
 test('setLayerFrames binds main accent and one shared particle frame to four layers', async () => {
   const { BossHazardVisualController, PoolableActor, cc } = await loadRuntime()
   const harness = createHarness(cc, BossHazardVisualController, PoolableActor)
-  harness.controller.setLayerSizes(280, 72)
+  harness.controller.setLayerLayout(280, 72, TEST_LAYOUT, false)
   const configuredSizes = LAYER_BINDINGS.map(({ field }) => ({
     field,
     reference: harness.layers[field].transform.contentSize,
@@ -373,45 +382,38 @@ test('mock reproduces TRIMMED frame resizing while CUSTOM preserves a configured
   assert.deepEqual(transform.contentSize, { width: 280, height: 72 })
 })
 
-test('setLayerSizes keeps every fixed layer positive and bounded for rectangular skill areas', async () => {
+test('setLayerLayout applies profile overscan minimums and swaps source axes for vertical sectors', async () => {
   const { BossHazardVisualController, PoolableActor, cc } = await loadRuntime()
   const harness = createHarness(cc, BossHazardVisualController, PoolableActor)
   const stableNodeCount = cc.mockStats.nodes
   const stableSpriteCount = cc.mockStats.sprites
-  const minimum = 0.001
-  const factors = {
-    mainShape: 1,
-    accent: 0.9,
-    particleNear: 0.7,
-    particleFar: 0.5,
-  }
   const cases = [
-    { hazard: 'sweep-like', width: 280, height: 72 },
-    { hazard: 'spike-like', width: 84, height: 196 },
-    { hazard: 'roar-like', width: 320, height: 48 },
-    { hazard: 'very-small', width: 0.25, height: 0.5 },
+    { hazard: 'horizontal', width: 280, height: 72, vertical: false },
+    { hazard: 'vertical', width: 72, height: 280, vertical: true },
+    { hazard: 'minimums', width: 0.25, height: 0.5, vertical: false },
   ]
   const sizeIdentities = Object.fromEntries(
     LAYER_BINDINGS.map(({ field }) => [field, harness.layers[field].transform.contentSize]),
   )
 
-  for (const { hazard, width, height } of cases) {
-    harness.controller.setLayerSizes(width, height)
+  for (const { hazard, width, height, vertical } of cases) {
+    harness.controller.setLayerLayout(width, height, TEST_LAYOUT, vertical)
     for (const { field } of LAYER_BINDINGS) {
       const size = harness.layers[field].transform.contentSize
+      const spec = TEST_LAYOUT.layers[field]
+      const orientedWidth = vertical ? height : width
+      const orientedHeight = vertical ? width : height
       assert.strictEqual(size, sizeIdentities[field], `${hazard} ${field} size identity`)
       assert.ok(Number.isFinite(size.width) && size.width > 0, `${hazard} ${field} width`)
       assert.ok(Number.isFinite(size.height) && size.height > 0, `${hazard} ${field} height`)
-      assert.ok(size.width <= width, `${hazard} ${field} width must stay inside root geometry`)
-      assert.ok(size.height <= height, `${hazard} ${field} height must stay inside root geometry`)
-      assert.equal(size.width, width * factors[field], `${hazard} ${field} width factor`)
-      assert.equal(size.height, height * factors[field], `${hazard} ${field} height factor`)
-      assert.ok(
-        Math.abs((size.width / size.height) - (width / height)) < 1e-12,
-        `${hazard} ${field} rectangular ratio`,
-      )
+      assert.equal(size.width, Math.max(spec.minWidth, orientedWidth * spec.widthScale), `${hazard} ${field} width`)
+      assert.equal(size.height, Math.max(spec.minHeight, orientedHeight * spec.heightScale), `${hazard} ${field} height`)
     }
   }
+  assert.deepEqual(
+    { ...harness.layers.mainShape.transform.contentSize },
+    { width: TEST_LAYOUT.layers.mainShape.minWidth, height: TEST_LAYOUT.layers.mainShape.minHeight },
+  )
 
   const unsafeCases = [
     { label: 'extreme-tiny', width: Number.MIN_VALUE, height: Number.MIN_VALUE },
@@ -420,17 +422,17 @@ test('setLayerSizes keeps every fixed layer positive and bounded for rectangular
     { label: 'nan', width: Number.NaN, height: Number.NaN },
     { label: 'infinity', width: Number.POSITIVE_INFINITY, height: Number.NEGATIVE_INFINITY },
   ]
-  const safeDimension = value => Number.isFinite(value) && value > 0 ? Math.max(minimum, value) : 1
+  const safeDimension = value => Number.isFinite(value) && value > 0 ? Math.max(0.001, value) : 1
   for (const { label, width, height } of unsafeCases) {
-    harness.controller.setLayerSizes(width, height)
+    harness.controller.setLayerLayout(width, height, TEST_LAYOUT, false)
     for (const { field } of LAYER_BINDINGS) {
       const size = harness.layers[field].transform.contentSize
-      const factor = factors[field]
+      const spec = TEST_LAYOUT.layers[field]
       assert.strictEqual(size, sizeIdentities[field], `${label} ${field} size identity`)
-      assert.equal(size.width, Math.max(minimum, safeDimension(width) * factor), `${label} ${field} width`)
-      assert.equal(size.height, Math.max(minimum, safeDimension(height) * factor), `${label} ${field} height`)
-      assert.ok(Number.isFinite(size.width) && size.width >= minimum, `${label} ${field} finite width`)
-      assert.ok(Number.isFinite(size.height) && size.height >= minimum, `${label} ${field} finite height`)
+      assert.equal(size.width, Math.max(spec.minWidth, safeDimension(width) * spec.widthScale), `${label} ${field} width`)
+      assert.equal(size.height, Math.max(spec.minHeight, safeDimension(height) * spec.heightScale), `${label} ${field} height`)
+      assert.ok(Number.isFinite(size.width) && size.width >= spec.minWidth, `${label} ${field} finite width`)
+      assert.ok(Number.isFinite(size.height) && size.height >= spec.minHeight, `${label} ${field} finite height`)
     }
   }
   assert.equal(cc.mockStats.nodes, stableNodeCount)
@@ -443,7 +445,7 @@ test('controller methods are null-safe when optional visual bindings are absent'
 
   assert.doesNotThrow(() => controller.resetVisual())
   assert.doesNotThrow(() => controller.setLayerFrames(null, null, null))
-  assert.doesNotThrow(() => controller.setLayerSizes(200, 80))
+  assert.doesNotThrow(() => controller.setLayerLayout(200, 80, TEST_LAYOUT, false))
 })
 
 test('bootstrap builds and binds exactly four persistent sprite children', async () => {

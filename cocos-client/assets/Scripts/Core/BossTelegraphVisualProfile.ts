@@ -9,6 +9,23 @@ export interface BossVfxResources {
   readonly particle: string
 }
 
+export interface BossVfxLayerLayout {
+  readonly widthScale: number
+  readonly heightScale: number
+  readonly minWidth: number
+  readonly minHeight: number
+}
+
+export interface BossVfxLayout {
+  readonly axis: 'fixed' | 'sector'
+  readonly layers: Readonly<{
+    readonly mainShape: BossVfxLayerLayout
+    readonly accent: BossVfxLayerLayout
+    readonly particleNear: BossVfxLayerLayout
+    readonly particleFar: BossVfxLayerLayout
+  }>
+}
+
 export interface BossVfxPhaseOutput {
   progress: number
   phase: BossVfxPhaseName
@@ -23,6 +40,7 @@ export interface BossTelegraphVisualProfile {
     readonly reducedAccent: boolean
     readonly minimalParticles: boolean
   }>
+  readonly layout: BossVfxLayout
   readonly warning: Rgba
   readonly spirit: Rgba
   readonly impact: Rgba
@@ -44,6 +62,13 @@ const PROFILES = Object.freeze({
       'Assets/Skills/BossDomain/leaf_particle/spriteFrame',
     ),
     quality,
+    layout: layout(
+      'fixed',
+      layerSize(1.2, 2.4, 300, 144),
+      layerSize(1.28, 2.8, 320, 168),
+      layerSize(0.9, 1.8, 200, 120),
+      layerSize(0.75, 1.5, 180, 100),
+    ),
     warning: rgba(232, 190, 88, 220),
     spirit,
     impact,
@@ -56,6 +81,13 @@ const PROFILES = Object.freeze({
       'Assets/Skills/BossDomain/impact_spark/spriteFrame',
     ),
     quality,
+    layout: layout(
+      'fixed',
+      layerSize(2.3, 2.7, 128, 152),
+      layerSize(2.5, 1.3, 140, 72),
+      layerSize(1.8, 2.4, 104, 136),
+      layerSize(1.6, 2.7, 96, 152),
+    ),
     warning: rgba(164, 58, 44, 220),
     spirit,
     impact,
@@ -68,6 +100,13 @@ const PROFILES = Object.freeze({
       'Assets/Skills/BossDomain/leaf_particle/spriteFrame',
     ),
     quality,
+    layout: layout(
+      'sector',
+      layerSize(1.3, 2.4, 180, 140),
+      layerSize(1.4, 2.1, 190, 128),
+      layerSize(1.2, 1.9, 160, 112),
+      layerSize(1.05, 1.7, 150, 104),
+    ),
     warning: rgba(232, 190, 88, 220),
     spirit,
     impact,
@@ -94,7 +133,7 @@ export function bossVfxPhase(
   const result = out ?? { progress: 0, phase: 'warning', intensity: 0, travel: 0 }
   result.progress = progress
   result.phase = critical ? 'critical' : 'warning'
-  result.intensity = round3(critical ? 0.7 + (progress - 0.7) : 0.32 + progress * 0.48)
+  result.intensity = round3(critical ? 0.75 + (progress - 0.7) * (5 / 6) : 0.58 + progress * 0.24)
   result.travel = round3(critical ? (progress - 0.7) / 0.3 : 0)
   return result
 }
@@ -105,6 +144,28 @@ function round3(value: number): number {
 
 function resources(main: string, accent: string, particle: string): BossVfxResources {
   return Object.freeze({ main, accent, particle })
+}
+
+function layerSize(
+  widthScale: number,
+  heightScale: number,
+  minWidth: number,
+  minHeight: number,
+): BossVfxLayerLayout {
+  return Object.freeze({ widthScale, heightScale, minWidth, minHeight })
+}
+
+function layout(
+  axis: BossVfxLayout['axis'],
+  mainShape: BossVfxLayerLayout,
+  accent: BossVfxLayerLayout,
+  particleNear: BossVfxLayerLayout,
+  particleFar: BossVfxLayerLayout,
+): BossVfxLayout {
+  return Object.freeze({
+    axis,
+    layers: Object.freeze({ mainShape, accent, particleNear, particleFar }),
+  })
 }
 
 function rgba(red: number, green: number, blue: number, alpha: number): Rgba {

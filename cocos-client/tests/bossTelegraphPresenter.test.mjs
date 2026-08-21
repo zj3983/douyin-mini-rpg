@@ -124,7 +124,7 @@ export class BossHazardVisualController {
     this.particleFar = null
   }
   setLayerFrames(main, accent, particle) {}
-  setLayerSizes(width, height) {}
+  setLayerLayout(width, height, layout, vertical) {}
 }
 `
 
@@ -273,7 +273,7 @@ class TelegraphNode {
     particleNear: this.particleNear,
     particleFar: this.particleFar,
     frameCalls: [],
-    sizeCalls: [],
+    layoutCalls: [],
     resetVisual: () => {
       const before = frameIds(this)
       for (const layer of Object.values(this.layers)) {
@@ -299,15 +299,15 @@ class TelegraphNode {
       this.particleFar.spriteFrame = particle
       this.controller.frameCalls.push([main, accent, particle])
     },
-    setLayerSizes: (width, height) => {
-      const factors = { mainShape: 1, accent: 0.9, particleNear: 0.7, particleFar: 0.5 }
+    setLayerLayout: (width, height, layout, vertical) => {
       for (const field of LAYER_FIELDS) {
+        const spec = layout.layers[field]
         Object.assign(this.layers[field].node.size, {
-          width: width * factors[field],
-          height: height * factors[field],
+          width: Math.max(spec.minWidth, (vertical ? height : width) * spec.widthScale),
+          height: Math.max(spec.minHeight, (vertical ? width : height) * spec.heightScale),
         })
       }
-      this.controller.sizeCalls.push({ width, height })
+      this.controller.layoutCalls.push({ width, height, layout, vertical })
     },
   }
   setPosition(x, y, z) { this.position = { x, y, z } }
@@ -667,6 +667,7 @@ test('preloads seven unique resources once and maps all profile layers for warni
   }
 
   const warningNodes = [...pool.active]
+  const warningVisuals = activeWarningVisuals(presenter)
   assert.equal(warningNodes.length, 3)
   assert.deepEqual(
     warningNodes.map((node) => visualIdForFrame(node.mainShape.spriteFrame)),
@@ -676,9 +677,11 @@ test('preloads seven unique resources once and maps all profile layers for warni
     const entry = PROFILE_CASES[index]
     assert.deepEqual(frameIds(node), [...entry.paths, entry.paths[2]], `${entry.id} warning frames`)
     assert.deepEqual(node.controller.frameCalls.at(-1).map((frame) => frame?.id ?? null), entry.paths)
-    assert.deepEqual(node.controller.sizeCalls.at(-1), {
+    assert.deepEqual(node.controller.layoutCalls.at(-1), {
       width: entry.area.maxX - entry.area.minX,
       height: entry.area.maxY - entry.area.minY,
+      layout: warningVisuals[index].profile.layout,
+      vertical: false,
     })
     assert.equal(areaKey({
       minX: node.position.x - node.transform.size.width / 2,
@@ -720,13 +723,103 @@ test('preloads seven unique resources once and maps all profile layers for warni
     const entry = PROFILE_CASES[index]
     assert.deepEqual(frameIds(node), [...entry.paths, entry.paths[2]], `${entry.id} impact frames`)
     assert.deepEqual(node.controller.frameCalls.at(-1).map((frame) => frame?.id ?? null), entry.paths)
-    assert.deepEqual(node.controller.sizeCalls.at(-1), {
-      width: entry.area.maxX - entry.area.minX,
-      height: entry.area.maxY - entry.area.minY,
-    })
+    assert.ok(node.controller.layoutCalls.length > 0)
     assert.equal(node.graphics.lineWidth, 4)
     assert.ok(node.graphics.calls.some((call) => call.type === 'stroke'))
   }
+})
+
+test('profile layouts overscan child sprites while authority roots and Graphics remain unchanged', async () => {
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
+  const { pool, presenter } = createPresenterScenario(BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY)
+  presenter.onLoad()
+
+  for (const entry of PROFILE_CASES) presenter.present(telegraph(entry.attackId, entry.area, entry.danger))
+  const visuals = activeWarningVisuals(presenter)
+  const nodes = [...pool.active]
+
+  for (const [index, node] of nodes.entries()) {
+    const entry = PROFILE_CASES[index]
+    const root = rootAndGraphics(node)
+    const child = layerGeometry(node)
+    assert.deepEqual(root.position, {
+      x: (entry.area.minX + entry.area.maxX) / 2,
+      y: (entry.area.minY + entry.area.maxY) / 2,
+      z: 0,
+    })
+    assert.deepEqual(root.size, {
+      width: entry.area.maxX - entry.area.minX,
+      height: entry.area.maxY - entry.area.minY,
+    })
+    assert.ok(root.graphics.some((call) => call.type === 'stroke'))
+    assert.equal(root.graphics.some((call) => ['rect', 'fill', 'circle', 'ellipse'].includes(call.type)), false)
+    assert.ok(child.mainShape.size.width > root.size.width || child.mainShape.size.height > root.size.height)
+    assert.strictEqual(visuals[index].profile.layout, node.controller.layoutCalls.at(-1).layout)
+  }
+
+  const spikeRoot = rootAndGraphics(nodes[1])
+  const spike = layerGeometry(nodes[1])
+  assert.ok(spike.mainShape.size.width >= 112 && spike.mainShape.size.height >= 112)
+  assert.ok(spike.mainShape.size.width > spikeRoot.size.width)
+  assert.ok(spike.mainShape.size.height > spikeRoot.size.height)
+  assert.ok(spike.accent.size.height < spike.mainShape.size.height, 'ground dust stays compact at the base')
+})
+
+test('roar sector layout keeps top and bottom horizontal and rotates left and right vertically', async () => {
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
+  const { pool, presenter } = createPresenterScenario(BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY)
+  presenter.onLoad()
+  const sectors = [
+    ['top', { minX: -100, maxX: 100, minY: 80, maxY: 130 }],
+    ['bottom', { minX: -100, maxX: 100, minY: -130, maxY: -80 }],
+    ['right', { minX: 80, maxX: 130, minY: -100, maxY: 100 }],
+    ['left-upper', { minX: -130, maxX: -80, minY: 10, maxY: 100 }],
+  ]
+  for (const [sector, area] of sectors) {
+    presenter.present(telegraph(`mountain-roar:7:orientation:${sector}`, area, {
+      kind: 'roar-sector', waveIndex: -1, radius: 190, sector,
+      safeGap: { sector: 'left', centerAngle: Math.PI, width: Math.PI / 3 },
+    }))
+  }
+
+  const nodes = [...pool.active]
+  assert.deepEqual(nodes.map((node) => node.controller.layoutCalls.at(-1).vertical), [false, false, true, true])
+  assert.deepEqual(nodes.map((node) => node.mainShape.node.eulerAngles.z), [0, 0, 90, 90])
+  assert.ok(nodes[0].mainShape.node.size.width > nodes[0].mainShape.node.size.height)
+  assert.ok(nodes[2].mainShape.node.size.width > nodes[2].mainShape.node.size.height, 'vertical sector uses a horizontal source before rotation')
+})
+
+test('standard warning main starts visibly at alpha 90 or higher and brightens toward critical', async () => {
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
+  const { presenter } = createPresenterScenario(BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY)
+  presenter.onLoad()
+  presenter.present(telegraph(PROFILE_CASES[0].attackId, PROFILE_CASES[0].area, PROFILE_CASES[0].danger))
+  const node = latestWarningVisual(presenter).node
+  const initial = node.mainShape.color.a
+  assert.ok(initial >= 90, `initial main alpha ${initial}`)
+  presenter.update(0.6)
+  assert.ok(node.mainShape.color.a > initial)
+})
+
+test('pooled reset restores overscan size and sector rotation state before reuse', async () => {
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
+  const { pool, presenter } = createPresenterScenario(BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY)
+  presenter.onLoad()
+  const roar = PROFILE_CASES[2]
+  presenter.present(telegraph(`${roar.attackId}:left`, roar.area, { ...roar.danger, sector: 'left-upper' }))
+  const node = [...pool.active][0]
+  assert.equal(node.mainShape.node.eulerAngles.z, 90)
+  assert.ok(node.mainShape.node.size.width > 1)
+
+  presenter.cancelEnemy(3, 7)
+  for (const field of LAYER_FIELDS) {
+    assert.deepEqual(node.layers[field].node.size, { width: 1, height: 1 })
+    assert.deepEqual(node.layers[field].node.eulerAngles, { x: 0, y: 0, z: 0 })
+  }
+
+  presenter.present(telegraph(PROFILE_CASES[0].attackId, PROFILE_CASES[0].area, PROFILE_CASES[0].danger))
+  assert.strictEqual([...pool.active][0], node)
+  assert.equal(node.mainShape.node.eulerAngles.z, -4, 'fixed sweep pose is not contaminated by pooled roar rotation')
 })
 
 test('warning motion becomes critical with distinct skill transforms while root geometry and Graphics stay static', async () => {
@@ -941,17 +1034,17 @@ test('steady-state phase updates avoid Color construction resource loads and com
     size: { ...node.transform.size },
     stroke: { ...node.graphics.strokeColor },
   }
-  assert.deepEqual(phaseOutput, { progress: 0, phase: 'warning', intensity: 0.32, travel: 0 })
+  assert.deepEqual(phaseOutput, { progress: 0, phase: 'warning', intensity: 0.58, travel: 0 })
   assert.strictEqual(visual.controller, node.controller)
   for (const field of LAYER_FIELDS) assert.strictEqual(visual[field], node.layers[field])
 
   presenter.update(0.2)
   assert.strictEqual(visual.phase, phaseOutput)
-  assert.deepEqual(phaseOutput, { progress: 0.25, phase: 'warning', intensity: 0.44, travel: 0 })
+  assert.deepEqual(phaseOutput, { progress: 0.25, phase: 'warning', intensity: 0.64, travel: 0 })
   assert.notEqual(node.mainShape.color.a, before.alpha)
   presenter.update(0.4)
   assert.strictEqual(visual.phase, phaseOutput)
-  assert.deepEqual(phaseOutput, { progress: 0.75, phase: 'critical', intensity: 0.75, travel: 0.167 })
+  assert.deepEqual(phaseOutput, { progress: 0.75, phase: 'critical', intensity: 0.792, travel: 0.167 })
   for (let index = 0; index < 120; index += 1) presenter.update(0.0005)
 
   for (const [index, field] of LAYER_FIELDS.entries()) {
@@ -985,7 +1078,7 @@ test('sweep impact crosses 82 percent of the area with a trailing accent and end
   const width = entry.area.maxX - entry.area.minX
   const staticState = rootAndGraphics(node)
   const start = layerGeometry(node)
-  assert.deepEqual(impact.phase, { progress: 0, phase: 'warning', intensity: 0.32, travel: 0 })
+  assert.deepEqual(impact.phase, { progress: 0, phase: 'warning', intensity: 0.58, travel: 0 })
   assert.equal(impact.remaining, 1)
   assertNear(impact.width, width)
   assertNear(start.mainShape.position.x, width * -0.41, 1e-6, 'sweep impact start')
@@ -1032,7 +1125,7 @@ test('spike impact rises with eased dust expansion and two scale beats', async (
   const height = entry.area.maxY - entry.area.minY
   const staticState = rootAndGraphics(node)
   const start = layerGeometry(node)
-  assert.deepEqual(impact.phase, { progress: 0, phase: 'warning', intensity: 0.32, travel: 0 })
+  assert.deepEqual(impact.phase, { progress: 0, phase: 'warning', intensity: 0.58, travel: 0 })
   assertNear(impact.height, height)
   assertNear(start.mainShape.position.y, height * -0.38, 1e-6, 'spike impact start')
   assertNear(start.accent.scale.x, 0.55, 1e-6, 'spike dust start width')
