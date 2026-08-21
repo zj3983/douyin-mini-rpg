@@ -52,6 +52,7 @@ interface PreparedVisualNode extends CachedVisualLayers {
   readonly width: number
   readonly height: number
   readonly baseRotation: number
+  readonly rotationFactor: number
 }
 
 interface CachedVisualColors {
@@ -674,6 +675,7 @@ export class BossTelegraphPresenter extends Component {
       width: geometry.width,
       height: geometry.height,
       baseRotation: vertical ? 90 : 0,
+      rotationFactor: vertical ? profile.layout.vertical?.rotationFactor ?? 1 : 1,
       mainShape: (layerMask & MAIN_LAYER_MASK) !== 0 ? controller?.mainShape ?? null : null,
       accent: (layerMask & ACCENT_LAYER_MASK) !== 0 ? controller?.accent ?? null : null,
       particleNear: (layerMask & PARTICLE_NEAR_LAYER_MASK) !== 0 ? controller?.particleNear ?? null : null,
@@ -816,7 +818,7 @@ export class BossTelegraphPresenter extends Component {
       height * progress * 0.025,
       0.82 + progress * 0.12,
       0.82 + progress * 0.12,
-      visual.baseRotation - 6 - progress * 18,
+      visual.baseRotation + (-6 - progress * 18) * visual.rotationFactor,
     )
     setLayerTransform(
       visual.particleFar,
@@ -824,7 +826,7 @@ export class BossTelegraphPresenter extends Component {
       height * progress * -0.025,
       0.78 + progress * 0.14,
       0.78 + progress * 0.14,
-      visual.baseRotation + 7 + progress * 19,
+      visual.baseRotation + (7 + progress * 19) * visual.rotationFactor,
     )
   }
 
@@ -926,7 +928,7 @@ export class BossTelegraphPresenter extends Component {
       height * verticalSignature * wavePulse,
       expansion,
       expansion,
-      visual.baseRotation + waveRotation * wavePulse,
+      visual.baseRotation + waveRotation * wavePulse * visual.rotationFactor,
     )
     setLayerTransform(
       visual.accent,
@@ -934,7 +936,7 @@ export class BossTelegraphPresenter extends Component {
       height * -verticalSignature * wavePulse,
       expansion,
       expansion,
-      visual.baseRotation + waveRotation * -1.4 * wavePulse,
+      visual.baseRotation + waveRotation * -1.4 * wavePulse * visual.rotationFactor,
     )
     setLayerTransform(
       visual.particleNear,
@@ -942,7 +944,7 @@ export class BossTelegraphPresenter extends Component {
       height * verticalSignature * wavePulse,
       0.76 + progress * 0.28,
       0.76 + progress * 0.28,
-      visual.baseRotation + turn + waveRotation * 2 * wavePulse,
+      visual.baseRotation + (turn + waveRotation * 2 * wavePulse) * visual.rotationFactor,
     )
     setLayerTransform(
       visual.particleFar,
@@ -950,7 +952,7 @@ export class BossTelegraphPresenter extends Component {
       height * -verticalSignature * wavePulse,
       0.72 + progress * 0.32,
       0.72 + progress * 0.32,
-      visual.baseRotation - turn * 0.86 + waveRotation * -2 * wavePulse,
+      visual.baseRotation + (-turn * 0.86 + waveRotation * -2 * wavePulse) * visual.rotationFactor,
     )
     return Math.pow(1 - progress, 1.4 - visual.waveIndex * 0.25)
   }

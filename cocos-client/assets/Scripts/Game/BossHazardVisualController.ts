@@ -30,12 +30,17 @@ function setLayerSize(
   width: number,
   height: number,
   spec: BossVfxLayerLayout,
+  layout: BossVfxLayout,
   vertical: boolean,
 ): void {
   const orientedWidth = vertical ? height : width
   const orientedHeight = vertical ? width : height
+  const uncappedWidth = Math.max(spec.minWidth, orientedWidth * spec.widthScale)
+  const maxWidth = vertical && layout.vertical
+    ? orientedWidth * layout.vertical.maxLongAxisRatio
+    : uncappedWidth
   sprite?.node.getComponent(UITransform)?.setContentSize(
-    Math.max(spec.minWidth, orientedWidth * spec.widthScale),
+    Math.min(uncappedWidth, maxWidth),
     Math.max(spec.minHeight, orientedHeight * spec.heightScale),
   )
 }
@@ -79,9 +84,9 @@ export class BossHazardVisualController extends Component {
   setLayerLayout(width: number, height: number, layout: BossVfxLayout, vertical: boolean): void {
     const safeWidth = positiveDimension(width)
     const safeHeight = positiveDimension(height)
-    setLayerSize(this.mainShape, safeWidth, safeHeight, layout.layers.mainShape, vertical)
-    setLayerSize(this.accent, safeWidth, safeHeight, layout.layers.accent, vertical)
-    setLayerSize(this.particleNear, safeWidth, safeHeight, layout.layers.particleNear, vertical)
-    setLayerSize(this.particleFar, safeWidth, safeHeight, layout.layers.particleFar, vertical)
+    setLayerSize(this.mainShape, safeWidth, safeHeight, layout.layers.mainShape, layout, vertical)
+    setLayerSize(this.accent, safeWidth, safeHeight, layout.layers.accent, layout, vertical)
+    setLayerSize(this.particleNear, safeWidth, safeHeight, layout.layers.particleNear, layout, vertical)
+    setLayerSize(this.particleFar, safeWidth, safeHeight, layout.layers.particleFar, layout, vertical)
   }
 }

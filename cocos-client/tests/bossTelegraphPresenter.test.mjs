@@ -302,8 +302,12 @@ class TelegraphNode {
     setLayerLayout: (width, height, layout, vertical) => {
       for (const field of LAYER_FIELDS) {
         const spec = layout.layers[field]
+        const orientedWidth = vertical ? height : width
+        const uncappedWidth = Math.max(spec.minWidth, orientedWidth * spec.widthScale)
         Object.assign(this.layers[field].node.size, {
-          width: Math.max(spec.minWidth, (vertical ? height : width) * spec.widthScale),
+          width: vertical && layout.vertical
+            ? Math.min(uncappedWidth, orientedWidth * layout.vertical.maxLongAxisRatio)
+            : uncappedWidth,
           height: Math.max(spec.minHeight, (vertical ? width : height) * spec.heightScale),
         })
       }
@@ -454,6 +458,48 @@ function assertNear(actual, expected, tolerance = 1e-6, message = '') {
     Math.abs(actual - expected) <= tolerance,
     `${message || 'value'}: expected ${expected} +/- ${tolerance}, received ${actual}`,
   )
+}
+
+function visibleLayerYEnvelope(node, field) {
+  const layer = node.layers[field].node
+  const radians = layer.eulerAngles.z * Math.PI / 180
+  const halfY = (
+    Math.abs(Math.sin(radians)) * layer.size.width * Math.abs(layer.scale.x)
+    + Math.abs(Math.cos(radians)) * layer.size.height * Math.abs(layer.scale.y)
+  ) * 0.5
+  const centerY = node.position.y + layer.position.y
+  return { minY: centerY - halfY, maxY: centerY + halfY }
+}
+
+function assertVisibleSafeGap(upperNode, lowerNode, label) {
+  for (const field of LAYER_FIELDS) {
+    const upper = visibleLayerYEnvelope(upperNode, field)
+    const lower = visibleLayerYEnvelope(lowerNode, field)
+    assert.ok(upper.minY - lower.maxY > 0, `${label} ${field} visible gap`)
+  }
+}
+
+function collectRealBossRoarCommands() {
+  const enemyId = 97
+  const position = { x: 0, y: 0 }
+  const battleBounds = { minX: -360, maxX: 360, minY: -420, maxY: 420 }
+  for (let seed = 0; seed < 256; seed += 1) {
+    const boss = createBambooWardenBrain(enemyId, position, seed)
+    const commands = []
+    while (boss.elapsed < 2.5) {
+      const deltaTime = Math.min(0.05, 2.5 - boss.elapsed)
+      commands.push(...stepBambooWarden(boss, {
+        now: boss.elapsed + deltaTime,
+        player: { id: 'player', position: { x: -120, y: 0 }, alive: true },
+        neighbors: [],
+        battleBounds,
+      }, deltaTime))
+    }
+    const warnings = commands.filter((command) => command.type === 'show-telegraph' && command.danger?.kind === 'roar-sector')
+    const impacts = commands.filter((command) => command.type === 'activate-hitbox' && command.danger?.kind === 'roar-sector')
+    if (warnings.length === 5 && impacts.length === 15) return { enemyId, impacts, warnings }
+  }
+  assert.fail('no deterministic seed emitted one complete real Boss roar')
 }
 
 function commandAttack(command) {
@@ -787,6 +833,127 @@ test('roar sector layout keeps top and bottom horizontal and rotates left and ri
   assert.deepEqual(nodes.map((node) => node.mainShape.node.eulerAngles.z), [0, 0, 90, 90])
   assert.ok(nodes[0].mainShape.node.size.width > nodes[0].mainShape.node.size.height)
   assert.ok(nodes[2].mainShape.node.size.width > nodes[2].mainShape.node.size.height, 'vertical sector uses a horizontal source before rotation')
+})
+
+test('real Boss roar child rectangles preserve the left safe gap through warning and impact peak', async () => {
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
+  const roar = collectRealBossRoarCommands()
+  const radii = [...new Set(roar.impacts.map((command) => command.danger.radius))].toSorted((a, b) => a - b)
+  assert.deepEqual(radii, [80, 135, 190], 'test follows the current authoritative ROAR_WAVE_RADII')
+
+  const realWarnings = roar.warnings.filter((command) => command.danger.sector.startsWith('left'))
+  assert.equal(realWarnings.length, 2)
+  const warningScenario = createPresenterScenario(BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY)
+  warningScenario.presenter.onLoad()
+  for (const command of realWarnings) {
+    warningScenario.presenter.present({
+      ...command,
+      enemyId: roar.enemyId,
+      telegraphId: command.telegraphId ?? command.attackId,
+      visibleAt: command.eventTime ?? 0,
+      activationNotBefore: command.activatesAt ?? (command.eventTime ?? 0) + command.duration,
+      generation: 3,
+    })
+  }
+  const warningNodes = [...warningScenario.pool.active].toSorted((left, right) => right.position.y - left.position.y)
+  const [warningUpper, warningLower] = warningNodes
+  const warningUpperCommand = realWarnings.find((command) => command.danger.sector === 'left-upper')
+  const warningLowerCommand = realWarnings.find((command) => command.danger.sector === 'left-lower')
+  assert.deepEqual(rootAndGraphics(warningUpper).position, {
+    x: (warningUpperCommand.area.minX + warningUpperCommand.area.maxX) * 0.5,
+    y: (warningUpperCommand.area.minY + warningUpperCommand.area.maxY) * 0.5,
+    z: 0,
+  })
+  assert.deepEqual(rootAndGraphics(warningLower).position, {
+    x: (warningLowerCommand.area.minX + warningLowerCommand.area.maxX) * 0.5,
+    y: (warningLowerCommand.area.minY + warningLowerCommand.area.maxY) * 0.5,
+    z: 0,
+  })
+  assert.deepEqual(rootAndGraphics(warningUpper).size, {
+    width: warningUpperCommand.area.maxX - warningUpperCommand.area.minX,
+    height: warningUpperCommand.area.maxY - warningUpperCommand.area.minY,
+  })
+  assert.deepEqual(rootAndGraphics(warningLower).size, {
+    width: warningLowerCommand.area.maxX - warningLowerCommand.area.minX,
+    height: warningLowerCommand.area.maxY - warningLowerCommand.area.minY,
+  })
+  assertNear(
+    warningUpperCommand.area.minY - warningLowerCommand.area.maxY,
+    warningUpperCommand.danger.radius * 0.68,
+    1e-9,
+    'warning authority safe gap',
+  )
+  assert.deepEqual(warningUpperCommand.danger.safeGap, warningLowerCommand.danger.safeGap)
+  const warningRoots = warningNodes.map(rootAndGraphics)
+  assertVisibleSafeGap(warningUpper, warningLower, 'initial warning')
+  warningScenario.presenter.update(0.4)
+  assertVisibleSafeGap(warningUpper, warningLower, 'mid warning')
+  warningScenario.presenter.update(0.399)
+  assertVisibleSafeGap(warningUpper, warningLower, 'critical warning')
+  assert.deepEqual(warningNodes.map(rootAndGraphics), warningRoots)
+
+  const topCommand = roar.warnings.find((command) => command.danger.sector === 'top')
+  const topScenario = createPresenterScenario(BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY)
+  topScenario.presenter.onLoad()
+  topScenario.presenter.present({
+    ...topCommand,
+    enemyId: roar.enemyId,
+    telegraphId: topCommand.telegraphId ?? topCommand.attackId,
+    visibleAt: topCommand.eventTime ?? 0,
+    activationNotBefore: topCommand.activatesAt ?? (topCommand.eventTime ?? 0) + topCommand.duration,
+    generation: 3,
+  })
+  const topNode = [...topScenario.pool.active][0]
+  assert.equal(topNode.controller.layoutCalls.at(-1).vertical, false)
+  assert.ok(topNode.mainShape.node.size.width > topNode.transform.size.width, 'real top wave keeps width overscan')
+  assert.ok(topNode.mainShape.node.size.height > topNode.transform.size.height, 'real top wave keeps broad thickness')
+
+  for (const radius of radii) {
+    const pair = roar.impacts.filter((command) => (
+      command.danger.radius === radius && command.danger.sector.startsWith('left')
+    ))
+    assert.equal(pair.length, 2, `radius ${radius} real impact pair`)
+    const upperCommand = pair.find((command) => command.danger.sector === 'left-upper')
+    const lowerCommand = pair.find((command) => command.danger.sector === 'left-lower')
+    const authorityGap = upperCommand.area.minY - lowerCommand.area.maxY
+    assertNear(authorityGap, radius * 0.68, 1e-9, `radius ${radius} authority safe gap`)
+
+    const { pool, presenter } = createPresenterScenario(BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY)
+    presenter.onLoad()
+    for (const command of realWarnings) {
+      presenter.present({
+        ...command,
+        enemyId: roar.enemyId,
+        telegraphId: command.telegraphId ?? command.attackId,
+        visibleAt: command.eventTime ?? 0,
+        activationNotBefore: command.activatesAt ?? (command.eventTime ?? 0) + command.duration,
+        generation: 3,
+      })
+    }
+    for (const command of pair) presenter.activate(3, roar.enemyId, command)
+    presenter.update(0.8)
+
+    const impactNodes = [...pool.active].toSorted((left, right) => right.position.y - left.position.y)
+    const [upperNode, lowerNode] = impactNodes
+    const impactRoots = impactNodes.map(rootAndGraphics)
+    assert.deepEqual(rootAndGraphics(upperNode).size, {
+      width: upperCommand.area.maxX - upperCommand.area.minX,
+      height: upperCommand.area.maxY - upperCommand.area.minY,
+    })
+    assert.deepEqual(rootAndGraphics(lowerNode).size, {
+      width: lowerCommand.area.maxX - lowerCommand.area.minX,
+      height: lowerCommand.area.maxY - lowerCommand.area.minY,
+    })
+    assert.ok(upperNode.mainShape.node.size.height > upperNode.transform.size.width, `radius ${radius} broad thickness`)
+    assertVisibleSafeGap(upperNode, lowerNode, `radius ${radius} impact progress 0`)
+    presenter.update(0.001)
+    for (const [index, deltaTime] of [0.03, 0.03, 0.03, 0.029999].entries()) {
+      presenter.update(deltaTime)
+      assertVisibleSafeGap(upperNode, lowerNode, `radius ${radius} impact step ${index + 1}`)
+      assert.deepEqual(impactNodes.map(rootAndGraphics), impactRoots)
+    }
+    assert.equal(presenter.impacts[0].phase.progress, 1, `radius ${radius} reaches the 1.18 peak envelope`)
+  }
 })
 
 test('standard warning main starts visibly at alpha 90 or higher and brightens toward critical', async () => {

@@ -7,9 +7,10 @@ import * as esmRuntime from '../tools/boss-telegraph-visual-profile.mjs'
 const expectedSpirit = [141, 232, 218, 190]
 const expectedImpact = [255, 240, 189, 245]
 const expectedQuality = { reducedAccent: true, minimalParticles: false }
-const layout = (axis, mainShape, accent, particleNear, particleFar) => ({
+const layout = (axis, mainShape, accent, particleNear, particleFar, vertical) => ({
   axis,
   layers: { mainShape, accent, particleNear, particleFar },
+  ...(vertical ? { vertical } : {}),
 })
 const size = (widthScale, heightScale, minWidth, minHeight) => ({ widthScale, heightScale, minWidth, minHeight })
 const expectedProfiles = {
@@ -65,6 +66,7 @@ const expectedProfiles = {
       size(1.4, 2.1, 190, 128),
       size(1.2, 1.9, 160, 112),
       size(1.05, 1.7, 150, 104),
+      { maxLongAxisRatio: 0.74, rotationFactor: 0 },
     ),
     warning: [232, 190, 88, 220],
     spirit: expectedSpirit,
@@ -123,6 +125,7 @@ test('profiles, resources, quality policies, and RGBA tuples resist runtime muta
     assert.equal(Object.isFrozen(profile.layout), true)
     assert.equal(Object.isFrozen(profile.layout.layers), true)
     assert.ok(Object.values(profile.layout.layers).every(Object.isFrozen))
+    if (profile.layout.vertical) assert.equal(Object.isFrozen(profile.layout.vertical), true)
     assert.equal(Object.isFrozen(profile.warning), true)
     assert.equal(Object.isFrozen(profile.spirit), true)
     assert.equal(Object.isFrozen(profile.impact), true)
@@ -133,6 +136,8 @@ test('profiles, resources, quality policies, and RGBA tuples resist runtime muta
   assert.throws(() => { sweep.resources.main = 'replacement' }, TypeError)
   assert.throws(() => { sweep.quality.reducedAccent = false }, TypeError)
   assert.throws(() => { sweep.layout.layers.mainShape.minHeight = 1 }, TypeError)
+  const roar = esmRuntime.resolveBossTelegraphVisual({ kind: 'roar-sector' })
+  assert.throws(() => { roar.layout.vertical.maxLongAxisRatio = 1 }, TypeError)
   assert.throws(() => { sweep.warning[0] = 0 }, TypeError)
   assert.throws(() => { sweep.spirit[0] = 0 }, TypeError)
   assert.throws(() => { sweep.impact[0] = 0 }, TypeError)
@@ -149,6 +154,7 @@ test('TypeScript declares the public glyph-free contract and omits retired runti
   assert.match(typeScriptSource, /export interface BossVfxPhaseOutput\s*\{\s*progress: number\s*phase: BossVfxPhaseName\s*intensity: number\s*travel: number\s*\}/s)
   assert.match(typeScriptSource, /export interface BossVfxLayerLayout/)
   assert.match(typeScriptSource, /export interface BossVfxLayout/)
+  assert.match(typeScriptSource, /readonly vertical\?:/)
   assert.match(typeScriptSource, /readonly layout: BossVfxLayout/)
 
   for (const source of [typeScriptSource, esmSource]) {

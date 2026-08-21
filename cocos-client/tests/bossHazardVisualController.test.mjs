@@ -11,6 +11,7 @@ const LAYER_BINDINGS = Object.freeze([
 ])
 const TEST_LAYOUT = Object.freeze({
   axis: 'sector',
+  vertical: Object.freeze({ maxLongAxisRatio: 0.74, rotationFactor: 0 }),
   layers: Object.freeze({
     mainShape: Object.freeze({ widthScale: 1.3, heightScale: 2.4, minWidth: 180, minHeight: 140 }),
     accent: Object.freeze({ widthScale: 1.4, heightScale: 2.1, minWidth: 190, minHeight: 128 }),
@@ -406,7 +407,11 @@ test('setLayerLayout applies profile overscan minimums and swaps source axes for
       assert.strictEqual(size, sizeIdentities[field], `${hazard} ${field} size identity`)
       assert.ok(Number.isFinite(size.width) && size.width > 0, `${hazard} ${field} width`)
       assert.ok(Number.isFinite(size.height) && size.height > 0, `${hazard} ${field} height`)
-      assert.equal(size.width, Math.max(spec.minWidth, orientedWidth * spec.widthScale), `${hazard} ${field} width`)
+      const uncappedWidth = Math.max(spec.minWidth, orientedWidth * spec.widthScale)
+      const expectedWidth = vertical
+        ? Math.min(uncappedWidth, orientedWidth * TEST_LAYOUT.vertical.maxLongAxisRatio)
+        : uncappedWidth
+      assert.equal(size.width, expectedWidth, `${hazard} ${field} width`)
       assert.equal(size.height, Math.max(spec.minHeight, orientedHeight * spec.heightScale), `${hazard} ${field} height`)
     }
   }
@@ -414,6 +419,15 @@ test('setLayerLayout applies profile overscan minimums and swaps source axes for
     { ...harness.layers.mainShape.transform.contentSize },
     { width: TEST_LAYOUT.layers.mainShape.minWidth, height: TEST_LAYOUT.layers.mainShape.minHeight },
   )
+  harness.controller.setLayerLayout(42, 52.8, TEST_LAYOUT, true)
+  for (const { field } of LAYER_BINDINGS) {
+    assert.equal(
+      harness.layers[field].transform.contentSize.width,
+      52.8 * TEST_LAYOUT.vertical.maxLongAxisRatio,
+      `${field} vertical long axis cap`,
+    )
+    assert.ok(harness.layers[field].transform.contentSize.height > 42, `${field} thickness overscan`)
+  }
 
   const unsafeCases = [
     { label: 'extreme-tiny', width: Number.MIN_VALUE, height: Number.MIN_VALUE },

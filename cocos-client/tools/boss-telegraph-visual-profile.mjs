@@ -58,6 +58,7 @@ const PROFILES = Object.freeze({
       layerSize(1.4, 2.1, 190, 128),
       layerSize(1.2, 1.9, 160, 112),
       layerSize(1.05, 1.7, 150, 104),
+      verticalLayout(0.74, 0),
     ),
     warning: rgba(232, 190, 88, 220),
     spirit,
@@ -98,11 +99,16 @@ function layerSize(widthScale, heightScale, minWidth, minHeight) {
   return Object.freeze({ widthScale, heightScale, minWidth, minHeight })
 }
 
-function layout(axis, mainShape, accent, particleNear, particleFar) {
+function layout(axis, mainShape, accent, particleNear, particleFar, vertical) {
   return Object.freeze({
     axis,
     layers: Object.freeze({ mainShape, accent, particleNear, particleFar }),
+    ...(vertical ? { vertical } : {}),
   })
+}
+
+function verticalLayout(maxLongAxisRatio, rotationFactor) {
+  return Object.freeze({ maxLongAxisRatio, rotationFactor })
 }
 
 function rgba(red, green, blue, alpha) {

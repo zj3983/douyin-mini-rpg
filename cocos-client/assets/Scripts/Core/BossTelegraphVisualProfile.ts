@@ -18,6 +18,10 @@ export interface BossVfxLayerLayout {
 
 export interface BossVfxLayout {
   readonly axis: 'fixed' | 'sector'
+  readonly vertical?: Readonly<{
+    readonly maxLongAxisRatio: number
+    readonly rotationFactor: number
+  }>
   readonly layers: Readonly<{
     readonly mainShape: BossVfxLayerLayout
     readonly accent: BossVfxLayerLayout
@@ -106,6 +110,7 @@ const PROFILES = Object.freeze({
       layerSize(1.4, 2.1, 190, 128),
       layerSize(1.2, 1.9, 160, 112),
       layerSize(1.05, 1.7, 150, 104),
+      verticalLayout(0.74, 0),
     ),
     warning: rgba(232, 190, 88, 220),
     spirit,
@@ -161,11 +166,17 @@ function layout(
   accent: BossVfxLayerLayout,
   particleNear: BossVfxLayerLayout,
   particleFar: BossVfxLayerLayout,
+  vertical?: BossVfxLayout['vertical'],
 ): BossVfxLayout {
   return Object.freeze({
     axis,
     layers: Object.freeze({ mainShape, accent, particleNear, particleFar }),
+    ...(vertical ? { vertical } : {}),
   })
+}
+
+function verticalLayout(maxLongAxisRatio: number, rotationFactor: number): NonNullable<BossVfxLayout['vertical']> {
+  return Object.freeze({ maxLongAxisRatio, rotationFactor })
 }
 
 function rgba(red: number, green: number, blue: number, alpha: number): Rgba {
