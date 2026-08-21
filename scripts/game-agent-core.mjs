@@ -24,44 +24,102 @@ export function canvasAspectHealth(stats) {
   }
 }
 
-const REQUIRED_BOSS_SKILL_WINDOWS_MS = [
-  ['sweep', 2600, 4350],
-  ['spikes', 5450, 8100],
-  ['roar', 9200, 11970],
-]
+const REQUIRED_BOSS_SKILLS = ['bamboo-sweep', 'ground-spikes', 'mountain-roar']
 
-export function bossSkillCapturePlan(options = {}) {
-  if (!options || typeof options !== 'object' || Array.isArray(options)) {
-    throw new TypeError('Boss skill capture options must be an object')
+export function reviewBossSkillEvidence({
+  samples = [],
+  maxGameElapsedSeconds = 25,
+  wallTimedOut = false,
+} = {}) {
+  if (!Array.isArray(samples)) throw new TypeError('Boss skill evidence samples must be an array')
+  if (!Number.isFinite(maxGameElapsedSeconds) || maxGameElapsedSeconds <= 0) {
+    throw new TypeError('maxGameElapsedSeconds must be positive and finite')
   }
+  if (typeof wallTimedOut !== 'boolean') throw new TypeError('wallTimedOut must be boolean')
 
-  const {
-    startOffsetMs = 2450,
-    endOffsetMs = 12600,
-    intervalMs = 350,
-  } = options
-  for (const [name, value] of Object.entries({ startOffsetMs, endOffsetMs, intervalMs })) {
-    if (!Number.isSafeInteger(value)) throw new TypeError(`${name} must be a safe integer`)
-  }
-  if (startOffsetMs < 0) throw new RangeError('startOffsetMs must be non-negative')
-  if (endOffsetMs < 12000 || endOffsetMs <= startOffsetMs) {
-    throw new RangeError('endOffsetMs must be after startOffsetMs and at least 12000')
-  }
-  if (intervalMs <= 0) throw new RangeError('intervalMs must be positive')
+  const observed = Object.fromEntries(REQUIRED_BOSS_SKILLS.map((skill) => [
+    skill,
+    { telegraph: false, active: false },
+  ]))
+  const captureRequests = []
+  const initial = samples[0]
+  let failureReason = null
+  let lastElapsed = Number(initial?.brain?.elapsed)
 
-  const plannedCount = Math.floor((endOffsetMs - startOffsetMs) / intervalMs) + 1
-  if (plannedCount > 200) throw new RangeError('Boss skill capture plan cannot exceed 200 screenshots')
+  if (!initial?.brain) failureReason = 'boss-missing'
+  const initialBossId = initial?.brain?.id
+  const initialGeneration = initial?.stageGeneration
+  const initialElapsed = Number(initial?.brain?.elapsed)
 
-  const offsets = []
-  for (let offset = startOffsetMs; offset <= endOffsetMs; offset += intervalMs) offsets.push(offset)
-  if (offsets.at(-1) !== endOffsetMs) offsets.push(endOffsetMs)
+  if (!failureReason) {
+    for (const status of samples) {
+      if (!status?.brain) {
+        failureReason = 'boss-missing'
+        break
+      }
+      if (status.stageGeneration !== initialGeneration) {
+        failureReason = 'stage-changed'
+        break
+      }
+      if (status.brain.id !== initialBossId) {
+        failureReason = 'boss-changed'
+        break
+      }
+      if (!status.alive || Number(status.hp) <= 0 || status.brain.phase === 'death') {
+        failureReason = 'boss-dead'
+        break
+      }
 
-  for (const [skill, windowStart, windowEnd] of REQUIRED_BOSS_SKILL_WINDOWS_MS) {
-    if (!offsets.some((offset) => offset >= windowStart && offset <= windowEnd)) {
-      throw new RangeError(`Boss skill capture plan must cover the ${skill} window`)
+      lastElapsed = Number(status.brain.elapsed)
+      const skill = status.brain.lastAttack
+      if (!REQUIRED_BOSS_SKILLS.includes(skill)) continue
+      const phase = status.brain.phase === 'telegraph'
+        && Number(status.visibleTelegraphCount) > 0
+        ? 'telegraph'
+        : status.brain.phase === 'attack' && Number(status.visibleImpactCount) > 0
+          ? 'active'
+          : null
+      if (!phase || observed[skill][phase]) continue
+      observed[skill][phase] = true
+      captureRequests.push({
+        key: `${skill}:${phase}`,
+        skill,
+        phase,
+        brainPhase: status.brain.phase,
+        elapsed: lastElapsed,
+        stageGeneration: status.stageGeneration,
+        vfxQuality: status.vfxQuality,
+        visibleTelegraphCount: Number(status.visibleTelegraphCount) || 0,
+        visibleImpactCount: Number(status.visibleImpactCount) || 0,
+        bossId: status.brain.id,
+        hp: Number(status.hp),
+        alive: Boolean(status.alive),
+      })
     }
   }
-  return offsets
+
+  const missing = REQUIRED_BOSS_SKILLS.flatMap((skill) => (
+    ['telegraph', 'active']
+      .filter((phase) => !observed[skill][phase])
+      .map((phase) => `${skill}:${phase}`)
+  ))
+  const gameElapsedSeconds = Number.isFinite(initialElapsed) && Number.isFinite(lastElapsed)
+    ? Math.max(0, lastElapsed - initialElapsed)
+    : 0
+
+  if (failureReason) {
+    return { ok: false, state: 'failed', reason: failureReason, observed, captureRequests, missing, gameElapsedSeconds }
+  }
+  if (wallTimedOut) {
+    return { ok: false, state: 'failed', reason: 'wall-timeout', observed, captureRequests, missing, gameElapsedSeconds }
+  }
+  if (gameElapsedSeconds >= maxGameElapsedSeconds) {
+    return { ok: false, state: 'failed', reason: 'game-timeout', observed, captureRequests, missing, gameElapsedSeconds }
+  }
+  if (missing.length === 0) {
+    return { ok: true, state: 'complete', reason: 'complete', observed, captureRequests, missing, gameElapsedSeconds }
+  }
+  return { ok: false, state: 'waiting', reason: 'waiting', observed, captureRequests, missing, gameElapsedSeconds }
 }
 
 export function summarizeAgentRun({ checks, consoleIssues, pageErrors, requestFailures }) {

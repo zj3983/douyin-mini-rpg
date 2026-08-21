@@ -10,6 +10,7 @@ import {
   setBossHealthRatio,
   stepBambooWarden,
 } from '../Combat/BossBrain'
+import type { BossBrainSnapshot } from '../Combat/BossBrain'
 import {
   createEnemyBrain,
   defeatEnemyBrain,
@@ -133,6 +134,10 @@ export class EnemyController extends Component {
       alive,
     })
     return this.neighborSnapshotCache
+  }
+
+  bossCombatSnapshot(): Readonly<BossBrainSnapshot> | null {
+    return this.bossBrain?.snapshot() ?? null
   }
 
   update(deltaTime: number) {

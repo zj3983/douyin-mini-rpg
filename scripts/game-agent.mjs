@@ -8,12 +8,12 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 
 import {
-  bossSkillCapturePlan,
   canvasAspectHealth,
   canvasHealth,
   dungeonLoopReview,
   playtestReview,
   reportMarkdown,
+  reviewBossSkillEvidence,
 } from './game-agent-core.mjs'
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -582,7 +582,7 @@ async function dungeonMove(exitId) {
   return dungeonCommand({ type: 'choose-exit', exitId }, `通过路线 ${exitId}`)
 }
 
-async function measureDetailedFrames(sampleCount = 180, phase = '基线') {
+async function measureDetailedFrames(sampleCount = 180, phase = '基线', bossEvidence = null) {
   const result = await page.evaluate(async (count) => {
     const samples = []
     let previous = await new Promise((resolveFrame) => requestAnimationFrame(resolveFrame))
@@ -602,49 +602,121 @@ async function measureDetailedFrames(sampleCount = 180, phase = '基线') {
     }
   }, sampleCount)
   performance = result
-  performancePhase = phase
+  const verifiedBossPhase = Boolean(
+    bossEvidence?.alive
+      && Number(bossEvidence.hp) > 0
+      && ['bamboo-sweep', 'ground-spikes', 'mountain-roar'].includes(bossEvidence.skill)
+      && (
+        (bossEvidence.phase === 'telegraph'
+          && bossEvidence.brainPhase === 'telegraph'
+          && Number(bossEvidence.visibleTelegraphCount) > 0)
+        || (bossEvidence.phase === 'active'
+          && bossEvidence.brainPhase === 'attack'
+          && Number(bossEvidence.visibleImpactCount) > 0)
+      )
+  )
+  const phaseDetail = bossEvidence
+    ? `skill=${bossEvidence.skill}, phase=${bossEvidence.brainPhase}, evidence=${bossEvidence.phase}, elapsed=${Number(bossEvidence.elapsed).toFixed(3)}s, telegraphs=${bossEvidence.visibleTelegraphCount}, impacts=${bossEvidence.visibleImpactCount}, quality=${bossEvidence.vfxQuality}`
+    : phase
+  const phaseVerified = bossEvidence ? verifiedBossPhase : phase.includes('战斗')
+  performancePhase = phaseDetail
   addCheck('Cocos 帧时间', result.p95FrameMs <= 20 && result.minimumFps >= 30, `P95 ${result.p95FrameMs.toFixed(2)}ms, min ${result.minimumFps.toFixed(1)} FPS, dropped ${result.droppedFrames}`)
-  addCheck('性能采样阶段', phase.includes('战斗'), phase)
-  return result
+  addCheck('性能采样阶段', phaseVerified, phaseDetail)
+  return { ...result, phaseVerified }
 }
 
-async function captureBossSkillCycle(activatedAtMs) {
-  const offsets = bossSkillCapturePlan()
-  const performanceStartOffsetMs = offsets.find((offset) => offset >= 3000)
-  if (performanceStartOffsetMs === undefined) throw new Error('Boss skill plan has no performance sampling point')
+const BOSS_SKILL_SCREENSHOT_LABELS = Object.freeze({
+  'bamboo-sweep': Object.freeze({
+    telegraph: 'greedy-boss-bamboo-sweep-telegraph',
+    active: 'greedy-boss-bamboo-sweep-active',
+  }),
+  'ground-spikes': Object.freeze({
+    telegraph: 'greedy-boss-ground-spikes-telegraph',
+    active: 'greedy-boss-ground-spikes-active',
+  }),
+  'mountain-roar': Object.freeze({
+    telegraph: 'greedy-boss-mountain-roar-telegraph',
+    active: 'greedy-boss-mountain-roar-active',
+  }),
+})
 
-  const labelWidth = String(offsets.length).length
-  const capturedLabels = []
+async function captureBossSkillStates() {
+  const wallDeadlineMs = Date.now() + 60_000
+  const samples = []
+  const captureTasks = new Map()
   let performancePromise = null
+  let review = null
 
-  for (const [index, offsetMs] of offsets.entries()) {
-    const waitMs = activatedAtMs + offsetMs - Date.now()
-    if (waitMs > 0) await page.waitForTimeout(waitMs)
-    if (offsetMs === performanceStartOffsetMs) {
-      performancePromise = measureDetailedFrames(180, 'Boss技能阶段真实战斗').then(
-        (result) => ({ result }),
-        (error) => ({ error }),
-      )
+  while (true) {
+    const status = await bridgeCall('bossCombatStatus')
+    const wallTimedOut = Date.now() >= wallDeadlineMs
+    if (samples.length === 0 && !status?.brain) {
+      if (wallTimedOut) {
+        samples.push(null)
+        review = reviewBossSkillEvidence({ samples, maxGameElapsedSeconds: 25, wallTimedOut: true })
+        break
+      }
+      await page.waitForTimeout(16)
+      continue
     }
 
-    const label = `greedy-boss-skill-${String(index + 1).padStart(labelWidth, '0')}`
-    if (await shot(label)) capturedLabels.push(label)
+    samples.push(status)
+    review = reviewBossSkillEvidence({ samples, maxGameElapsedSeconds: 25, wallTimedOut })
+    for (const evidence of review.captureRequests) {
+      if (captureTasks.has(evidence.key)) continue
+      const label = BOSS_SKILL_SCREENSHOT_LABELS[evidence.skill]?.[evidence.phase]
+      if (!label) throw new Error(`Unknown Boss evidence label: ${evidence.key}`)
+      captureTasks.set(evidence.key, shot(label).then((ok) => ({
+        key: evidence.key,
+        label,
+        ok,
+        evidence,
+      })))
+      if (!performancePromise) {
+        performancePromise = measureDetailedFrames(180, 'Boss技能状态实战', evidence).then(
+          (result) => ({ result, evidence }),
+          (error) => ({ error, evidence }),
+        )
+      }
+    }
+    if (review.state !== 'waiting') break
+    await page.waitForTimeout(16)
   }
 
-  const performanceOutcome = await performancePromise
-  if (performanceOutcome.error) throw performanceOutcome.error
-  const elapsedMs = Date.now() - activatedAtMs
-  const complete = capturedLabels.length === offsets.length && elapsedMs >= offsets.at(-1)
-  addCheck(
-    '完整 Boss 技能证据序列',
-    complete,
-    `captured=${capturedLabels.length}/${offsets.length}, planned=${offsets[0]}-${offsets.at(-1)}ms, elapsed=${elapsedMs}ms`,
+  const captures = await Promise.all(captureTasks.values())
+  const performanceOutcome = performancePromise ? await performancePromise : null
+  if (review?.ok) {
+    samples.push(await bridgeCall('bossCombatStatus'))
+    review = reviewBossSkillEvidence({
+      samples,
+      maxGameElapsedSeconds: 25,
+      wallTimedOut: Date.now() >= wallDeadlineMs,
+    })
+  }
+  if (!performanceOutcome) addCheck('性能采样阶段', false, 'no verified Boss VFX state observed')
+  else if (performanceOutcome.error) addCheck('性能采样阶段', false, performanceOutcome.error.message)
+  const complete = Boolean(
+    review?.ok
+      && captures.length === 6
+      && captures.every((capture) => capture.ok)
+      && performanceOutcome
+      && !performanceOutcome.error
+      && performanceOutcome.result?.phaseVerified
   )
+  const detail = `state=${review?.state ?? 'missing'}, reason=${review?.reason ?? 'missing'}, gameElapsed=${review?.gameElapsedSeconds?.toFixed(3) ?? 'n/a'}s, captured=${captures.filter((capture) => capture.ok).length}/6, missing=${review?.missing?.join(',') || 'none'}`
+  addCheck(
+    '完整 Boss 技能状态证据',
+    complete,
+    detail,
+  )
+  if (!complete) throw new Error(`Boss skill evidence incomplete: ${detail}`)
   return {
-    plannedOffsetsMs: offsets,
-    capturedLabels,
-    elapsedMs,
-    performanceStartOffsetMs,
+    review,
+    captures,
+    sampleCount: samples.length,
+    initialStatus: samples[0] ?? null,
+    finalStatus: samples.at(-1) ?? null,
+    performanceEvidence: performanceOutcome.evidence,
   }
 }
 
@@ -803,10 +875,9 @@ async function playCocosDungeonPolicy(policy) {
       await bridgeCall('completeEncounter')
       await dungeonMove('f2-elite-to-floor3')
       await dungeonMove('f3-antechamber-to-altar')
-      const altarActivatedAtMs = Date.now()
       const altarActivated = await dungeonCommand({ type: 'activate-altar' }, '激活竹皇祭坛')
       if (!altarActivated) throw new Error('Bamboo Emperor altar activation was rejected')
-      bossSkillEvidence = await captureBossSkillCycle(altarActivatedAtMs)
+      bossSkillEvidence = await captureBossSkillStates()
       await bridgeCall('completeEncounter')
       await dungeonMove('f3-altar-to-vault')
       await dungeonCommand({ type: 'search' }, '搜索飞剑宝库')

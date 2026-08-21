@@ -47,6 +47,7 @@ import {
 } from '../Core/HomingSwordRuntime'
 import { stageVisualFor } from '../Core/StageVisualCatalog'
 import type { EnemyCommand } from '../Combat/EnemyBrain'
+import type { BossBrainSnapshot } from '../Combat/BossBrain'
 import { feedbackFor } from '../Combat/FeedbackTimeline.ts'
 import type { FeedbackRequest } from '../Combat/FeedbackTimeline.ts'
 import { createPerformanceBudget, updateVfxQuality } from '../Combat/PerformanceBudget.ts'
@@ -78,6 +79,16 @@ import { StageClearPanelController } from './StageClearPanelController'
 import { createWorldRewardSessionId, worldRewardId } from '../Core/World/WorldRewardId.ts'
 
 const { ccclass, property } = _decorator
+
+export interface BossAgentSnapshot {
+  readonly brain: Readonly<BossBrainSnapshot> | null
+  readonly hp: number
+  readonly alive: boolean
+  readonly stageGeneration: number
+  readonly vfxQuality: VfxQuality
+  readonly visibleTelegraphCount: number
+  readonly visibleImpactCount: number
+}
 
 @ccclass('BattleRuntimeController')
 export class BattleRuntimeController extends Component {
@@ -335,6 +346,23 @@ export class BattleRuntimeController extends Component {
 
   getCurrentVfxQuality() {
     return this.currentVfxQuality
+  }
+
+  getBossAgentSnapshot(): Readonly<BossAgentSnapshot> | null {
+    const boss = this.runtime?.enemies.find((enemy) => enemy.profile.role === 'boss')
+    if (!boss) return null
+    const brain = this.enemyNodes.get(boss.id)
+      ?.getComponent(EnemyController)
+      ?.bossCombatSnapshot() ?? null
+    return Object.freeze({
+      brain,
+      hp: boss.hp,
+      alive: boss.alive,
+      stageGeneration: this.stageGeneration,
+      vfxQuality: this.currentVfxQuality,
+      visibleTelegraphCount: this.bossTelegraphPresenter?.visibleTelegraphCount ?? 0,
+      visibleImpactCount: this.bossTelegraphPresenter?.visibleImpactCount ?? 0,
+    })
   }
 
   presentCombatFeedback(requests: readonly FeedbackRequest[]) {

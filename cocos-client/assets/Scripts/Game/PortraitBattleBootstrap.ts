@@ -108,6 +108,7 @@ type DungeonAgentBridge = {
   uiLayout: () => unknown
   enterDungeon: (seed?: number) => boolean
   snapshot: () => unknown
+  bossCombatStatus: () => unknown
   command: (command: DungeonCommand) => unknown
   advance: (seconds: number) => unknown
   completeEncounter: () => unknown
@@ -216,6 +217,7 @@ export class PortraitBattleBootstrap extends Component {
       uiLayout: () => this.dungeonPresenter?.getLayoutSnapshot() ?? null,
       enterDungeon: (seed) => Boolean(this.dualModeController?.enterDungeon(seed)),
       snapshot: () => this.dungeonRunController?.getRunSnapshot() ?? null,
+      bossCombatStatus: () => this.battleRuntimeController?.getBossAgentSnapshot() ?? null,
       command: (command) => this.applyDungeonCommand(command),
       advance: (seconds) => {
         const steps = Math.min(3000, Math.max(0, Math.ceil(Number(seconds) * 10)))

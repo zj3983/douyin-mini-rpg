@@ -11,21 +11,123 @@ const {
   summarizeAgentRun,
 } = gameAgentCore
 
-test('boss skill capture plan spans sweep, spikes, and roar windows', () => {
-  const plan = gameAgentCore.bossSkillCapturePlan()
+function bossStatus({
+  elapsed,
+  skill = null,
+  phase = 'spawn',
+  telegraphs = 0,
+  impacts = 0,
+  alive = true,
+  generation = 7,
+  id = 99,
+} = {}) {
+  return {
+    brain: {
+      id,
+      phase,
+      phaseNumber: 1,
+      healthRatio: alive ? 1 : 0,
+      elapsed,
+      position: { x: 120, y: -40 },
+      lastAttack: skill,
+      attackSequence: 1,
+      cooldowns: {},
+    },
+    hp: alive ? 520 : 0,
+    alive,
+    stageGeneration: generation,
+    vfxQuality: 'full',
+    visibleTelegraphCount: telegraphs,
+    visibleImpactCount: impacts,
+  }
+}
 
-  assert.equal(plan[0], 2450)
-  assert.equal(plan.at(-1), 12600)
-  assert.ok(plan.length > 0)
-  assert.ok(plan.slice(1).every((offset, index) => offset - plan[index] === 350))
-  assert.ok(plan.some((offset) => offset >= 2600 && offset <= 4350), 'sweep window is covered')
-  assert.ok(plan.some((offset) => offset >= 5450 && offset <= 8100), 'spikes window is covered')
-  assert.ok(plan.some((offset) => offset >= 9200 && offset <= 11970), 'roar window is covered')
+test('boss skill evidence review completes only after brain phases and visible VFX prove all skills', () => {
+  const initial = bossStatus({ elapsed: 0.1 })
+  const samples = [
+    initial,
+    bossStatus({ elapsed: 0.4, skill: 'bamboo-sweep', phase: 'telegraph', telegraphs: 1 }),
+    bossStatus({ elapsed: 1.2, skill: 'bamboo-sweep', phase: 'attack', impacts: 1 }),
+    bossStatus({ elapsed: 3.2, skill: 'ground-spikes', phase: 'telegraph', telegraphs: 3 }),
+    bossStatus({ elapsed: 4, skill: 'ground-spikes', phase: 'attack', impacts: 1 }),
+    bossStatus({ elapsed: 8.6, skill: 'mountain-roar', phase: 'telegraph', telegraphs: 5 }),
+    bossStatus({ elapsed: 9.4, skill: 'mountain-roar', phase: 'attack', impacts: 5 }),
+  ]
 
-  assert.throws(() => gameAgentCore.bossSkillCapturePlan({ startOffsetMs: '2450' }), /startOffsetMs/)
-  assert.throws(() => gameAgentCore.bossSkillCapturePlan({ intervalMs: 0 }), /intervalMs/)
-  assert.throws(() => gameAgentCore.bossSkillCapturePlan({ endOffsetMs: 11000 }), /endOffsetMs/)
-  assert.throws(() => gameAgentCore.bossSkillCapturePlan({ startOffsetMs: 5000 }), /sweep/)
+  const review = gameAgentCore.reviewBossSkillEvidence({ samples })
+
+  assert.equal(review.ok, true)
+  assert.equal(review.state, 'complete')
+  assert.equal(review.reason, 'complete')
+  assert.deepEqual(review.missing, [])
+  assert.deepEqual(review.observed, {
+    'bamboo-sweep': { telegraph: true, active: true },
+    'ground-spikes': { telegraph: true, active: true },
+    'mountain-roar': { telegraph: true, active: true },
+  })
+  assert.deepEqual(review.captureRequests.map((entry) => entry.key), [
+    'bamboo-sweep:telegraph',
+    'bamboo-sweep:active',
+    'ground-spikes:telegraph',
+    'ground-spikes:active',
+    'mountain-roar:telegraph',
+    'mountain-roar:active',
+  ])
+  assert.ok(Math.abs(review.gameElapsedSeconds - 9.3) < 1e-9)
+
+  const unproved = gameAgentCore.reviewBossSkillEvidence({
+    samples: [
+      initial,
+      bossStatus({ elapsed: 0.4, skill: 'bamboo-sweep', phase: 'telegraph', telegraphs: 0 }),
+      bossStatus({ elapsed: 1.2, skill: 'bamboo-sweep', phase: 'attack', impacts: 0 }),
+    ],
+  })
+  assert.equal(unproved.state, 'waiting')
+  assert.equal(unproved.captureRequests.length, 0)
+  assert.ok(unproved.missing.includes('bamboo-sweep:telegraph'))
+  assert.ok(unproved.missing.includes('bamboo-sweep:active'))
+})
+
+test('boss skill evidence review hard-fails missing, dead, replaced, and timed-out Boss states', () => {
+  const initial = bossStatus({ elapsed: 0.1 })
+  const missing = gameAgentCore.reviewBossSkillEvidence({ samples: [initial, null] })
+  assert.deepEqual({ state: missing.state, reason: missing.reason }, { state: 'failed', reason: 'boss-missing' })
+
+  const dead = gameAgentCore.reviewBossSkillEvidence({
+    samples: [initial, bossStatus({ elapsed: 2, phase: 'death', alive: false })],
+  })
+  assert.deepEqual({ state: dead.state, reason: dead.reason }, { state: 'failed', reason: 'boss-dead' })
+
+  const replaced = gameAgentCore.reviewBossSkillEvidence({
+    samples: [initial, bossStatus({ elapsed: 1, generation: 8 })],
+  })
+  assert.deepEqual({ state: replaced.state, reason: replaced.reason }, { state: 'failed', reason: 'stage-changed' })
+
+  const gameTimeout = gameAgentCore.reviewBossSkillEvidence({
+    samples: [initial, bossStatus({ elapsed: 25.2 })],
+    maxGameElapsedSeconds: 25,
+  })
+  assert.deepEqual({ state: gameTimeout.state, reason: gameTimeout.reason }, { state: 'failed', reason: 'game-timeout' })
+
+  const wallTimeout = gameAgentCore.reviewBossSkillEvidence({ samples: [initial], wallTimedOut: true })
+  assert.deepEqual({ state: wallTimeout.state, reason: wallTimeout.reason }, { state: 'failed', reason: 'wall-timeout' })
+
+  const completeAtWallTimeout = gameAgentCore.reviewBossSkillEvidence({
+    samples: [
+      initial,
+      bossStatus({ elapsed: 0.4, skill: 'bamboo-sweep', phase: 'telegraph', telegraphs: 1 }),
+      bossStatus({ elapsed: 1.2, skill: 'bamboo-sweep', phase: 'attack', impacts: 1 }),
+      bossStatus({ elapsed: 3.2, skill: 'ground-spikes', phase: 'telegraph', telegraphs: 3 }),
+      bossStatus({ elapsed: 4, skill: 'ground-spikes', phase: 'attack', impacts: 1 }),
+      bossStatus({ elapsed: 8.6, skill: 'mountain-roar', phase: 'telegraph', telegraphs: 5 }),
+      bossStatus({ elapsed: 9.4, skill: 'mountain-roar', phase: 'attack', impacts: 5 }),
+    ],
+    wallTimedOut: true,
+  })
+  assert.deepEqual(
+    { state: completeAtWallTimeout.state, reason: completeAtWallTimeout.reason },
+    { state: 'failed', reason: 'wall-timeout' },
+  )
 })
 
 test('game agent summary fails on failed checks or runtime issues', () => {

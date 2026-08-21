@@ -145,6 +145,47 @@ test('EnemyController resize sync keeps the active Boss Brain and roar origin on
   assert.equal((right.area.minY + right.area.maxY) / 2, node.position.y)
 })
 
+test('EnemyController exposes an immutable Boss combat snapshot and clears it on non-Boss reuse', async () => {
+  const { EnemyController } = await loadEnemyController()
+  const node = new EventNode()
+  const controller = new EnemyController()
+  controller.node = node
+  const battleBounds = { current: { minX: -700, maxX: 700, minY: -500, maxY: 600 } }
+
+  controller.bindRuntimeEnemy(
+    { id: 77, hp: 100, alive: true, position: { x: node.position.x, y: node.position.y } },
+    binding(77),
+  )
+  assert.equal(controller.bossCombatSnapshot(), null)
+
+  controller.bindRuntimeEnemy(
+    { id: 99, hp: 520, alive: true, position: { x: node.position.x, y: node.position.y } },
+    bossBinding(0, battleBounds),
+  )
+  const first = controller.bossCombatSnapshot()
+  assert.equal(first.id, 99)
+  assert.equal(first.phase, 'spawn')
+  assert.equal(first.elapsed, 0)
+  assert.equal(Object.isFrozen(first), true)
+  assert.equal(Object.isFrozen(first.position), true)
+  assert.equal(Object.isFrozen(first.cooldowns), true)
+  assert.throws(() => { first.position.x = 999 }, TypeError)
+
+  controller.setTarget({
+    x: -100,
+    y: 30,
+    z: 0,
+    clone() { return { x: this.x, y: this.y, z: this.z, clone: this.clone } },
+  })
+  controller.update(0.25)
+  const advanced = controller.bossCombatSnapshot()
+  assert.notStrictEqual(advanced, first)
+  assert.equal(advanced.elapsed, 0.25)
+
+  controller.prepareForPool()
+  assert.equal(controller.bossCombatSnapshot(), null)
+})
+
 test('EnemyController reuses immutable neighbor snapshot identity until observable state changes', async () => {
   const { EnemyController } = await loadEnemyController()
   const node = new EventNode()
