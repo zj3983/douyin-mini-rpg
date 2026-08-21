@@ -186,6 +186,7 @@ test('boss hazard pool factory owns exactly four fixed sprite layers', () => {
     assert.match(factory, new RegExp(`${nodeVariable}\\.layer = UI_LAYER`), name)
     assert.match(factory, new RegExp(`${nodeVariable}\\.addComponent\\(UITransform\\)`), name)
     assert.match(factory, new RegExp(`const ${field} = ${nodeVariable}\\.addComponent\\(Sprite\\)`), name)
+    assert.match(factory, new RegExp(`${field}\\.sizeMode = Sprite\\.SizeMode\\.CUSTOM`), name)
     assert.equal(countOccurrences(factory, `node.addChild(${nodeVariable})`), 1, name)
     assert.match(factory, new RegExp(`visual\\.${field} = ${field}`), name)
     assert.match(controller, new RegExp(`@property\\(Sprite\\)\\s+${field}: Sprite \\| null = null`), field)

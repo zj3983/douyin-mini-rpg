@@ -1045,21 +1045,25 @@ export class PortraitBattleBootstrap extends Component {
     mainShapeNode.layer = UI_LAYER
     mainShapeNode.addComponent(UITransform).setContentSize(1, 1)
     const mainShape = mainShapeNode.addComponent(Sprite)
+    mainShape.sizeMode = Sprite.SizeMode.CUSTOM
     node.addChild(mainShapeNode)
     const accentNode = new Node('Accent')
     accentNode.layer = UI_LAYER
     accentNode.addComponent(UITransform).setContentSize(1, 1)
     const accent = accentNode.addComponent(Sprite)
+    accent.sizeMode = Sprite.SizeMode.CUSTOM
     node.addChild(accentNode)
     const particleNearNode = new Node('ParticleNear')
     particleNearNode.layer = UI_LAYER
     particleNearNode.addComponent(UITransform).setContentSize(1, 1)
     const particleNear = particleNearNode.addComponent(Sprite)
+    particleNear.sizeMode = Sprite.SizeMode.CUSTOM
     node.addChild(particleNearNode)
     const particleFarNode = new Node('ParticleFar')
     particleFarNode.layer = UI_LAYER
     particleFarNode.addComponent(UITransform).setContentSize(1, 1)
     const particleFar = particleFarNode.addComponent(Sprite)
+    particleFar.sizeMode = Sprite.SizeMode.CUSTOM
     node.addChild(particleFarNode)
     const visual = node.addComponent(BossHazardVisualController)
     visual.graphics = graphics
