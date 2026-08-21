@@ -26,6 +26,7 @@ export class BossHazardPoolInvariantError extends Error {
 type ActiveHitboxCommand = Extract<EnemyCommand, { readonly type: 'activate-hitbox' }>
 
 interface CachedVisualLayers {
+  readonly layerMask: number
   readonly controller: BossHazardVisualController | null
   readonly mainShape: Sprite | null
   readonly accent: Sprite | null
@@ -84,6 +85,11 @@ interface ImpactVisual extends PreparedVisualNode, CachedVisualColors {
 
 type ProfileColor = BossTelegraphVisualProfile['spirit']
 
+const MAIN_LAYER_MASK = 1 << 0
+const ACCENT_LAYER_MASK = 1 << 1
+const PARTICLE_NEAR_LAYER_MASK = 1 << 2
+const PARTICLE_FAR_LAYER_MASK = 1 << 3
+
 const BOSS_VFX_RESOURCE_PATHS = (() => {
   const paths: string[] = []
   const seen = new Set<string>()
@@ -115,6 +121,18 @@ function setLayerVisibility(sprite: Sprite | null, visible: boolean): void {
   if (!sprite) return
   sprite.enabled = visible
   sprite.node.active = visible
+}
+
+function qualityLayerMask(profile: BossTelegraphVisualProfile, quality: VfxQuality): number {
+  let mask = MAIN_LAYER_MASK
+  if (quality === 'full' || (quality === 'reduced' && profile.quality.reducedAccent)) {
+    mask |= ACCENT_LAYER_MASK
+  }
+  if (quality !== 'minimal' || profile.quality.minimalParticles) {
+    mask |= PARTICLE_NEAR_LAYER_MASK
+  }
+  if (quality === 'full') mask |= PARTICLE_FAR_LAYER_MASK
+  return mask
 }
 
 function setLayerColor(
@@ -559,35 +577,32 @@ export class BossTelegraphPresenter extends Component {
       this.vfxFrames.get(profile.resources.particle) ?? null,
     )
     controller?.setLayerSizes(geometry.width, geometry.height)
+    const layerMask = this.applyQuality(controller, profile, quality)
     const prepared: PreparedVisualNode = {
+      layerMask,
       controller,
       graphics,
       width: geometry.width,
       height: geometry.height,
-      mainShape: controller?.mainShape ?? null,
-      accent: controller?.accent ?? null,
-      particleNear: controller?.particleNear ?? null,
-      particleFar: controller?.particleFar ?? null,
+      mainShape: (layerMask & MAIN_LAYER_MASK) !== 0 ? controller?.mainShape ?? null : null,
+      accent: (layerMask & ACCENT_LAYER_MASK) !== 0 ? controller?.accent ?? null : null,
+      particleNear: (layerMask & PARTICLE_NEAR_LAYER_MASK) !== 0 ? controller?.particleNear ?? null : null,
+      particleFar: (layerMask & PARTICLE_FAR_LAYER_MASK) !== 0 ? controller?.particleFar ?? null : null,
     }
-    this.applyQuality(prepared, profile, quality)
     return prepared
   }
 
   private applyQuality(
-    visual: CachedVisualLayers,
+    controller: BossHazardVisualController | null,
     profile: BossTelegraphVisualProfile,
     quality: VfxQuality,
-  ): void {
-    setLayerVisibility(visual.mainShape, true)
-    setLayerVisibility(
-      visual.accent,
-      quality === 'full' || (quality === 'reduced' && profile.quality.reducedAccent),
-    )
-    setLayerVisibility(
-      visual.particleNear,
-      quality !== 'minimal' || profile.quality.minimalParticles,
-    )
-    setLayerVisibility(visual.particleFar, quality === 'full')
+  ): number {
+    const layerMask = qualityLayerMask(profile, quality)
+    setLayerVisibility(controller?.mainShape ?? null, (layerMask & MAIN_LAYER_MASK) !== 0)
+    setLayerVisibility(controller?.accent ?? null, (layerMask & ACCENT_LAYER_MASK) !== 0)
+    setLayerVisibility(controller?.particleNear ?? null, (layerMask & PARTICLE_NEAR_LAYER_MASK) !== 0)
+    setLayerVisibility(controller?.particleFar ?? null, (layerMask & PARTICLE_FAR_LAYER_MASK) !== 0)
+    return layerMask
   }
 
   private applyLayerColors(
@@ -596,10 +611,18 @@ export class BossTelegraphPresenter extends Component {
     alphaScale: number,
   ): void {
     const safeAlpha = Math.min(1, Math.max(0, alphaScale))
-    setLayerColor(visual.mainShape, visual.mainColor, color, safeAlpha)
-    setLayerColor(visual.accent, visual.accentColor, color, safeAlpha * 0.9)
-    setLayerColor(visual.particleNear, visual.particleNearColor, color, safeAlpha * 0.72)
-    setLayerColor(visual.particleFar, visual.particleFarColor, color, safeAlpha * 0.55)
+    if ((visual.layerMask & MAIN_LAYER_MASK) !== 0) {
+      setLayerColor(visual.mainShape, visual.mainColor, color, safeAlpha)
+    }
+    if ((visual.layerMask & ACCENT_LAYER_MASK) !== 0) {
+      setLayerColor(visual.accent, visual.accentColor, color, safeAlpha * 0.9)
+    }
+    if ((visual.layerMask & PARTICLE_NEAR_LAYER_MASK) !== 0) {
+      setLayerColor(visual.particleNear, visual.particleNearColor, color, safeAlpha * 0.72)
+    }
+    if ((visual.layerMask & PARTICLE_FAR_LAYER_MASK) !== 0) {
+      setLayerColor(visual.particleFar, visual.particleFarColor, color, safeAlpha * 0.55)
+    }
   }
 
   private updateTelegraphMotion(visual: TelegraphVisual): void {

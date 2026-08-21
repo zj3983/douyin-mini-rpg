@@ -200,13 +200,23 @@ function createSpriteMock(name) {
   const node = {
     name,
     active: false,
+    setterCalls: { position: 0, scale: 0, rotation: 0 },
     position: { x: 0, y: 0, z: 0 },
     scale: { x: 1, y: 1, z: 1 },
     eulerAngles: { x: 0, y: 0, z: 0 },
     size: { width: 1, height: 1 },
-    setPosition(x, y, z) { Object.assign(this.position, { x, y, z }) },
-    setScale(x, y, z) { Object.assign(this.scale, { x, y, z }) },
-    setRotationFromEuler(x, y, z) { Object.assign(this.eulerAngles, { x, y, z }) },
+    setPosition(x, y, z) {
+      this.setterCalls.position += 1
+      Object.assign(this.position, { x, y, z })
+    },
+    setScale(x, y, z) {
+      this.setterCalls.scale += 1
+      Object.assign(this.scale, { x, y, z })
+    },
+    setRotationFromEuler(x, y, z) {
+      this.setterCalls.rotation += 1
+      Object.assign(this.eulerAngles, { x, y, z })
+    },
   }
   return {
     name,
@@ -393,6 +403,34 @@ function layerColors(node) {
   }))
 }
 
+function layerWriteCounts(node) {
+  return Object.fromEntries(LAYER_FIELDS.map((field) => {
+    const layer = node.layers[field]
+    return [field, {
+      color: layer.colorAssignments,
+      position: layer.node.setterCalls.position,
+      rotation: layer.node.setterCalls.rotation,
+      scale: layer.node.setterCalls.scale,
+    }]
+  }))
+}
+
+function layerWriteDeltas(node, before) {
+  const after = layerWriteCounts(node)
+  return Object.fromEntries(LAYER_FIELDS.map((field) => [field, {
+    color: after[field].color - before[field].color,
+    position: after[field].position - before[field].position,
+    rotation: after[field].rotation - before[field].rotation,
+    scale: after[field].scale - before[field].scale,
+  }]))
+}
+
+function assertLayerWrites(counts, expected, message) {
+  for (const field of ['color', 'position', 'rotation', 'scale']) {
+    assert.equal(counts[field], expected, `${message} ${field}`)
+  }
+}
+
 function rootAndGraphics(node) {
   return {
     position: { ...node.position },
@@ -501,6 +539,81 @@ function telegraph(attackId, area, danger, telegraphId = attackId) {
   return { enemyId: 7, attackId, telegraphId, area, duration: 0.8, visibleAt: 0, activationNotBefore: 0.8, generation: 3, danger }
 }
 
+function createPresenterScenario(BossTelegraphPresenter, capacity) {
+  const presenter = new BossTelegraphPresenter()
+  const pool = new TelegraphPool(capacity)
+  presenter.telegraphPool = pool
+  return { pool, presenter }
+}
+
+function activeWarningVisuals(presenter) {
+  const visuals = []
+  for (const group of presenter.groups.values()) visuals.push(...group.visuals)
+  return visuals
+}
+
+function latestWarningVisual(presenter) {
+  return activeWarningVisuals(presenter).at(-1) ?? null
+}
+
+function latestImpactVisual(presenter) {
+  return presenter.impacts.at(-1) ?? null
+}
+
+function activeImpactVisuals(presenter) {
+  return [...presenter.impacts]
+}
+
+function impactCommand(entry, authorityId, duration, attackId = authorityId) {
+  return {
+    type: 'activate-hitbox',
+    attackId,
+    telegraphId: authorityId,
+    area: entry.area,
+    damage: 8,
+    duration,
+    danger: entry.danger,
+  }
+}
+
+function startImpactScenario(
+  presenter,
+  entry,
+  {
+    attackId = entry.id === 'roar-wave' ? `${entry.attackId}:wave:0` : entry.attackId,
+    authorityId = entry.attackId,
+    duration = 1,
+    quality = 'full',
+  } = {},
+) {
+  assert.equal(presenter.present(telegraph(authorityId, entry.area, entry.danger, authorityId), quality), true)
+  const command = impactCommand(entry, authorityId, duration, attackId)
+  presenter.activate(3, 7, command, quality)
+  presenter.update(0.8)
+  const visual = latestImpactVisual(presenter)
+  assert.ok(visual, `${entry.id} impact visual`)
+  return { command, node: visual.node, visual }
+}
+
+function motionRenderSnapshot(node) {
+  return {
+    colors: layerColors(node),
+    geometry: layerGeometry(node),
+  }
+}
+
+function primeImpactAuthority(presenter, entry, authorityId, quality = 'full') {
+  startImpactScenario(presenter, entry, {
+    attackId: entry.id === 'roar-wave' ? `${authorityId}:wave:0:bootstrap` : `${authorityId}:bootstrap`,
+    authorityId,
+    duration: 0.001,
+    quality,
+  })
+  presenter.update(0.001)
+  presenter.update(0.001)
+  assert.equal(presenter.visibleImpactCount, 0, `${entry.id} bootstrap impact expires`)
+}
+
 test('preloads seven unique resources once and maps all profile layers for warnings and impacts', async () => {
   const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY, frames, loadedPaths } = await loadPresenter()
   const presenter = new BossTelegraphPresenter()
@@ -592,7 +705,7 @@ test('warning motion becomes critical with distinct skill transforms while root 
     assert.equal(presenter.present(telegraph(entry.attackId, entry.area, entry.danger), 'full'), true)
   }
 
-  const visuals = [...presenter.groups.values()].map((group) => group.visuals[0])
+  const visuals = activeWarningVisuals(presenter)
   const nodes = visuals.map((visual) => visual.node)
   const staticStates = nodes.map(rootAndGraphics)
   const initialGeometry = nodes.map(layerGeometry)
@@ -682,7 +795,7 @@ test('full reduced and minimal quality select the required four-layer visibility
   presenter.update(0.4)
   assert.deepEqual([full, reduced, minimal].map((node) => layerVisibility(node)), warningVisibility)
   for (const [index, node] of [full, reduced, minimal].entries()) {
-    assert.notDeepEqual(layerGeometry(node), warningGeometry[index], `${qualities[index]} hidden warning layers may still transform`)
+    assert.notDeepEqual(layerGeometry(node).mainShape, warningGeometry[index].mainShape, `${qualities[index]} visible warning main transforms`)
   }
 
   for (const [index, quality] of qualities.entries()) {
@@ -708,7 +821,58 @@ test('full reduced and minimal quality select the required four-layer visibility
   presenter.update(0.03)
   assert.deepEqual(impacts.map((node) => layerVisibility(node)), warningVisibility)
   for (const [index, node] of impacts.entries()) {
-    assert.notDeepEqual(layerGeometry(node), impactGeometry[index], `${qualities[index]} hidden impact layers may still transform`)
+    assert.notDeepEqual(layerGeometry(node).mainShape, impactGeometry[index].mainShape, `${qualities[index]} visible impact main transforms`)
+  }
+})
+
+test('reduced and minimal steady-state updates write only enabled warning and impact layers', async () => {
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
+  const entry = PROFILE_CASES[0]
+
+  for (const quality of ['reduced', 'minimal']) {
+    const { pool, presenter } = createPresenterScenario(BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY)
+    presenter.onLoad()
+    const authorityId = `bamboo-sweep:7:hidden-writes:${quality}:impact`
+    const impact = startImpactScenario(presenter, entry, {
+      attackId: authorityId,
+      authorityId,
+      duration: 0.18,
+      quality,
+    })
+    const warningId = `bamboo-sweep:7:hidden-writes:${quality}:warning`
+    assert.equal(presenter.present(telegraph(warningId, entry.area, entry.danger), quality), true)
+    const warning = latestWarningVisual(presenter)
+    assert.ok(warning, `${quality} warning visual`)
+
+    const scenarios = [
+      { expectedWrites: 119, label: `${quality} impact`, node: impact.node },
+      { expectedWrites: 120, label: `${quality} warning`, node: warning.node },
+    ]
+    const before = scenarios.map(({ node }) => ({
+      graphics: structuredClone(node.graphics.calls),
+      writes: layerWriteCounts(node),
+    }))
+
+    for (let index = 0; index < 120; index += 1) presenter.update(0.00025)
+
+    for (const [scenarioIndex, scenario] of scenarios.entries()) {
+      const { expectedWrites, label, node } = scenario
+      const deltas = layerWriteDeltas(node, before[scenarioIndex].writes)
+      assertLayerWrites(deltas.mainShape, expectedWrites, `${label} main`)
+      if (quality === 'reduced') {
+        assertLayerWrites(deltas.accent, expectedWrites, `${label} accent`)
+        assertLayerWrites(deltas.particleNear, expectedWrites, `${label} particleNear`)
+        assertLayerWrites(deltas.particleFar, 0, `${label} particleFar`)
+      } else {
+        assertLayerWrites(deltas.accent, 0, `${label} accent`)
+        assertLayerWrites(deltas.particleNear, 0, `${label} particleNear`)
+        assertLayerWrites(deltas.particleFar, 0, `${label} particleFar`)
+      }
+      assert.equal(node.active, true, `${label} root remains active`)
+      assert.deepEqual(layerVisibility(node).mainShape, { active: true, enabled: true }, `${label} main remains active`)
+      assert.ok(node.graphics.calls.some((call) => call.type === 'stroke'), `${label} Graphics remains active`)
+      assert.deepEqual(node.graphics.calls, before[scenarioIndex].graphics, `${label} Graphics stays static`)
+    }
   }
 })
 
@@ -722,7 +886,8 @@ test('steady-state phase updates avoid Color construction resource loads and com
   presenter.present(telegraph(entry.attackId, entry.area, entry.danger), 'full')
 
   const node = [...pool.active][0]
-  const visual = [...presenter.groups.values()][0].visuals[0]
+  const visual = latestWarningVisual(presenter)
+  assert.ok(visual)
   const phaseOutput = visual.phase
   const reusableColors = LAYER_FIELDS.map((field) => node.layers[field].lastAssignedInput)
   const reusableVectors = LAYER_FIELDS.map((field) => ({
@@ -772,28 +937,16 @@ test('steady-state phase updates avoid Color construction resource loads and com
 
 test('sweep impact crosses 82 percent of the area with a trailing accent and end dissipation', async () => {
   const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
-  const presenter = new BossTelegraphPresenter()
-  const pool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
-  presenter.telegraphPool = pool
+  const { presenter } = createPresenterScenario(BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY)
   presenter.onLoad()
   const entry = PROFILE_CASES[0]
   const authorityId = 'bamboo-sweep:7:motion'
-  const warning = telegraph(authorityId, entry.area, entry.danger, authorityId)
-
-  presenter.present(warning)
-  presenter.activate(3, 7, {
-    type: 'activate-hitbox',
+  const { node, visual: impact } = startImpactScenario(presenter, entry, {
     attackId: authorityId,
-    telegraphId: authorityId,
-    area: entry.area,
-    damage: 8,
+    authorityId,
     duration: 1,
-    danger: entry.danger,
   })
-  presenter.update(0.8)
 
-  const impact = presenter.impacts[0]
-  const node = impact.node
   const width = entry.area.maxX - entry.area.minX
   const staticState = rootAndGraphics(node)
   const start = layerGeometry(node)
@@ -831,28 +984,16 @@ test('sweep impact crosses 82 percent of the area with a trailing accent and end
 
 test('spike impact rises with eased dust expansion and two scale beats', async () => {
   const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
-  const presenter = new BossTelegraphPresenter()
-  const pool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
-  presenter.telegraphPool = pool
+  const { presenter } = createPresenterScenario(BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY)
   presenter.onLoad()
   const entry = PROFILE_CASES[1]
   const authorityId = 'ground-spikes:7:motion:marker:0'
-  const warning = telegraph(authorityId, entry.area, entry.danger, authorityId)
-
-  presenter.present(warning)
-  presenter.activate(3, 7, {
-    type: 'activate-hitbox',
+  const { node, visual: impact } = startImpactScenario(presenter, entry, {
     attackId: authorityId,
-    telegraphId: authorityId,
-    area: entry.area,
-    damage: 8,
+    authorityId,
     duration: 1,
-    danger: entry.danger,
   })
-  presenter.update(0.8)
 
-  const impact = presenter.impacts[0]
-  const node = impact.node
   const height = entry.area.maxY - entry.area.minY
   const staticState = rootAndGraphics(node)
   const start = layerGeometry(node)
@@ -888,14 +1029,11 @@ test('spike impact rises with eased dust expansion and two scale beats', async (
 
 test('roar impacts expand from .72 to 1.18 with parsed wave signatures and staggered fading', async () => {
   const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
-  const presenter = new BossTelegraphPresenter()
-  const pool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
-  presenter.telegraphPool = pool
+  const { presenter } = createPresenterScenario(BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY)
   presenter.onLoad()
   const entry = PROFILE_CASES[2]
   const authorityId = 'mountain-roar:7:motion'
-  const warning = telegraph(`${authorityId}:sector:top`, entry.area, entry.danger, authorityId)
-  const impactCommand = (wave) => ({
+  const roarCommand = (wave) => ({
     type: 'activate-hitbox',
     attackId: `${authorityId}:wave:${wave}:sector:top`,
     telegraphId: authorityId,
@@ -904,14 +1042,16 @@ test('roar impacts expand from .72 to 1.18 with parsed wave signatures and stagg
     duration: 1,
   })
 
-  presenter.present(warning)
-  presenter.activate(3, 7, impactCommand(0))
-  presenter.update(0.8)
-  presenter.activate(3, 7, impactCommand(1))
-  presenter.activate(3, 7, impactCommand(2))
-  presenter.activate(3, 7, impactCommand('not-a-number'))
+  startImpactScenario(presenter, entry, {
+    attackId: `${authorityId}:wave:0:sector:top`,
+    authorityId,
+    duration: 1,
+  })
+  presenter.activate(3, 7, roarCommand(1))
+  presenter.activate(3, 7, roarCommand(2))
+  presenter.activate(3, 7, roarCommand('not-a-number'))
 
-  const impacts = presenter.impacts
+  const impacts = activeImpactVisuals(presenter)
   const nodes = impacts.map((impact) => impact.node)
   const staticStates = nodes.map(rootAndGraphics)
   const initialGeometry = nodes.map(layerGeometry)
@@ -952,30 +1092,89 @@ test('roar impacts expand from .72 to 1.18 with parsed wave signatures and stagg
   assert.equal(presenter.visibleImpactCount, 4)
 })
 
+test('production impact durations render motion and dissipation at 60 and 30 fps in both update orders', async () => {
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
+  const timingCases = [
+    { duration: 0.18, entry: PROFILE_CASES[0] },
+    { duration: 0.14, entry: PROFILE_CASES[1] },
+    { duration: 0.12, entry: PROFILE_CASES[2] },
+  ]
+
+  for (const { duration, entry } of timingCases) {
+    for (const deltaSeconds of [1 / 60, 1 / 30]) {
+      for (const updateOrder of ['presenter-first', 'enemy-first']) {
+        const label = `${entry.id} duration=${duration} dt=${deltaSeconds} order=${updateOrder}`
+        const { pool, presenter } = createPresenterScenario(BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY)
+        const authorityId = `${entry.attackId}:realistic:${deltaSeconds}:${updateOrder}`
+        primeImpactAuthority(presenter, entry, authorityId)
+        const attackId = entry.id === 'roar-wave'
+          ? `${authorityId}:wave:0:sector:top`
+          : authorityId
+        const command = impactCommand(entry, authorityId, duration, attackId)
+
+        if (updateOrder === 'presenter-first') presenter.update(deltaSeconds)
+        presenter.activate(3, 7, command)
+        const visual = latestImpactVisual(presenter)
+        assert.ok(visual, `${label} activation creates impact`)
+        const node = visual.node
+        const initial = motionRenderSnapshot(node)
+        const initialGeometry = JSON.stringify(initial.geometry)
+        const initialAlpha = node.mainShape.color.a
+        assert.equal(presenter.visibleImpactCount, 1, `${label} initial impact visible`)
+        assert.equal(node.active, true, `${label} initial root active`)
+        assert.deepEqual(layerVisibility(node).mainShape, { active: true, enabled: true }, `${label} initial main visible`)
+        assert.ok(initialAlpha > 0, `${label} initial alpha rendered`)
+        assert.ok(node.graphics.calls.some((call) => call.type === 'stroke'), `${label} initial Graphics rendered`)
+
+        if (updateOrder === 'enemy-first') presenter.update(deltaSeconds)
+        else presenter.update(deltaSeconds)
+        assert.equal(visual.remaining, duration, `${label} fresh update preserves duration`)
+        assert.deepEqual(motionRenderSnapshot(node), initial, `${label} fresh update preserves initial rendered state`)
+
+        let elapsed = 0
+        let movingRendered = false
+        let dissipatingRendered = false
+        for (let frame = 0; frame < 20 && presenter.visibleImpactCount > 0; frame += 1) {
+          pool.frame += 1
+          presenter.update(deltaSeconds)
+          elapsed += deltaSeconds
+          if (presenter.visibleImpactCount === 0) {
+            assert.ok(elapsed + 1e-9 >= duration, `${label} cannot despawn before duration`)
+            break
+          }
+          assert.ok(elapsed < duration + 1e-9, `${label} remains only before expiry`)
+          const rendered = motionRenderSnapshot(node)
+          if (JSON.stringify(rendered.geometry) !== initialGeometry) movingRendered = true
+          if (node.mainShape.color.a < initialAlpha) dissipatingRendered = true
+        }
+
+        assert.equal(movingRendered, true, `${label} has a subsequent moving rendered state`)
+        assert.equal(dissipatingRendered, true, `${label} has a later dissipating rendered state`)
+        assert.equal(presenter.visibleImpactCount, 0, `${label} eventually despawns`)
+        assert.equal(pool.active.size, 0, `${label} returns node to pool`)
+      }
+    }
+  }
+})
+
 test('warning and impact steady-state updates reuse phase colors and layer vectors without runtime lookups', async () => {
   const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY, loadedPaths } = await loadPresenter()
-  const presenter = new BossTelegraphPresenter()
-  const pool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
-  presenter.telegraphPool = pool
+  const { presenter } = createPresenterScenario(BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY)
   presenter.onLoad()
   const sweep = PROFILE_CASES[0]
   const spike = PROFILE_CASES[1]
   const authorityId = 'bamboo-sweep:7:steady-impact'
 
-  presenter.present(telegraph(authorityId, sweep.area, sweep.danger, authorityId))
-  presenter.activate(3, 7, {
-    type: 'activate-hitbox',
+  const impact = startImpactScenario(presenter, sweep, {
     attackId: authorityId,
-    telegraphId: authorityId,
-    area: sweep.area,
-    damage: 8,
+    authorityId,
     duration: 0.18,
-    danger: sweep.danger,
   })
-  presenter.update(0.8)
   presenter.present(telegraph('ground-spikes:7:steady-warning', spike.area, spike.danger))
+  const warning = latestWarningVisual(presenter)
+  assert.ok(warning)
 
-  const visualStates = [presenter.impacts[0], [...presenter.groups.values()][0].visuals[0]]
+  const visualStates = [impact.visual, warning]
   const nodes = visualStates.map((visual) => visual.node)
   const phases = visualStates.map((visual) => visual.phase)
   const colors = nodes.map((node) => LAYER_FIELDS.map((field) => node.layers[field].lastAssignedInput))
@@ -1012,9 +1211,7 @@ test('warning and impact steady-state updates reuse phase colors and layer vecto
 
 test('twenty-seven mixed warning impact pool cycles restore every transform color and frame state', async () => {
   const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
-  const presenter = new BossTelegraphPresenter()
-  const pool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
-  presenter.telegraphPool = pool
+  const { pool, presenter } = createPresenterScenario(BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY)
   presenter.onLoad()
   const qualities = ['full', 'reduced', 'minimal']
   const warningBaselines = new Map()
@@ -1027,7 +1224,8 @@ test('twenty-seven mixed warning impact pool cycles restore every transform colo
     const warning = telegraph(authorityId, entry.area, entry.danger, authorityId)
     assert.equal(presenter.present(warning, quality), true)
 
-    const warningVisual = [...presenter.groups.values()][0].visuals[0]
+    const warningVisual = latestWarningVisual(presenter)
+    assert.ok(warningVisual)
     const warningNode = warningVisual.node
     const warningKey = `${entry.id}:${quality}`
     const warningState = pooledVisualState(warningNode)
@@ -1056,7 +1254,8 @@ test('twenty-seven mixed warning impact pool cycles restore every transform colo
     }, quality)
     presenter.update(0.6)
 
-    const impactVisual = presenter.impacts[0]
+    const impactVisual = latestImpactVisual(presenter)
+    assert.ok(impactVisual)
     const impactNode = impactVisual.node
     const impactState = pooledVisualState(impactNode)
     const impactKey = `${entry.id}:${quality}`
