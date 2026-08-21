@@ -614,6 +614,41 @@ function primeImpactAuthority(presenter, entry, authorityId, quality = 'full') {
   assert.equal(presenter.visibleImpactCount, 0, `${entry.id} bootstrap impact expires`)
 }
 
+test('visible VFX snapshot preserves the actual first phase-two cast when lastAttack is already the second', async () => {
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
+  const presenter = new BossTelegraphPresenter()
+  presenter.telegraphPool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
+  const boss = createBambooWardenBrain(7, { x: 260, y: 40 }, 0)
+  setBossHealthRatio(boss, 0.49)
+  const expected = { telegraph: [], impact: [] }
+  const pairAttacks = new Map()
+
+  for (let frame = 0; frame < 2; frame += 1) {
+    const deltaSeconds = 0.25
+    const commands = stepBambooWarden(boss, {
+      now: boss.elapsed + deltaSeconds,
+      player: { id: 'player', position: { x: -120, y: 0 }, alive: true },
+      neighbors: [],
+      battleBounds: { minX: -360, maxX: 360, minY: -420, maxY: 420 },
+    }, deltaSeconds)
+    deliverBossCommands(presenter, commands, expected, pairAttacks)
+  }
+
+  const brain = boss.snapshot()
+  const entries = presenter.visibleVfxEntries()
+  assert.equal(brain.phaseNumber, 2)
+  assert.equal(brain.attackSequence, 2)
+  assert.ok(entries.length > 0)
+  assert.ok(entries.every((entry) => entry.phase === 'telegraph'))
+  assert.ok(entries.every((entry) => entry.skill !== brain.lastAttack))
+  assert.ok(entries.every((entry) => entry.sequence === 1))
+  assert.ok(entries.every((entry) => entry.attackId.startsWith(`${entry.skill}:7:1`)))
+  assert.ok(entries.every((entry) => entry.authorityId.startsWith(`${entry.skill}:7:1`)))
+  assert.equal(Object.isFrozen(entries), true)
+  assert.ok(entries.every(Object.isFrozen))
+  assert.throws(() => { entries[0].skill = brain.lastAttack }, TypeError)
+})
+
 test('preloads seven unique resources once and maps all profile layers for warnings and impacts', async () => {
   const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY, frames, loadedPaths } = await loadPresenter()
   const presenter = new BossTelegraphPresenter()
@@ -1599,6 +1634,19 @@ test('Cocos presenter executes show-visible-active-hidden and cancel/reset lifec
 
   assert.equal(presenter.present(warning), true)
   assert.equal(presenter.visibleTelegraphCount, 1)
+  assert.deepEqual(presenter.visibleVfxEntries().map(({ attackId, authorityId, sequence, skill, phase }) => ({
+    attackId,
+    authorityId,
+    sequence,
+    skill,
+    phase,
+  })), [{
+    attackId: 'bamboo-sweep:7:1',
+    authorityId: 'bamboo-sweep:7:1',
+    sequence: 1,
+    skill: 'bamboo-sweep',
+    phase: 'telegraph',
+  }])
   const warningNode = [...pool.active][0]
   assert.deepEqual(warningNode.position, { x: 30, y: 14, z: 0 })
   assert.deepEqual(warningNode.transform.size, { width: 300, height: 108 })
@@ -1613,6 +1661,19 @@ test('Cocos presenter executes show-visible-active-hidden and cancel/reset lifec
   presenter.update(0.01)
   assert.equal(presenter.visibleTelegraphCount, 0)
   assert.equal(presenter.visibleImpactCount, 1)
+  assert.deepEqual(presenter.visibleVfxEntries().map(({ attackId, authorityId, sequence, skill, phase }) => ({
+    attackId,
+    authorityId,
+    sequence,
+    skill,
+    phase,
+  })), [{
+    attackId: 'bamboo-sweep:7:1',
+    authorityId: 'bamboo-sweep:7:1',
+    sequence: 1,
+    skill: 'bamboo-sweep',
+    phase: 'impact',
+  }])
   presenter.update(0.18)
   assert.equal(presenter.visibleImpactCount, 1, 'a new impact survives its first presenter update so either component order renders it')
   presenter.update(0.18)

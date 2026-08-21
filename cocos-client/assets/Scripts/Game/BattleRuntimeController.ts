@@ -56,6 +56,7 @@ import type { PlayerActionToken } from '../Combat/PlayerMotor.ts'
 import { BattleHudController } from './BattleHudController'
 import { BattleInputController } from './BattleInputController'
 import { BossTelegraphPresenter } from './BossTelegraphPresenter'
+import type { BossVisibleVfxEntry } from './BossTelegraphPresenter'
 import { DamageNumberController } from './DamageNumberController'
 import { EnemyController } from './EnemyController'
 import { EnemySpawner } from './EnemySpawner'
@@ -88,6 +89,7 @@ export interface BossAgentSnapshot {
   readonly vfxQuality: VfxQuality
   readonly visibleTelegraphCount: number
   readonly visibleImpactCount: number
+  readonly visibleVfx: readonly Readonly<BossVisibleVfxEntry>[]
 }
 
 @ccclass('BattleRuntimeController')
@@ -354,14 +356,16 @@ export class BattleRuntimeController extends Component {
     const brain = this.enemyNodes.get(boss.id)
       ?.getComponent(EnemyController)
       ?.bossCombatSnapshot() ?? null
+    const visibleVfx = this.bossTelegraphPresenter?.visibleVfxEntries() ?? Object.freeze([])
     return Object.freeze({
       brain,
       hp: boss.hp,
       alive: boss.alive,
       stageGeneration: this.stageGeneration,
       vfxQuality: this.currentVfxQuality,
-      visibleTelegraphCount: this.bossTelegraphPresenter?.visibleTelegraphCount ?? 0,
-      visibleImpactCount: this.bossTelegraphPresenter?.visibleImpactCount ?? 0,
+      visibleTelegraphCount: visibleVfx.filter((entry) => entry.phase === 'telegraph').length,
+      visibleImpactCount: visibleVfx.filter((entry) => entry.phase === 'impact').length,
+      visibleVfx,
     })
   }
 

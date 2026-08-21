@@ -688,6 +688,72 @@ test('dungeon defeat emits authority event without a world defeat panel', async 
   assert.equal(controller.stageClearPanel.defeats, 0)
 })
 
+test('Boss agent snapshot returns immutable presenter-owned VFX identities and matching counts', async () => {
+  const { BattleRuntimeController, dependencies } = await loadController()
+  const controller = new BattleRuntimeController()
+  const brain = Object.freeze({
+    id: 9,
+    phase: 'telegraph',
+    phaseNumber: 2,
+    healthRatio: 0.49,
+    elapsed: 4.25,
+    position: Object.freeze({ x: 120, y: -40 }),
+    lastAttack: 'mountain-roar',
+    attackSequence: 2,
+    cooldowns: Object.freeze({}),
+  })
+  const visibleVfx = Object.freeze([
+    Object.freeze({
+      generation: 12,
+      enemyId: 9,
+      skill: 'bamboo-sweep',
+      sequence: 1,
+      attackId: 'bamboo-sweep:9:1',
+      authorityId: 'bamboo-sweep:9:1',
+      phase: 'telegraph',
+    }),
+    Object.freeze({
+      generation: 12,
+      enemyId: 9,
+      skill: 'ground-spikes',
+      sequence: 2,
+      attackId: 'ground-spikes:9:2:marker:0',
+      authorityId: 'ground-spikes:9:2:marker:0',
+      phase: 'impact',
+    }),
+  ])
+  controller.runtime = {
+    enemies: [{ id: 9, hp: 255, alive: true, profile: { role: 'boss' } }],
+  }
+  controller.stageGeneration = 12
+  controller.currentVfxQuality = 'reduced'
+  controller.enemyNodes = new Map([[
+    9,
+    {
+      getComponent(Type) {
+        assert.strictEqual(Type, dependencies.EnemyController)
+        return { bossCombatSnapshot: () => brain }
+      },
+    },
+  ]])
+  controller.bossTelegraphPresenter = { visibleVfxEntries: () => visibleVfx }
+
+  const snapshot = controller.getBossAgentSnapshot()
+  assert.equal(Object.isFrozen(snapshot), true)
+  assert.strictEqual(snapshot.brain, brain)
+  assert.strictEqual(snapshot.visibleVfx, visibleVfx)
+  assert.equal(snapshot.visibleTelegraphCount, 1)
+  assert.equal(snapshot.visibleImpactCount, 1)
+  assert.equal(snapshot.vfxQuality, 'reduced')
+  assert.equal(snapshot.hp, 255)
+  assert.equal(snapshot.alive, true)
+  assert.equal(snapshot.stageGeneration, 12)
+  assert.throws(() => { snapshot.hp = 0 }, TypeError)
+
+  controller.runtime.enemies = []
+  assert.equal(controller.getBossAgentSnapshot(), null)
+})
+
 test('controller exposes the dungeon encounter, exploration, and world restoration APIs', () => {
   const source = readFileSync(resolve('assets/Scripts/Game/BattleRuntimeController.ts'), 'utf8')
   for (const marker of [

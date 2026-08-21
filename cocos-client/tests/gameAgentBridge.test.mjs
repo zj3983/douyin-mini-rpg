@@ -17,7 +17,7 @@ test('Cocos dungeon agent bridge is query-gated and removed during teardown', as
   assert.match(source, /delete agentGlobal\.__M3_DUNGEON_AGENT__/)
 })
 
-test('Battle runtime joins immutable Boss brain, health, generation, quality, and visible VFX evidence', async () => {
+test('Battle runtime forwards presenter-owned visible VFX identities with Boss state', async () => {
   const source = await readFile(new URL('../assets/Scripts/Game/BattleRuntimeController.ts', import.meta.url), 'utf8')
 
   assert.match(source, /getBossAgentSnapshot\(\)/)
@@ -26,6 +26,8 @@ test('Battle runtime joins immutable Boss brain, health, generation, quality, an
   assert.match(source, /currentVfxQuality/)
   assert.match(source, /visibleTelegraphCount/)
   assert.match(source, /visibleImpactCount/)
+  assert.match(source, /visibleVfxEntries/)
+  assert.match(source, /visibleVfx/)
   assert.match(source, /Object\.freeze/)
 })
 
@@ -38,10 +40,17 @@ test('dungeon agent verifies real controls and drives Boss evidence from bridge 
   assert.match(source, /性能采样阶段/)
   assert.match(source, /bridgeCall\('bossCombatStatus'\)/)
   assert.match(source, /reviewBossSkillEvidence/)
+  assert.match(source, /reviewBossEvidenceCapture/)
+  assert.match(source, /reviewBossFinalInvariant/)
+  assert.match(source, /buildDungeonAgentArtifacts/)
   assert.match(source, /greedy-boss-bamboo-sweep-telegraph/)
   assert.match(source, /greedy-boss-ground-spikes-active/)
   assert.match(source, /greedy-boss-mountain-roar-active/)
   assert.match(source, /maxGameElapsedSeconds:\s*25/)
   assert.match(source, /60_000/)
+  assert.match(source, /await capturePendingBossScreenshot[\s\S]+?await bridgeCall\('bossCombatStatus'\)[\s\S]+?reviewBossEvidenceCapture/)
+  assert.match(source, /finally\s*\{[\s\S]+?await writeDungeonAgentArtifacts\(route, failure\)/)
   assert.doesNotMatch(source, /bossSkillCapturePlan/)
+  assert.doesNotMatch(source, /captureTasks|Promise\.all\(capture/)
+  assert.doesNotMatch(source, /brain\?*\.lastAttack|brain\.lastAttack/)
 })

@@ -1,5 +1,6 @@
 import { _decorator, Color, Component, Graphics, Node, resources, Sprite, SpriteFrame, UITransform } from 'cc'
 import { BOSS_HAZARD_POOL_CAPACITY } from '../Combat/BossBrain.ts'
+import type { BossAttackId } from '../Combat/BossBrain.ts'
 import type { EnemyCommand } from '../Combat/EnemyBrain.ts'
 import type { VfxQuality } from '../Combat/PerformanceBudget.ts'
 import {
@@ -34,6 +35,18 @@ interface CachedVisualLayers {
   readonly particleFar: Sprite | null
 }
 
+export type BossVisibleVfxPhase = 'telegraph' | 'impact'
+
+export interface BossVisibleVfxEntry {
+  readonly generation: number
+  readonly enemyId: number
+  readonly attackId: string
+  readonly authorityId: string
+  readonly skill: BossAttackId | null
+  readonly sequence: number | null
+  readonly phase: BossVisibleVfxPhase
+}
+
 interface PreparedVisualNode extends CachedVisualLayers {
   readonly graphics: Graphics | null
   readonly width: number
@@ -49,6 +62,9 @@ interface CachedVisualColors {
 
 interface TelegraphVisual extends PreparedVisualNode, CachedVisualColors {
   readonly node: Node
+  readonly attackId: string
+  readonly skill: BossAttackId | null
+  readonly sequence: number | null
   readonly duration: number
   readonly profile: BossTelegraphVisualProfile
   readonly quality: VfxQuality
@@ -74,6 +90,10 @@ interface ImpactVisual extends PreparedVisualNode, CachedVisualColors {
   readonly node: Node
   readonly generation: number
   readonly enemyId: number
+  readonly attackId: string
+  readonly authorityId: string
+  readonly skill: BossAttackId | null
+  readonly sequence: number | null
   readonly duration: number
   readonly profile: BossTelegraphVisualProfile
   readonly quality: VfxQuality
@@ -167,6 +187,23 @@ function dangerKindForAttack(attackId: string): string {
   if (attackId.startsWith('ground-spikes:')) return 'spike'
   if (attackId.startsWith('mountain-roar:')) return 'roar-sector'
   return 'sweep'
+}
+
+function bossAttackIdentity(attackId: string): {
+  readonly skill: BossAttackId | null
+  readonly sequence: number | null
+} {
+  const [skillToken, , sequenceToken] = attackId.split(':')
+  const skill = skillToken === 'bamboo-sweep'
+    || skillToken === 'ground-spikes'
+    || skillToken === 'mountain-roar'
+    ? skillToken
+    : null
+  const sequence = Number(sequenceToken)
+  return {
+    skill,
+    sequence: Number.isSafeInteger(sequence) && sequence >= 0 ? sequence : null,
+  }
 }
 
 function safeWaveIndex(
@@ -270,6 +307,35 @@ export class BossTelegraphPresenter extends Component {
     return this.impacts.length
   }
 
+  visibleVfxEntries(): readonly Readonly<BossVisibleVfxEntry>[] {
+    const entries: Readonly<BossVisibleVfxEntry>[] = []
+    for (const group of this.groups.values()) {
+      for (const visual of group.visuals) {
+        entries.push(Object.freeze({
+          generation: group.generation,
+          enemyId: group.enemyId,
+          attackId: visual.attackId,
+          authorityId: group.authorityId,
+          skill: visual.skill,
+          sequence: visual.sequence,
+          phase: 'telegraph' as const,
+        }))
+      }
+    }
+    for (const impact of this.impacts) {
+      entries.push(Object.freeze({
+        generation: impact.generation,
+        enemyId: impact.enemyId,
+        attackId: impact.attackId,
+        authorityId: impact.authorityId,
+        skill: impact.skill,
+        sequence: impact.sequence,
+        phase: 'impact' as const,
+      }))
+    }
+    return Object.freeze(entries)
+  }
+
   onDisable(): void {
     this.hideAll()
   }
@@ -312,11 +378,14 @@ export class BossTelegraphPresenter extends Component {
     if (delivery.generation > this.generation) this.resetGeneration(delivery.generation)
     const node = this.acquireHazardNode(delivery.attackId)
     const profile = resolveBossTelegraphVisual(delivery.danger)
+    const identity = bossAttackIdentity(delivery.attackId)
     const phase = createPhaseOutput()
     const colors = createVisualColors(profile.spirit)
     const layers = this.drawTelegraph(node, delivery.area, profile, quality)
     const visual: TelegraphVisual = {
       node,
+      attackId: delivery.attackId,
+      ...identity,
       duration: delivery.duration,
       profile,
       quality,
@@ -446,6 +515,8 @@ export class BossTelegraphPresenter extends Component {
     const node = this.acquireHazardNode(command.attackId)
     const danger = command.danger ?? { kind: dangerKindForAttack(command.attackId) }
     const profile = resolveBossTelegraphVisual(danger)
+    const authorityId = commandAuthority(command)
+    const identity = bossAttackIdentity(command.attackId)
     const phase = createPhaseOutput()
     const colors = createVisualColors(profile.impact)
     const layers = this.drawImpact(node, command.area, profile, quality)
@@ -453,6 +524,9 @@ export class BossTelegraphPresenter extends Component {
       node,
       generation,
       enemyId,
+      attackId: command.attackId,
+      authorityId,
+      ...identity,
       duration: command.duration,
       profile,
       quality,

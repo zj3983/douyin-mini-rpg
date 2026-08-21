@@ -1,18 +1,22 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process'
 import { createWriteStream, existsSync } from 'node:fs'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { chromium } from 'playwright'
 
 import {
+  buildDungeonAgentArtifacts,
   canvasAspectHealth,
   canvasHealth,
   dungeonLoopReview,
   playtestReview,
   reportMarkdown,
+  reviewBossEvidenceCapture,
+  reviewBossFinalInvariant,
+  reviewBossPerformanceInterval,
   reviewBossSkillEvidence,
 } from './game-agent-core.mjs'
 
@@ -75,6 +79,24 @@ let dungeonReview = null
 
 function addCheck(name, ok, detail = '') {
   checks.push({ name, ok: Boolean(ok), detail })
+}
+
+class BossEvidenceError extends Error {
+  constructor(reason, message, details = null) {
+    super(message)
+    this.name = 'BossEvidenceError'
+    this.reason = reason
+    this.details = details
+  }
+}
+
+function structuredAgentFailure(error) {
+  return {
+    reason: typeof error?.reason === 'string' ? error.reason : 'agent-fatal',
+    name: error?.name || 'Error',
+    message: error?.message || String(error),
+    details: error?.details ?? null,
+  }
 }
 
 async function probe(url, timeoutMs = 800) {
@@ -582,8 +604,8 @@ async function dungeonMove(exitId) {
   return dungeonCommand({ type: 'choose-exit', exitId }, `通过路线 ${exitId}`)
 }
 
-async function measureDetailedFrames(sampleCount = 180, phase = '基线', bossEvidence = null) {
-  const result = await page.evaluate(async (count) => {
+async function sampleDetailedFrames(sampleCount) {
+  return page.evaluate(async (count) => {
     const samples = []
     let previous = await new Promise((resolveFrame) => requestAnimationFrame(resolveFrame))
     while (samples.length < count) {
@@ -601,28 +623,37 @@ async function measureDetailedFrames(sampleCount = 180, phase = '基线', bossEv
       droppedFrames: samples.filter((value) => value > 34).length,
     }
   }, sampleCount)
-  performance = result
-  const verifiedBossPhase = Boolean(
-    bossEvidence?.alive
-      && Number(bossEvidence.hp) > 0
-      && ['bamboo-sweep', 'ground-spikes', 'mountain-roar'].includes(bossEvidence.skill)
-      && (
-        (bossEvidence.phase === 'telegraph'
-          && bossEvidence.brainPhase === 'telegraph'
-          && Number(bossEvidence.visibleTelegraphCount) > 0)
-        || (bossEvidence.phase === 'active'
-          && bossEvidence.brainPhase === 'attack'
-          && Number(bossEvidence.visibleImpactCount) > 0)
-      )
-  )
-  const phaseDetail = bossEvidence
-    ? `skill=${bossEvidence.skill}, phase=${bossEvidence.brainPhase}, evidence=${bossEvidence.phase}, elapsed=${Number(bossEvidence.elapsed).toFixed(3)}s, telegraphs=${bossEvidence.visibleTelegraphCount}, impacts=${bossEvidence.visibleImpactCount}, quality=${bossEvidence.vfxQuality}`
-    : phase
-  const phaseVerified = bossEvidence ? verifiedBossPhase : phase.includes('战斗')
-  performancePhase = phaseDetail
+}
+
+function recordDetailedFrameCheck(result) {
   addCheck('Cocos 帧时间', result.p95FrameMs <= 20 && result.minimumFps >= 30, `P95 ${result.p95FrameMs.toFixed(2)}ms, min ${result.minimumFps.toFixed(1)} FPS, dropped ${result.droppedFrames}`)
-  addCheck('性能采样阶段', phaseVerified, phaseDetail)
+}
+
+async function measureDetailedFrames(sampleCount = 180, phase = '基线') {
+  const result = await sampleDetailedFrames(sampleCount)
+  performance = result
+  const phaseVerified = phase.includes('战斗')
+  performancePhase = phase
+  recordDetailedFrameCheck(result)
+  addCheck('性能采样阶段', phaseVerified, phase)
   return { ...result, phaseVerified }
+}
+
+async function measureBossCombatFrames(startStatus) {
+  const wallStartedAt = Date.now()
+  const result = await sampleDetailedFrames(180)
+  const endStatus = await bridgeCall('bossCombatStatus')
+  const intervalReview = reviewBossPerformanceInterval({
+    start: startStatus,
+    end: endStatus,
+    frameCount: 180,
+    wallDurationMs: Date.now() - wallStartedAt,
+  })
+  performance = { ...result, interval: intervalReview.metadata ?? null }
+  performancePhase = intervalReview.detail ?? `mixed Boss combat interval failed: ${intervalReview.reason}`
+  recordDetailedFrameCheck(result)
+  addCheck('性能采样阶段', intervalReview.ok, performancePhase)
+  return { ...result, phaseVerified: intervalReview.ok, intervalReview, endStatus }
 }
 
 const BOSS_SKILL_SCREENSHOT_LABELS = Object.freeze({
@@ -640,83 +671,225 @@ const BOSS_SKILL_SCREENSHOT_LABELS = Object.freeze({
   }),
 })
 
+async function capturePendingBossScreenshot(label) {
+  const pendingFile = join(outDir, `.pending-${label}.png`)
+  const finalFile = join(outDir, `${label}.png`)
+  try {
+    await rm(pendingFile, { force: true })
+    await page.screenshot({ path: pendingFile, fullPage: false, timeout: 10000 })
+    return { ok: true, pendingFile, finalFile }
+  } catch (error) {
+    await rm(pendingFile, { force: true }).catch(() => {})
+    return { ok: false, pendingFile, finalFile, error }
+  }
+}
+
+async function discardPendingBossScreenshot(capture) {
+  try {
+    await rm(capture.pendingFile, { force: true })
+  } catch (error) {
+    throw bossEvidenceError('screenshot-failure', `Could not remove stale screenshot ${capture.pendingFile}: ${error.message}`, {
+      pendingFile: capture.pendingFile,
+    })
+  }
+}
+
+async function promoteBossScreenshot(label, capture) {
+  await rename(capture.pendingFile, capture.finalFile)
+  const index = screenshots.findIndex((entry) => entry.label === label)
+  const record = { label, file: capture.finalFile }
+  if (index >= 0) screenshots[index] = record
+  else screenshots.push(record)
+  return record
+}
+
+function bossEvidenceError(reason, message, details) {
+  const detail = `${reason}: ${message}`
+  addCheck('完整 Boss 技能状态证据', false, detail)
+  return new BossEvidenceError(reason, message, details)
+}
+
 async function captureBossSkillStates() {
   const wallDeadlineMs = Date.now() + 60_000
   const samples = []
-  const captureTasks = new Map()
+  const captures = new Map()
+  const rejectedCaptures = []
   let performancePromise = null
   let review = null
 
-  while (true) {
-    const status = await bridgeCall('bossCombatStatus')
-    const wallTimedOut = Date.now() >= wallDeadlineMs
-    if (samples.length === 0 && !status?.brain) {
-      if (wallTimedOut) {
-        samples.push(null)
-        review = reviewBossSkillEvidence({ samples, maxGameElapsedSeconds: 25, wallTimedOut: true })
-        break
+  try {
+    while (true) {
+      const status = await bridgeCall('bossCombatStatus')
+      const wallTimedOut = Date.now() >= wallDeadlineMs
+      if (samples.length === 0 && status === null) {
+        if (wallTimedOut) {
+          throw bossEvidenceError('wall-timeout', 'Boss did not appear before the wall timeout', {
+            captured: captures.size,
+            rejectedCaptures,
+          })
+        }
+        await page.waitForTimeout(16)
+        continue
       }
-      await page.waitForTimeout(16)
-      continue
-    }
 
-    samples.push(status)
-    review = reviewBossSkillEvidence({ samples, maxGameElapsedSeconds: 25, wallTimedOut })
-    for (const evidence of review.captureRequests) {
-      if (captureTasks.has(evidence.key)) continue
-      const label = BOSS_SKILL_SCREENSHOT_LABELS[evidence.skill]?.[evidence.phase]
-      if (!label) throw new Error(`Unknown Boss evidence label: ${evidence.key}`)
-      captureTasks.set(evidence.key, shot(label).then((ok) => ({
-        key: evidence.key,
-        label,
-        ok,
-        evidence,
-      })))
+      samples.push(status)
+      review = reviewBossSkillEvidence({
+        samples,
+        captures: [...captures.values()],
+        maxGameElapsedSeconds: 25,
+        wallTimedOut,
+      })
+      if (review.state === 'failed') {
+        throw bossEvidenceError(review.reason, review.detail, {
+          missing: review.missing,
+          gameElapsedSeconds: review.gameElapsedSeconds,
+          captured: [...captures.values()],
+          rejectedCaptures,
+        })
+      }
+      if (review.state === 'complete') break
+
+      const candidate = review.captureRequests[0]
+      if (!candidate) {
+        await page.waitForTimeout(16)
+        continue
+      }
+      const label = BOSS_SKILL_SCREENSHOT_LABELS[candidate.skill]?.[candidate.phase]
+      if (!label) {
+        throw bossEvidenceError('malformed-candidate', `Unknown Boss evidence label: ${candidate.key}`, { candidate })
+      }
+
+      const pendingCapture = await capturePendingBossScreenshot(label)
+      if (!pendingCapture.ok) {
+        throw bossEvidenceError('screenshot-failure', `Screenshot ${label} failed: ${pendingCapture.error?.message ?? 'unknown error'}`, {
+          candidate,
+        })
+      }
+
+      let after
+      try {
+        after = await bridgeCall('bossCombatStatus')
+      } catch (error) {
+        await discardPendingBossScreenshot(pendingCapture)
+        throw error
+      }
+      samples.push(after)
+      const captureReview = reviewBossEvidenceCapture({ before: status, after, candidate })
+      if (!captureReview.ok) {
+        await discardPendingBossScreenshot(pendingCapture)
+        if (captureReview.reason === 'state-changed') {
+          rejectedCaptures.push({
+            key: candidate.key,
+            reason: captureReview.reason,
+            detail: captureReview.detail,
+            elapsedBefore: status?.brain?.elapsed ?? null,
+            elapsedAfter: after?.brain?.elapsed ?? null,
+          })
+          continue
+        }
+        throw bossEvidenceError(captureReview.reason, captureReview.detail, {
+          candidate,
+          captured: [...captures.values()],
+          rejectedCaptures,
+        })
+      }
+
+      let screenshot
+      try {
+        screenshot = await promoteBossScreenshot(label, pendingCapture)
+      } catch (error) {
+        await discardPendingBossScreenshot(pendingCapture).catch(() => {})
+        throw bossEvidenceError('screenshot-failure', `Screenshot ${label} could not be committed: ${error.message}`, {
+          candidate,
+        })
+      }
+      const accepted = Object.freeze({ ...captureReview.evidence, label, file: screenshot.file })
+      captures.set(candidate.key, accepted)
       if (!performancePromise) {
-        performancePromise = measureDetailedFrames(180, 'Boss技能状态实战', evidence).then(
-          (result) => ({ result, evidence }),
-          (error) => ({ error, evidence }),
+        performancePromise = measureBossCombatFrames(after).then(
+          (result) => ({ result }),
+          (error) => ({ error }),
         )
       }
-    }
-    if (review.state !== 'waiting') break
-    await page.waitForTimeout(16)
-  }
 
-  const captures = await Promise.all(captureTasks.values())
-  const performanceOutcome = performancePromise ? await performancePromise : null
-  if (review?.ok) {
-    samples.push(await bridgeCall('bossCombatStatus'))
-    review = reviewBossSkillEvidence({
-      samples,
-      maxGameElapsedSeconds: 25,
-      wallTimedOut: Date.now() >= wallDeadlineMs,
+      review = reviewBossSkillEvidence({
+        samples,
+        captures: [...captures.values()],
+        maxGameElapsedSeconds: 25,
+        wallTimedOut: Date.now() >= wallDeadlineMs,
+      })
+      if (review.state === 'failed') {
+        throw bossEvidenceError(review.reason, review.detail, {
+          missing: review.missing,
+          gameElapsedSeconds: review.gameElapsedSeconds,
+          captured: [...captures.values()],
+          rejectedCaptures,
+        })
+      }
+      if (review.state === 'complete') break
+    }
+
+    const performanceOutcome = performancePromise ? await performancePromise : null
+    if (!performanceOutcome) {
+      addCheck('性能采样阶段', false, 'no verified Boss VFX state started the mixed combat interval')
+      throw bossEvidenceError('performance-sampling-failure', 'No mixed Boss combat performance interval was sampled', {
+        captured: [...captures.values()],
+      })
+    }
+    if (performanceOutcome.error) {
+      addCheck('性能采样阶段', false, performanceOutcome.error.message)
+      throw bossEvidenceError('performance-sampling-failure', performanceOutcome.error.message, {
+        captured: [...captures.values()],
+      })
+    }
+    if (!performanceOutcome.result.phaseVerified) {
+      const intervalFailure = performanceOutcome.result.intervalReview
+      throw bossEvidenceError(intervalFailure.reason, intervalFailure.detail, {
+        performanceInterval: intervalFailure,
+        captured: [...captures.values()],
+      })
+    }
+
+    const finalStatus = await bridgeCall('bossCombatStatus')
+    const lastCaptureStatus = samples.at(-1)
+    const lastPerformanceStatus = performanceOutcome.result.endStatus
+    const previousStatus = lastPerformanceStatus.brain.elapsed > lastCaptureStatus.brain.elapsed
+      ? lastPerformanceStatus
+      : lastCaptureStatus
+    const finalInvariant = reviewBossFinalInvariant({
+      initial: samples[0],
+      previous: previousStatus,
+      final: finalStatus,
     })
-  }
-  if (!performanceOutcome) addCheck('性能采样阶段', false, 'no verified Boss VFX state observed')
-  else if (performanceOutcome.error) addCheck('性能采样阶段', false, performanceOutcome.error.message)
-  const complete = Boolean(
-    review?.ok
-      && captures.length === 6
-      && captures.every((capture) => capture.ok)
-      && performanceOutcome
-      && !performanceOutcome.error
-      && performanceOutcome.result?.phaseVerified
-  )
-  const detail = `state=${review?.state ?? 'missing'}, reason=${review?.reason ?? 'missing'}, gameElapsed=${review?.gameElapsedSeconds?.toFixed(3) ?? 'n/a'}s, captured=${captures.filter((capture) => capture.ok).length}/6, missing=${review?.missing?.join(',') || 'none'}`
-  addCheck(
-    '完整 Boss 技能状态证据',
-    complete,
-    detail,
-  )
-  if (!complete) throw new Error(`Boss skill evidence incomplete: ${detail}`)
-  return {
-    review,
-    captures,
-    sampleCount: samples.length,
-    initialStatus: samples[0] ?? null,
-    finalStatus: samples.at(-1) ?? null,
-    performanceEvidence: performanceOutcome.evidence,
+    if (!finalInvariant.ok) {
+      throw bossEvidenceError(finalInvariant.reason, finalInvariant.detail, {
+        captured: [...captures.values()],
+        rejectedCaptures,
+      })
+    }
+
+    const complete = review?.ok && captures.size === 6
+    const detail = `state=${review?.state ?? 'missing'}, reason=${review?.reason ?? 'missing'}, gameElapsed=${review?.gameElapsedSeconds?.toFixed(3) ?? 'n/a'}s, captured=${captures.size}/6, rejected=${rejectedCaptures.length}, missing=${review?.missing?.join(',') || 'none'}`
+    addCheck('完整 Boss 技能状态证据', complete, detail)
+    if (!complete) {
+      throw new BossEvidenceError('evidence-incomplete', `Boss skill evidence incomplete: ${detail}`, {
+        captured: [...captures.values()],
+        rejectedCaptures,
+      })
+    }
+    return {
+      review,
+      captures: [...captures.values()],
+      rejectedCaptures,
+      sampleCount: samples.length,
+      initialStatus: samples[0],
+      finalStatus,
+      finalInvariant,
+      performanceInterval: performanceOutcome.result.intervalReview.metadata,
+    }
+  } catch (error) {
+    if (performancePromise) await performancePromise
+    throw error
   }
 }
 
@@ -898,46 +1071,56 @@ async function playCocosDungeonPolicy(policy) {
   return { beforeExtraction, terminalSnapshot, bossSkillEvidence }
 }
 
-async function runCocosDungeonAgent() {
-  if (!await probe(baseUrl, 1500)) throw new Error(`Cocos build is not reachable: ${baseUrl}`)
-  browser = await chromium.launch(browserLaunchOptions())
-  const context = await browser.newContext({ viewport, deviceScaleFactor: 1, isMobile: viewport.width < viewport.height, hasTouch: true })
-  page = await context.newPage()
-  page.on('console', (message) => {
-    const location = message.location()
-    if (message.type() === 'error' && !location.url.endsWith('/favicon.ico')) {
-      consoleIssues.push({ type: message.type(), text: message.text(), url: location.url })
-    }
+async function writeDungeonAgentArtifacts(route, failure) {
+  const artifacts = buildDungeonAgentArtifacts({
+    policy: dungeonPolicy,
+    viewport,
+    baseUrl,
+    checks,
+    performance,
+    performancePhase,
+    consoleIssues,
+    pageErrors,
+    requestFailures,
+    screenshots,
+    route,
+    failure,
   })
-  page.on('pageerror', (error) => pageErrors.push(error.message))
-  page.on('requestfailed', (request) => requestFailures.push(`${request.method()} ${request.url()} ${request.failure()?.errorText ?? ''}`))
-  await page.goto(`${baseUrl}${baseUrl.includes('?') ? '&' : '?'}gameAgent=1`, { waitUntil: 'domcontentloaded', timeout: 30000 })
-  await inspectCocosViewport()
-  const route = await playCocosDungeonPolicy(dungeonPolicy)
-  addCheck('运行时无错误', consoleIssues.length === 0 && pageErrors.length === 0 && requestFailures.length === 0, `console=${consoleIssues.length}, page=${pageErrors.length}, request=${requestFailures.length}`)
-
-  const evidence = {
-    mode: 'dungeon', policy: dungeonPolicy, viewport, baseUrl,
-    checks, performance, performancePhase, consoleIssues, pageErrors, requestFailures, screenshots, route,
-  }
-  await writeFile(join(outDir, 'dungeon-evidence.json'), JSON.stringify(evidence, null, 2), 'utf8')
-  const markdown = [
-    `# Cocos Dungeon Agent: ${dungeonPolicy}`,
-    '',
-    `- Viewport: ${viewport.width}x${viewport.height}`,
-    `- P95 frame: ${performance.p95FrameMs?.toFixed(2) ?? 'n/a'}ms`,
-    `- Performance phase: ${performancePhase}`,
-    `- Minimum sampled FPS: ${performance.minimumFps?.toFixed(1) ?? 'n/a'}`,
-    `- Result: ${checks.every((check) => check.ok) ? 'PASS' : 'FAIL'}`,
-    '',
-    ...checks.map((check) => `- ${check.ok ? '[x]' : '[ ]'} ${check.name}: ${check.detail}`),
-  ].join('\n')
-  await writeFile(join(outDir, 'report.md'), markdown, 'utf8')
-  console.log(markdown)
+  await writeFile(join(outDir, 'dungeon-evidence.json'), JSON.stringify(artifacts.evidence, null, 2), 'utf8')
+  await writeFile(join(outDir, 'report.md'), artifacts.markdown, 'utf8')
+  console.log(artifacts.markdown)
   console.log(`\nReport: ${join(outDir, 'report.md')}`)
-  await browser.close()
-  browser = null
-  return checks.every((check) => check.ok)
+  return artifacts.ok
+}
+
+async function runCocosDungeonAgent() {
+  let route = null
+  let failure = null
+  try {
+    if (!await probe(baseUrl, 1500)) throw new Error(`Cocos build is not reachable: ${baseUrl}`)
+    browser = await chromium.launch(browserLaunchOptions())
+    const context = await browser.newContext({ viewport, deviceScaleFactor: 1, isMobile: viewport.width < viewport.height, hasTouch: true })
+    page = await context.newPage()
+    page.on('console', (message) => {
+      const location = message.location()
+      if (message.type() === 'error' && !location.url.endsWith('/favicon.ico')) {
+        consoleIssues.push({ type: message.type(), text: message.text(), url: location.url })
+      }
+    })
+    page.on('pageerror', (error) => pageErrors.push(error.message))
+    page.on('requestfailed', (request) => requestFailures.push(`${request.method()} ${request.url()} ${request.failure()?.errorText ?? ''}`))
+    await page.goto(`${baseUrl}${baseUrl.includes('?') ? '&' : '?'}gameAgent=1`, { waitUntil: 'domcontentloaded', timeout: 30000 })
+    await inspectCocosViewport()
+    route = await playCocosDungeonPolicy(dungeonPolicy)
+    addCheck('运行时无错误', consoleIssues.length === 0 && pageErrors.length === 0 && requestFailures.length === 0, `console=${consoleIssues.length}, page=${pageErrors.length}, request=${requestFailures.length}`)
+    return checks.every((check) => check.ok)
+  } catch (error) {
+    failure = structuredAgentFailure(error)
+    addCheck('Agent 致命错误', false, `${failure.reason}: ${failure.message}`)
+    throw error
+  } finally {
+    await writeDungeonAgentArtifacts(route, failure)
+  }
 }
 
 if (agentMode === 'dungeon') {
