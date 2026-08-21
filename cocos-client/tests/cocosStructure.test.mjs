@@ -55,7 +55,23 @@ const worldRegionGameModules = [
   'assets/Scripts/Game/WorldStageSelectPageAssembler.ts',
 ]
 
-const requiredBossTalismanAssets = [
+const bossVfxAssetNames = [
+  'sweep_arc',
+  'sweep_trail',
+  'spike_cluster',
+  'ground_dust',
+  'roar_wave',
+  'leaf_particle',
+  'impact_spark',
+]
+
+const retiredBossTalismanAssetNames = [
+  'talisman_sweep',
+  'talisman_spike',
+  'talisman_roar',
+]
+
+const requiredBossVfxAssets = [
   'assets/Scripts/Core/BossTelegraphVisualProfile.ts',
   'assets/Scripts/Core/BossTelegraphVisualProfile.ts.meta',
   'assets/Scripts/Game/BossTelegraphPresenter.ts',
@@ -63,12 +79,10 @@ const requiredBossTalismanAssets = [
   'assets/Scripts/Game/BossHazardVisualController.ts',
   'assets/Scripts/Game/BossHazardVisualController.ts.meta',
   'assets/resources/Assets/Skills/BossDomain.meta',
-  'assets/resources/Assets/Skills/BossDomain/talisman_sweep.png',
-  'assets/resources/Assets/Skills/BossDomain/talisman_sweep.png.meta',
-  'assets/resources/Assets/Skills/BossDomain/talisman_spike.png',
-  'assets/resources/Assets/Skills/BossDomain/talisman_spike.png.meta',
-  'assets/resources/Assets/Skills/BossDomain/talisman_roar.png',
-  'assets/resources/Assets/Skills/BossDomain/talisman_roar.png.meta',
+  ...bossVfxAssetNames.flatMap((name) => [
+    `assets/resources/Assets/Skills/BossDomain/${name}.png`,
+    `assets/resources/Assets/Skills/BossDomain/${name}.png.meta`,
+  ]),
 ]
 
 function readSource(file) {
@@ -155,10 +169,20 @@ test('world-region Game modules do not import legacy Combat rules', () => {
   }
 })
 
-test('build readiness requires the compiled boss telegraph and talisman resource closure', () => {
-  for (const asset of requiredBossTalismanAssets) {
+test('build readiness requires the compiled telegraph and seven-asset layered boss VFX closure', () => {
+  for (const asset of requiredBossVfxAssets) {
     assert.equal(requiredDualModeAssets.includes(asset), true, `${asset} should be build-readiness required`)
     assert.equal(existsSync(resolve(asset)), true, `${asset} should exist`)
+  }
+
+  for (const name of retiredBossTalismanAssetNames) {
+    for (const asset of [
+      `assets/resources/Assets/Skills/BossDomain/${name}.png`,
+      `assets/resources/Assets/Skills/BossDomain/${name}.png.meta`,
+    ]) {
+      assert.equal(requiredDualModeAssets.includes(asset), false, `${asset} should be retired`)
+      assert.equal(existsSync(resolve(asset)), false, `${asset} should be absent`)
+    }
   }
 
   const bootstrap = readSource('assets/Scripts/Game/PortraitBattleBootstrap.ts')

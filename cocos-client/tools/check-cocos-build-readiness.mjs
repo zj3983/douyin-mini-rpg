@@ -95,12 +95,20 @@ export const requiredDualModeAssets = [
   'assets/resources/Assets/World/MistHeaven/mid.png',
   'assets/resources/Assets/World/MistHeaven/mid.png.meta',
   'assets/resources/Assets/Skills/BossDomain.meta',
-  'assets/resources/Assets/Skills/BossDomain/talisman_sweep.png',
-  'assets/resources/Assets/Skills/BossDomain/talisman_sweep.png.meta',
-  'assets/resources/Assets/Skills/BossDomain/talisman_spike.png',
-  'assets/resources/Assets/Skills/BossDomain/talisman_spike.png.meta',
-  'assets/resources/Assets/Skills/BossDomain/talisman_roar.png',
-  'assets/resources/Assets/Skills/BossDomain/talisman_roar.png.meta',
+  'assets/resources/Assets/Skills/BossDomain/sweep_arc.png',
+  'assets/resources/Assets/Skills/BossDomain/sweep_arc.png.meta',
+  'assets/resources/Assets/Skills/BossDomain/sweep_trail.png',
+  'assets/resources/Assets/Skills/BossDomain/sweep_trail.png.meta',
+  'assets/resources/Assets/Skills/BossDomain/spike_cluster.png',
+  'assets/resources/Assets/Skills/BossDomain/spike_cluster.png.meta',
+  'assets/resources/Assets/Skills/BossDomain/ground_dust.png',
+  'assets/resources/Assets/Skills/BossDomain/ground_dust.png.meta',
+  'assets/resources/Assets/Skills/BossDomain/roar_wave.png',
+  'assets/resources/Assets/Skills/BossDomain/roar_wave.png.meta',
+  'assets/resources/Assets/Skills/BossDomain/leaf_particle.png',
+  'assets/resources/Assets/Skills/BossDomain/leaf_particle.png.meta',
+  'assets/resources/Assets/Skills/BossDomain/impact_spark.png',
+  'assets/resources/Assets/Skills/BossDomain/impact_spark.png.meta',
 ]
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -204,12 +212,8 @@ export function checkCocosBuildReadiness(options = {}) {
     }
   }
 
-  const hasBuildIndex = buildRoot
-    ? existsSync(join(buildRoot, 'index.html'))
-    : hasPath(projectRoot, 'build/web-mobile/index.html', files)
-  if (!hasBuildIndex) {
-    const expectedIndex = buildRoot ? join(buildRoot, 'index.html') : 'build/web-mobile/index.html'
-    blockers.push(`${expectedIndex} is missing; run a Cocos web-mobile build before deployment can serve it.`)
+  if (buildRoot && !existsSync(join(buildRoot, 'index.html'))) {
+    blockers.push(`${join(buildRoot, 'index.html')} is missing; run a Cocos web-mobile build before deployment can serve it.`)
   }
 
   return {

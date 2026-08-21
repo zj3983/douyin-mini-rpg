@@ -26,18 +26,38 @@ function compressAssetUuidFixture(uuid) {
 }
 
 const legacyMainIndex = `PortraitBattleBootstrap ${classId} StageResourceRuntime Array.from(this.pending.values()) Array.from(this.retained.keys())`
-const bossTalismanMarkers = 'BossTelegraphVisualProfile BossTelegraphPresenter BossHazardVisualController'
+const bossVfxCompiledMarkers = 'BossTelegraphVisualProfile BossTelegraphPresenter BossHazardVisualController'
 const dungeonRuntimeMarkers = 'DungeonPressureRuntime PursuitBossRuntime DungeonRunPresenter DungeonResourceController'
-const validMainIndex = `${legacyMainIndex} ${bossTalismanMarkers} ${dungeonRuntimeMarkers}`
-const talismans = ['sweep', 'spike', 'roar'].map((name) => {
-  const assetUuid = JSON.parse(
-    readFileSync(resolve(`assets/resources/Assets/Skills/BossDomain/talisman_${name}.png.meta`), 'utf8'),
-  ).uuid
+const validMainIndex = `${legacyMainIndex} ${bossVfxCompiledMarkers} ${dungeonRuntimeMarkers}`
+const bossVfxNames = [
+  'sweep_arc',
+  'sweep_trail',
+  'spike_cluster',
+  'ground_dust',
+  'roar_wave',
+  'leaf_particle',
+  'impact_spark',
+]
+const retiredBossRuntimeMarkers = [
+  'talismanPath',
+  'talismanPulse',
+  'talisman_sweep',
+  'talisman_spike',
+  'talisman_roar',
+]
+const bossVfxAssets = bossVfxNames.map((name) => {
+  const sourceMeta = JSON.parse(
+    readFileSync(resolve(`assets/resources/Assets/Skills/BossDomain/${name}.png.meta`), 'utf8'),
+  )
+  const spriteFrameUuid = sourceMeta.subMetas?.f9941?.uuid
+  assert.equal(typeof spriteFrameUuid, 'string', `${name} should expose an @f9941 spriteFrame UUID`)
+  const [spriteFrameAssetUuid, spriteFrameSubId] = spriteFrameUuid.split('@')
   return {
     name,
-    assetUuid,
-    spriteFrameUuid: `${compressAssetUuidFixture(assetUuid)}@f9941`,
-    resourcePath: `Assets/Skills/BossDomain/talisman_${name}/spriteFrame`,
+    assetUuid: sourceMeta.uuid,
+    spriteFrameUuid,
+    builtSpriteFrameUuid: `${compressAssetUuidFixture(spriteFrameAssetUuid)}@${spriteFrameSubId}`,
+    resourcePath: `Assets/Skills/BossDomain/${name}/spriteFrame`,
   }
 })
 const h3ActorIds = new Set(['qinglan-sword-cultivator', 'moss-wolf'])
@@ -102,42 +122,54 @@ function reverseObjectKeys(value) {
   )
 }
 
-function writeBossTalismanFixture(root, {
+function writeBossVfxFixture(root, {
   omitPath = null,
   wrongUuid = null,
   omitImport = null,
   omitNative = null,
+  retiredPath = null,
+  hashed = false,
 } = {}) {
   const uuids = []
   const paths = {}
 
-  for (const talisman of talismans) {
+  for (const asset of bossVfxAssets) {
     const index = uuids.length
-    uuids.push(talisman.name === wrongUuid ? 'wrong-resource-uuid@f9941' : talisman.spriteFrameUuid)
-    if (talisman.name !== omitPath) paths[index] = [talisman.resourcePath, 3, 1]
-    if (talisman.name !== omitImport) {
+    uuids.push(asset.name === wrongUuid ? 'wrong-resource-uuid@f9941' : asset.builtSpriteFrameUuid)
+    if (asset.name !== omitPath) paths[index] = [asset.resourcePath, 3, 1]
+    if (asset.name !== omitImport) {
       writeFixture(
         root,
-        `assets/resources/import/${talisman.assetUuid.slice(0, 2)}/${talisman.assetUuid}@f9941.json`,
-        `{"name":"talisman_${talisman.name}"}`,
+        `assets/resources/import/${asset.spriteFrameUuid.slice(0, 2)}/${asset.spriteFrameUuid}${hashed ? '.a1b2c' : ''}.json`,
+        `{"name":"${asset.name}"}`,
       )
     }
-    if (talisman.name !== omitNative) {
+    if (asset.name !== omitNative) {
       writeFixture(
         root,
-        `assets/resources/native/${talisman.assetUuid.slice(0, 2)}/${talisman.assetUuid}.png`,
+        `assets/resources/native/${asset.assetUuid.slice(0, 2)}/${asset.assetUuid}${hashed ? '.d3e4f' : ''}.png`,
         'png-fixture',
       )
     }
   }
 
-  writeFixture(root, 'assets/resources/config.json', JSON.stringify({ uuids, paths }))
+  if (retiredPath) {
+    const index = uuids.length
+    uuids.push('retired-resource-uuid@f9941')
+    paths[index] = [`Assets/Skills/BossDomain/${retiredPath}/spriteFrame`, 3, 1]
+  }
+
+  writeFixture(
+    root,
+    `assets/resources/config${hashed ? '.f5a6b' : ''}.json`,
+    JSON.stringify({ uuids, paths }),
+  )
 }
 
-function writeCompleteFixture(root, mainIndex = validMainIndex) {
+function writeCompleteFixture(root, mainIndex = validMainIndex, bossVfxOptions = {}) {
   writeFixture(root, 'assets/main/index.js', mainIndex)
   writeFixture(root, 'assets/main/import/main-battle.json', `["MainBattle","${classId}"]`)
-  writeBossTalismanFixture(root)
+  writeBossVfxFixture(root, bossVfxOptions)
   writeH3AnimationFixture(root)
 }
 
@@ -146,24 +178,7 @@ test('build-output check accepts Cocos production filename hashes', () => {
   writeFixture(buildRoot, 'assets/main/index.a1b2c.js', validMainIndex)
   writeFixture(buildRoot, 'assets/main/import/main-battle.c3d4e.json', `["MainBattle","${classId}"]`)
 
-  const uuids = []
-  const paths = {}
-  for (const talisman of talismans) {
-    const index = uuids.length
-    uuids.push(talisman.spriteFrameUuid)
-    paths[index] = [talisman.resourcePath, 3, 1]
-    writeFixture(
-      buildRoot,
-      `assets/resources/import/${talisman.assetUuid.slice(0, 2)}/${talisman.assetUuid}@f9941.a1b2c.json`,
-      `{"name":"talisman_${talisman.name}"}`,
-    )
-    writeFixture(
-      buildRoot,
-      `assets/resources/native/${talisman.assetUuid.slice(0, 2)}/${talisman.assetUuid}.d3e4f.png`,
-      'png-fixture',
-    )
-  }
-  writeFixture(buildRoot, 'assets/resources/config.f5a6b.json', JSON.stringify({ uuids, paths }))
+  writeBossVfxFixture(buildRoot, { hashed: true })
   writeH3AnimationFixture(buildRoot)
 
   const report = checkCocosBuildOutput({ buildRoot, projectRoot })
@@ -194,19 +209,19 @@ test('build-output check accepts a compiled script and serialized MainBattle com
   assert.equal(Boolean(report.sceneFile), true)
 })
 
-test('build-output check rejects output without compiled boss talisman feature markers', () => {
-  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-missing-talisman-code-'))
+test('build-output check rejects output without compiled layered boss VFX feature markers', () => {
+  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-missing-boss-vfx-code-'))
   writeCompleteFixture(buildRoot, legacyMainIndex)
 
   const report = checkCocosBuildOutput({ buildRoot, projectRoot })
 
   assert.equal(report.ok, false)
-  assert.equal(report.errors.some((error) => error.includes('boss talisman compiled feature')), true)
+  assert.equal(report.errors.some((error) => error.includes('layered boss VFX compiled feature')), true)
 })
 
 test('build-output check rejects output without compiled dungeon runtime markers', () => {
   const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-missing-dungeon-runtime-'))
-  writeCompleteFixture(buildRoot, `${legacyMainIndex} ${bossTalismanMarkers}`)
+  writeCompleteFixture(buildRoot, `${legacyMainIndex} ${bossVfxCompiledMarkers}`)
 
   const report = checkCocosBuildOutput({ buildRoot, projectRoot })
 
@@ -214,41 +229,66 @@ test('build-output check rejects output without compiled dungeon runtime markers
   assert.equal(report.errors.some((error) => error.includes('dungeon compiled feature')), true)
 })
 
-test('build-output check rejects a missing boss talisman spriteFrame resource path', () => {
-  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-missing-talisman-path-'))
+test('build-output check rejects an omitted layered boss VFX spriteFrame resource path', () => {
+  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-missing-boss-vfx-path-'))
   writeFixture(buildRoot, 'assets/main/index.js', validMainIndex)
   writeFixture(buildRoot, 'assets/main/import/main-battle.json', `["MainBattle","${classId}"]`)
-  writeBossTalismanFixture(buildRoot, { omitPath: 'spike' })
+  writeBossVfxFixture(buildRoot, { omitPath: 'spike_cluster' })
 
   const report = checkCocosBuildOutput({ buildRoot, projectRoot })
 
   assert.equal(report.ok, false)
-  assert.equal(report.errors.some((error) => error.includes(talismans[1].resourcePath)), true)
+  assert.equal(report.errors.some((error) => error.includes('Assets/Skills/BossDomain/spike_cluster/spriteFrame')), true)
 })
 
-test('build-output check rejects a boss talisman resource path mapped to the wrong UUID', () => {
-  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-wrong-talisman-uuid-'))
+test('build-output check rejects a layered boss VFX resource path mapped to the wrong UUID', () => {
+  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-wrong-boss-vfx-uuid-'))
   writeFixture(buildRoot, 'assets/main/index.js', validMainIndex)
   writeFixture(buildRoot, 'assets/main/import/main-battle.json', `["MainBattle","${classId}"]`)
-  writeBossTalismanFixture(buildRoot, { wrongUuid: 'roar' })
+  writeBossVfxFixture(buildRoot, { wrongUuid: 'roar_wave' })
 
   const report = checkCocosBuildOutput({ buildRoot, projectRoot })
 
   assert.equal(report.ok, false)
-  assert.equal(report.errors.some((error) => error.includes('talisman_roar') && error.includes('UUID')), true)
+  assert.equal(report.errors.some((error) => error.includes('roar_wave') && error.includes('UUID')), true)
 })
 
-test('build-output check rejects missing boss talisman import and native artifacts', () => {
-  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-missing-talisman-artifacts-'))
+test('build-output check rejects missing layered boss VFX import and native artifacts', () => {
+  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-missing-boss-vfx-artifacts-'))
   writeFixture(buildRoot, 'assets/main/index.js', validMainIndex)
   writeFixture(buildRoot, 'assets/main/import/main-battle.json', `["MainBattle","${classId}"]`)
-  writeBossTalismanFixture(buildRoot, { omitImport: 'sweep', omitNative: 'spike' })
+  writeBossVfxFixture(buildRoot, { omitImport: 'sweep_arc', omitNative: 'spike_cluster' })
 
   const report = checkCocosBuildOutput({ buildRoot, projectRoot })
 
   assert.equal(report.ok, false)
-  assert.equal(report.errors.some((error) => error.includes('talisman_sweep') && error.includes('import')), true)
-  assert.equal(report.errors.some((error) => error.includes('talisman_spike') && error.includes('native')), true)
+  assert.equal(report.errors.some((error) => error.includes('sweep_arc') && error.includes('import')), true)
+  assert.equal(report.errors.some((error) => error.includes('spike_cluster') && error.includes('native')), true)
+})
+
+test('build-output check rejects retired boss talisman resource settings paths', () => {
+  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-retired-talisman-path-'))
+  writeCompleteFixture(buildRoot, validMainIndex, { retiredPath: 'talisman_sweep' })
+
+  const report = checkCocosBuildOutput({ buildRoot, projectRoot })
+
+  assert.equal(report.ok, false)
+  assert.equal(
+    report.errors.some((error) => error.includes('Assets/Skills/BossDomain/talisman_')),
+    true,
+  )
+})
+
+test('build-output check rejects retired boss talisman compiled runtime references', () => {
+  for (const marker of retiredBossRuntimeMarkers) {
+    const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-retired-talisman-runtime-'))
+    writeCompleteFixture(buildRoot, `${validMainIndex} ${marker}`)
+
+    const report = checkCocosBuildOutput({ buildRoot, projectRoot })
+
+    assert.equal(report.ok, false, marker)
+    assert.equal(report.errors.some((error) => error.includes(marker)), true, marker)
+  }
 })
 
 test('build-output check rejects output without the promoted H3 animation contract', () => {

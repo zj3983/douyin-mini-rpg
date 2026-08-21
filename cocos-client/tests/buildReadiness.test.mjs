@@ -118,7 +118,7 @@ function validDungeonProfile() {
   return JSON.parse(readFileSync(new URL('../assets/resources/Data/dual-mode-slice.json', import.meta.url), 'utf8'))
 }
 
-test('build readiness reports missing Cocos export blockers', () => {
+test('source build readiness reports editor and import blockers without requiring built output', () => {
   const report = checkCocosBuildReadiness({
     projectRoot: process.cwd(),
     creatorCommand: '',
@@ -129,7 +129,7 @@ test('build readiness reports missing Cocos export blockers', () => {
   assert.equal(report.blockers.some((blocker) => blocker.includes('Cocos Creator')), true)
   assert.equal(report.blockers.some((blocker) => blocker.includes('assets/Scenes')), true)
   assert.equal(report.blockers.some((blocker) => blocker.includes('settings')), true)
-  assert.equal(report.blockers.some((blocker) => blocker.includes('build/web-mobile')), true)
+  assert.equal(report.blockers.some((blocker) => blocker.includes('build/web-mobile')), false)
 })
 
 test('build readiness passes when editor and every required imported runtime asset exist', () => {
@@ -140,7 +140,6 @@ test('build readiness passes when editor and every required imported runtime ass
     files: new Set([
       ...requiredDualModeAssets,
       'settings/v2/packages/builder.json',
-      'build/web-mobile/index.html',
     ]),
     readFile: (path) => contents.get(path),
   })
