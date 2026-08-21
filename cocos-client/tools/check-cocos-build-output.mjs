@@ -6,6 +6,7 @@ import {
   checkCocosBuildReadiness,
   isCanonicalAssetUuid,
 } from './check-cocos-build-readiness.mjs'
+import { decodePngRgba } from './png-alpha-runtime.mjs'
 
 const base64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 const bossVfxNames = [
@@ -193,6 +194,38 @@ const bossVfxSpriteFramePayloadFields = [
   'pivot',
   'meshType',
 ]
+
+function bossVfxNativeMatchesSource(sourceBytes, builtBytes) {
+  if (sourceBytes.equals(builtBytes)) return true
+
+  let source
+  let built
+  try {
+    source = decodePngRgba(sourceBytes)
+    built = decodePngRgba(builtBytes)
+  } catch {
+    return false
+  }
+
+  if (source.width !== built.width || source.height !== built.height || source.data.length !== built.data.length) {
+    return false
+  }
+
+  for (let offset = 0; offset < source.data.length; offset += 4) {
+    const sourceAlpha = source.data[offset + 3]
+    if (sourceAlpha !== built.data[offset + 3]) return false
+    if (sourceAlpha === 0) continue
+    if (
+      source.data[offset] !== built.data[offset]
+      || source.data[offset + 1] !== built.data[offset + 1]
+      || source.data[offset + 2] !== built.data[offset + 2]
+    ) {
+      return false
+    }
+  }
+
+  return true
+}
 
 function readPath(value, path) {
   return path.split('.').reduce((current, key) => current?.[key], value)
@@ -495,7 +528,10 @@ export function checkCocosBuildOutput({ buildRoot, projectRoot = process.cwd() }
       } else if (nativeName) {
         if (!existsSync(sourceImagePath)) {
           errors.push(`missing layered boss VFX source PNG for ${name}: ${sourceImagePath}`)
-        } else if (!readFileSync(sourceImagePath).equals(readFileSync(join(nativeRoot, nativeName)))) {
+        } else if (!bossVfxNativeMatchesSource(
+          readFileSync(sourceImagePath),
+          readFileSync(join(nativeRoot, nativeName)),
+        )) {
           errors.push(`built layered boss VFX ${name} native PNG bytes differ from source: ${sourceImagePath}`)
         }
       }

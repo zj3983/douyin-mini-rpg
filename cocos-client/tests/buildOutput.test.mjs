@@ -4,6 +4,8 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, writeFil
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { deflateSync } from 'node:zlib'
+import { decodePngRgba } from '../tools/png-alpha-runtime.mjs'
 import {
   checkCocosBuildOutput,
   compressAssetUuid,
@@ -15,6 +17,51 @@ const projectRoot = process.cwd()
 const meta = JSON.parse(readFileSync(resolve('assets/Scripts/Game/PortraitBattleBootstrap.ts.meta'), 'utf8'))
 const classId = compressScriptUuid(meta.uuid)
 const uuidBase64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
+
+function pngCrc32(buffer) {
+  let crc = 0xffffffff
+  for (const byte of buffer) {
+    crc ^= byte
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1))
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0
+}
+
+function pngChunk(type, data) {
+  const typeBytes = Buffer.from(type, 'ascii')
+  const output = Buffer.alloc(12 + data.length)
+  output.writeUInt32BE(data.length, 0)
+  typeBytes.copy(output, 4)
+  data.copy(output, 8)
+  output.writeUInt32BE(pngCrc32(Buffer.concat([typeBytes, data])), 8 + data.length)
+  return output
+}
+
+function encodePngRgba({ width, height, data }) {
+  const header = Buffer.alloc(13)
+  header.writeUInt32BE(width, 0)
+  header.writeUInt32BE(height, 4)
+  header[8] = 8
+  header[9] = 6
+
+  const stride = width * 4
+  const scanlines = Buffer.alloc(height * (stride + 1))
+  for (let row = 0; row < height; row += 1) {
+    const targetOffset = row * (stride + 1)
+    scanlines[targetOffset] = 0
+    data.copy(scanlines, targetOffset + 1, row * stride, (row + 1) * stride)
+  }
+
+  return Buffer.concat([
+    pngSignature,
+    pngChunk('IHDR', header),
+    pngChunk('IDAT', deflateSync(scanlines)),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ])
+}
 
 function compressAssetUuidFixture(uuid) {
   const hex = uuid.replaceAll('-', '')
@@ -665,6 +712,53 @@ test('build-output check rejects stale layered boss VFX native PNG bytes', () =>
   const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-stale-boss-native-'))
   writeCompleteFixture(buildRoot, validMainIndex, {
     nativeOverrides: { impact_spark: 'stale-native-png' },
+  })
+
+  const report = checkCocosBuildOutput({ buildRoot, projectRoot })
+
+  assert.equal(report.ok, false)
+  assert.equal(
+    report.errors.some((error) => error.includes('impact_spark native PNG bytes differ')),
+    true,
+    report.errors.join('\n'),
+  )
+})
+
+test('build-output check accepts Cocos RGB bleed inside fully transparent boss VFX pixels', () => {
+  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-transparent-rgb-bleed-'))
+  const asset = bossVfxAssets.find(({ name }) => name === 'spike_cluster')
+  const decoded = decodePngRgba(readFileSync(asset.sourcePath))
+  const data = Buffer.from(decoded.data)
+  const pixelOffset = data.findIndex((value, index) => index % 4 === 3 && value === 0) - 3
+  assert.ok(pixelOffset >= 0, 'fixture needs a fully transparent pixel')
+  data[pixelOffset] = 2
+  data[pixelOffset + 1] = 4
+  data[pixelOffset + 2] = 6
+
+  writeCompleteFixture(buildRoot, validMainIndex, {
+    nativeOverrides: {
+      [asset.name]: encodePngRgba({ ...decoded, data }),
+    },
+  })
+
+  const report = checkCocosBuildOutput({ buildRoot, projectRoot })
+
+  assert.equal(report.ok, true, report.errors.join('\n'))
+})
+
+test('build-output check still rejects changed visible boss VFX pixels', () => {
+  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-visible-vfx-change-'))
+  const asset = bossVfxAssets.find(({ name }) => name === 'impact_spark')
+  const decoded = decodePngRgba(readFileSync(asset.sourcePath))
+  const data = Buffer.from(decoded.data)
+  const pixelOffset = data.findIndex((value, index) => index % 4 === 3 && value > 0) - 3
+  assert.ok(pixelOffset >= 0, 'fixture needs a visible pixel')
+  data[pixelOffset] = (data[pixelOffset] + 1) % 256
+
+  writeCompleteFixture(buildRoot, validMainIndex, {
+    nativeOverrides: {
+      [asset.name]: encodePngRgba({ ...decoded, data }),
+    },
   })
 
   const report = checkCocosBuildOutput({ buildRoot, projectRoot })
