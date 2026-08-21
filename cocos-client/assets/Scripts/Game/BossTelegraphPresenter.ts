@@ -51,6 +51,7 @@ export interface BossVisibleVfxEntry {
   readonly skill: BossAttackId | null
   readonly sequence: number | null
   readonly phase: BossVisibleVfxPhase
+  readonly progress: number
 }
 
 interface PreparedVisualNode extends CachedVisualLayers {
@@ -353,6 +354,7 @@ export class BossTelegraphPresenter extends Component {
           skill: visual.skill,
           sequence: visual.sequence,
           phase: 'telegraph' as const,
+          progress: visual.phase.progress,
         }))
       }
     }
@@ -365,6 +367,7 @@ export class BossTelegraphPresenter extends Component {
         skill: impact.skill,
         sequence: impact.sequence,
         phase: 'impact' as const,
+        progress: impact.phase.progress,
       }))
     }
     return Object.freeze(entries)
@@ -555,6 +558,7 @@ export class BossTelegraphPresenter extends Component {
     const phase = createPhaseOutput()
     const colors = createVisualColors(profile.impact)
     const layers = this.drawImpact(node, command.area, profile, danger, quality)
+    const visualDuration = Math.max(command.duration, profile.impactDuration)
     const impact: ImpactVisual = {
       node,
       generation,
@@ -562,13 +566,13 @@ export class BossTelegraphPresenter extends Component {
       attackId: command.attackId,
       authorityId,
       ...identity,
-      duration: command.duration,
+      duration: visualDuration,
       profile,
       quality,
       phase,
       waveIndex: safeWaveIndex(command.attackId, danger),
       fresh: true,
-      remaining: command.duration,
+      remaining: visualDuration,
       ...layers,
       ...colors,
     }

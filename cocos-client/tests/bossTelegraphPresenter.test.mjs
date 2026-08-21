@@ -24,6 +24,7 @@ const RESOURCE_PATHS = Object.freeze([
 const PROFILE_CASES = Object.freeze([
   Object.freeze({
     id: 'sweep-arc',
+    impactDuration: 0.45,
     attackId: 'bamboo-sweep:7:visual',
     area: Object.freeze({ minX: -180, maxX: 140, minY: -60, maxY: 52 }),
     danger: Object.freeze({ kind: 'sweep', escape: 'vertical', origin: Object.freeze({ x: 210, y: 24 }), arcDegrees: 120 }),
@@ -35,6 +36,7 @@ const PROFILE_CASES = Object.freeze([
   }),
   Object.freeze({
     id: 'spike-eruption',
+    impactDuration: 0.5,
     attackId: 'ground-spikes:7:visual:marker:0',
     area: Object.freeze({ minX: 20, maxX: 84, minY: -140, maxY: -76 }),
     danger: Object.freeze({ kind: 'spike', markerIndex: 0, center: Object.freeze({ x: 52, y: -108 }) }),
@@ -46,6 +48,7 @@ const PROFILE_CASES = Object.freeze([
   }),
   Object.freeze({
     id: 'roar-wave',
+    impactDuration: 0.55,
     attackId: 'mountain-roar:7:visual:sector:top',
     area: Object.freeze({ minX: -90, maxX: 90, minY: 120, maxY: 190 }),
     danger: Object.freeze({
@@ -687,8 +690,8 @@ function primeImpactAuthority(presenter, entry, authorityId, quality = 'full') {
     duration: 0.001,
     quality,
   })
-  presenter.update(0.001)
-  presenter.update(0.001)
+  presenter.update(1)
+  presenter.update(1)
   assert.equal(presenter.visibleImpactCount, 0, `${entry.id} bootstrap impact expires`)
 }
 
@@ -731,6 +734,41 @@ test('visible VFX snapshot preserves the actual first phase-two cast when lastAt
   assert.equal(Object.isFrozen(entries), true)
   assert.ok(entries.every(Object.isFrozen))
   assert.throws(() => { entries[0].skill = brain.lastAttack }, TypeError)
+})
+
+test('visible VFX snapshots expose finite immutable monotonic normalized progress', async () => {
+  const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
+  const { presenter } = createPresenterScenario(BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY)
+  const entry = PROFILE_CASES[0]
+  const authorityId = 'bamboo-sweep:7:42'
+
+  presenter.present(telegraph(authorityId, entry.area, entry.danger, authorityId))
+  const warningProgress = [presenter.visibleVfxEntries()[0].progress]
+  presenter.update(0.2)
+  warningProgress.push(presenter.visibleVfxEntries()[0].progress)
+  presenter.update(0.2)
+  const warningSnapshot = presenter.visibleVfxEntries()
+  warningProgress.push(warningSnapshot[0].progress)
+
+  assert.deepEqual(warningProgress, [0, 0.25, 0.5])
+  assert.ok(warningProgress.every((progress) => Number.isFinite(progress) && progress >= 0 && progress <= 1))
+  assert.equal(Object.isFrozen(warningSnapshot), true)
+  assert.equal(Object.isFrozen(warningSnapshot[0]), true)
+  assert.throws(() => { warningSnapshot[0].progress = 0 }, TypeError)
+
+  const command = impactCommand(entry, authorityId, 0.18, authorityId)
+  presenter.activate(3, 7, command)
+  presenter.update(0.4)
+  const impactStart = presenter.visibleVfxEntries()[0]
+  presenter.update(0.01)
+  presenter.update(entry.impactDuration * 0.5)
+  const impactMiddle = presenter.visibleVfxEntries()[0]
+
+  assert.equal(impactStart.phase, 'impact')
+  assert.equal(impactStart.progress, 0)
+  assert.equal(impactMiddle.phase, 'impact')
+  assert.ok(impactMiddle.progress >= 0.5 && impactMiddle.progress <= 0.53)
+  assert.ok(impactMiddle.progress >= impactStart.progress)
 })
 
 test('preloads seven unique resources once and maps all profile layers for warnings and impacts', async () => {
@@ -915,7 +953,7 @@ test('no-danger right and left roar impacts recover vertical layout and retain t
   const authorityRoots = presenter.impacts.map((impact) => rootAndGraphics(impact.node))
   assertVisibleSafeGap(impacts['left-upper'].node, impacts['left-lower'].node, 'no-danger impact initial')
   presenter.update(0.001)
-  for (const deltaTime of [0.03, 0.03, 0.03, 0.029999]) presenter.update(deltaTime)
+  for (const deltaTime of [0.13745, 0.13745, 0.13745, 0.13745]) presenter.update(deltaTime)
   assertVisibleSafeGap(impacts['left-upper'].node, impacts['left-lower'].node, 'no-danger impact peak')
   assert.deepEqual(presenter.impacts.map((impact) => rootAndGraphics(impact.node)), authorityRoots)
   assert.ok(presenter.impacts.every((impact) => impact.phase.progress === 1), 'all impacts reach the 1.18 peak envelope')
@@ -1033,7 +1071,7 @@ test('real Boss roar child rectangles preserve the left safe gap through warning
     assert.ok(upperNode.mainShape.node.size.height > upperNode.transform.size.width, `radius ${radius} broad thickness`)
     assertVisibleSafeGap(upperNode, lowerNode, `radius ${radius} impact progress 0`)
     presenter.update(0.001)
-    for (const [index, deltaTime] of [0.03, 0.03, 0.03, 0.029999].entries()) {
+    for (const [index, deltaTime] of [0.13745, 0.13745, 0.13745, 0.13745].entries()) {
       presenter.update(deltaTime)
       assertVisibleSafeGap(upperNode, lowerNode, `radius ${radius} impact step ${index + 1}`)
       assert.deepEqual(impactNodes.map(rootAndGraphics), impactRoots)
@@ -1473,7 +1511,7 @@ test('roar impacts expand from .72 to 1.18 with parsed wave signatures and stagg
   assert.equal(presenter.visibleImpactCount, 4)
 })
 
-test('production impact durations render motion and dissipation at 60 and 30 fps in both update orders', async () => {
+test('profile-driven impact lifetimes render a midpoint and dissipation without changing authority durations', async () => {
   const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY } = await loadPresenter()
   const timingCases = [
     { duration: 0.18, entry: PROFILE_CASES[0] },
@@ -1492,6 +1530,7 @@ test('production impact durations render motion and dissipation at 60 and 30 fps
           ? `${authorityId}:wave:0:sector:top`
           : authorityId
         const command = impactCommand(entry, authorityId, duration, attackId)
+        const authoritySnapshot = structuredClone(command)
 
         if (updateOrder === 'presenter-first') presenter.update(deltaSeconds)
         presenter.activate(3, 7, command)
@@ -1509,27 +1548,32 @@ test('production impact durations render motion and dissipation at 60 and 30 fps
 
         if (updateOrder === 'enemy-first') presenter.update(deltaSeconds)
         else presenter.update(deltaSeconds)
-        assert.equal(visual.remaining, duration, `${label} fresh update preserves duration`)
+        assert.deepEqual(command, authoritySnapshot, `${label} authority command remains unchanged`)
+        assert.equal(visual.duration, entry.impactDuration, `${label} uses profile visual duration`)
+        assert.equal(visual.remaining, entry.impactDuration, `${label} fresh update preserves visual duration`)
         assert.deepEqual(motionRenderSnapshot(node), initial, `${label} fresh update preserves initial rendered state`)
 
         let elapsed = 0
         let movingRendered = false
+        let midpointRendered = false
         let dissipatingRendered = false
-        for (let frame = 0; frame < 20 && presenter.visibleImpactCount > 0; frame += 1) {
+        for (let frame = 0; frame < 60 && presenter.visibleImpactCount > 0; frame += 1) {
           pool.frame += 1
           presenter.update(deltaSeconds)
           elapsed += deltaSeconds
           if (presenter.visibleImpactCount === 0) {
-            assert.ok(elapsed + 1e-9 >= duration, `${label} cannot despawn before duration`)
+            assert.ok(elapsed + 1e-9 >= entry.impactDuration, `${label} cannot despawn before visual duration`)
             break
           }
-          assert.ok(elapsed < duration + 1e-9, `${label} remains only before expiry`)
+          assert.ok(elapsed < entry.impactDuration + 1e-9, `${label} remains only before visual expiry`)
           const rendered = motionRenderSnapshot(node)
           if (JSON.stringify(rendered.geometry) !== initialGeometry) movingRendered = true
+          if (visual.phase.progress >= 0.45 && visual.phase.progress <= 0.65) midpointRendered = true
           if (node.mainShape.color.a < initialAlpha) dissipatingRendered = true
         }
 
         assert.equal(movingRendered, true, `${label} has a subsequent moving rendered state`)
+        assert.equal(midpointRendered, true, `${label} renders a visible midpoint`)
         assert.equal(dissipatingRendered, true, `${label} has a later dissipating rendered state`)
         assert.equal(presenter.visibleImpactCount, 0, `${label} eventually despawns`)
         assert.equal(pool.active.size, 0, `${label} returns node to pool`)
@@ -1875,7 +1919,7 @@ test('missing optional frames retain Graphics and the complete warning impact li
   assert.ok(impactNode.graphics.calls.some((call) => call.type === 'stroke'))
   assert.equal(impactNode.graphics.calls.some((call) => ['rect', 'fill', 'circle', 'ellipse'].includes(call.type)), false)
   presenter.update(0.18)
-  presenter.update(0.18)
+  presenter.update(0.5)
   assert.equal(presenter.visibleImpactCount, 0)
   presenter.onDestroy()
   assert.ok([...frames.values()].every((frame) => frame.refCount === 0 && frame.decRefCalls === 1))
@@ -2022,7 +2066,7 @@ test('Cocos presenter executes show-visible-active-hidden and cancel/reset lifec
   }])
   presenter.update(0.18)
   assert.equal(presenter.visibleImpactCount, 1, 'a new impact survives its first presenter update so either component order renders it')
-  presenter.update(0.18)
+  presenter.update(0.45)
   assert.equal(presenter.visibleImpactCount, 0)
 
   for (let index = 0; index < 3; index += 1) {

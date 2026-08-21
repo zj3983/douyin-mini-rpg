@@ -167,6 +167,22 @@ test('mountain roar expands ordered rings while preserving one explicit safe ang
   assert.equal(active.some(({ command }) => command.danger.sector === command.danger.safeGap.sector), false)
 })
 
+test('Boss authority hitbox durations remain independent from presentation lifetimes', () => {
+  const cases = [
+    { attack: 'bamboo-sweep', duration: 0.18, id: 87 },
+    { attack: 'ground-spikes', duration: 0.14, id: 88 },
+    { attack: 'mountain-roar', duration: 0.12, id: 89 },
+  ]
+
+  for (const { attack, duration, id } of cases) {
+    const brain = createBambooWardenBrain(id, spawn, seedForFirstAttack(attack, id))
+    const active = advanceTrace(brain, 3.5)
+      .filter(({ command }) => command.type === 'activate-hitbox' && attackKind(command) === attack)
+    assert.ok(active.length > 0, `${attack} must emit an authority hitbox`)
+    assert.ok(active.every(({ command }) => command.duration === duration), `${attack} authority duration`)
+  }
+})
+
 test('mountain roar active sectors reuse telegraph-time snapshots after a resize', () => {
   const brain = createBambooWardenBrain(86, spawn, seedForFirstAttack('mountain-roar', 86))
   const beforeResize = advanceTrace(brain, 0.7, [0.25])

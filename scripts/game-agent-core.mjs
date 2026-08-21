@@ -27,6 +27,10 @@ export function canvasAspectHealth(stats) {
 const REQUIRED_BOSS_SKILLS = Object.freeze(['bamboo-sweep', 'ground-spikes', 'mountain-roar'])
 const BOSS_BRAIN_PHASES = Object.freeze(['spawn', 'telegraph', 'attack', 'recovery', 'hurt', 'interrupted', 'death'])
 const VFX_QUALITIES = Object.freeze(['full', 'reduced', 'minimal'])
+const VFX_CAPTURE_PROGRESS_WINDOWS = Object.freeze({
+  telegraph: Object.freeze({ min: 0.25, max: 0.7 }),
+  impact: Object.freeze({ min: 0.35, max: 0.75 }),
+})
 
 function isNonNegativeInteger(value) {
   return Number.isSafeInteger(value) && value >= 0
@@ -62,10 +66,22 @@ function validateVisibleVfx(entry, status, index) {
   if (entry.phase !== 'telegraph' && entry.phase !== 'impact') {
     return malformed(`visibleVfx[${index}].phase is invalid`)
   }
+  if (!Number.isFinite(entry.progress) || entry.progress < 0 || entry.progress > 1) {
+    return malformed(`visibleVfx[${index}].progress must be finite and normalized`)
+  }
   return { ok: true }
 }
 
-function validateBossStatus(status, previousElapsed = null) {
+function visibleVfxIdentity(entry) {
+  return `${entry.generation}\u0000${entry.enemyId}\u0000${entry.skill}\u0000${entry.sequence}\u0000${entry.attackId}\u0000${entry.authorityId}\u0000${entry.phase}`
+}
+
+function readableVfxProgress(entry) {
+  const window = VFX_CAPTURE_PROGRESS_WINDOWS[entry.phase]
+  return Boolean(window && entry.progress >= window.min && entry.progress <= window.max)
+}
+
+function validateBossStatus(status, previous = null) {
   if (status === null || status === undefined || status?.brain === null || status?.brain === undefined) {
     return { ok: false, reason: 'boss-missing', detail: 'Boss status or brain snapshot is missing' }
   }
@@ -75,6 +91,7 @@ function validateBossStatus(status, previousElapsed = null) {
   if (!isNonNegativeInteger(status.brain.id)) return malformed('Boss id must be a nonnegative integer')
   if (!isNonNegativeInteger(status.stageGeneration)) return malformed('stageGeneration must be a nonnegative integer')
   if (!Number.isFinite(status.brain.elapsed) || status.brain.elapsed < 0) return malformed('brain elapsed must be finite and nonnegative')
+  const previousElapsed = typeof previous === 'number' ? previous : previous?.brain?.elapsed ?? null
   if (previousElapsed !== null && status.brain.elapsed < previousElapsed) return malformed('brain elapsed must be monotonic')
   if (!BOSS_BRAIN_PHASES.includes(status.brain.phase)) return malformed('brain phase is invalid')
   if (typeof status.alive !== 'boolean') return malformed('alive must be boolean')
@@ -91,6 +108,13 @@ function validateBossStatus(status, previousElapsed = null) {
   const impactCount = status.visibleVfx.filter((entry) => entry.phase === 'impact').length
   if (telegraphCount !== status.visibleTelegraphCount || impactCount !== status.visibleImpactCount) {
     return malformed('visible VFX counts must match visibleVfx entries')
+  }
+  if (previous && typeof previous === 'object') {
+    const previousProgress = new Map(previous.visibleVfx.map((entry) => [visibleVfxIdentity(entry), entry.progress]))
+    for (const entry of status.visibleVfx) {
+      const prior = previousProgress.get(visibleVfxIdentity(entry))
+      if (prior !== undefined && entry.progress < prior) return malformed('visible VFX progress must be monotonic')
+    }
   }
   return { ok: true }
 }
@@ -118,6 +142,11 @@ function validateCapturedEvidence(capture) {
   if (capture.attackId !== castPrefix && !capture.attackId.startsWith(`${castPrefix}:`)) return false
   if (capture.authorityId !== castPrefix && !capture.authorityId.startsWith(`${castPrefix}:`)) return false
   if (!Number.isFinite(capture.elapsedBefore) || !Number.isFinite(capture.elapsedAfter)) return false
+  if (!Number.isFinite(capture.progressBefore) || !Number.isFinite(capture.progressAfter)) return false
+  if (capture.progressBefore < 0 || capture.progressBefore > 1) return false
+  if (capture.progressAfter < capture.progressBefore || capture.progressAfter > 1) return false
+  const progressWindow = VFX_CAPTURE_PROGRESS_WINDOWS[capture.vfxPhase]
+  if (!progressWindow || capture.progressBefore < progressWindow.min || capture.progressBefore > progressWindow.max) return false
   return capture.elapsedBefore >= 0 && capture.elapsedAfter >= capture.elapsedBefore
 }
 
@@ -149,11 +178,12 @@ function captureCandidate(status, entry) {
     vfxQuality: status.vfxQuality,
     visibleTelegraphCount: status.visibleTelegraphCount,
     visibleImpactCount: status.visibleImpactCount,
+    progress: entry.progress,
   })
 }
 
 function exactVisibleEntry(status, candidate) {
-  return status.visibleVfx.some((entry) => (
+  return status.visibleVfx.find((entry) => (
     entry.generation === candidate.stageGeneration
       && entry.enemyId === candidate.bossId
       && entry.skill === candidate.skill
@@ -167,7 +197,7 @@ function exactVisibleEntry(status, candidate) {
 export function reviewBossEvidenceCapture({ before, after, candidate } = {}) {
   const beforeValidation = validateBossStatus(before)
   if (!beforeValidation.ok) return beforeValidation
-  const afterValidation = validateBossStatus(after, before.brain.elapsed)
+  const afterValidation = validateBossStatus(after, before)
   if (!afterValidation.ok) return afterValidation
   const beforeInvariant = bossInvariantFailure(before, before)
   if (beforeInvariant) return { ok: false, ...beforeInvariant }
@@ -176,19 +206,26 @@ export function reviewBossEvidenceCapture({ before, after, candidate } = {}) {
   if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
     return { ok: false, reason: 'malformed-candidate', detail: 'capture candidate must be an object' }
   }
-  const candidateShape = {
-    ...candidate,
-    elapsedBefore: before.brain.elapsed,
-    elapsedAfter: after.brain.elapsed,
-  }
-  if (!validateCapturedEvidence(candidateShape)) {
+  if (!Number.isFinite(candidate.progress) || candidate.progress < 0 || candidate.progress > 1) {
     return { ok: false, reason: 'malformed-candidate', detail: 'capture candidate fields are invalid' }
   }
   if (candidate.bossId !== before.brain.id || candidate.stageGeneration !== before.stageGeneration) {
     return { ok: false, reason: 'state-changed', detail: 'capture candidate does not belong to the current Boss' }
   }
-  if (!exactVisibleEntry(before, candidate) || !exactVisibleEntry(after, candidate)) {
+  const beforeEntry = exactVisibleEntry(before, candidate)
+  const afterEntry = exactVisibleEntry(after, candidate)
+  if (!beforeEntry || !afterEntry || beforeEntry.progress !== candidate.progress) {
     return { ok: false, reason: 'state-changed', detail: 'the exact visible VFX entry did not survive screenshot capture' }
+  }
+  const candidateShape = {
+    ...candidate,
+    elapsedBefore: before.brain.elapsed,
+    elapsedAfter: after.brain.elapsed,
+    progressBefore: beforeEntry.progress,
+    progressAfter: afterEntry.progress,
+  }
+  if (!validateCapturedEvidence(candidateShape)) {
+    return { ok: false, reason: 'malformed-candidate', detail: 'capture candidate fields are invalid' }
   }
   return {
     ok: true,
@@ -200,11 +237,11 @@ export function reviewBossEvidenceCapture({ before, after, candidate } = {}) {
 export function reviewBossFinalInvariant({ initial, previous = initial, final } = {}) {
   const initialValidation = validateBossStatus(initial)
   if (!initialValidation.ok) return initialValidation
-  const previousValidation = validateBossStatus(previous, initial.brain.elapsed)
+  const previousValidation = validateBossStatus(previous, initial)
   if (!previousValidation.ok) return previousValidation
   const previousInvariant = bossInvariantFailure(initial, previous)
   if (previousInvariant) return { ok: false, ...previousInvariant }
-  const finalValidation = validateBossStatus(final, previous.brain.elapsed)
+  const finalValidation = validateBossStatus(final, previous)
   if (!finalValidation.ok) return finalValidation
   const initialInvariant = bossInvariantFailure(initial, initial)
   if (initialInvariant) return { ok: false, ...initialInvariant }
@@ -270,11 +307,11 @@ export function reviewBossSkillEvidence({
   ]))
   const captureByKey = new Map()
   let failure = null
-  let previousElapsed = null
+  let previousStatus = null
   const initial = samples[0]
 
   for (const status of samples) {
-    const validation = validateBossStatus(status, previousElapsed)
+    const validation = validateBossStatus(status, previousStatus)
     if (!validation.ok) {
       failure = validation
       break
@@ -292,7 +329,7 @@ export function reviewBossSkillEvidence({
         break
       }
     }
-    previousElapsed = status.brain.elapsed
+    previousStatus = status
   }
 
   if (!failure && samples.length === 0) failure = { ok: false, reason: 'boss-missing', detail: 'Boss status is missing' }
@@ -340,12 +377,15 @@ export function reviewBossSkillEvidence({
           && entry.phase === 'impact'
           && entry.sequence === telegraph.sequence
           && entry.authorityId === telegraph.authorityId
+          && readableVfxProgress(entry)
       ))
       if (matchingImpact) {
         captureRequests.push(captureCandidate(last, matchingImpact))
         continue
       }
-      const visibleTelegraph = last.visibleVfx.find((entry) => entry.skill === skill && entry.phase === 'telegraph')
+      const visibleTelegraph = last.visibleVfx.find((entry) => (
+        entry.skill === skill && entry.phase === 'telegraph' && readableVfxProgress(entry)
+      ))
       if (visibleTelegraph && (!telegraph
         || visibleTelegraph.sequence !== telegraph.sequence
         || visibleTelegraph.authorityId !== telegraph.authorityId)) {

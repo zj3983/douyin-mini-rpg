@@ -19,6 +19,7 @@ function visibleVfx({
   id = 99,
   attackId = `${skill}:${id}:${sequence}`,
   authorityId = `${skill}:${id}:${sequence}`,
+  progress = 0.5,
 } = {}) {
   return {
     generation,
@@ -28,6 +29,7 @@ function visibleVfx({
     attackId,
     authorityId,
     phase,
+    progress,
   }
 }
 
@@ -66,7 +68,15 @@ function bossStatus({
   }
 }
 
-function capturedEvidence(skill, phase, sequence, elapsedBefore = sequence, elapsedAfter = elapsedBefore + 0.05) {
+function capturedEvidence(
+  skill,
+  phase,
+  sequence,
+  elapsedBefore = sequence,
+  elapsedAfter = elapsedBefore + 0.05,
+  progressBefore = 0.5,
+  progressAfter = 0.6,
+) {
   const authorityId = `${skill}:99:${sequence}`
   return {
     key: `${skill}:${phase}`,
@@ -80,6 +90,8 @@ function capturedEvidence(skill, phase, sequence, elapsedBefore = sequence, elap
     stageGeneration: 7,
     elapsedBefore,
     elapsedAfter,
+    progressBefore,
+    progressAfter,
   }
 }
 
@@ -157,6 +169,7 @@ test('boss screenshot evidence is accepted only while the exact VFX cast survive
     bossId: 99,
     stageGeneration: 7,
     elapsed: 6,
+    progress: candidateEntry.progress,
   }
 
   const changed = gameAgentCore.reviewBossEvidenceCapture({
@@ -181,6 +194,21 @@ test('boss screenshot evidence is accepted only while the exact VFX cast survive
   assert.equal(retry.evidence.sequence, 4)
   assert.equal(retry.evidence.elapsedBefore, 6)
   assert.equal(retry.evidence.elapsedAfter, 6.08)
+  assert.equal(retry.evidence.progressBefore, 0.5)
+  assert.equal(retry.evidence.progressAfter, 0.5)
+
+  const recovery = gameAgentCore.reviewBossEvidenceCapture({
+    before,
+    after: bossStatus({
+      elapsed: 6.08,
+      brainPhase: 'recovery',
+      entries: [{ ...candidateEntry, progress: 0.62 }],
+    }),
+    candidate,
+  })
+  assert.equal(recovery.ok, true)
+  assert.equal(Object.isFrozen(recovery.evidence), true)
+  assert.equal(recovery.evidence.progressAfter, 0.62)
 
   const replacement = gameAgentCore.reviewBossSkillEvidence({
     samples: [
@@ -195,6 +223,38 @@ test('boss screenshot evidence is accepted only while the exact VFX cast survive
   assert.equal(replacement.captureRequests[0].key, 'bamboo-sweep:telegraph')
   assert.equal(replacement.captureRequests[0].sequence, 4)
   assert.equal(replacement.captureRequests[0].authorityId, 'bamboo-sweep:99:4')
+})
+
+test('boss evidence candidates require readable bounded warning and impact progress', () => {
+  const initial = bossStatus({ elapsed: 0 })
+  const requestFor = (entry, captures = []) => gameAgentCore.reviewBossSkillEvidence({
+    samples: [initial, bossStatus({ elapsed: 1, entries: [entry] })],
+    captures,
+  }).captureRequests
+
+  assert.deepEqual(requestFor(visibleVfx({ skill: 'bamboo-sweep', phase: 'telegraph', progress: 0 })), [])
+  assert.deepEqual(requestFor(visibleVfx({ skill: 'bamboo-sweep', phase: 'telegraph', progress: 0.24 })), [])
+  assert.equal(requestFor(visibleVfx({ skill: 'bamboo-sweep', phase: 'telegraph', progress: 0.25 }))[0].progress, 0.25)
+  assert.equal(requestFor(visibleVfx({ skill: 'bamboo-sweep', phase: 'telegraph', progress: 0.7 }))[0].progress, 0.7)
+  assert.deepEqual(requestFor(visibleVfx({ skill: 'bamboo-sweep', phase: 'telegraph', progress: 0.71 })), [])
+
+  const telegraphCapture = capturedEvidence('ground-spikes', 'telegraph', 1)
+  assert.deepEqual(requestFor(
+    visibleVfx({ skill: 'ground-spikes', phase: 'impact', progress: 0.34 }),
+    [telegraphCapture],
+  ), [])
+  assert.equal(requestFor(
+    visibleVfx({ skill: 'ground-spikes', phase: 'impact', progress: 0.35 }),
+    [telegraphCapture],
+  )[0].progress, 0.35)
+  assert.equal(requestFor(
+    visibleVfx({ skill: 'ground-spikes', phase: 'impact', progress: 0.75 }),
+    [telegraphCapture],
+  )[0].progress, 0.75)
+  assert.deepEqual(requestFor(
+    visibleVfx({ skill: 'ground-spikes', phase: 'impact', progress: 0.76 }),
+    [telegraphCapture],
+  ), [])
 })
 
 test('boss capture deadline applies before completion but final invariant does not retroactively fail it', () => {
@@ -354,6 +414,33 @@ test('boss evidence validation fails closed for malformed runtime samples', () =
           authorityId: 'ground-spikes:99:4',
         })],
       })],
+    },
+    {
+      label: 'entry progress nonfinite',
+      samples: [bossStatus({
+        elapsed: 1,
+        entries: [visibleVfx({ skill: 'bamboo-sweep', phase: 'telegraph', progress: Number.NaN })],
+      })],
+    },
+    {
+      label: 'entry progress outside normalized range',
+      samples: [bossStatus({
+        elapsed: 1,
+        entries: [visibleVfx({ skill: 'bamboo-sweep', phase: 'telegraph', progress: 1.01 })],
+      })],
+    },
+    {
+      label: 'same VFX progress regresses',
+      samples: [
+        bossStatus({
+          elapsed: 1,
+          entries: [visibleVfx({ skill: 'bamboo-sweep', phase: 'telegraph', progress: 0.6 })],
+        }),
+        bossStatus({
+          elapsed: 1.1,
+          entries: [visibleVfx({ skill: 'bamboo-sweep', phase: 'telegraph', progress: 0.5 })],
+        }),
+      ],
     },
   ]
 

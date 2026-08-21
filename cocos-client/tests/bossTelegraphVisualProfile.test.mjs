@@ -16,6 +16,7 @@ const size = (widthScale, heightScale, minWidth, minHeight) => ({ widthScale, he
 const expectedProfiles = {
   sweep: {
     id: 'sweep-arc',
+    impactDuration: 0.45,
     resources: {
       main: 'Assets/Skills/BossDomain/sweep_arc/spriteFrame',
       accent: 'Assets/Skills/BossDomain/sweep_trail/spriteFrame',
@@ -35,6 +36,7 @@ const expectedProfiles = {
   },
   spike: {
     id: 'spike-eruption',
+    impactDuration: 0.5,
     resources: {
       main: 'Assets/Skills/BossDomain/spike_cluster/spriteFrame',
       accent: 'Assets/Skills/BossDomain/ground_dust/spriteFrame',
@@ -54,6 +56,7 @@ const expectedProfiles = {
   },
   'roar-sector': {
     id: 'roar-wave',
+    impactDuration: 0.55,
     resources: {
       main: 'Assets/Skills/BossDomain/roar_wave/spriteFrame',
       accent: 'Assets/Skills/BossDomain/ground_dust/spriteFrame',
@@ -98,6 +101,21 @@ test('boss danger kinds resolve to distinct glyph-free resource profiles', () =>
     esmRuntime.resolveBossTelegraphVisual({ kind: 'unknown' }),
     esmRuntime.resolveBossTelegraphVisual({ kind: 'sweep' }),
   )
+})
+
+test('boss profiles own readable visual impact lifetimes longer than authority hitboxes', () => {
+  const cases = [
+    { kind: 'sweep', authorityDuration: 0.18, visualDuration: 0.45 },
+    { kind: 'spike', authorityDuration: 0.14, visualDuration: 0.5 },
+    { kind: 'roar-sector', authorityDuration: 0.12, visualDuration: 0.55 },
+  ]
+
+  for (const { kind, authorityDuration, visualDuration } of cases) {
+    const profile = esmRuntime.resolveBossTelegraphVisual({ kind })
+    assert.equal(profile.impactDuration, visualDuration)
+    assert.ok(profile.impactDuration > authorityDuration)
+    assert.ok(profile.impactDuration >= 0.4 && profile.impactDuration <= 0.55)
+  }
 })
 
 test('boss VFX phase progresses through warning and critical phases with safe clamping', () => {
@@ -156,6 +174,7 @@ test('TypeScript declares the public glyph-free contract and omits retired runti
   assert.match(typeScriptSource, /export interface BossVfxLayout/)
   assert.match(typeScriptSource, /readonly vertical\?:/)
   assert.match(typeScriptSource, /readonly layout: BossVfxLayout/)
+  assert.match(typeScriptSource, /readonly impactDuration: number/)
 
   for (const source of [typeScriptSource, esmSource]) {
     assert.doesNotMatch(source, /\bglyph\s*:/)

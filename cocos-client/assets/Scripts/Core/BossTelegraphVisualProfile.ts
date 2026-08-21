@@ -39,6 +39,7 @@ export interface BossVfxPhaseOutput {
 
 export interface BossTelegraphVisualProfile {
   readonly id: BossTelegraphVisualId
+  readonly impactDuration: number
   readonly resources: BossVfxResources
   readonly quality: Readonly<{
     readonly reducedAccent: boolean
@@ -60,6 +61,7 @@ const quality = Object.freeze({
 const PROFILES = Object.freeze({
   sweep: Object.freeze({
     id: 'sweep-arc',
+    impactDuration: 0.45,
     resources: resources(
       'Assets/Skills/BossDomain/sweep_arc/spriteFrame',
       'Assets/Skills/BossDomain/sweep_trail/spriteFrame',
@@ -79,6 +81,7 @@ const PROFILES = Object.freeze({
   }),
   spike: Object.freeze({
     id: 'spike-eruption',
+    impactDuration: 0.5,
     resources: resources(
       'Assets/Skills/BossDomain/spike_cluster/spriteFrame',
       'Assets/Skills/BossDomain/ground_dust/spriteFrame',
@@ -98,6 +101,7 @@ const PROFILES = Object.freeze({
   }),
   'roar-sector': Object.freeze({
     id: 'roar-wave',
+    impactDuration: 0.55,
     resources: resources(
       'Assets/Skills/BossDomain/roar_wave/spriteFrame',
       'Assets/Skills/BossDomain/ground_dust/spriteFrame',
