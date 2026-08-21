@@ -212,9 +212,9 @@ export class BossTelegraphPresenter extends Component {
   onDestroy(): void {
     this.destroyed = true
     this.loadGeneration += 1
+    this.hideAll()
     for (const frame of this.vfxFrames.values()) frame.decRef(true)
     this.vfxFrames.clear()
-    this.hideAll()
   }
 
   update(deltaSeconds: number): void {
@@ -560,11 +560,16 @@ export class BossTelegraphPresenter extends Component {
   private removeGroup(key: string, group: TelegraphGroup): void {
     if (this.groups.get(key) !== group) return
     this.groups.delete(key)
-    for (const visual of group.visuals) this.telegraphPool?.despawn(visual.node)
+    for (const visual of group.visuals) {
+      visual.controller?.resetVisual()
+      this.telegraphPool?.despawn(visual.node)
+    }
   }
 
   private removeImpact(index: number): void {
     const [impact] = this.impacts.splice(index, 1)
-    if (impact) this.telegraphPool?.despawn(impact.node)
+    if (!impact) return
+    impact.controller?.resetVisual()
+    this.telegraphPool?.despawn(impact.node)
   }
 }

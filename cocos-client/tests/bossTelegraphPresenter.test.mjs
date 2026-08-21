@@ -94,9 +94,18 @@ export class SpriteFrame {
   }
   decRef(autoRelease = false) {
     if (this.refCount <= 0) throw new Error('SpriteFrame reference underflow')
+    const refCountBefore = this.refCount
     this.decRefCalls += 1
     this.refCount -= 1
     if (autoRelease && this.refCount === 0) this.destroyed = true
+    globalThis.__bossVfxLifecycleEvents?.push({
+      type: 'dec-ref',
+      frameId: this.id,
+      refCountBefore,
+      refCountAfter: this.refCount,
+      destroyed: this.destroyed,
+      activeSpriteFrames: globalThis.__bossVfxActiveFramesSnapshot?.() ?? [],
+    })
     return this
   }
 }
@@ -122,6 +131,7 @@ export class BossHazardVisualController {
 async function loadPresenter({ failedPaths = [], deferred = false } = {}) {
   const loadedPaths = []
   const releaseCalls = []
+  const lifecycleEvents = []
   const pendingLoads = []
   const frames = new Map()
   const failed = new Set(failedPaths)
@@ -133,6 +143,8 @@ async function loadPresenter({ failedPaths = [], deferred = false } = {}) {
     return frame
   }
   globalThis.__bossColorAllocations = 0
+  globalThis.__bossVfxLifecycleEvents = lifecycleEvents
+  globalThis.__bossVfxActiveFramesSnapshot = null
   globalThis.__bossTelegraphResources = {
     load(path, Type, callback) {
       loadedPaths.push(path)
@@ -163,6 +175,7 @@ async function loadPresenter({ failedPaths = [], deferred = false } = {}) {
   return {
     ...await import(moduleUrl(executable)),
     loadedPaths,
+    lifecycleEvents,
     releaseCalls,
     frames,
     completeLoad(path, error = null, pathIndex = 0) {
@@ -252,6 +265,7 @@ class TelegraphNode {
     frameCalls: [],
     sizeCalls: [],
     resetVisual: () => {
+      const before = frameIds(this)
       for (const layer of Object.values(this.layers)) {
         layer.spriteFrame = null
         layer.color = { r: 255, g: 255, b: 255, a: 0 }
@@ -262,6 +276,11 @@ class TelegraphNode {
         layer.node.setRotationFromEuler(0, 0, 0)
         Object.assign(layer.node.size, { width: 1, height: 1 })
       }
+      globalThis.__bossVfxLifecycleEvents?.push({
+        type: 'reset-visual',
+        before,
+        after: frameIds(this),
+      })
     },
     setLayerFrames: (main, accent, particle) => {
       this.mainShape.spriteFrame = main
@@ -323,6 +342,12 @@ class TelegraphPool {
     if (node.hazardKind === 'impact' && node.activatedFrame === this.frame) this.sameFrameImpactDespawns += 1
     node.active = false
     this.active.delete(node)
+    globalThis.__bossVfxLifecycleEvents?.push({
+      type: 'despawn',
+      frameIds: frameIds(node),
+      nodeActive: node.active,
+      poolActiveCount: this.active.size,
+    })
   }
   despawnAll() { for (const node of [...this.active]) this.despawn(node) }
 }
@@ -581,7 +606,7 @@ test('full reduced and minimal quality select the required four-layer visibility
   assert.ok(impacts.every((node) => node.graphics.calls.some((call) => call.type === 'stroke')))
 })
 
-test('boss phase changes cached layer alpha without geometry drift or update-time allocations and lookups', async () => {
+test('steady-state phase updates avoid Color construction resource loads and component lookups while reusing cached objects', async () => {
   const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY, loadedPaths } = await loadPresenter()
   const presenter = new BossTelegraphPresenter()
   const pool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
@@ -754,6 +779,63 @@ test('repeated destroy decrements each successfully held frame exactly once', as
   assert.deepEqual(releaseCalls, [])
 })
 
+test('destroy resets and despawns active layers before releasing final owned frame references', async () => {
+  const {
+    BossTelegraphPresenter,
+    BOSS_HAZARD_POOL_CAPACITY,
+    frames,
+    lifecycleEvents,
+  } = await loadPresenter()
+  const presenter = new BossTelegraphPresenter()
+  const pool = new TelegraphPool(BOSS_HAZARD_POOL_CAPACITY)
+  presenter.telegraphPool = pool
+  presenter.onLoad()
+  const entry = PROFILE_CASES[0]
+
+  presenter.present(telegraph(entry.attackId, entry.area, entry.danger), 'full')
+  const warningNode = [...pool.active][0]
+  assert.deepEqual(frameIds(warningNode), [...entry.paths, entry.paths[2]])
+  assert.ok([...frames.values()].every((frame) => frame.refCount === 1 && !frame.destroyed))
+
+  globalThis.__bossVfxActiveFramesSnapshot = () => (
+    [...pool.active].flatMap((node) => frameIds(node).filter(Boolean))
+  )
+  const destroyStart = lifecycleEvents.length
+  try {
+    presenter.onDestroy()
+    const destroyEvents = lifecycleEvents.slice(destroyStart)
+    const resetIndex = destroyEvents.findIndex((event) => event.type === 'reset-visual')
+    const despawnIndex = destroyEvents.findIndex((event) => event.type === 'despawn')
+    const finalReleaseIndex = destroyEvents.findIndex((event) => (
+      event.type === 'dec-ref' && event.refCountAfter === 0 && event.destroyed
+    ))
+
+    assert.ok(resetIndex >= 0, 'active warning layers are reset during destruction')
+    assert.ok(despawnIndex > resetIndex, 'the reset completes before the node is despawned')
+    assert.ok(finalReleaseIndex > despawnIndex, 'owned frames are released after node cleanup')
+    assert.deepEqual(destroyEvents[resetIndex].before, [...entry.paths, entry.paths[2]])
+    assert.deepEqual(destroyEvents[resetIndex].after, [null, null, null, null])
+    assert.deepEqual(destroyEvents[despawnIndex], {
+      type: 'despawn',
+      frameIds: [null, null, null, null],
+      nodeActive: false,
+      poolActiveCount: 0,
+    })
+    const releases = destroyEvents.filter((event) => event.type === 'dec-ref')
+    assert.equal(releases.length, RESOURCE_PATHS.length)
+    assert.ok(releases.every((event) => (
+      event.refCountBefore === 1
+      && event.refCountAfter === 0
+      && event.destroyed
+      && event.activeSpriteFrames.length === 0
+    )))
+    assert.equal(pool.active.size, 0)
+    assert.deepEqual(frameIds(warningNode), [null, null, null, null])
+  } finally {
+    globalThis.__bossVfxActiveFramesSnapshot = null
+  }
+})
+
 test('missing optional frames retain Graphics and the complete warning impact lifecycle without references', async () => {
   const missingPaths = [RESOURCE_PATHS[4], RESOURCE_PATHS[5]]
   const { BossTelegraphPresenter, BOSS_HAZARD_POOL_CAPACITY, frames, loadedPaths, releaseCalls } = await loadPresenter({ failedPaths: missingPaths })
@@ -848,14 +930,16 @@ test('impact danger selects the visual profile ahead of a disagreeing attack id 
 })
 
 test('presenter uses only layered phase contracts and BattleRuntime forwards adaptive quality', async () => {
-  const [presenterSource, runtimeSource] = await Promise.all([
+  const [presenterSource, runtimeSource, hazardControllerSource] = await Promise.all([
     readFile(new URL('../assets/Scripts/Game/BossTelegraphPresenter.ts', import.meta.url), 'utf8'),
     readFile(new URL('../assets/Scripts/Game/BattleRuntimeController.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../assets/Scripts/Game/BossHazardVisualController.ts', import.meta.url), 'utf8'),
   ])
   const retiredTerm = new RegExp(['talis', 'man'].join(''), 'i')
 
-  assert.doesNotMatch(presenterSource, retiredTerm)
-  assert.doesNotMatch(controllerSource, retiredTerm)
+  for (const source of [presenterSource, runtimeSource, hazardControllerSource, controllerSource]) {
+    assert.doesNotMatch(source, retiredTerm)
+  }
   assert.match(presenterSource, /bossVfxPhase/)
   assert.match(presenterSource, /type BossVfxPhaseOutput/)
   assert.match(presenterSource, /import type \{ VfxQuality \}/)
