@@ -24,6 +24,46 @@ export function canvasAspectHealth(stats) {
   }
 }
 
+const REQUIRED_BOSS_SKILL_WINDOWS_MS = [
+  ['sweep', 2600, 4350],
+  ['spikes', 5450, 8100],
+  ['roar', 9200, 11970],
+]
+
+export function bossSkillCapturePlan(options = {}) {
+  if (!options || typeof options !== 'object' || Array.isArray(options)) {
+    throw new TypeError('Boss skill capture options must be an object')
+  }
+
+  const {
+    startOffsetMs = 2450,
+    endOffsetMs = 12600,
+    intervalMs = 350,
+  } = options
+  for (const [name, value] of Object.entries({ startOffsetMs, endOffsetMs, intervalMs })) {
+    if (!Number.isSafeInteger(value)) throw new TypeError(`${name} must be a safe integer`)
+  }
+  if (startOffsetMs < 0) throw new RangeError('startOffsetMs must be non-negative')
+  if (endOffsetMs < 12000 || endOffsetMs <= startOffsetMs) {
+    throw new RangeError('endOffsetMs must be after startOffsetMs and at least 12000')
+  }
+  if (intervalMs <= 0) throw new RangeError('intervalMs must be positive')
+
+  const plannedCount = Math.floor((endOffsetMs - startOffsetMs) / intervalMs) + 1
+  if (plannedCount > 200) throw new RangeError('Boss skill capture plan cannot exceed 200 screenshots')
+
+  const offsets = []
+  for (let offset = startOffsetMs; offset <= endOffsetMs; offset += intervalMs) offsets.push(offset)
+  if (offsets.at(-1) !== endOffsetMs) offsets.push(endOffsetMs)
+
+  for (const [skill, windowStart, windowEnd] of REQUIRED_BOSS_SKILL_WINDOWS_MS) {
+    if (!offsets.some((offset) => offset >= windowStart && offset <= windowEnd)) {
+      throw new RangeError(`Boss skill capture plan must cover the ${skill} window`)
+    }
+  }
+  return offsets
+}
+
 export function summarizeAgentRun({ checks, consoleIssues, pageErrors, requestFailures }) {
   const lines = []
   let passed = 0

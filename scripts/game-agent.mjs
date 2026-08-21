@@ -7,7 +7,14 @@ import { fileURLToPath } from 'node:url'
 
 import { chromium } from 'playwright'
 
-import { canvasAspectHealth, canvasHealth, dungeonLoopReview, playtestReview, reportMarkdown } from './game-agent-core.mjs'
+import {
+  bossSkillCapturePlan,
+  canvasAspectHealth,
+  canvasHealth,
+  dungeonLoopReview,
+  playtestReview,
+  reportMarkdown,
+} from './game-agent-core.mjs'
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const runId = new Date().toISOString().replace(/[:.]/g, '-')
@@ -601,6 +608,46 @@ async function measureDetailedFrames(sampleCount = 180, phase = '基线') {
   return result
 }
 
+async function captureBossSkillCycle(activatedAtMs) {
+  const offsets = bossSkillCapturePlan()
+  const performanceStartOffsetMs = offsets.find((offset) => offset >= 3000)
+  if (performanceStartOffsetMs === undefined) throw new Error('Boss skill plan has no performance sampling point')
+
+  const labelWidth = String(offsets.length).length
+  const capturedLabels = []
+  let performancePromise = null
+
+  for (const [index, offsetMs] of offsets.entries()) {
+    const waitMs = activatedAtMs + offsetMs - Date.now()
+    if (waitMs > 0) await page.waitForTimeout(waitMs)
+    if (offsetMs === performanceStartOffsetMs) {
+      performancePromise = measureDetailedFrames(180, 'Boss技能阶段真实战斗').then(
+        (result) => ({ result }),
+        (error) => ({ error }),
+      )
+    }
+
+    const label = `greedy-boss-skill-${String(index + 1).padStart(labelWidth, '0')}`
+    if (await shot(label)) capturedLabels.push(label)
+  }
+
+  const performanceOutcome = await performancePromise
+  if (performanceOutcome.error) throw performanceOutcome.error
+  const elapsedMs = Date.now() - activatedAtMs
+  const complete = capturedLabels.length === offsets.length && elapsedMs >= offsets.at(-1)
+  addCheck(
+    '完整 Boss 技能证据序列',
+    complete,
+    `captured=${capturedLabels.length}/${offsets.length}, planned=${offsets[0]}-${offsets.at(-1)}ms, elapsed=${elapsedMs}ms`,
+  )
+  return {
+    plannedOffsetsMs: offsets,
+    capturedLabels,
+    elapsedMs,
+    performanceStartOffsetMs,
+  }
+}
+
 function designRectToCss(rect, scale) {
   return {
     left: viewport.width / 2 + (rect.centerX - rect.width / 2) * scale,
@@ -714,6 +761,7 @@ async function playCocosDungeonPolicy(policy) {
   await shot(`${policy}-entry`)
 
   const uiLayout = await inspectDungeonUiLayout()
+  let bossSkillEvidence = null
   await clickDungeonMapRoundTrip(uiLayout)
   await clickDungeonCommand(uiLayout, 1)
   const firstRoom = await bridgeCall('snapshot')
@@ -755,10 +803,10 @@ async function playCocosDungeonPolicy(policy) {
       await bridgeCall('completeEncounter')
       await dungeonMove('f2-elite-to-floor3')
       await dungeonMove('f3-antechamber-to-altar')
-      await dungeonCommand({ type: 'activate-altar' }, '激活竹皇祭坛')
-      await page.waitForTimeout(300)
-      await shot('greedy-final-boss-telegraph')
-      await measureDetailedFrames(180, 'Boss真实战斗')
+      const altarActivatedAtMs = Date.now()
+      const altarActivated = await dungeonCommand({ type: 'activate-altar' }, '激活竹皇祭坛')
+      if (!altarActivated) throw new Error('Bamboo Emperor altar activation was rejected')
+      bossSkillEvidence = await captureBossSkillCycle(altarActivatedAtMs)
       await bridgeCall('completeEncounter')
       await dungeonMove('f3-altar-to-vault')
       await dungeonCommand({ type: 'search' }, '搜索飞剑宝库')
@@ -776,7 +824,7 @@ async function playCocosDungeonPolicy(policy) {
   await shot(`${policy}-settlement`)
   const closed = await clickSettlementClose(uiLayout)
   addCheck('真实按钮关闭结算', closed, String(closed))
-  return { beforeExtraction, terminalSnapshot }
+  return { beforeExtraction, terminalSnapshot, bossSkillEvidence }
 }
 
 async function runCocosDungeonAgent() {

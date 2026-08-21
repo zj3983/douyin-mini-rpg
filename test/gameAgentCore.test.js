@@ -1,13 +1,32 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import {
+import * as gameAgentCore from '../scripts/game-agent-core.mjs'
+
+const {
   canvasAspectHealth,
   canvasHealth,
   dungeonLoopReview,
   playtestReview,
   summarizeAgentRun,
-} from '../scripts/game-agent-core.mjs'
+} = gameAgentCore
+
+test('boss skill capture plan spans sweep, spikes, and roar windows', () => {
+  const plan = gameAgentCore.bossSkillCapturePlan()
+
+  assert.equal(plan[0], 2450)
+  assert.equal(plan.at(-1), 12600)
+  assert.ok(plan.length > 0)
+  assert.ok(plan.slice(1).every((offset, index) => offset - plan[index] === 350))
+  assert.ok(plan.some((offset) => offset >= 2600 && offset <= 4350), 'sweep window is covered')
+  assert.ok(plan.some((offset) => offset >= 5450 && offset <= 8100), 'spikes window is covered')
+  assert.ok(plan.some((offset) => offset >= 9200 && offset <= 11970), 'roar window is covered')
+
+  assert.throws(() => gameAgentCore.bossSkillCapturePlan({ startOffsetMs: '2450' }), /startOffsetMs/)
+  assert.throws(() => gameAgentCore.bossSkillCapturePlan({ intervalMs: 0 }), /intervalMs/)
+  assert.throws(() => gameAgentCore.bossSkillCapturePlan({ endOffsetMs: 11000 }), /endOffsetMs/)
+  assert.throws(() => gameAgentCore.bossSkillCapturePlan({ startOffsetMs: 5000 }), /sweep/)
+})
 
 test('game agent summary fails on failed checks or runtime issues', () => {
   const summary = summarizeAgentRun({
