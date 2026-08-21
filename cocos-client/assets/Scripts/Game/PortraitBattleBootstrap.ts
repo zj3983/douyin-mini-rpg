@@ -1041,14 +1041,32 @@ export class PortraitBattleBootstrap extends Component {
     node.layer = UI_LAYER
     node.addComponent(UITransform).setContentSize(1, 1)
     const graphics = node.addComponent(Graphics)
-    const talismanNode = new Node('Talisman')
-    talismanNode.layer = UI_LAYER
-    talismanNode.addComponent(UITransform).setContentSize(112, 112)
-    const talisman = talismanNode.addComponent(Sprite)
-    node.addChild(talismanNode)
+    const mainShapeNode = new Node('MainShape')
+    mainShapeNode.layer = UI_LAYER
+    mainShapeNode.addComponent(UITransform).setContentSize(1, 1)
+    const mainShape = mainShapeNode.addComponent(Sprite)
+    node.addChild(mainShapeNode)
+    const accentNode = new Node('Accent')
+    accentNode.layer = UI_LAYER
+    accentNode.addComponent(UITransform).setContentSize(1, 1)
+    const accent = accentNode.addComponent(Sprite)
+    node.addChild(accentNode)
+    const particleNearNode = new Node('ParticleNear')
+    particleNearNode.layer = UI_LAYER
+    particleNearNode.addComponent(UITransform).setContentSize(1, 1)
+    const particleNear = particleNearNode.addComponent(Sprite)
+    node.addChild(particleNearNode)
+    const particleFarNode = new Node('ParticleFar')
+    particleFarNode.layer = UI_LAYER
+    particleFarNode.addComponent(UITransform).setContentSize(1, 1)
+    const particleFar = particleFarNode.addComponent(Sprite)
+    node.addChild(particleFarNode)
     const visual = node.addComponent(BossHazardVisualController)
     visual.graphics = graphics
-    visual.talisman = talisman
+    visual.mainShape = mainShape
+    visual.accent = accent
+    visual.particleNear = particleNear
+    visual.particleFar = particleFar
     node.addComponent(PoolableActor)
     node.on('pool-despawned', visual.resetVisual, visual)
     visual.resetVisual()

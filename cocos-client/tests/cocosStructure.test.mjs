@@ -168,6 +168,33 @@ test('build readiness requires the compiled boss telegraph and talisman resource
   assert.match(presenter, /from '\.\.\/Core\/BossTelegraphVisualProfile\.ts'/)
 })
 
+test('boss hazard pool factory owns exactly four fixed sprite layers', () => {
+  const bootstrap = readSource('assets/Scripts/Game/PortraitBattleBootstrap.ts')
+  const controller = readSource('assets/Scripts/Game/BossHazardVisualController.ts')
+  const factory = extractBlock(bootstrap, 'private createBossEffectNode()')
+  const layers = [
+    ['MainShape', 'mainShapeNode', 'mainShape'],
+    ['Accent', 'accentNode', 'accent'],
+    ['ParticleNear', 'particleNearNode', 'particleNear'],
+    ['ParticleFar', 'particleFarNode', 'particleFar'],
+  ]
+
+  assert.equal(countOccurrences(factory, '.addComponent(Sprite)'), 4)
+  assert.equal(countOccurrences(factory, 'node.addChild('), 4)
+  for (const [name, nodeVariable, field] of layers) {
+    assert.equal(countOccurrences(factory, `new Node('${name}')`), 1, name)
+    assert.match(factory, new RegExp(`${nodeVariable}\\.layer = UI_LAYER`), name)
+    assert.match(factory, new RegExp(`${nodeVariable}\\.addComponent\\(UITransform\\)`), name)
+    assert.match(factory, new RegExp(`const ${field} = ${nodeVariable}\\.addComponent\\(Sprite\\)`), name)
+    assert.equal(countOccurrences(factory, `node.addChild(${nodeVariable})`), 1, name)
+    assert.match(factory, new RegExp(`visual\\.${field} = ${field}`), name)
+    assert.match(controller, new RegExp(`@property\\(Sprite\\)\\s+${field}: Sprite \\| null = null`), field)
+  }
+
+  assert.doesNotMatch(factory, /Talisman|talisman/)
+  assert.doesNotMatch(controller, /Talisman|talisman/)
+})
+
 test('battle runtime controller exposes boss stage hooks', () => {
   const source = readFileSync(resolve('assets/Scripts/Game/BattleRuntimeController.ts'), 'utf8')
 
