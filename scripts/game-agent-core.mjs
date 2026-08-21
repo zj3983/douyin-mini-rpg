@@ -72,8 +72,14 @@ function validateVisibleVfx(entry, status, index) {
   return { ok: true }
 }
 
-function visibleVfxIdentity(entry) {
-  return `${entry.generation}\u0000${entry.enemyId}\u0000${entry.skill}\u0000${entry.sequence}\u0000${entry.attackId}\u0000${entry.authorityId}\u0000${entry.phase}`
+function sameVisibleVfxIdentity(left, right) {
+  return left.generation === right.generation
+    && left.enemyId === right.enemyId
+    && left.skill === right.skill
+    && left.sequence === right.sequence
+    && left.attackId === right.attackId
+    && left.authorityId === right.authorityId
+    && left.phase === right.phase
 }
 
 function readableVfxProgress(entry) {
@@ -110,10 +116,9 @@ function validateBossStatus(status, previous = null) {
     return malformed('visible VFX counts must match visibleVfx entries')
   }
   if (previous && typeof previous === 'object') {
-    const previousProgress = new Map(previous.visibleVfx.map((entry) => [visibleVfxIdentity(entry), entry.progress]))
     for (const entry of status.visibleVfx) {
-      const prior = previousProgress.get(visibleVfxIdentity(entry))
-      if (prior !== undefined && entry.progress < prior) return malformed('visible VFX progress must be monotonic')
+      const prior = previous.visibleVfx.find((candidate) => sameVisibleVfxIdentity(candidate, entry))
+      if (prior && entry.progress < prior.progress) return malformed('visible VFX progress must be monotonic')
     }
   }
   return { ok: true }
@@ -131,9 +136,9 @@ function bossInvariantFailure(initial, current) {
 function validateCapturedEvidence(capture) {
   if (!capture || typeof capture !== 'object' || Array.isArray(capture)) return false
   if (!REQUIRED_BOSS_SKILLS.includes(capture.skill)) return false
-  if (capture.phase !== 'telegraph' && capture.phase !== 'active') return false
+  if (capture.phase !== 'telegraph' && capture.phase !== 'impact') return false
   if (capture.key !== `${capture.skill}:${capture.phase}`) return false
-  if (capture.vfxPhase !== (capture.phase === 'telegraph' ? 'telegraph' : 'impact')) return false
+  if (capture.vfxPhase !== capture.phase) return false
   if (!isNonNegativeInteger(capture.sequence)) return false
   if (!isNonNegativeInteger(capture.bossId) || !isNonNegativeInteger(capture.stageGeneration)) return false
   if (typeof capture.attackId !== 'string' || capture.attackId.length === 0) return false
@@ -147,6 +152,7 @@ function validateCapturedEvidence(capture) {
   if (capture.progressAfter < capture.progressBefore || capture.progressAfter > 1) return false
   const progressWindow = VFX_CAPTURE_PROGRESS_WINDOWS[capture.vfxPhase]
   if (!progressWindow || capture.progressBefore < progressWindow.min || capture.progressBefore > progressWindow.max) return false
+  if (capture.progressAfter < progressWindow.min || capture.progressAfter > progressWindow.max) return false
   return capture.elapsedBefore >= 0 && capture.elapsedAfter >= capture.elapsedBefore
 }
 
@@ -161,7 +167,7 @@ function sameCast(left, right) {
 }
 
 function captureCandidate(status, entry) {
-  const phase = entry.phase === 'telegraph' ? 'telegraph' : 'active'
+  const phase = entry.phase
   return Object.freeze({
     key: `${entry.skill}:${phase}`,
     skill: entry.skill,
@@ -223,6 +229,13 @@ export function reviewBossEvidenceCapture({ before, after, candidate } = {}) {
     elapsedAfter: after.brain.elapsed,
     progressBefore: beforeEntry.progress,
     progressAfter: afterEntry.progress,
+  }
+  const progressWindow = VFX_CAPTURE_PROGRESS_WINDOWS[candidate.vfxPhase]
+  if (progressWindow
+    && candidate.progress >= progressWindow.min
+    && candidate.progress <= progressWindow.max
+    && (afterEntry.progress < progressWindow.min || afterEntry.progress > progressWindow.max)) {
+    return { ok: false, reason: 'state-changed', detail: 'the visible VFX left its readable progress window during screenshot capture' }
   }
   if (!validateCapturedEvidence(candidateShape)) {
     return { ok: false, reason: 'malformed-candidate', detail: 'capture candidate fields are invalid' }
@@ -288,13 +301,66 @@ export function reviewBossPerformanceInterval({ start, end, frameCount, wallDura
   }
 }
 
-export function reviewBossSkillEvidence({
-  samples = [],
+const BOSS_EVIDENCE_POLL_STATE = Symbol('boss-evidence-poll-state')
+
+export function createBossEvidencePollState() {
+  return {
+    [BOSS_EVIDENCE_POLL_STATE]: true,
+    initial: null,
+    previous: null,
+    failure: null,
+    appendedSamples: 0,
+    totalValidatedSamples: 0,
+  }
+}
+
+function requireBossEvidencePollState(state) {
+  if (!state || state[BOSS_EVIDENCE_POLL_STATE] !== true) {
+    throw new TypeError('Boss evidence poll state must be created by createBossEvidencePollState')
+  }
+}
+
+export function appendBossEvidenceSample(state, status) {
+  requireBossEvidencePollState(state)
+  state.appendedSamples += 1
+  if (state.failure) {
+    return { ...state.failure, validatedThisAppend: 0, totalValidatedSamples: state.totalValidatedSamples }
+  }
+
+  state.totalValidatedSamples += 1
+  const validation = validateBossStatus(status, state.previous)
+  if (!validation.ok) {
+    state.failure = validation
+  } else {
+    const invariant = state.initial
+      ? bossInvariantFailure(state.initial, status)
+      : bossInvariantFailure(status, status)
+    if (invariant) state.failure = { ok: false, ...invariant }
+  }
+
+  if (!state.failure) {
+    if (!state.initial) state.initial = status
+    state.previous = status
+  }
+  return state.failure
+    ? { ...state.failure, validatedThisAppend: 1, totalValidatedSamples: state.totalValidatedSamples }
+    : { ok: true, validatedThisAppend: 1, totalValidatedSamples: state.totalValidatedSamples }
+}
+
+function captureForKey(captures, key) {
+  for (let index = captures.length - 1; index >= 0; index -= 1) {
+    if (captures[index]?.key === key) return captures[index]
+  }
+  return null
+}
+
+export function reviewBossEvidencePollState({
+  state,
   captures = [],
   maxGameElapsedSeconds = 25,
   wallTimedOut = false,
 } = {}) {
-  if (!Array.isArray(samples)) throw new TypeError('Boss skill evidence samples must be an array')
+  requireBossEvidencePollState(state)
   if (!Array.isArray(captures)) throw new TypeError('Boss skill evidence captures must be an array')
   if (!Number.isFinite(maxGameElapsedSeconds) || maxGameElapsedSeconds <= 0) {
     throw new TypeError('maxGameElapsedSeconds must be positive and finite')
@@ -303,36 +369,13 @@ export function reviewBossSkillEvidence({
 
   const observed = Object.fromEntries(REQUIRED_BOSS_SKILLS.map((skill) => [
     skill,
-    { telegraph: false, active: false },
+    { telegraph: false, impact: false },
   ]))
-  const captureByKey = new Map()
-  let failure = null
-  let previousStatus = null
-  const initial = samples[0]
+  const initial = state.initial
+  const last = state.previous
+  let failure = state.failure
 
-  for (const status of samples) {
-    const validation = validateBossStatus(status, previousStatus)
-    if (!validation.ok) {
-      failure = validation
-      break
-    }
-    if (initial && status !== initial) {
-      const invariant = bossInvariantFailure(initial, status)
-      if (invariant) {
-        failure = { ok: false, ...invariant }
-        break
-      }
-    } else {
-      const invariant = bossInvariantFailure(status, status)
-      if (invariant) {
-        failure = { ok: false, ...invariant }
-        break
-      }
-    }
-    previousStatus = status
-  }
-
-  if (!failure && samples.length === 0) failure = { ok: false, reason: 'boss-missing', detail: 'Boss status is missing' }
+  if (!failure && !initial) failure = { ok: false, reason: 'boss-missing', detail: 'Boss status is missing' }
   if (!failure) {
     for (const capture of captures) {
       if (!validateCapturedEvidence(capture)) {
@@ -343,23 +386,21 @@ export function reviewBossSkillEvidence({
         failure = { ok: false, reason: 'malformed-capture', detail: 'captured evidence belongs to another Boss' }
         break
       }
-      captureByKey.set(capture.key, capture)
     }
   }
 
   for (const skill of REQUIRED_BOSS_SKILLS) {
-    const telegraph = captureByKey.get(`${skill}:telegraph`)
-    const active = captureByKey.get(`${skill}:active`)
+    const telegraph = captureForKey(captures, `${skill}:telegraph`)
+    const impact = captureForKey(captures, `${skill}:impact`)
     observed[skill].telegraph = Boolean(telegraph)
-    observed[skill].active = Boolean(active && sameCast(telegraph, active))
+    observed[skill].impact = Boolean(impact && sameCast(telegraph, impact))
   }
 
   const missing = REQUIRED_BOSS_SKILLS.flatMap((skill) => (
-    ['telegraph', 'active']
+    ['telegraph', 'impact']
       .filter((phase) => !observed[skill][phase])
       .map((phase) => `${skill}:${phase}`)
   ))
-  const last = samples.at(-1)
   const initialElapsed = Number(initial?.brain?.elapsed)
   const lastElapsed = Number(last?.brain?.elapsed)
   const gameElapsedSeconds = Number.isFinite(initialElapsed) && Number.isFinite(lastElapsed)
@@ -369,9 +410,9 @@ export function reviewBossSkillEvidence({
 
   if (!failure && last) {
     for (const skill of REQUIRED_BOSS_SKILLS) {
-      const telegraph = captureByKey.get(`${skill}:telegraph`)
-      const active = captureByKey.get(`${skill}:active`)
-      if (active && sameCast(telegraph, active)) continue
+      const telegraph = captureForKey(captures, `${skill}:telegraph`)
+      const impact = captureForKey(captures, `${skill}:impact`)
+      if (impact && sameCast(telegraph, impact)) continue
       const matchingImpact = telegraph && last.visibleVfx.find((entry) => (
         entry.skill === skill
           && entry.phase === 'impact'
@@ -394,7 +435,11 @@ export function reviewBossSkillEvidence({
     }
   }
 
-  const result = { observed, captureRequests, missing, gameElapsedSeconds }
+  const pollValidation = Object.freeze({
+    appendedSamples: state.appendedSamples,
+    totalValidatedSamples: state.totalValidatedSamples,
+  })
+  const result = { observed, captureRequests, missing, gameElapsedSeconds, pollValidation }
   if (failure) return { ok: false, state: 'failed', reason: failure.reason, detail: failure.detail, ...result }
   if (wallTimedOut) return { ok: false, state: 'failed', reason: 'wall-timeout', detail: 'Boss evidence wall timeout elapsed', ...result }
   if (gameElapsedSeconds >= maxGameElapsedSeconds) {
@@ -402,6 +447,21 @@ export function reviewBossSkillEvidence({
   }
   if (missing.length === 0) return { ok: true, state: 'complete', reason: 'complete', detail: 'all Boss evidence captured', ...result }
   return { ok: false, state: 'waiting', reason: 'waiting', detail: 'waiting for visible Boss VFX evidence', ...result }
+}
+
+export function reviewBossSkillEvidence({
+  samples = [],
+  captures = [],
+  maxGameElapsedSeconds = 25,
+  wallTimedOut = false,
+} = {}) {
+  if (!Array.isArray(samples)) throw new TypeError('Boss skill evidence samples must be an array')
+  const state = createBossEvidencePollState()
+  for (const sample of samples) {
+    const appended = appendBossEvidenceSample(state, sample)
+    if (!appended.ok) break
+  }
+  return reviewBossEvidencePollState({ state, captures, maxGameElapsedSeconds, wallTimedOut })
 }
 
 export function buildDungeonAgentArtifacts({

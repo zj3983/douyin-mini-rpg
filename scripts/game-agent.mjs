@@ -8,12 +8,15 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 
 import {
+  appendBossEvidenceSample,
   buildDungeonAgentArtifacts,
   canvasAspectHealth,
   canvasHealth,
+  createBossEvidencePollState,
   dungeonLoopReview,
   playtestReview,
   reportMarkdown,
+  reviewBossEvidencePollState,
   reviewBossEvidenceCapture,
   reviewBossFinalInvariant,
   reviewBossPerformanceInterval,
@@ -659,15 +662,15 @@ async function measureBossCombatFrames(startStatus) {
 const BOSS_SKILL_SCREENSHOT_LABELS = Object.freeze({
   'bamboo-sweep': Object.freeze({
     telegraph: 'greedy-boss-bamboo-sweep-telegraph',
-    active: 'greedy-boss-bamboo-sweep-active',
+    impact: 'greedy-boss-bamboo-sweep-impact',
   }),
   'ground-spikes': Object.freeze({
     telegraph: 'greedy-boss-ground-spikes-telegraph',
-    active: 'greedy-boss-ground-spikes-active',
+    impact: 'greedy-boss-ground-spikes-impact',
   }),
   'mountain-roar': Object.freeze({
     telegraph: 'greedy-boss-mountain-roar-telegraph',
-    active: 'greedy-boss-mountain-roar-active',
+    impact: 'greedy-boss-mountain-roar-impact',
   }),
 })
 
@@ -714,6 +717,7 @@ async function captureBossSkillStates() {
   const samples = []
   const captures = new Map()
   const rejectedCaptures = []
+  const pollState = createBossEvidencePollState()
   let performancePromise = null
   let review = null
 
@@ -733,8 +737,9 @@ async function captureBossSkillStates() {
       }
 
       samples.push(status)
-      review = reviewBossSkillEvidence({
-        samples,
+      appendBossEvidenceSample(pollState, status)
+      review = reviewBossEvidencePollState({
+        state: pollState,
         captures: [...captures.values()],
         maxGameElapsedSeconds: 25,
         wallTimedOut,
@@ -774,6 +779,7 @@ async function captureBossSkillStates() {
         throw error
       }
       samples.push(after)
+      appendBossEvidenceSample(pollState, after)
       const captureReview = reviewBossEvidenceCapture({ before: status, after, candidate })
       if (!captureReview.ok) {
         await discardPendingBossScreenshot(pendingCapture)
@@ -812,8 +818,8 @@ async function captureBossSkillStates() {
         )
       }
 
-      review = reviewBossSkillEvidence({
-        samples,
+      review = reviewBossEvidencePollState({
+        state: pollState,
         captures: [...captures.values()],
         maxGameElapsedSeconds: 25,
         wallTimedOut: Date.now() >= wallDeadlineMs,
@@ -827,6 +833,21 @@ async function captureBossSkillStates() {
         })
       }
       if (review.state === 'complete') break
+    }
+
+    review = reviewBossSkillEvidence({
+      samples,
+      captures: [...captures.values()],
+      maxGameElapsedSeconds: 25,
+      wallTimedOut: Date.now() >= wallDeadlineMs,
+    })
+    if (review.state === 'failed') {
+      throw bossEvidenceError(review.reason, review.detail, {
+        missing: review.missing,
+        gameElapsedSeconds: review.gameElapsedSeconds,
+        captured: [...captures.values()],
+        rejectedCaptures,
+      })
     }
 
     const performanceOutcome = performancePromise ? await performancePromise : null

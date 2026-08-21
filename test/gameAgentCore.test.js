@@ -98,11 +98,11 @@ function capturedEvidence(
 function completeBossCaptures() {
   return [
     capturedEvidence('bamboo-sweep', 'telegraph', 1),
-    capturedEvidence('bamboo-sweep', 'active', 1),
+    capturedEvidence('bamboo-sweep', 'impact', 1),
     capturedEvidence('ground-spikes', 'telegraph', 2),
-    capturedEvidence('ground-spikes', 'active', 2),
+    capturedEvidence('ground-spikes', 'impact', 2),
     capturedEvidence('mountain-roar', 'telegraph', 3),
-    capturedEvidence('mountain-roar', 'active', 3),
+    capturedEvidence('mountain-roar', 'impact', 3),
   ]
 }
 
@@ -132,9 +132,9 @@ test('boss evidence derives skill identity from live VFX instead of phase-two la
   assert.equal(review.reason, 'complete')
   assert.deepEqual(review.missing, [])
   assert.deepEqual(review.observed, {
-    'bamboo-sweep': { telegraph: true, active: true },
-    'ground-spikes': { telegraph: true, active: true },
-    'mountain-roar': { telegraph: true, active: true },
+    'bamboo-sweep': { telegraph: true, impact: true },
+    'ground-spikes': { telegraph: true, impact: true },
+    'mountain-roar': { telegraph: true, impact: true },
   })
   assert.deepEqual(review.captureRequests, [])
   assert.ok(Math.abs(review.gameElapsedSeconds - 9.3) < 1e-9)
@@ -143,11 +143,11 @@ test('boss evidence derives skill identity from live VFX instead of phase-two la
     samples: [initial, bossStatus({ elapsed: 4 })],
     captures: [
       capturedEvidence('bamboo-sweep', 'telegraph', 1),
-      capturedEvidence('bamboo-sweep', 'active', 4),
+      capturedEvidence('bamboo-sweep', 'impact', 4),
     ],
   })
   assert.equal(mismatchedCast.state, 'waiting')
-  assert.ok(mismatchedCast.missing.includes('bamboo-sweep:active'))
+  assert.ok(mismatchedCast.missing.includes('bamboo-sweep:impact'))
 })
 
 test('boss screenshot evidence is accepted only while the exact VFX cast survives capture', () => {
@@ -159,9 +159,9 @@ test('boss screenshot evidence is accepted only while the exact VFX cast survive
     entries: [candidateEntry],
   })
   const candidate = {
-    key: 'bamboo-sweep:active',
+    key: 'bamboo-sweep:impact',
     skill: 'bamboo-sweep',
-    phase: 'active',
+    phase: 'impact',
     vfxPhase: 'impact',
     sequence: 4,
     attackId: candidateEntry.attackId,
@@ -209,6 +209,25 @@ test('boss screenshot evidence is accepted only while the exact VFX cast survive
   assert.equal(recovery.ok, true)
   assert.equal(Object.isFrozen(recovery.evidence), true)
   assert.equal(recovery.evidence.progressAfter, 0.62)
+
+  const leftReadableWindow = gameAgentCore.reviewBossEvidenceCapture({
+    before: bossStatus({
+      elapsed: 6,
+      brainPhase: 'recovery',
+      entries: [{ ...candidateEntry, progress: 0.75 }],
+    }),
+    after: bossStatus({
+      elapsed: 6.08,
+      brainPhase: 'recovery',
+      entries: [{ ...candidateEntry, progress: 0.95 }],
+    }),
+    candidate: { ...candidate, progress: 0.75 },
+  })
+  assert.deepEqual(
+    { ok: leftReadableWindow.ok, reason: leftReadableWindow.reason },
+    { ok: false, reason: 'state-changed' },
+  )
+  assert.match(leftReadableWindow.detail, /readable progress window/)
 
   const replacement = gameAgentCore.reviewBossSkillEvidence({
     samples: [
@@ -454,6 +473,39 @@ test('boss evidence validation fails closed for malformed runtime samples', () =
   }
 })
 
+test('boss evidence polling validates only each appended sample and retains fail-closed checks', () => {
+  const state = gameAgentCore.createBossEvidencePollState()
+  const sampleCount = 240
+
+  for (let index = 0; index < sampleCount; index += 1) {
+    const result = gameAgentCore.appendBossEvidenceSample(state, bossStatus({ elapsed: index / 60 }))
+    assert.equal(result.ok, true)
+    assert.equal(result.validatedThisAppend, 1)
+    assert.equal(result.totalValidatedSamples, index + 1)
+  }
+
+  const review = gameAgentCore.reviewBossEvidencePollState({ state })
+  assert.equal(review.state, 'waiting')
+  assert.deepEqual(review.pollValidation, {
+    appendedSamples: sampleCount,
+    totalValidatedSamples: sampleCount,
+  })
+
+  const malformedState = gameAgentCore.createBossEvidencePollState()
+  gameAgentCore.appendBossEvidenceSample(malformedState, bossStatus({
+    elapsed: 1,
+    entries: [visibleVfx({ skill: 'bamboo-sweep', phase: 'impact', progress: 0.6 })],
+  }))
+  const regressed = gameAgentCore.appendBossEvidenceSample(malformedState, bossStatus({
+    elapsed: 1.1,
+    entries: [visibleVfx({ skill: 'bamboo-sweep', phase: 'impact', progress: 0.5 })],
+  }))
+  assert.deepEqual(
+    { ok: regressed.ok, reason: regressed.reason, validatedThisAppend: regressed.validatedThisAppend },
+    { ok: false, reason: 'malformed-sample', validatedThisAppend: 1 },
+  )
+})
+
 test('dungeon artifacts retain structured Boss failure reasons', () => {
   const artifacts = gameAgentCore.buildDungeonAgentArtifacts({
     policy: 'greedy',
@@ -470,13 +522,13 @@ test('dungeon artifacts retain structured Boss failure reasons', () => {
     failure: {
       reason: 'boss-dead',
       message: 'Boss died before mountain-roar impact evidence',
-      details: { missing: ['mountain-roar:active'] },
+      details: { missing: ['mountain-roar:impact'] },
     },
   })
 
   assert.equal(artifacts.ok, false)
   assert.equal(artifacts.evidence.failure.reason, 'boss-dead')
-  assert.match(JSON.stringify(artifacts.evidence), /mountain-roar:active/)
+  assert.match(JSON.stringify(artifacts.evidence), /mountain-roar:impact/)
   assert.match(artifacts.markdown, /Result: FAIL/)
   assert.match(artifacts.markdown, /Failure reason: boss-dead/)
 })
