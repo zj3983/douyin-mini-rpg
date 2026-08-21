@@ -20,13 +20,7 @@ const bossVfxCompiledMarkers = [
   'BossHazardVisualController',
 ]
 const retiredBossResourcePathPrefix = 'Assets/Skills/BossDomain/talisman_'
-const retiredBossCompiledReferences = [
-  'talismanPath',
-  'talismanPulse',
-  'talisman_sweep',
-  'talisman_spike',
-  'talisman_roar',
-]
+const retiredBossCompiledReferencePattern = /[A-Za-z0-9_$]*talisman[A-Za-z0-9_$]*/i
 const dungeonCompiledMarkers = [
   'DungeonPressureRuntime',
   'PursuitBossRuntime',
@@ -231,10 +225,9 @@ export function checkCocosBuildOutput({ buildRoot, projectRoot = process.cwd() }
     if (missingBossVfxMarkers.length > 0) {
       errors.push(`built main index omits layered boss VFX compiled feature markers: ${missingBossVfxMarkers.join(', ')}`)
     }
-    for (const reference of retiredBossCompiledReferences) {
-      if (mainIndex.includes(reference)) {
-        errors.push(`built main index contains retired boss talisman runtime reference: ${reference}`)
-      }
+    const retiredBossReference = mainIndex.match(retiredBossCompiledReferencePattern)?.[0]
+    if (retiredBossReference) {
+      errors.push(`built main index contains retired boss talisman runtime reference: ${retiredBossReference}`)
     }
     const missingDungeonMarkers = dungeonCompiledMarkers.filter((marker) => !mainIndex.includes(marker))
     if (missingDungeonMarkers.length > 0) {

@@ -38,7 +38,11 @@ const bossVfxNames = [
   'leaf_particle',
   'impact_spark',
 ]
-const retiredBossRuntimeMarkers = [
+const retiredBossRuntimeReferences = [
+  'talisman',
+  'Talisman',
+  'setTalisman',
+  'talismanFrames',
   'talismanPath',
   'talismanPulse',
   'talisman_sweep',
@@ -279,17 +283,23 @@ test('build-output check rejects retired boss talisman resource settings paths',
   )
 })
 
-test('build-output check rejects retired boss talisman compiled runtime references', () => {
-  for (const marker of retiredBossRuntimeMarkers) {
+for (const reference of retiredBossRuntimeReferences) {
+  test(`build-output check rejects retired boss runtime reference ${reference}`, () => {
     const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-retired-talisman-runtime-'))
-    writeCompleteFixture(buildRoot, `${validMainIndex} ${marker}`)
+    writeCompleteFixture(buildRoot, `${validMainIndex} ${reference}`)
 
     const report = checkCocosBuildOutput({ buildRoot, projectRoot })
 
-    assert.equal(report.ok, false, marker)
-    assert.equal(report.errors.some((error) => error.includes(marker)), true, marker)
-  }
-})
+    assert.equal(report.ok, false, reference)
+    assert.equal(
+      report.errors.includes(
+        `built main index contains retired boss talisman runtime reference: ${reference}`,
+      ),
+      true,
+      report.errors.join('\n'),
+    )
+  })
+}
 
 test('build-output check rejects output without the promoted H3 animation contract', () => {
   const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-missing-h3-runtime-'))
