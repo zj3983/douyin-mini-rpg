@@ -26,6 +26,7 @@ const retiredBossResourcePathPrefix = 'Assets/Skills/BossDomain/talisman_'
 const retiredBossCompiledReferencePattern = /(?:^|[^A-Za-z0-9_$])(setTalisman|talismanFrames|talismanPath|talismanPulse|talisman_sweep|talisman_spike|talisman_roar|Talisman|talisman)(?![A-Za-z0-9_$])/
 const cocosBuildHashMinLength = 5
 const cocosBuildHashMaxLength = 32
+const cocosSubAssetIdPattern = /^[0-9a-f]{5}$/
 const dungeonCompiledMarkers = [
   'DungeonPressureRuntime',
   'PursuitBossRuntime',
@@ -53,6 +54,17 @@ export function compressAssetUuid(uuid) {
     throw new TypeError(`compressAssetUuid expected a canonical asset UUID, received ${JSON.stringify(uuid)}`)
   }
   return compressUuid(uuid, 2)
+}
+
+function parseSubAssetUuid(value) {
+  if (typeof value !== 'string') return null
+  const parts = value.split('@')
+  if (
+    parts.length !== 2
+    || !isCanonicalAssetUuid(parts[0])
+    || !cocosSubAssetIdPattern.test(parts[1])
+  ) return null
+  return { assetUuid: parts[0], subId: parts[1] }
 }
 
 function collectFiles(root) {
@@ -219,6 +231,25 @@ function validateBossVfxImport(importPath, name, spriteFrameMeta, errors) {
     return
   }
 
+  const sourceTextureUuid = spriteFrameMeta.userData?.imageUuidOrDatabaseUri
+  const parsedTextureUuid = parseSubAssetUuid(sourceTextureUuid)
+  if (!parsedTextureUuid) {
+    errors.push(`layered boss VFX source meta for ${name} has invalid imageUuidOrDatabaseUri ${JSON.stringify(sourceTextureUuid)}`)
+    return
+  }
+  const expectedTextureReference = `${compressAssetUuid(parsedTextureUuid.assetUuid)}@${parsedTextureUuid.subId}`
+  if (!isDeepStrictEqual(importArtifact[1], [expectedTextureReference])) {
+    errors.push(`built layered boss VFX ${name} import texture reference differs from source meta: expected ${expectedTextureReference}: ${importPath}`)
+  }
+  if (
+    !isDeepStrictEqual(importArtifact[2], ['_textureSource'])
+    || !isDeepStrictEqual(importArtifact[8], [0])
+    || !isDeepStrictEqual(importArtifact[9], [0])
+    || !isDeepStrictEqual(importArtifact[10], [0])
+  ) {
+    errors.push(`built layered boss VFX ${name} import _textureSource property mapping differs from the Cocos SpriteFrame contract: ${importPath}`)
+  }
+
   const expectedPayload = expectedBossVfxSpriteFramePayload(spriteFrameMeta)
   for (const field of bossVfxSpriteFramePayloadFields) {
     if (!isDeepStrictEqual(readPath(payload, field), readPath(expectedPayload, field))) {
@@ -306,21 +337,25 @@ function checkH3AnimationOutput({ projectRoot, resourcesRoot, resourcesConfig, e
     }
     const uuid = meta.uuid
     if (resourcesConfig) {
-      const textureMeta = Object.values(meta.subMetas ?? {}).find(({ name }) => name === 'texture')
+      const textureMeta = Object.values(meta.subMetas ?? {}).find((subMeta) => subMeta?.name === 'texture')
       const resourcePath = atlasPath.replace(/\.png$/, '/texture')
       if (!textureMeta?.uuid) {
         errors.push(`missing H3 atlas texture meta: ${atlasPath}`)
       } else {
-        const [textureAssetUuid, textureSubId] = textureMeta.uuid.split('@')
-        const expectedTextureUuid = `${compressAssetUuid(textureAssetUuid)}@${textureSubId}`
-        const pathEntry = Object.entries(resourcesConfig.paths ?? {})
-          .find(([, value]) => Array.isArray(value) && value[0] === resourcePath)
-        if (!pathEntry) {
-          errors.push(`built H3 atlas resource path is missing: ${resourcePath}`)
+        const parsedTextureUuid = parseSubAssetUuid(textureMeta.uuid)
+        if (!parsedTextureUuid) {
+          errors.push(`invalid H3 atlas texture submeta UUID ${JSON.stringify(textureMeta.uuid)}: ${atlasPath}`)
         } else {
-          const actualTextureUuid = resourcesConfig.uuids?.[Number(pathEntry[0])]
-          if (actualTextureUuid !== expectedTextureUuid) {
-            errors.push(`built H3 atlas resource UUID ${actualTextureUuid ?? '<missing>'} for ${resourcePath} does not match ${expectedTextureUuid}`)
+          const expectedTextureUuid = `${compressAssetUuid(parsedTextureUuid.assetUuid)}@${parsedTextureUuid.subId}`
+          const pathEntry = Object.entries(resourcesConfig.paths ?? {})
+            .find(([, value]) => Array.isArray(value) && value[0] === resourcePath)
+          if (!pathEntry) {
+            errors.push(`built H3 atlas resource path is missing: ${resourcePath}`)
+          } else {
+            const actualTextureUuid = resourcesConfig.uuids?.[Number(pathEntry[0])]
+            if (actualTextureUuid !== expectedTextureUuid) {
+              errors.push(`built H3 atlas resource UUID ${actualTextureUuid ?? '<missing>'} for ${resourcePath} does not match ${expectedTextureUuid}`)
+            }
           }
         }
       }

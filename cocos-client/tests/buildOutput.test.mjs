@@ -84,6 +84,7 @@ const h3AtlasAssets = [...new Set(
   return {
     atlas,
     sourcePath,
+    sourceMeta: meta,
     uuid: meta.uuid,
     textureUuid: `${compressAssetUuidFixture(textureUuid.split('@')[0])}@${textureUuid.split('@')[1]}`,
     resourcePath: atlas.replace(/\.png$/, '/texture'),
@@ -138,7 +139,7 @@ function createBossVfxImport(asset) {
   ]
 }
 
-function writeBossVfxProjectFixture(root, targetName, mutateMeta) {
+function writeBossVfxProjectFixture(root, targetName = null, mutateMeta = (meta) => meta) {
   writeFixture(
     root,
     'assets/Scripts/Game/PortraitBattleBootstrap.ts.meta',
@@ -155,6 +156,29 @@ function writeBossVfxProjectFixture(root, targetName, mutateMeta) {
       root,
       `assets/resources/Assets/Skills/BossDomain/${asset.name}.png`,
       readFileSync(asset.sourcePath),
+    )
+  }
+}
+
+function writeH3SourceProjectFixture(root, targetAtlas, mutateMeta) {
+  writeBossVfxProjectFixture(root)
+  writeFixture(
+    root,
+    'assets/resources/Data/animation-atlas.json',
+    readFileSync(resolve('assets/resources/Data/animation-atlas.json')),
+  )
+  writeFixture(
+    root,
+    'assets/resources/Data/animation-atlas.json.meta',
+    readFileSync(resolve('assets/resources/Data/animation-atlas.json.meta')),
+  )
+  for (const asset of h3AtlasAssets) {
+    const meta = structuredClone(asset.sourceMeta)
+    writeFixture(root, `assets/resources/${asset.atlas}`, readFileSync(asset.sourcePath))
+    writeFixture(
+      root,
+      `assets/resources/${asset.atlas}.meta`,
+      JSON.stringify(asset.atlas === targetAtlas ? mutateMeta(meta) : meta),
     )
   }
 }
@@ -279,6 +303,13 @@ test('asset UUID compression matches a tracked Cocos config golden vector', () =
     '01tyLS4uZLcbqn2eaZbwFo',
   )
   assert.throws(() => compressAssetUuid('not-a-uuid'), /canonical asset UUID/)
+})
+
+test('asset UUID compression matches a second tracked Cocos config golden vector', () => {
+  assert.equal(
+    compressAssetUuid('95e6d67e-d7ed-4600-a9b4-c1d9223c1c74'),
+    '955tZ+1+1GAKm0wdkiPBx0',
+  )
 })
 
 test('build-output check accepts Cocos production filename hashes', () => {
@@ -563,6 +594,52 @@ for (const [label, source, expected] of [
   })
 }
 
+test('build-output check rejects a layered boss VFX import with the wrong texture reference', () => {
+  const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-wrong-boss-texture-'))
+  const asset = bossVfxAssets.find(({ name }) => name === 'roar_wave')
+  const otherAsset = bossVfxAssets.find(({ name }) => name === 'sweep_arc')
+  const importArtifact = createBossVfxImport(asset)
+  importArtifact[1][0] = createBossVfxImport(otherAsset)[1][0]
+  writeCompleteFixture(buildRoot, validMainIndex, {
+    importOverrides: { [asset.name]: JSON.stringify(importArtifact) },
+  })
+
+  const report = checkCocosBuildOutput({ buildRoot, projectRoot })
+
+  assert.equal(report.ok, false, report.errors.join('\n'))
+  assert.equal(Array.isArray(report.errors), true)
+  assert.equal(
+    report.errors.some((error) => error.includes(asset.name) && error.includes('texture reference')),
+    true,
+    report.errors.join('\n'),
+  )
+})
+
+for (const [label, mutate] of [
+  ['shared property name', (importArtifact) => { importArtifact[2] = ['_wrongTextureSource'] }],
+  ['dependency property index', (importArtifact) => { importArtifact[9] = [1] }],
+]) {
+  test(`build-output check rejects a layered boss VFX import with a wrong ${label} mapping array`, () => {
+    const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-wrong-boss-texture-map-'))
+    const asset = bossVfxAssets.find(({ name }) => name === 'impact_spark')
+    const importArtifact = createBossVfxImport(asset)
+    mutate(importArtifact)
+    writeCompleteFixture(buildRoot, validMainIndex, {
+      importOverrides: { [asset.name]: JSON.stringify(importArtifact) },
+    })
+
+    const report = checkCocosBuildOutput({ buildRoot, projectRoot })
+
+    assert.equal(report.ok, false, report.errors.join('\n'))
+    assert.equal(Array.isArray(report.errors), true)
+    assert.equal(
+      report.errors.some((error) => error.includes(asset.name) && error.includes('_textureSource property mapping')),
+      true,
+      report.errors.join('\n'),
+    )
+  })
+}
+
 for (const [field, mutate] of spriteFramePayloadCorruptions) {
   test(`build-output check rejects stale layered boss VFX import payload field ${field}`, () => {
     const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-stale-boss-import-'))
@@ -714,6 +791,39 @@ test('build-output check rejects a promoted H3 atlas path mapped to the wrong te
   assert.equal(report.ok, false)
   assert.equal(report.errors.some((error) => error.includes('H3 atlas resource UUID') && error.includes(wrong.resourcePath)), true)
 })
+
+for (const [label, mutateUuid] of [
+  ['malformed base UUID', () => 'not-a-uuid@6c48a'],
+  ['missing sub-id', (uuid) => uuid.split('@')[0]],
+  ['extra sub-id separator', (uuid) => `${uuid}@extra`],
+]) {
+  test(`build-output check reports an H3 texture meta ${label} without throwing`, () => {
+    const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-invalid-h3-texture-meta-'))
+    const sourceRoot = mkdtempSync(join(tmpdir(), 'cocos-source-invalid-h3-texture-meta-'))
+    const target = h3AtlasAssets.find(({ atlas }) => atlas.endsWith('/MossWolf/attack.png'))
+    writeCompleteFixture(buildRoot)
+    writeH3SourceProjectFixture(sourceRoot, target.atlas, (meta) => {
+      const textureMeta = Object.values(meta.subMetas).find(({ name }) => name === 'texture')
+      textureMeta.uuid = mutateUuid(textureMeta.uuid)
+      return meta
+    })
+
+    let report
+    assert.doesNotThrow(() => {
+      report = checkCocosBuildOutput({ buildRoot, projectRoot: sourceRoot })
+    })
+    assert.equal(report.ok, false)
+    assert.equal(Array.isArray(report.errors), true)
+    assert.equal(
+      report.errors.some((error) => (
+        error.includes('invalid H3 atlas texture submeta UUID')
+        && error.includes(target.atlas)
+      )),
+      true,
+      report.errors.join('\n'),
+    )
+  })
+}
 
 test('build-output check rejects the Cocos Map iterator spread regression', () => {
   const buildRoot = mkdtempSync(join(tmpdir(), 'cocos-build-iterator-regression-'))
