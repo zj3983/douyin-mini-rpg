@@ -1,0 +1,91 @@
+/* Visual brightness pass: lift scene readability without changing gameplay. */
+
+:root {
+  --visual-panel-bg: rgba(7, 16, 30, 0.92);
+  --visual-panel-bg-soft: rgba(12, 25, 43, 0.78);
+}
+
+/* The canvas contains both world and dungeon scenes. Keep the boost modest so
+   characters and VFX do not wash out while dark AI backgrounds gain detail. */
+canvas {
+  filter: brightness(1.14) saturate(1.04) !important;
+}
+
+/* Lift the overall shell slightly so the UI no longer collapses into black. */
+body {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.20), transparent 34%),
+    linear-gradient(180deg, #0b1a2d 0%, #050a12 100%) !important;
+}
+
+.phone-shell {
+  background: #0d1a28 !important;
+}
+
+.topbar {
+  background: rgba(7, 16, 30, 0.92) !important;
+}
+
+/* Login scene: preserve atmosphere, but recover background and character detail. */
+.profile-login-bg {
+  filter: brightness(1.12) saturate(1.03) !important;
+}
+
+.profile-login-scene::after {
+  background:
+    linear-gradient(180deg, rgba(2, 6, 23, 0) 0%, rgba(2, 6, 23, 0.05) 54%, rgba(2, 6, 23, 0.30) 100%) !important;
+}
+
+.profile-panel {
+  background:
+    radial-gradient(circle at 50% 2%, rgba(250, 204, 21, 0.22), transparent 30%),
+    linear-gradient(180deg, rgba(8, 72, 104, 0.26), transparent 36%),
+    radial-gradient(circle at 12% 82%, rgba(94, 234, 212, 0.20), transparent 30%),
+    rgba(5, 13, 26, 0.82) !important;
+}
+
+/* Dungeon page: the original card art already has dark AI lighting, so avoid
+   adding another heavy blue-black vignette on top. */
+.dungeon-sheet {
+  background:
+    radial-gradient(circle at 20% 0%, rgba(250, 204, 21, 0.17), transparent 34%),
+    radial-gradient(circle at 86% 8%, rgba(94, 234, 212, 0.18), transparent 32%),
+    linear-gradient(180deg, rgba(13, 31, 50, 0.97), rgba(6, 14, 28, 0.97)) !important;
+}
+
+.dungeon-card {
+  background:
+    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--dungeon-color), transparent 74%), transparent 36%),
+    linear-gradient(135deg, color-mix(in srgb, var(--dungeon-bg, #17304a), #07111f 22%), rgba(7, 16, 30, 0.82)) !important;
+}
+
+.dungeon-card-art {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--dungeon-color), transparent 78%), transparent),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.07) 0 1px, transparent 1px 18px),
+    rgba(8, 20, 36, 0.32) !important;
+}
+
+.dungeon-card-art img {
+  filter: brightness(1.14) saturate(1.06) contrast(1.01) !important;
+}
+
+.dungeon-card-art::after {
+  background:
+    linear-gradient(180deg, rgba(2, 6, 23, 0), rgba(2, 6, 23, 0.20)),
+    radial-gradient(circle at 45% 42%, transparent 0 62%, rgba(2, 6, 23, 0.09) 88%) !important;
+}
+
+/* Small information tiles should remain dark enough for white text, but not black. */
+.dungeon-stats span,
+.dungeon-reward-row,
+.dungeon-floor-route,
+.dungeon-drop-row span {
+  background-color: rgba(8, 20, 36, 0.46) !important;
+}
+
+/* Locked content still reads as locked without becoming nearly invisible. */
+.dungeon-card.locked {
+  filter: saturate(0.72) brightness(0.94) !important;
+  opacity: 0.82 !important;
+}
