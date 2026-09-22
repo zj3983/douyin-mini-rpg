@@ -1,0 +1,52 @@
+name: PR checks
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-verify-cocos:
+    name: Test and verify Cocos build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test dependencies
+        run: |
+          npm ci
+          python -m pip install --disable-pip-version-check pillow
+
+      - name: Test account API and web shell
+        run: npm test
+
+      - name: Test Cocos gameplay and asset contracts
+        working-directory: cocos-client
+        run: npm test
+
+      - name: Verify checked Cocos web build
+        working-directory: cocos-client
+        env:
+          COCOS_CREATOR_PATH: prebuilt
+        run: |
+          npm run build:check
+          npm run verify:build-output -- build/web-mobile
