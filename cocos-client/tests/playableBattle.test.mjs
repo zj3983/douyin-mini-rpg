@@ -4,7 +4,14 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import * as swordRuntime from '../tools/homing-sword-runtime.mjs'
 import * as battleRuntime from '../tools/battle-runtime.mjs'
-import * as movementRuntime from '../tools/movement-runtime.mjs'
+import { actionCompleted, actionDuration, markersCrossed } from '../tools/animation-event-runtime.mjs'
+import {
+  createPlayerMotor,
+  requestMove,
+  resetPlayerMotor,
+  stepPlayerMotor,
+  stopPlayerMotor,
+} from '../assets/Scripts/Combat/PlayerMotor.ts'
 import { completeDrain, createStageFlow, recordBossDefeat, recordOrdinaryDefeat } from '../tools/stage-flow-runtime.mjs'
 
 const read = (path) => readFileSync(resolve(path), 'utf8')
@@ -15,28 +22,28 @@ test('accepted boss settlement freezes input movement and queued damage until re
   const flow = createStageFlow(1, 4)
   recordOrdinaryDefeat(flow)
   completeDrain(flow, 4)
-  const movement = movementRuntime.createPlayerMovementState({ x: -210, y: -80 })
+  const movement = createPlayerMotor({ x: -210, y: -80 }, 220)
   const damageGate = battleRuntime.createContactDamageGate({ maxHealth: 220, cooldown: 0 })
   const freeze = battleRuntime.createBattleFreezeState()
 
-  assert.equal(movementRuntime.requestPlayerMovement(movement, { x: 40, y: 200 }), true)
+  assert.equal(requestMove(movement, { x: 40, y: 200 }), true)
   const transition = recordBossDefeat(flow)
   assert.deepEqual(transition, { changed: true, command: 'settle' })
   battleRuntime.freezeBattle(freeze)
-  movementRuntime.stopPlayerMovement(movement)
+  stopPlayerMotor(movement)
 
   assert.equal(battleRuntime.canProcessBattleAction(freeze), false)
-  assert.equal(movementRuntime.requestPlayerMovement(movement, { x: 20, y: 120 }), false)
+  assert.equal(requestMove(movement, { x: 20, y: 120 }), false)
   assert.equal(movement.target, null)
-  const delayedFrame = movementRuntime.advancePlayerMovement(movement, { x: -210, y: -80 }, 220, 0.55)
+  const delayedFrame = stepPlayerMotor(movement, 0.55)
   assert.equal(delayedFrame.distanceMoved, 0)
   if (battleRuntime.canProcessBattleAction(freeze)) battleRuntime.applyDirectDamage(damageGate, 35)
   assert.equal(damageGate.health, 220)
 
   battleRuntime.rebuildBattleFreeze(freeze)
-  movementRuntime.resetPlayerMovement(movement)
+  resetPlayerMotor(movement)
   assert.equal(battleRuntime.canProcessBattleAction(freeze), true)
-  assert.equal(movementRuntime.requestPlayerMovement(movement, { x: 20, y: 120 }), true)
+  assert.equal(requestMove(movement, { x: 20, y: 120 }), true)
   if (battleRuntime.canProcessBattleAction(freeze)) battleRuntime.applyDirectDamage(damageGate, 35)
   assert.equal(damageGate.health, 185)
 })
@@ -52,32 +59,64 @@ test('runtime node pool supports a bounded factory-backed pool', () => {
   assert.match(source, /poolStats\(this\.state\)\.active < this\.capacity/)
 })
 
-test('enemy spawner binds runtime profiles and separates ground, flying, and boss lanes', () => {
+test('enemy spawner binds ordinary and Boss brains to shared live context providers', () => {
   const source = read('assets/Scripts/Game/EnemySpawner.ts')
 
   assert.match(source, /bindEnemy\(enemy: BattleEnemy\)/)
   assert.match(source, /profile\.role === 'flying'/)
   assert.match(source, /profile\.role === 'boss'/)
-  assert.match(source, /enemy\.position = \{ x: spawnX, y: spawnY \}/)
-  assert.match(source, /controller\.bindRuntimeEnemy\(enemy\)/)
+  assert.match(source, /profile\.id === 'moss-wolf'/)
+  assert.match(source, /profile\.id === 'green-wing-moth'/)
+  assert.match(source, /computeOrdinaryEnemySpawn\(this\.battleLayout, visualSize, laneY\)/)
+  assert.match(source, /enemy\.position = \{ x: spawn\.x, y: spawn\.y \}/)
+  assert.match(source, /battleBounds:\s*\(\) => this\.currentBattleBounds\(\)/)
+  assert.match(source, /neighbors:\s*\(\) => this\.livingNeighbors\(\)/)
+  assert.match(source, /if \(kind \|\| isBoss\)[\s\S]*controller\.bindRuntimeEnemy\(enemy,\s*\{[\s\S]*kind: isBoss \? 'bamboo-warden'/)
+  assert.doesNotMatch(source, /createEnemyBrain\([^\n]*bamboo-warden/)
 })
 
-test('enemy movement continuously synchronizes the combat runtime position', () => {
+test('enemy controller builds live brain context and continuously synchronizes movement to runtime position', () => {
   const source = read('assets/Scripts/Game/EnemyController.ts')
 
   assert.match(source, /private runtimeEnemy: BattleEnemy \| null/)
-  assert.match(source, /bindRuntimeEnemy\(enemy: BattleEnemy\)/)
+  assert.match(source, /private brain: EnemyBrainState \| null/)
+  assert.match(source, /private bossBrain: BossBrainState \| null/)
+  assert.match(source, /bindRuntimeEnemy\(enemy: BattleEnemy, binding\?: EnemyBrainBinding\)/)
+  assert.match(source, /createBambooWardenBrain\(enemy\.id,/)
+  assert.match(source, /createEnemyBrain\(binding\.kind, enemy\.id,/)
+  assert.match(source, /stepEnemyBrain\(this\.brain, context, deltaTime\)/)
+  assert.match(source, /player:\s*\{[\s\S]*position:\s*\{ x: liveTarget\.x, y: liveTarget\.y \}/)
+  assert.match(source, /neighbors:\s*this\.brainBinding\.neighbors\(\)/)
+  assert.match(source, /battleBounds:\s*this\.brainBinding\.battleBounds\(\)/)
+  assert.match(source, /case 'move':[\s\S]*this\.brain\?\.position \?\? this\.bossBrain\?\.position/)
   assert.match(source, /this\.runtimeEnemy\.position = \{ x: local\.x, y: local\.y \}/)
   assert.match(source, /setTargetNode\(targetNode: Node, lockY:/)
-  assert.match(source, /this\.targetNode\?\.worldPosition/)
+  assert.match(source, /this\.targetNode\?\.position/)
 })
 
-test('battle controller drives enemy contact damage, stage flow, drops, HUD, and manual clear', () => {
+test('enemy controller forwards active-frame commands and never emits direct player damage', () => {
+  const source = read('assets/Scripts/Game/EnemyController.ts')
+
+  assert.match(source, /mapEnemyAnimationAction\(this\.brain\.kind, command\.action\)/)
+  assert.match(source, /emit\('enemy-semantic-animation', command\.action,/)
+  assert.match(source, /case 'show-telegraph':[\s\S]*emit\('enemy-telegraph',/)
+  assert.match(source, /case 'activate-hitbox':[\s\S]*emit\('enemy-hitbox-active',/)
+  assert.match(source, /case 'spawn-projectile':[\s\S]*emit\('enemy-projectile-spawned',/)
+  assert.doesNotMatch(source, /enemy-attack-player/)
+  assert.doesNotMatch(source, /attackCooldown|cooldownLeft|contactDamage|contact-damage/)
+  assert.doesNotMatch(source, /new Node\([^\n]*(?:wing|limb)/i)
+  assert.match(source, /consumeCommands\(hurtEnemyBrain\(this\.brain, this\.brain\.elapsed\)\)/)
+  assert.match(source, /setCombatPaused\(paused: boolean\)/)
+  assert.match(source, /if \(this\.combatPaused\) return/)
+  assert.match(source, /emit\('enemy-attack-cancelled', this\.runtimeEnemy\.id\)/)
+})
+
+test('battle controller drives resolved enemy damage, stage flow, drops, HUD, and manual clear', () => {
   const source = read('assets/Scripts/Game/BattleRuntimeController.ts')
 
   for (const marker of [
-    "'enemy-attack-player'",
-    "'enemy-boss-skill'",
+    "'enemy-telegraph-presented'",
+    'bossTelegraphPresenter',
     "'soul-orb-picked'",
     'spawnSoulOrb',
     'trySpawnBoss',
@@ -96,6 +135,39 @@ test('battle controller drives enemy contact damage, stage flow, drops, HUD, and
   assert.match(source, /advanceOrdinaryDefeatFlow\(this\.runtime, this\.stageFlow, generation\)/)
   assert.doesNotMatch(source, /pendingEnemyRecycles/)
   assert.doesNotMatch(source, /if \(this\.enemyNodes\.get\(enemyId\) !== enemyNode\) return/)
+})
+
+test('battle controller owns one generation-scoped resolver adapter and all enemy combat listeners', () => {
+  const source = read('assets/Scripts/Game/BattleRuntimeController.ts')
+
+  assert.match(source, /createEnemyCombatResolverAdapter\(1\)/)
+  assert.match(source, /resetEnemyCombatResolverAdapter\(this\.enemyCombatResolver, this\.stageGeneration\)/)
+  assert.match(source, /upsertPlayerCombatActor\(this\.enemyCombatResolver,/)
+  assert.match(source, /upsertEnemyCombatActor\(this\.enemyCombatResolver,/)
+  assert.match(source, /stepEnemyCombatResolverAdapter\(this\.enemyCombatResolver, deltaTime\)/)
+  assert.match(source, /drainEnemyCombatDamage\(this\.enemyCombatResolver\)/)
+  assert.match(source, /drainEnemyTelegraphs\(this\.enemyCombatResolver\)/)
+  assert.match(source, /node\.on\('enemy-telegraph', this\.onEnemyTelegraph, this\)/)
+  assert.match(source, /node\.on\('enemy-hitbox-active', this\.onEnemyHitboxActive, this\)/)
+  assert.match(source, /node\.on\('enemy-projectile-spawned', this\.onEnemyProjectileSpawned, this\)/)
+  assert.match(source, /node\.on\('enemy-attack-cancelled', this\.onEnemyCombatCancelled, this\)/)
+  assert.match(source, /pauseEnemyCombatResolverAdapter\(this\.enemyCombatResolver, this\.stageGeneration, true\)/)
+  assert.match(source, /getComponent\(EnemyController\)\?\.setCombatPaused\(paused\)/)
+  assert.match(source, /node\.off\('enemy-telegraph', this\.onEnemyTelegraph, this\)/)
+  assert.match(source, /removeEnemyCombatActor\(this\.enemyCombatResolver, this\.stageGeneration, enemyId\)/)
+  assert.match(source, /onDestroy\(\)[\s\S]*detachEnemyCombatListeners/)
+  assert.doesNotMatch(source, /enemy-attack-player|onEnemyAttack|applyContactDamage|tickContactDamageGate/)
+})
+
+test('enemy spawner shares one immutable neighbor snapshot across all brains per frame', () => {
+  const source = read('assets/Scripts/Game/EnemySpawner.ts')
+
+  assert.match(source, /private neighborSnapshot: readonly EnemyNeighborSnapshot\[\]/)
+  assert.match(source, /lateUpdate\(\)/)
+  assert.match(source, /this\.rebuildNeighborSnapshot\(\)/)
+  assert.match(source, /neighbors: \(\) => this\.livingNeighbors\(\)/)
+  assert.doesNotMatch(source, /livingNeighbors\(excludedId: number\)/)
+  assert.match(source, /return this\.neighborSnapshot/)
 })
 
 test('boss spawn and settlement are commanded once with delayed generation guards', () => {
@@ -150,7 +222,9 @@ test('pooled enemy lifecycle resets combat and visual state before spawn events'
   assert.match(enemy, /this\.target = null/)
   assert.match(enemy, /this\.targetNode = null/)
   assert.match(enemy, /this\.lockTargetY = false/)
-  assert.match(enemy, /this\.cooldownLeft = 0/)
+  assert.match(enemy, /this\.brain = null/)
+  assert.match(enemy, /this\.brainBinding = null/)
+  assert.match(enemy, /this\.facing = -1/)
   assert.match(visual, /resetForSpawn\(profile:/)
   assert.match(visual, /prepareForPool\(\)/)
   assert.match(visual, /unscheduleAllCallbacks\(\)/)
@@ -172,8 +246,12 @@ test('atlas animator invalidates stale loads and exposes stop and frame-zero res
   assert.match(source, /this\.loadGeneration \+= 1/)
   assert.match(source, /stop\(\)/)
   assert.match(source, /reset\(actionName = 'move'\)/)
+  assert.match(source, /currentFrameSize\(\)/)
+  assert.match(source, /currentFrameAspect\(\)/)
   assert.match(source, /acceptAnimationLoad\(/)
   assert.match(source, /this\.frameIndex = 0/)
+  assert.match(source, /resourcePathForPng\(action\.atlas\)/)
+  assert.match(source, /this\.buildFrames\(texture, this\.actorId, action\.atlas, action\)/)
 })
 
 test('atlas animator owns and reuses cached action frames until destruction', () => {
@@ -187,6 +265,169 @@ test('atlas animator owns and reuses cached action frames until destruction', ()
   assert.match(source, /for \(const frames of this\.frameCache\.values\(\)\)/)
   assert.match(source, /for \(const frame of frames\) frame\.destroy\(\)/)
   assert.match(source, /this\.frameCache\.clear\(\)/)
+})
+
+function advanceAtlasHarness(state, elapsedDelta, callbacks = {}) {
+  const previousElapsed = state.elapsed
+  state.elapsed += elapsedDelta
+  const action = state.action
+  const actorId = state.actorId
+  const generation = state.generation
+  const duration = actionDuration(action.frameCount, action.fps)
+  const crossedMarkers = markersCrossed({
+    previousElapsed,
+    elapsed: state.elapsed,
+    duration,
+    loop: action.loop,
+    markers: action.events,
+    maxCatchUpCycles: 2,
+  })
+  const completed = !state.completionEmitted && actionCompleted({
+    previousElapsed,
+    elapsed: state.elapsed,
+    duration,
+    loop: action.loop,
+  })
+
+  state.frameIndex = Math.min(action.frameCount - 1, Math.floor(state.elapsed * action.fps))
+  if (completed) {
+    state.completionEmitted = true
+    state.playing = false
+  }
+
+  const contextCurrent = () => !state.destroyed
+    && state.nodeValid
+    && state.generation === generation
+    && state.action === action
+
+  for (const marker of crossedMarkers) {
+    callbacks.marker?.({ actorId, action: action.name, marker: marker.name, normalizedTime: marker.at }, state)
+    if (!contextCurrent()) return
+  }
+  if (completed) {
+    callbacks.complete?.({ actorId, action: action.name }, state)
+    if (!contextCurrent()) return
+  }
+}
+
+const atlasHarnessState = (overrides = {}) => ({
+  actorId: 'qinglan',
+  action: {
+    name: 'cast',
+    frameCount: 4,
+    fps: 4,
+    loop: false,
+    events: [{ name: 'release', at: 0.25 }],
+  },
+  generation: 7,
+  elapsed: 0,
+  frameIndex: 0,
+  playing: true,
+  completionEmitted: false,
+  destroyed: false,
+  nodeValid: true,
+  ...overrides,
+})
+
+test('atlas animator transition harness rejects stale writes after marker callbacks', () => {
+  for (const mutate of [
+    (state) => { state.generation += 1; state.action = null; state.playing = false },
+    (state) => { state.generation += 1; state.actorId = 'moss-wolf'; state.action = null },
+    (state) => { state.generation += 1; state.destroyed = true; state.nodeValid = false },
+  ]) {
+    const state = atlasHarnessState({
+      action: {
+        name: 'cast',
+        frameCount: 8,
+        fps: 8,
+        loop: false,
+        events: [{ name: 'first', at: 0.2 }, { name: 'second', at: 0.4 }],
+      },
+    })
+    const seen = []
+    advanceAtlasHarness(state, 0.75, {
+      marker(payload, liveState) {
+        seen.push(payload.marker)
+        mutate(liveState)
+      },
+    })
+    assert.deepEqual(seen, ['first'])
+  }
+})
+
+test('atlas animator transition harness preserves cached play started by completion callback', () => {
+  const state = atlasHarnessState()
+  const cachedAction = { name: 'move', frameCount: 6, fps: 12, loop: true, events: [] }
+
+  advanceAtlasHarness(state, 1, {
+    complete(payload, liveState) {
+      assert.deepEqual(payload, { actorId: 'qinglan', action: 'cast' })
+      liveState.generation += 1
+      liveState.action = cachedAction
+      liveState.elapsed = 0
+      liveState.frameIndex = 0
+      liveState.playing = true
+      liveState.completionEmitted = false
+    },
+  })
+
+  assert.equal(state.action, cachedAction)
+  assert.equal(state.playing, true)
+  assert.equal(state.frameIndex, 0)
+  assert.equal(state.completionEmitted, false)
+})
+
+test('atlas animator transition harness completes one-frame actions and emits every crossed marker', () => {
+  const state = atlasHarnessState({
+    action: {
+      name: 'seal',
+      frameCount: 1,
+      fps: 2,
+      loop: false,
+      events: [{ name: 'form', at: 0.2 }, { name: 'flash', at: 0.45 }, { name: 'release', at: 0.8 }],
+    },
+  })
+  const markers = []
+  let completions = 0
+
+  advanceAtlasHarness(state, 2, {
+    marker: (payload) => markers.push(payload),
+    complete: () => { completions += 1 },
+  })
+
+  assert.deepEqual(markers, [
+    { actorId: 'qinglan', action: 'seal', marker: 'form', normalizedTime: 0.2 },
+    { actorId: 'qinglan', action: 'seal', marker: 'flash', normalizedTime: 0.45 },
+    { actorId: 'qinglan', action: 'seal', marker: 'release', normalizedTime: 0.8 },
+  ])
+  assert.equal(completions, 1)
+  assert.equal(state.frameIndex, 0)
+  assert.equal(state.playing, false)
+})
+
+test('atlas animator snapshots and commits transition state before synchronous emits', () => {
+  const source = read('assets/Scripts/Game/AtlasAnimator.ts')
+
+  assert.match(source, /import \{[\s\S]*actionDuration,[\s\S]*actionCompleted,[\s\S]*markersCrossed,[\s\S]*\} from '\.\.\/Core\/AnimationEventRuntime'/)
+  assert.match(source, /private completionEmitted = false/)
+  assert.match(source, /if \(!this\.playing \|\| !this\.action \|\| this\.frames\.length === 0\) return/)
+  assert.match(source, /const previousElapsed = this\.elapsed/)
+  assert.match(source, /const action = this\.action[\s\S]*const actorId = this\.actorId[\s\S]*const loadGeneration = this\.loadGeneration/)
+  assert.match(source, /markersCrossed\(\{[\s\S]*previousElapsed,[\s\S]*elapsed: this\.elapsed,[\s\S]*duration,[\s\S]*loop: action\.loop,[\s\S]*markers: action\.events \?\? \[\],[\s\S]*maxCatchUpCycles: 2,[\s\S]*\}\)/)
+  assert.match(source, /actionCompleted\(\{[\s\S]*previousElapsed,[\s\S]*elapsed: this\.elapsed,[\s\S]*duration,[\s\S]*loop: action\.loop,[\s\S]*\}\)/)
+  assert.match(source, /this\.node\.emit\('atlas-animation-event', \{[\s\S]*actorId,[\s\S]*action: action\.name,[\s\S]*marker: marker\.name,[\s\S]*normalizedTime: marker\.at,[\s\S]*\}\)[\s\S]*if \(!this\.isUpdateContextCurrent\(action, loadGeneration\)\) return/)
+  assert.match(source, /this\.node\.emit\('atlas-animation-complete', \{[\s\S]*actorId,[\s\S]*action: action\.name,[\s\S]*\}\)[\s\S]*if \(!this\.isUpdateContextCurrent\(action, loadGeneration\)\) return/)
+  assert.match(source, /private isUpdateContextCurrent\(action: AtlasAction, loadGeneration: number\)/)
+
+  const snapshotIndex = source.indexOf('const action = this.action')
+  const frameCommitIndex = source.indexOf('this.frameIndex = nextFrameIndex')
+  const completionCommitIndex = source.indexOf('this.completionEmitted = true')
+  const markerIndex = source.indexOf("this.node.emit('atlas-animation-event'")
+  const completionIndex = source.indexOf("this.node.emit('atlas-animation-complete'")
+  assert.ok(snapshotIndex >= 0 && snapshotIndex < frameCommitIndex)
+  assert.ok(frameCommitIndex >= 0 && frameCommitIndex < markerIndex)
+  assert.ok(completionCommitIndex >= 0 && completionCommitIndex < completionIndex)
+  assert.ok((source.match(/this\.completionEmitted = false/g) ?? []).length >= 4)
 })
 
 test('atlas animator destruction invalidates late loads and checks every Cocos target', () => {
@@ -260,7 +501,7 @@ test('defeat panel retries the current stage after a guarded death presentation'
   const bootstrap = read('assets/Scripts/Game/PortraitBattleBootstrap.ts')
 
   assert.match(runtime, /markBattleAttemptDefeated/)
-  assert.match(runtime, /emit\('player-action-requested', 'death'\)/)
+  assert.match(runtime, /requestPresentationAction\('death', 'battle-runtime'\)/)
   assert.match(runtime, /showDefeat\(this\.stageNumber\)/)
   assert.match(runtime, /retryCurrentStage\(\)/)
   assert.match(panel, /showDefeat\(stageNumber: number\)/)
@@ -268,7 +509,9 @@ test('defeat panel retries the current stage after a guarded death presentation'
   assert.match(panel, /重新挑战/)
   assert.match(panel, /onRetry/)
   assert.match(bootstrap, /onRetry = \(\) => runtime\.retryCurrentStage\(\)/)
-  assert.doesNotMatch(panel, /location\.reload|scheduleOnce/)
+  const defeatBody = panel.match(/showDefeat\(stageNumber: number\) \{([\s\S]*?)\n  \}/)?.[1] ?? ''
+  assert.doesNotMatch(panel, /location\.reload/)
+  assert.doesNotMatch(defeatBody, /scheduleAutoContinue|scheduleOnce/)
 })
 
 test('moving player stops before death and retry restores sword ride without a stale target', () => {
@@ -279,22 +522,22 @@ test('moving player stops before death and retry restores sword ride without a s
 
   assert.match(player, /public stop\(\)/)
   assert.match(player, /public reset\(\)/)
-  assert.match(player, /stopPlayerMovement/)
-  assert.match(player, /resetPlayerMovement/)
+  assert.match(player, /stopPlayerMotor/)
+  assert.match(player, /resetPlayerMotor/)
   const stopBody = player.match(/public stop\(\) \{([\s\S]*?)\n  \}/)?.[1] ?? ''
   assert.doesNotMatch(stopBody, /sword_ride/)
-  assert.match(stopBody, /stopPlayerMovement\(this\.movementState\)/)
+  assert.match(stopBody, /stopPlayerMotor\(this\.motor\)/)
   const resetBody = player.match(/public reset\(\) \{([\s\S]*?)\n  \}/)?.[1] ?? ''
-  assert.match(resetBody, /resetPlayerMovement\(this\.movementState\)/)
-  assert.match(resetBody, /resetPlayerPresentationState\(this\.presentationState\)/)
+  assert.match(resetBody, /resetPlayerMotor\(this\.motor\)/)
+  assert.doesNotMatch(player, /movementBounds|movementEnabled|movementSpawn/)
 
   const stopIndex = runtime.indexOf('this.freezeBattle()')
-  const deathIndex = runtime.indexOf("emit('player-action-requested', 'death')")
+  const deathIndex = runtime.indexOf("requestPresentationAction('death', 'battle-runtime')")
   assert.ok(stopIndex >= 0 && deathIndex > stopIndex)
   assert.match(runtime, /private freezeBattle\(\)[\s\S]*getComponent\(PlayerController\)\?\.stop\(\)/)
   assert.match(runtime, /playerController\?\.reset\(\)/)
-  assert.match(input, /player\.moveTo\(worldTarget\)/)
-  assert.match(bootstrap, /player\.node\.setPosition\(-210, -80, 0\)[\s\S]*addComponent\(PlayerController\)/)
+  assert.match(input, /player\.requestMovementInCoordinateSpace/)
+  assert.match(bootstrap, /player\.node\.setPosition\(-210, -80, 0\)[\s\S]*addComponent\(PlayerController\)[\s\S]*configureMovement\(/)
 })
 
 test('stage changes clear soul nodes and reject stale pickup callbacks', () => {
@@ -315,17 +558,22 @@ test('all failed visual spawns use the generic runtime rollback', () => {
   assert.doesNotMatch(runtime, /rollbackBossSpawn/)
 })
 
-test('battle controller uses a real contact damage gate and zero-health defeat state', () => {
+test('battle controller presents player damage only after resolver damage events', () => {
   const controller = read('assets/Scripts/Game/BattleRuntimeController.ts')
   const enemy = read('assets/Scripts/Game/EnemyController.ts')
 
   assert.match(controller, /createContactDamageGate/)
-  assert.match(controller, /tickContactDamageGate\(this\.damageGate, deltaTime\)/)
-  assert.match(controller, /applyContactDamage\(this\.damageGate, damage\)/)
+  assert.match(controller, /for \(const event of drainEnemyCombatDamage\(this\.enemyCombatResolver\)\)/)
+  assert.match(controller, /this\.applyResolvedPlayerDamage\(event\.amount\)/)
+  assert.match(controller, /private applyResolvedPlayerDamage\(damage: number\)/)
   assert.match(controller, /applyDirectDamage\(this\.damageGate, damage\)/)
+  assert.match(controller, /requestPresentationAction\('hurt', 'battle-runtime-hurt'\)/)
+  assert.match(controller, /completePresentationAction\(token\)/)
+  assert.match(controller, /playerHurtDuration/)
   assert.match(controller, /markPlayerDefeated\(this\.stageFlow\)\.changed/)
   assert.match(controller, /markBattleAttemptDefeated\(this\.attemptState\)/)
-  assert.match(enemy, /role === 'boss' \? 10 : 3/)
+  assert.doesNotMatch(controller, /applyPlayerDamage\(|applyContactDamage|enemy-attack-player/)
+  assert.doesNotMatch(enemy, /enemy-attack-player|role === 'boss' \? 10 : 3/)
 })
 
 test('runtime-created enemies contain sprite animation combat and pool components', () => {
@@ -343,10 +591,39 @@ test('runtime-created enemies contain sprite animation combat and pool component
     assert.equal(source.includes(marker), true, `missing ${marker}`)
   }
   assert.match(source, /bindAnimationManifest\(visual, animator, 'move'\)/)
-  assert.match(source, /createSpriteNode\('Visual', node, 210, 336\)/)
+  assert.match(source, /ORDINARY_ENEMY_FRAME_WIDTH/)
+  assert.match(source, /ORDINARY_ENEMY_FRAME_HEIGHT/)
+  assert.match(read('assets/Scripts/Game/EnemySpawner.ts'), /visual\?\.animator\?\.currentFrameSize\(\)/)
   for (const actorId of ['moss-wolf', 'green-wing-moth', 'bamboo-warden']) {
     assert.equal(manifest.includes(`\"id\": \"${actorId}\"`), true, `missing ${actorId}`)
   }
+})
+
+test('player actor renders above the enemy pool so overlapping monsters cannot hide it', () => {
+  const source = read('assets/Scripts/Game/PortraitBattleBootstrap.ts')
+
+  assert.match(source, /player\.setSiblingIndex\(actorLayer\.children\.length - 1\)/)
+  assert.doesNotMatch(source, /player\.setSiblingIndex\(0\)/)
+})
+
+test('promoted moss wolf attack crosses its single bite contact marker once', () => {
+  const manifest = JSON.parse(read('assets/resources/Data/animation-atlas.json'))
+  const mossWolf = manifest.actors.find((actor) => actor.id === 'moss-wolf')
+  const attack = mossWolf?.actions.find((action) => action.name === 'attack')
+
+  assert.deepEqual(attack?.events, [{ name: 'bite-contact', at: 0.55 }])
+
+  const duration = actionDuration(attack.frames.length, attack.fps)
+  const crossed = markersCrossed({
+    markers: attack.events,
+    previousElapsed: duration * 0.54,
+    elapsed: duration * 0.56,
+    duration,
+    loop: attack.loop,
+    maxCatchUpCycles: 2,
+  })
+
+  assert.deepEqual(crossed, [{ name: 'bite-contact', at: 0.55 }])
 })
 
 test('portrait bootstrap does not special-case the player atlas texture path', () => {
@@ -362,23 +639,28 @@ test('flying sword uses the transparent v2 asset at a long-sword ratio', () => {
   assert.doesNotMatch(source, /Assets\/Skills\/FlyingSword\/sword_projectile\/spriteFrame/)
 })
 
-test('flying sword visual and damage consume the same per-frame swept segment', () => {
+test('flying sword visual and damage consume artifact runtime commands from one authority', () => {
   const controller = read('assets/Scripts/Game/BattleRuntimeController.ts')
   const skill = read('assets/Scripts/Game/FlyingSwordSkill.ts')
+  const artifact = read('assets/Scripts/Combat/ArtifactRuntime.ts')
 
-  assert.match(skill, /const frame = stepHomingSwordCast\(/)
-  assert.match(skill, /applySwordPose\(frame\.presentationSegment\)/)
-  assert.match(skill, /resolveHomingSwordSegment\(this\.homingState, frame\.damageSegment, frame\.step\.previousPhase\)/)
-  assert.match(controller, /points: \[from, to\]/)
+  assert.match(skill, /const commands = stepArtifact\(this\.artifact,/)
+  assert.match(skill, /case 'move-sword':[\s\S]*this\.applySwordPose\(command\)/)
+  assert.match(skill, /case 'resolve-sword-hit':[\s\S]*resolveArtifactSwordHit\(command\.targetId\)/)
+  assert.match(controller, /resolveArtifactSwordHit\(targetId: string\)/)
+  assert.match(artifact, /resolveHits\(path, targets, from, to, phase\)/)
   assert.doesNotMatch(skill, /timeline\.progress|Math\.sin|Math\.cos/)
 })
 
-test('player controller consumes substep movement and emits motion only for displacement', () => {
+test('player controller keeps sword ride presentation while movement emits motion transitions', () => {
   const player = read('assets/Scripts/Game/PlayerController.ts')
-  assert.match(player, /advancePlayerControllerFrame\(/)
-  assert.match(player, /applyPlayerActionEvent\(/)
-  assert.match(player, /if \(frame\.emitMove\)/)
-  assert.match(player, /if \(frame\.action\)/)
+  assert.match(player, /stepPlayerMotor\(this\.motor, deltaTime\)/)
+  assert.match(player, /if \(frame\.distanceMoved > 0\)/)
+  assert.match(player, /this\.syncNodePosition\(frame\.position\)/)
+  assert.match(player, /if \(frame\.distanceMoved > 0\) \{[\s\S]*this\.setMoving\(true\)/)
+  assert.match(player, /if \(frame\.arrived\) this\.setMoving\(false\)/)
+  assert.match(player, /setPlayerMotionPresentation\(this\.motor, moving\)/)
+  assert.doesNotMatch(player, /setPlayerFallbackAction/)
   assert.doesNotMatch(player, /private target: Vec3/)
 })
 
@@ -396,20 +678,22 @@ test('cast hit and death events cannot mutate player movement or create a lunge'
 
 test('sword hover is subtle and always derives from its captured base transform', () => {
   const player = read('assets/Scripts/Game/PlayerController.ts')
-  assert.match(player, /frame\.hoverY/)
-  assert.match(player, /createPlayerPresentationState\(this\.swordMountBasePosition\.y\)/)
+  assert.match(player, /this\.swordMountBasePosition\.set\(this\.swordMount\.position\)/)
+  assert.match(player, /this\.swordMountBasePosition\.y \+ Math\.sin\(this\.hoverElapsed \* 4\) \* 2/)
   assert.doesNotMatch(player, /swordMount\.position\.y \+ yOffset/)
 })
 
-test('flying sword refreshes live targets every frame so dead targets retarget next frame', () => {
+test('flying sword refreshes live artifact targets every frame so dead targets retarget next frame', () => {
   const controller = read('assets/Scripts/Game/BattleRuntimeController.ts')
   const skill = read('assets/Scripts/Game/FlyingSwordSkill.ts')
+  const artifact = read('assets/Scripts/Combat/ArtifactRuntime.ts')
 
   assert.match(controller, /getLivingSwordTargets\(\)[\s\S]*snapshotLivingSwordTargets\(this\.runtime\?\.enemies \?\? \[\]\)/)
-  assert.match(skill, /updateHomingSword\(deltaTime\)/)
-  const updateBody = skill.match(/private updateHomingSword\(deltaTime: number\) \{([\s\S]*?)\n  \}/)?.[1] ?? ''
+  assert.match(skill, /stepArtifact\(this\.artifact,/)
+  const updateBody = skill.match(/update\(deltaTime: number\) \{([\s\S]*?)\n  \}/)?.[1] ?? ''
   assert.match(updateBody, /getLivingSwordTargets\(\)/)
-  assert.match(updateBody, /stepHomingSwordCast\(this\.homingState, deltaTime, targets,/)
+  assert.match(updateBody, /stepArtifact\(this\.artifact,/)
+  assert.match(artifact, /const targets = livingTargets\(context\)/)
   assert.doesNotMatch(skill, /cachedTargets|activeTarget/)
 })
 
@@ -490,11 +774,21 @@ test('soul orbs magnet to the player and publish pickup amount before recycling'
   assert.match(source, /Math\.min\(distance, this\.magnetSpeed \* deltaTime\)/)
 })
 
-test('stage clear panel is compact, click-driven, and has one-line rewards', () => {
+test('stage clear panel is compact, waits for an explicit settlement click, and has one-line rewards', () => {
   const source = read('assets/Scripts/Game/StageClearPanelController.ts')
+  const bootstrap = read('assets/Scripts/Game/PortraitBattleBootstrap.ts')
+  const handleContinueBody = source.match(/private handleContinue\(\) \{([\s\S]*?)\n  \}/)?.[1] ?? ''
 
   assert.match(source, /rewardLabel\.string = \[/)
   assert.match(source, /\.join\('   '\)/)
   assert.match(source, /nextStageButton\?\.node\.on\(Button\.EventType\.CLICK/)
-  assert.doesNotMatch(source, /scheduleOnce/)
+  assert.match(source, /onDestroy\(\) \{[\s\S]*nextStageButton\?\.node\.off\(Button\.EventType\.CLICK, this\.handleContinue, this\)/)
+  assert.match(source, /bindContinueButton\(button: Button\) \{[\s\S]*nextStageButton\?\.node\.off\(Button\.EventType\.CLICK, this\.handleContinue, this\)[\s\S]*button\.node\.on\(Button\.EventType\.CLICK, this\.handleContinue, this\)/)
+  assert.doesNotMatch(source, /autoContinueSeconds|scheduleAutoContinue|handleAutoContinue/)
+  assert.doesNotMatch(source, /\bscheduleOnce\s*\(|\bunschedule\s*\(/)
+  assert.match(handleContinueBody, /if \(this\.mode === 'defeat'\) \{[\s\S]*nextStageButton\.interactable = false[\s\S]*this\.onRetry\?\.\(\)/)
+  assert.match(handleContinueBody, /if \(this\.mode !== 'clear' \|\| !this\.result\) return[\s\S]*nextStageButton\.interactable = false[\s\S]*this\.onContinue\?\.\(this\.result\)[\s\S]*if \(!accepted[\s\S]*nextStageButton\.interactable = true/)
+  assert.match(source, /result\.action\.kind === 'continue'[\s\S]*'区域完成'/)
+  assert.match(bootstrap, /createNode\('StageClearPanel', parent, 472, 214\)/)
+  assert.doesNotMatch(bootstrap, /createNode\('StageClearPanel', parent, 520, 258\)/)
 })

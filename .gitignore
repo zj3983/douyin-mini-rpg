@@ -34,6 +34,8 @@ dist-ssr
 /public/assets/item-icons/*.zip
 Thumbs.db
 **/Thumbs.db
+**/__pycache__/
+*.pyc
 
 # Editor directories and files
 .vscode/*

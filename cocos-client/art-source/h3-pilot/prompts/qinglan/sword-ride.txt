@@ -1,0 +1,21 @@
+subject_definitions:
+<Subject 1> is the adult Chinese MAN in the exact supplied first frame: the same adult male Qinglan sword cultivator with the exact first-frame face and costume, masculine face and body, long dark hair, layered blue-and-white cultivation costume, body proportions, and the single flying sword beneath both feet as one inseparable subject. Keep the same gender; never feminize or change gender.
+
+summary:
+[first-and-last-frame generation] Create one continuous shot, 0.00-5.00s, showing <Subject 1> balancing naturally in place on the flying sword while preserving the exact supplied first frame and stable side-view silhouette.
+
+retention_analysis:
+<Subject 1>: fully_preserved - identity, face, costume, body proportions, long hair, hand count, and the single flying sword remain unchanged throughout the action.
+
+detailed_description:
+Use the supplied image as both first and final conditioning. Begin from the exact supplied first-frame face, costume, anatomy, sword, scale, and pose. After restrained natural motion, return to the exact supplied final pose without freezing early.
+The target video is a clean gameplay sprite-motion study with even neutral lighting and crisp silhouette separation.
+[Shot 1] The 0.00-5.00s timeline uses a locked side-view camera with no camera movement. The feet stay planted on the flying sword throughout. From 0.00-0.15s, <Subject 1> establishes the poised opening balance. At 0.15s, <Subject 1> is in the opening sampled balance pose, and that same sampled balance pose is restored at 4.20s. From 0.15-2.20s, the torso and hips make subtle balance compensation over the sword, with a small controlled bend through the knees. From 2.20-3.40s, a steady implied airflow makes the long hair and robe fabric trail backward while the feet remain fixed and the sword stays level. From 3.40-4.20s, the torso and hips naturally counterbalance back to that sampled balance pose. From 4.20-5.00s, the next seamless balance cycle continues with another slight knee response and living cloth motion rather than a static hold. <Subject 1> remains centered without screen-space displacement, preserving the feeling of flight through body and cloth response rather than movement across the image.
+
+The only referenced visual subject is <Subject 1>; do not introduce any scenery, additional people, additional monsters, added weapons, or effects that obscure <Subject 1>. Use a plain near-white background. The subject remains fully inside frame. Composition guard: the full hair, robe tails, sleeves, both hands, both feet, and the entire sword are always visible. Keep at least 12% clear near-white margin between every part of <Subject 1> and every canvas edge throughout. No crop, no zoom, and no camera movement; maintain stable subject scale and facing. Use no cuts, zoom, pan, tilt, or shake. Identity guards: no costume change, no face change, no extra or missing hands, no extra limbs and no missing limbs, no extra swords, and the flying sword is never removed. Motion guards: no walking, no running, no body lunge, and no stepping.
+
+overall_soundscape:
+No dialogue and no generated diegetic sound; audio will be discarded downstream.
+
+non_diegetic_music:
+No music; audio will be discarded downstream.

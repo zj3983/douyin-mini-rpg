@@ -13,6 +13,11 @@ export interface AnimationAdvanceInput {
   updateInterval: number
 }
 
+export interface AnimationTimeConsumptionInput {
+  accumulatedTime: number
+  updateInterval: number
+}
+
 export function frameIndexAtTime(input: FrameIndexInput) {
   const safeFrameCount = Math.max(1, Math.floor(input.frameCount))
   const safeFps = Math.max(1, input.framesPerSecond)
@@ -24,6 +29,14 @@ export function shouldAdvanceAnimation(input: AnimationAdvanceInput) {
   if (!input.visible) return false
   if (input.distanceToCamera > input.maxActiveDistance) return false
   return input.accumulatedTime >= input.updateInterval
+}
+
+export function consumeAnimationTime(input: AnimationTimeConsumptionInput) {
+  const shouldAdvance = input.accumulatedTime >= input.updateInterval
+  return {
+    shouldAdvance,
+    elapsedDelta: shouldAdvance ? Math.max(0, input.accumulatedTime) : 0,
+  }
 }
 
 export function resourcePathForPng(assetPath: string) {

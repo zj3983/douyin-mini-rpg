@@ -30,6 +30,12 @@ jobs:
         with:
           python-version: '3.12'
 
+      # Animation asset tests require ffmpeg on the runner.
+      - name: Install system test dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg
+
       - name: Install image-test dependency
         run: python -m pip install --disable-pip-version-check pillow
 

@@ -11,6 +11,14 @@ export function shouldAdvanceAnimation({ visible, distanceToCamera, maxActiveDis
   return accumulatedTime >= updateInterval
 }
 
+export function consumeAnimationTime({ accumulatedTime, updateInterval }) {
+  const shouldAdvance = accumulatedTime >= updateInterval
+  return {
+    shouldAdvance,
+    elapsedDelta: shouldAdvance ? Math.max(0, accumulatedTime) : 0,
+  }
+}
+
 export function resourcePathForPng(assetPath) {
   const resourcePath = assetPath.replace(/\.png$/, '')
   return resourcePath.endsWith('/texture') ? resourcePath : `${resourcePath}/texture`

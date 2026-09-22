@@ -27,10 +27,13 @@ export interface BattleRuntime {
   enemies: BattleEnemy[]
   soulDrops: Array<{ enemyId: number; amount: number }>
   bossSpawned: boolean
-  bossSkillTimer: number
-  bossSkillInterval: number
   stageCleared: boolean
   stageClearClaimed: boolean
+}
+
+export interface BattleRuntimeLimits {
+  defeatTarget: number
+  maxAlive: number
 }
 
 export interface DamageEvent {
@@ -40,41 +43,46 @@ export interface DamageEvent {
   position: { x: number; y: number }
 }
 
-export interface BossSkillEvent {
-  enemyId: number
-  skillId: string
-  name: string
-  damage: number
-  position: { x: number; y: number }
-}
-
 export interface StageClearReward {
   spiritStones: number
-  artifactEssence: number
-  dungeonPass: { id: string; name: string }
+  dungeonPasses: number
 }
+
+export type StageClearAction =
+  | { readonly kind: 'continue'; readonly stageId: number }
+  | { readonly kind: 'region-complete' }
 
 export interface StageClearResult {
   title: string
   stageId: number
-  nextStageId: number
+  action: StageClearAction
   reward: StageClearReward
 }
 
-export function createBattleRuntime(stage: StageProfile, heroAttack: number): BattleRuntime {
+export function createBattleRuntime(
+  stage: StageProfile,
+  heroAttack: number,
+  limits?: BattleRuntimeLimits,
+): BattleRuntime {
+  const defeatTarget = limits?.defeatTarget ?? 12
+  const maxAlive = limits?.maxAlive ?? 18
+  if (!Number.isSafeInteger(defeatTarget) || defeatTarget <= 0) {
+    throw new RangeError('defeatTarget must be a positive safe integer.')
+  }
+  if (!Number.isSafeInteger(maxAlive) || maxAlive <= 0 || maxAlive > 18) {
+    throw new RangeError('maxAlive must be a positive safe integer no greater than 18.')
+  }
   return {
     stage,
     heroAttack,
     spawnTimer: 0,
     spawnInterval: 1,
-    defeatTarget: 12,
-    maxAliveEnemies: 18,
+    defeatTarget,
+    maxAliveEnemies: maxAlive,
     nextEnemyId: 1,
     enemies: [],
     soulDrops: [],
     bossSpawned: false,
-    bossSkillTimer: 0,
-    bossSkillInterval: 2.6,
     stageCleared: false,
     stageClearClaimed: false,
   }
@@ -339,26 +347,6 @@ export function spawnBoss(runtime: BattleRuntime) {
   return { ok: true, enemy }
 }
 
-export function tickBossSkill(runtime: BattleRuntime, deltaTime: number): { ok: boolean; event: BossSkillEvent | null } {
-  const boss = runtime.enemies.find((enemy) => enemy.profile.role === 'boss' && enemy.alive)
-  if (!boss || runtime.stageCleared) return { ok: false, event: null }
-
-  runtime.bossSkillTimer += deltaTime
-  if (runtime.bossSkillTimer + 0.000001 < runtime.bossSkillInterval) return { ok: false, event: null }
-
-  runtime.bossSkillTimer = 0
-  return {
-    ok: true,
-    event: {
-      enemyId: boss.id,
-      skillId: `${boss.profile.theme}-boss-skill`,
-      name: boss.profile.theme === 'flame-cave' ? '地火裂涌' : boss.profile.theme === 'starlight-ruin' ? '星陨压境' : '妖气冲袭',
-      damage: boss.profile.theme === 'flame-cave' ? 18 : boss.profile.theme === 'starlight-ruin' ? 16 : 14,
-      position: { ...boss.position },
-    },
-  }
-}
-
 export function claimStageClear(
   runtime: BattleRuntime,
 ): { ok: boolean; reason: 'not-cleared' | 'already-claimed' | null; result: StageClearResult | null } {
@@ -367,23 +355,18 @@ export function claimStageClear(
 
   runtime.stageClearClaimed = true
   const stageId = runtime.stage.id
-  const passCycle = [
-    { id: 'mist-bamboo-secret', name: '青竹令' },
-    { id: 'flame-cave', name: '赤焰符券' },
-    { id: 'soul-bell-valley', name: '摄魂残铃' },
-    { id: 'star-gate-ruins', name: '星门残券' },
-  ]
   return {
     ok: true,
     reason: null,
     result: {
       title: `第${stageId}关突破`,
       stageId,
-      nextStageId: stageId + 1,
+      action: stageId === 10
+        ? { kind: 'region-complete' }
+        : { kind: 'continue', stageId: stageId + 1 },
       reward: {
-        spiritStones: 180 + stageId * 20,
-        artifactEssence: 2 + stageId,
-        dungeonPass: passCycle[(stageId - 1) % passCycle.length],
+        spiritStones: 80,
+        dungeonPasses: 1,
       },
     },
   }
@@ -439,7 +422,6 @@ export function rollbackSpawnedEnemy(runtime: BattleRuntime, enemyId: number) {
   const [enemy] = runtime.enemies.splice(index, 1)
   if (enemy.profile.role !== 'boss') return true
   runtime.bossSpawned = false
-  runtime.bossSkillTimer = 0
   return true
 }
 

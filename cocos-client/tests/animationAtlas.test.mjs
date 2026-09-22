@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const manifestPath = resolve('assets/Data/animation-atlas.json')
@@ -18,6 +18,13 @@ const monsterIds = [
   'void-wing-spirit',
   'meteor-guardian',
 ]
+const verticalSliceActorIds = new Set([
+  'qinglan-sword-cultivator',
+  'moss-wolf',
+  'green-wing-moth',
+  'bamboo-warden',
+  'mist-bamboo-emperor',
+])
 
 function pngSize(assetPath) {
   const buffer = readFileSync(resolve('assets/resources', assetPath))
@@ -33,9 +40,9 @@ function actorFolder(actorId) {
 
 test('all monsters use canonical 1024x1280 actor atlases', () => {
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
-  const monsters = manifest.actors.filter(({ type }) => type === 'monster')
+  const monsters = manifest.actors.filter(({ type, id }) => type === 'monster' && !verticalSliceActorIds.has(id))
 
-  assert.deepEqual(monsters.map(({ id }) => id).sort(), [...monsterIds].sort())
+  assert.deepEqual(monsters.map(({ id }) => id).sort(), monsterIds.filter((id) => !verticalSliceActorIds.has(id)).sort())
   for (const actor of monsters) {
     const expectedAtlas = `Assets/ActorAtlases/${actorFolder(actor.id)}/atlas.png`
     assert.equal(actor.atlas, expectedAtlas)
@@ -48,7 +55,7 @@ test('all monsters use canonical 1024x1280 actor atlases', () => {
 test('monster actor atlases contain visible art on transparent canvases', async () => {
   const { readPngRgba } = await import('../tools/png-alpha-runtime.mjs')
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
-  const monsters = manifest.actors.filter(({ type }) => type === 'monster')
+  const monsters = manifest.actors.filter(({ type, id }) => type === 'monster' && !verticalSliceActorIds.has(id))
 
   for (const actor of monsters) {
     const image = readPngRgba(resolve('assets/resources', actor.atlas))
@@ -69,7 +76,7 @@ test('source and resources animation manifests stay deeply identical', () => {
   assert.deepEqual(resourceManifest, sourceManifest)
 })
 
-test('animation atlas manifest uses one texture per actor', () => {
+test('animation atlas manifest resolves legacy and vertical-slice textures', () => {
   assert.equal(existsSync(manifestPath), true)
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
 
@@ -78,7 +85,25 @@ test('animation atlas manifest uses one texture per actor', () => {
   for (const actor of manifest.actors) {
     assert.equal(Boolean(actor.atlas), true)
     assert.equal(existsSync(resolve('assets/resources', actor.atlas)), true, `${actor.atlas} should exist`)
-    assert.equal(actor.actions.every((action) => action.atlas === actor.atlas), true)
+    if (verticalSliceActorIds.has(actor.id)) {
+      assert.equal(actor.actions.every((action) => existsSync(resolve('assets/resources', action.atlas))), true)
+    } else {
+      assert.equal(actor.actions.every((action) => action.atlas === actor.atlas), true)
+    }
+  }
+})
+
+test('vertical-slice actor folders contain no undeclared PNG atlases', () => {
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+
+  for (const actor of manifest.actors.filter(({ id }) => verticalSliceActorIds.has(id))) {
+    const folder = actorFolder(actor.id)
+    const declared = [...new Set(actor.actions.map(({ atlas }) => atlas.split('/').at(-1)))].sort()
+    const actual = readdirSync(resolve('assets/resources/Assets/ActorAtlases', folder))
+      .filter((name) => name.endsWith('.png'))
+      .sort()
+
+    assert.deepEqual(actual, declared, `${actor.id} should not ship undeclared PNG atlases`)
   }
 })
 
@@ -86,9 +111,8 @@ test('animation atlas actions define frame rects, playback order, and loop rules
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
 
   for (const actor of manifest.actors) {
-    const atlasSize = pngSize(actor.atlas)
-
     for (const action of actor.actions) {
+      const atlasSize = pngSize(action.atlas ?? actor.atlas)
       assert.equal(action.frames.length > 0, true)
       assert.equal(action.order.length > 0, true)
       assert.equal(action.order.every((index) => Number.isInteger(index) && index >= 0 && index < action.frames.length), true)

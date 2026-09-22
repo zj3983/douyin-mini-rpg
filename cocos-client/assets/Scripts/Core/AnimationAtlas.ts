@@ -1,3 +1,5 @@
+import type { AnimationEventMarker } from './AnimationEventRuntime'
+
 export interface AtlasFrameRect {
   x: number
   y: number
@@ -12,6 +14,7 @@ export interface AtlasAction {
   loop: boolean
   order: number[]
   frames: AtlasFrameRect[]
+  events?: AnimationEventMarker[]
 }
 
 export interface ActorAtlas {

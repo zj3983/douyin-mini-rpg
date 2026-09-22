@@ -1,0 +1,21 @@
+subject_definitions:
+<Subject 1> is the moss wolf in the exact supplied first frame. Preserve the same species, same low quadrupedal silhouette, green moss-like markings, angular head shape, long tail shape, body proportions, and four complete legs. There are no extra or missing legs or limbs.
+
+summary:
+[first-frame generation] Create one continuous shot, 0.00-5.00s, showing <Subject 1> lose balance, collapse under control, and finish as a still, fully visible defeated silhouette while retaining the exact supplied first frame identity.
+
+retention_analysis:
+<Subject 1>: fully_preserved - identity, species silhouette, markings, head shape, tail shape, body proportions, and exactly four legs remain unchanged and visible throughout the action.
+
+detailed_description:
+Begin from the exact supplied first-frame species, silhouette, markings, anatomy, scale, facing, and pose. Preserve that identity through the full motion; the ending is motion-authored and is not conditioned by a supplied final frame.
+The target video is a clean gameplay sprite-motion study with even neutral lighting and crisp silhouette separation.
+[Shot 1] The 0.00-5.00s timeline uses a locked side-view camera with no camera movement. From 0.00-0.80s, <Subject 1> holds the quadrupedal stance and begins to lose balance as the forelegs soften and the torso tilts. From 0.80-2.50s, the wolf enters a controlled collapse: the forequarters lower first, the hindquarters fold next, and all four attached legs remain anatomically connected to the torso. From 2.50-3.80s, the chest, hips, head, and tail settle onto the implied ground plane without bouncing, reversing direction, or sliding out of frame. From 3.80-5.00s, the final still silhouette holds completely motionless. The body remains visible and does not disappear, dissolve, fade, or sink away.
+
+The only referenced visual subject is <Subject 1>; do not introduce any scenery, additional people, additional monsters, added weapons, or effects that obscure <Subject 1>. Use a plain near-white background. Composition guard: the full horns, full ears, full snout, full fur silhouette, full torso, all four legs, all four paws, and full tail are always visible. Keep at least 12% clear near-white margin between every part of <Subject 1> and every canvas edge throughout. No crop, no zoom, and no camera movement; maintain stable subject scale and facing. The subject remains fully inside frame with stable subject scale and facing. Use no cuts, zoom, pan, tilt, or shake. Anatomy and motion guards: preserve exactly four legs, the species silhouette, markings, head shape, and tail shape; no detached limbs, no bipedal motion, no direction reversal, no extra or missing legs, and no frame exit.
+
+overall_soundscape:
+No dialogue and no generated diegetic sound; audio will be discarded downstream.
+
+non_diegetic_music:
+No music; audio will be discarded downstream.

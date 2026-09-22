@@ -6,8 +6,12 @@
   "files": [],
   "subMetas": {},
   "userData": {
-    "compressionType": {},
-    "isRemoteBundle": {},
+    "compressionType": {
+      "bytedance-mini-game": "zip"
+    },
+    "isRemoteBundle": {
+      "bytedance-mini-game": true
+    },
     "isBundle": true,
     "bundleConfigID": "default",
     "bundleName": "resources",

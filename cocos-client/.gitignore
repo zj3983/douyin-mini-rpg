@@ -5,3 +5,7 @@ profiles/
 build/
 node_modules/
 tmp/
+
+artifacts/h3-animation-pilot/*/videos/
+artifacts/h3-animation-pilot/*/frames-raw/
+artifacts/h3-animation-pilot/*/jobs.json

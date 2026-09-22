@@ -10,7 +10,6 @@ import {
   segmentHitEnemies,
   segmentHitEnemiesAlongPath,
   spawnBoss,
-  tickBossSkill,
 } from '../tools/battle-runtime.mjs'
 import * as battleRuntimeModule from '../tools/battle-runtime.mjs'
 import { createStageFlow } from '../tools/stage-flow-runtime.mjs'
@@ -361,21 +360,6 @@ test('generic spawned enemy rollback removes ordinary and boss runtime entries',
   assert.equal(spawnBoss(bossRuntime).ok, true)
 })
 
-test('boss casts timed skill events while alive', () => {
-  const runtime = createBattleRuntime({ stageId: 3, heroAttack: 80 })
-  defeatOrdinaryEnemies(runtime)
-  const boss = spawnBoss(runtime).enemy
-
-  const early = tickBossSkill(runtime, 1.2)
-  const cast = tickBossSkill(runtime, 1.4)
-
-  assert.equal(early.ok, false)
-  assert.equal(cast.ok, true)
-  assert.equal(cast.event.enemyId, boss.id)
-  assert.equal(cast.event.skillId, 'flame-cave-boss-skill')
-  assert.equal(cast.event.damage, 18)
-})
-
 test('defeating the world boss clears the stage', () => {
   const runtime = createBattleRuntime({ stageId: 1, heroAttack: 260 })
   defeatOrdinaryEnemies(runtime)
@@ -401,12 +385,27 @@ test('stage clear reward can only be claimed once after boss defeat', () => {
 
   assert.equal(first.ok, true)
   assert.equal(first.result.stageId, 4)
-  assert.equal(first.result.nextStageId, 5)
-  assert.equal(first.result.reward.spiritStones, 260)
-  assert.equal(first.result.reward.artifactEssence, 6)
-  assert.equal(first.result.reward.dungeonPass.name, '星门残券')
+  assert.deepEqual(first.result.action, { kind: 'continue', stageId: 5 })
+  assert.equal(first.result.reward.spiritStones, 80)
+  assert.equal(first.result.reward.dungeonPasses, 1)
+  assert.equal('artifactEssence' in first.result.reward, false)
   assert.equal(second.ok, false)
   assert.equal(second.reason, 'already-claimed')
+})
+
+test('stage ten clear is terminal and never advertises an eleventh stage', () => {
+  const runtime = createBattleRuntime({ stageId: 10, heroAttack: 520 })
+  defeatOrdinaryEnemies(runtime)
+  spawnBoss(runtime)
+  applyFlyingSwordHit(runtime, { pierce: 1, damageScale: 1 })
+
+  const claim = claimStageClear(runtime)
+
+  assert.equal(claim.ok, true)
+  assert.equal(claim.result.stageId, 10)
+  assert.deepEqual(claim.result.action, { kind: 'region-complete' })
+  assert.equal('nextStageId' in claim.result, false)
+  assert.doesNotMatch(JSON.stringify(claim.result), /11/)
 })
 
 test('first-stage contact damage is limited but sustained boss pressure can still defeat the player', () => {

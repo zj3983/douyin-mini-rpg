@@ -1,9 +1,47 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
+import ts from 'typescript'
 
 import { StageBackgroundRuntime } from '../tools/stage-background-runtime.mjs'
 import { stageVisualFor } from '../tools/stage-visual-catalog.mjs'
+
+const moduleUrl = (source) => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
+
+async function loadStageResourceController() {
+  const ccUrl = moduleUrl(`
+    export class Asset {}
+    export class SpriteFrame {}
+    export class Texture2D {}
+    export const resources = { load() {} }
+  `)
+  const runtimeUrl = moduleUrl(`
+    export class StageResourceRuntime {
+      constructor() {}
+      activate() { return true }
+      prefetch(plan) {
+        globalThis.__stageResourcePrefetches.push(plan.stageId)
+        return true
+      }
+      destroy() {}
+    }
+  `)
+  const catalogUrl = moduleUrl(`
+    export const WORLD_STAGE_COUNT = 10
+    export const stageResourcePlanFor = (stageId) => ({ stageId, assets: [] })
+  `)
+  const backgroundUrl = moduleUrl('export class StageBackgroundController {}')
+  const source = readFileSync(new URL('../assets/Scripts/Game/StageResourceController.ts', import.meta.url), 'utf8')
+  let javascript = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+  }).outputText
+  javascript = javascript
+    .replace("from 'cc'", `from '${ccUrl}'`)
+    .replace("from '../Core/StageResourceRuntime'", `from '${runtimeUrl}'`)
+    .replace("from '../Core/StageVisualCatalog'", `from '${catalogUrl}'`)
+    .replace("from './StageBackgroundController'", `from '${backgroundUrl}'`)
+  return import(moduleUrl(javascript))
+}
 
 function createHarness() {
   const pending = new Map()
@@ -149,6 +187,26 @@ test('destroy releases active and resolved pending assets once, then releases la
   assert.equal(new Set(harness.released.map(({ resource: value }) => value)).size, harness.released.length)
 })
 
+test('stage resource controller prefetches stages 9 and 10 then stops at the catalog boundary', async () => {
+  const { StageResourceController } = await loadStageResourceController()
+  globalThis.__stageResourcePrefetches = []
+  try {
+    const controller = new StageResourceController({ showStage() {} })
+
+    assert.equal(controller.prefetchNext(8), true)
+    assert.equal(controller.prefetchNext(9), true)
+    assert.equal(controller.prefetchNext(10), false)
+    assert.deepEqual(globalThis.__stageResourcePrefetches, [9, 10])
+  } finally {
+    delete globalThis.__stageResourcePrefetches
+  }
+})
+
+test('stage catalog owns the final prefetch boundary', async () => {
+  const catalog = await import('../tools/stage-visual-catalog.mjs')
+  assert.equal(catalog.WORLD_STAGE_COUNT, 10)
+})
+
 test('stage resource controller delegates background first and owns only its resource runtime', () => {
   const source = readFileSync(new URL('../assets/Scripts/Game/StageResourceController.ts', import.meta.url), 'utf8')
   const activateBody = source.match(/activate\(stageId: number\)[\s\S]*?\n  }/)?.[0] ?? ''
@@ -159,7 +217,9 @@ test('stage resource controller delegates background first and owns only its res
   assert.match(source, /asset\.kind === 'spriteFrame' \? SpriteFrame : Texture2D/)
   assert.match(source, /loaded\.addRef\(\)/)
   assert.match(source, /release: \(_asset, resource\) => resource\.decRef\(\)/)
-  assert.match(source, /if \(stageId < 1 \|\| stageId >= 4\) return false/)
+  assert.match(source, /WORLD_STAGE_COUNT/)
+  assert.match(source, /if \(stageId < 1 \|\| stageId >= WORLD_STAGE_COUNT\) return false/)
+  assert.doesNotMatch(source, /stageId >= 8/)
   assert.match(source, /prefetch\(stageResourcePlanFor\(stageId \+ 1\)\)/)
   assert.match(source, /destroy\(\)[\s\S]*this\.runtime\.destroy\(\)/)
   assert.doesNotMatch(source, /backgroundController\.destroy\(\)/)

@@ -35,11 +35,11 @@ test('TypeScript and executable mirrors have behavioral parity', async () => {
   assert.deepEqual(cases.map(args => tsRuntime.updateEnemyFacing(...args)), cases.map(args => esmRuntime.updateEnemyFacing(...args)))
 })
 
-test('controller wiring uses live world positions and emits facing without scaling the root', async () => {
+test('controller consumes brain facing commands without scaling the root', async () => {
   const enemy = await readFile(new URL('../assets/Scripts/Game/EnemyController.ts', import.meta.url), 'utf8')
   const visual = await readFile(new URL('../assets/Scripts/Game/EnemyVisualController.ts', import.meta.url), 'utf8')
   assert.match(enemy, /@property\s+facingDeadZone\s*=/)
-  assert.match(enemy, /updateEnemyFacing\([^,]+,\s*current\.x,\s*liveTarget\.x,\s*this\.facingDeadZone\)/)
+  assert.match(enemy, /case 'face':[\s\S]*command\.direction/)
   assert.match(enemy, /this\.node\.emit\(['"]enemy-facing['"],\s*this\.facing\)/)
   assert.doesNotMatch(enemy, /this\.node\.setScale/)
   assert.match(visual, /this\.node\.on\(['"]enemy-facing['"],\s*this\.onEnemyFacing/)

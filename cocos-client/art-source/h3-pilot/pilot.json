@@ -1,0 +1,164 @@
+{
+  "version": 1,
+  "bridgeUrl": "http://127.0.0.1:8900",
+  "model": "minimax-h3-fl2v-local",
+  "width": 768,
+  "height": 1344,
+  "duration": 5,
+  "fps": 24,
+  "jobs": [
+    {
+      "id": "qinglan-idle",
+      "actor": "qinglan",
+      "action": "idle",
+      "conditioning": "first-last",
+      "reference": "art-source/h3-pilot/references/qinglan-h3.png",
+      "prompt": "art-source/h3-pilot/prompts/qinglan/idle.txt",
+      "seed": 3082001,
+      "video": "qinglan/idle.mp4",
+      "outputs": [
+        {
+          "action": "idle",
+          "samples": [0.2, 0.8, 1.4, 2.0, 2.6, 3.2, 3.8, 4.4]
+        }
+      ]
+    },
+    {
+      "id": "qinglan-sword-ride",
+      "actor": "qinglan",
+      "action": "sword_ride",
+      "conditioning": "first-last",
+      "reference": "art-source/h3-pilot/references/qinglan-motion-h3.png",
+      "prompt": "art-source/h3-pilot/prompts/qinglan/sword-ride.txt",
+      "seed": 3082002,
+      "video": "qinglan/sword-ride.mp4",
+      "outputs": [
+        {
+          "action": "sword_ride",
+          "samples": [0.15, 0.6, 1.05, 1.5, 1.95, 2.4, 2.85, 3.3, 3.75, 4.2]
+        }
+      ]
+    },
+    {
+      "id": "qinglan-hand-seal",
+      "actor": "qinglan",
+      "action": "hand_seal",
+      "conditioning": "first-frame",
+      "reference": "art-source/h3-pilot/references/qinglan-h3.png",
+      "prompt": "art-source/h3-pilot/prompts/qinglan/hand-seal.txt",
+      "seed": 3082003,
+      "video": "qinglan/hand-seal.mp4",
+      "outputs": [
+        {
+          "action": "hand_seal",
+          "samples": [0.2, 0.55, 0.9, 1.25, 1.6, 2.0, 2.4, 2.85, 3.35, 4.0]
+        }
+      ]
+    },
+    {
+      "id": "qinglan-hurt",
+      "actor": "qinglan",
+      "action": "hurt",
+      "conditioning": "first-frame",
+      "reference": "art-source/h3-pilot/references/qinglan-motion-h3.png",
+      "prompt": "art-source/h3-pilot/prompts/qinglan/hurt.txt",
+      "seed": 3082004,
+      "video": "qinglan/hurt.mp4",
+      "outputs": [
+        {
+          "action": "hurt",
+          "samples": [0.2, 0.55, 0.9, 1.3, 1.85, 4.6]
+        }
+      ]
+    },
+    {
+      "id": "moss-wolf-idle",
+      "actor": "moss-wolf",
+      "action": "idle",
+      "matteCleanup": "dark-subject-white-matte",
+      "conditioning": "first-last",
+      "reference": "art-source/h3-pilot/references/moss-wolf-motion-h3.png",
+      "prompt": "art-source/h3-pilot/prompts/moss-wolf/idle.txt",
+      "seed": 3082005,
+      "video": "moss-wolf/idle.mp4",
+      "outputs": [
+        {
+          "action": "idle",
+          "samples": [0.25, 1.0, 1.75, 2.5, 3.25, 4.0]
+        }
+      ]
+    },
+    {
+      "id": "moss-wolf-run",
+      "actor": "moss-wolf",
+      "action": "run",
+      "matteCleanup": "dark-subject-white-matte",
+      "conditioning": "first-last",
+      "reference": "art-source/h3-pilot/references/moss-wolf-motion-h3.png",
+      "prompt": "art-source/h3-pilot/prompts/moss-wolf/run.txt",
+      "seed": 3082006,
+      "video": "moss-wolf/run.mp4",
+      "outputs": [
+        {
+          "action": "move",
+          "samples": [0.2, 0.65, 1.1, 1.55, 2.0, 2.45, 2.9, 3.35]
+        }
+      ]
+    },
+    {
+      "id": "moss-wolf-bite-lunge",
+      "actor": "moss-wolf",
+      "action": "bite-lunge",
+      "matteCleanup": "dark-subject-white-matte",
+      "conditioning": "first-frame",
+      "reference": "art-source/h3-pilot/references/moss-wolf-motion-h3.png",
+      "prompt": "art-source/h3-pilot/prompts/moss-wolf/bite-lunge.txt",
+      "seed": 3082007,
+      "video": "moss-wolf/bite-lunge.mp4",
+      "outputs": [
+        {
+          "action": "telegraph",
+          "samples": [0.2, 0.55, 0.9, 1.2]
+        },
+        {
+          "action": "attack",
+          "samples": [1.4, 1.65, 1.9, 2.15, 2.45, 2.8, 3.2, 3.7]
+        }
+      ]
+    },
+    {
+      "id": "moss-wolf-hurt",
+      "actor": "moss-wolf",
+      "action": "hurt",
+      "matteCleanup": "dark-subject-white-matte",
+      "conditioning": "first-frame",
+      "reference": "art-source/h3-pilot/references/moss-wolf-motion-h3.png",
+      "prompt": "art-source/h3-pilot/prompts/moss-wolf/hurt.txt",
+      "seed": 3082008,
+      "video": "moss-wolf/hurt.mp4",
+      "outputs": [
+        {
+          "action": "hurt",
+          "samples": [0.2, 0.6, 3.8, 4.5]
+        }
+      ]
+    },
+    {
+      "id": "moss-wolf-death",
+      "actor": "moss-wolf",
+      "action": "death",
+      "matteCleanup": "dark-subject-white-matte",
+      "conditioning": "first-frame",
+      "reference": "art-source/h3-pilot/references/moss-wolf-motion-h3.png",
+      "prompt": "art-source/h3-pilot/prompts/moss-wolf/death.txt",
+      "seed": 3082009,
+      "video": "moss-wolf/death.mp4",
+      "outputs": [
+        {
+          "action": "death",
+          "samples": [0.2, 0.6, 1.0, 1.4, 1.9, 2.5, 3.2, 4.0]
+        }
+      ]
+    }
+  ]
+}

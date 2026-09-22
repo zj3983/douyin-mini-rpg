@@ -22,8 +22,6 @@ export function createBattleRuntime({ stageId, heroAttack }) {
     enemies: [],
     soulDrops: [],
     bossSpawned: false,
-    bossSkillTimer: 0,
-    bossSkillInterval: 2.6,
     stageCleared: false,
     stageClearClaimed: false,
   }
@@ -118,49 +116,24 @@ export function spawnBoss(runtime) {
   return { ok: true, enemy }
 }
 
-export function tickBossSkill(runtime, deltaTime) {
-  const boss = runtime.enemies.find((enemy) => enemy.role === 'boss' && enemy.alive)
-  if (!boss || runtime.stageCleared) return { ok: false, event: null }
-
-  runtime.bossSkillTimer += deltaTime
-  if (runtime.bossSkillTimer + 0.000001 < runtime.bossSkillInterval) return { ok: false, event: null }
-
-  runtime.bossSkillTimer = 0
-  return {
-    ok: true,
-    event: {
-      enemyId: boss.id,
-      skillId: `${boss.theme}-boss-skill`,
-      name: boss.theme === 'flame-cave' ? '地火裂涌' : boss.theme === 'starlight-ruin' ? '星陨压境' : '妖气冲袭',
-      damage: boss.theme === 'flame-cave' ? 18 : boss.theme === 'starlight-ruin' ? 16 : 14,
-      position: { ...boss.position },
-    },
-  }
-}
-
 export function claimStageClear(runtime) {
   if (!runtime.stageCleared) return { ok: false, reason: 'not-cleared', result: null }
   if (runtime.stageClearClaimed) return { ok: false, reason: 'already-claimed', result: null }
 
   runtime.stageClearClaimed = true
   const stageId = runtime.stage.id
-  const passCycle = [
-    { id: 'mist-bamboo-secret', name: '青竹令' },
-    { id: 'flame-cave', name: '赤焰符券' },
-    { id: 'soul-bell-valley', name: '摄魂残铃' },
-    { id: 'star-gate-ruins', name: '星门残券' },
-  ]
   return {
     ok: true,
     reason: null,
     result: {
       title: `第${stageId}关突破`,
       stageId,
-      nextStageId: stageId + 1,
+      action: stageId === 10
+        ? { kind: 'region-complete' }
+        : { kind: 'continue', stageId: stageId + 1 },
       reward: {
-        spiritStones: 180 + stageId * 20,
-        artifactEssence: 2 + stageId,
-        dungeonPass: passCycle[(stageId - 1) % passCycle.length],
+        spiritStones: 80,
+        dungeonPasses: 1,
       },
     },
   }
@@ -210,7 +183,6 @@ export function rollbackSpawnedEnemy(runtime, enemyId) {
   const [enemy] = runtime.enemies.splice(index, 1)
   if (enemy.role !== 'boss') return true
   runtime.bossSpawned = false
-  runtime.bossSkillTimer = 0
   return true
 }
 

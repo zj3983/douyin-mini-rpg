@@ -1,0 +1,189 @@
+{
+  "id": "mist-vault",
+  "entryRoomId": "f1-entry",
+  "extractionRoomIds": ["f2-damaged-exit", "f3-full-exit"],
+  "finalExtractionRoomId": "f3-full-exit",
+  "bossAltarRoomId": "f3-altar",
+  "rooms": [
+    {
+      "id": "f1-entry",
+      "floor": 1,
+      "kind": "entry",
+      "sceneId": "mist-bamboo-exterior-entry",
+      "risk": "low",
+      "exits": [
+        { "id": "f1-entry-to-forest", "to": "f1-forest-combat", "cost": 0 }
+      ]
+    },
+    {
+      "id": "f1-forest-combat",
+      "floor": 1,
+      "kind": "combat",
+      "sceneId": "mist-bamboo-exterior-forest",
+      "risk": "medium",
+      "encounterId": "mist-bamboo-forest-pack",
+      "exits": [
+        { "id": "f1-forest-to-entry", "to": "f1-entry", "cost": 0 },
+        { "id": "f1-forest-to-alchemy", "to": "f1-alchemy", "cost": 0 },
+        { "id": "f1-forest-to-sealed-cache", "to": "f1-sealed-cache", "cost": 2 },
+        { "id": "f1-forest-to-floor2", "to": "f2-bridge-combat", "cost": 0 }
+      ],
+      "loot": [
+        { "itemId": "spirit-ore", "amount": 2 }
+      ],
+      "doorCurrency": 2,
+      "searchPressureSeconds": 12
+    },
+    {
+      "id": "f1-alchemy",
+      "floor": 1,
+      "kind": "alchemy",
+      "sceneId": "mist-bamboo-exterior-alchemy",
+      "risk": "low",
+      "exits": [
+        { "id": "f1-alchemy-to-forest", "to": "f1-forest-combat", "cost": 0 }
+      ],
+      "loot": [
+        { "itemId": "mist-herb", "amount": 2 },
+        { "itemId": "jade-elixir", "amount": 1 }
+      ],
+      "searchPressureSeconds": 12
+    },
+    {
+      "id": "f1-sealed-cache",
+      "floor": 1,
+      "kind": "treasure",
+      "sceneId": "mist-bamboo-exterior-cache",
+      "risk": "high",
+      "exits": [
+        { "id": "f1-sealed-cache-to-forest", "to": "f1-forest-combat", "cost": 2 }
+      ],
+      "loot": [
+        { "itemId": "flying-sword", "amount": 1 },
+        { "itemId": "spirit-stone", "amount": 3 }
+      ],
+      "doorCurrency": 2,
+      "searchPressureSeconds": 20
+    },
+    {
+      "id": "f2-bridge-combat",
+      "floor": 2,
+      "kind": "combat",
+      "sceneId": "cold-lantern-bridge-combat",
+      "risk": "medium",
+      "encounterId": "cold-lantern-bridge-pack",
+      "exits": [
+        { "id": "f2-bridge-to-sword-array", "to": "f2-sword-array", "cost": 0 },
+        { "id": "f2-bridge-to-exit", "to": "f2-damaged-exit", "cost": 0 }
+      ],
+      "loot": [
+        { "itemId": "spirit-ore", "amount": 2 }
+      ],
+      "doorCurrency": 1,
+      "searchPressureSeconds": 12
+    },
+    {
+      "id": "f2-sword-array",
+      "floor": 2,
+      "kind": "mechanism",
+      "sceneId": "cold-lantern-sword-array",
+      "risk": "high",
+      "exits": [
+        { "id": "f2-sword-array-to-bridge", "to": "f2-bridge-combat", "cost": 0 },
+        { "id": "f2-sword-array-to-elite", "to": "f2-gate-elite", "cost": 1 }
+      ],
+      "loot": [
+        { "itemId": "sword-array-seal", "amount": 1 }
+      ],
+      "searchPressureSeconds": 20
+    },
+    {
+      "id": "f2-gate-elite",
+      "floor": 2,
+      "kind": "elite",
+      "sceneId": "cold-lantern-gate-elite",
+      "risk": "high",
+      "encounterId": "cold-lantern-gate-elite",
+      "exits": [
+        { "id": "f2-elite-to-sword-array", "to": "f2-sword-array", "cost": 0 },
+        { "id": "f2-elite-to-exit", "to": "f2-damaged-exit", "cost": 0 },
+        { "id": "f2-elite-to-floor3", "to": "f3-antechamber", "cost": 0 }
+      ],
+      "loot": [
+        { "itemId": "refined-spirit-ore", "amount": 1 }
+      ],
+      "doorCurrency": 1,
+      "searchPressureSeconds": 12
+    },
+    {
+      "id": "f2-damaged-exit",
+      "floor": 2,
+      "kind": "extraction",
+      "sceneId": "cold-lantern-damaged-exit",
+      "risk": "medium",
+      "exits": [
+        { "id": "f2-damaged-exit-to-bridge", "to": "f2-bridge-combat", "cost": 0 },
+        { "id": "f2-damaged-exit-to-elite", "to": "f2-gate-elite", "cost": 0 }
+      ]
+    },
+    {
+      "id": "f3-antechamber",
+      "floor": 3,
+      "kind": "combat",
+      "sceneId": "bamboo-emperor-antechamber",
+      "risk": "high",
+      "encounterId": "bamboo-emperor-sanctuary-guard",
+      "exits": [
+        { "id": "f3-antechamber-to-altar", "to": "f3-altar", "cost": 0 },
+        { "id": "f3-antechamber-to-exit", "to": "f3-full-exit", "cost": 0 }
+      ],
+      "loot": [
+        { "itemId": "jade-elixir", "amount": 1 }
+      ],
+      "searchPressureSeconds": 12
+    },
+    {
+      "id": "f3-altar",
+      "floor": 3,
+      "kind": "boss",
+      "sceneId": "bamboo-emperor-altar",
+      "risk": "extreme",
+      "encounterId": "bamboo-emperor-true-form",
+      "exits": [
+        { "id": "f3-altar-to-antechamber", "to": "f3-antechamber", "cost": 0 },
+        { "id": "f3-altar-to-vault", "to": "f3-sword-vault", "cost": 0, "unlock": "boss-defeat" }
+      ],
+      "loot": [
+        { "itemId": "mist-core", "amount": 1 }
+      ],
+      "searchPressureSeconds": 20
+    },
+    {
+      "id": "f3-sword-vault",
+      "floor": 3,
+      "kind": "treasure",
+      "sceneId": "bamboo-emperor-sword-vault",
+      "risk": "extreme",
+      "exits": [
+        { "id": "f3-vault-to-altar", "to": "f3-altar", "cost": 0, "unlock": "boss-defeat" },
+        { "id": "f3-vault-to-exit", "to": "f3-full-exit", "cost": 0 }
+      ],
+      "loot": [
+        { "itemId": "heavenly-sword-shard", "amount": 1 },
+        { "itemId": "bamboo-emperor-fitting", "amount": 1 }
+      ],
+      "searchPressureSeconds": 20
+    },
+    {
+      "id": "f3-full-exit",
+      "floor": 3,
+      "kind": "extraction",
+      "sceneId": "bamboo-emperor-full-exit",
+      "risk": "high",
+      "exits": [
+        { "id": "f3-full-exit-to-antechamber", "to": "f3-antechamber", "cost": 0 },
+        { "id": "f3-full-exit-to-vault", "to": "f3-sword-vault", "cost": 0, "unlock": "boss-defeat" }
+      ]
+    }
+  ]
+}

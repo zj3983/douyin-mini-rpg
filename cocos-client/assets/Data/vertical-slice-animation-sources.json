@@ -1,0 +1,126 @@
+{
+  "version": 2,
+  "sourceRoot": "art-source/vertical-slice",
+  "runtimeRoot": "Assets/ActorAtlases",
+  "actors": {
+    "qinglan-sword-cultivator": {
+      "id": "qinglan-sword-cultivator",
+      "type": "character",
+      "folder": "QinglanSwordCultivator",
+      "masterFrameSize": [512, 640],
+      "runtimeFrameSize": [256, 320],
+      "anchor": { "x": 0.5, "y": 0.88 },
+      "quality": {
+        "maxCenterDrift": 0.08,
+        "maxScaleDrift": 0.12,
+        "minAlphaCoverage": 0.02,
+        "maxAlphaCoverage": 0.72,
+        "safePadding": 0.08
+      },
+      "actions": {
+        "idle": { "frames": 8, "fps": 6, "loop": true, "source": "qinglan/idle", "sourceMode": "pose-video" },
+        "sword_ride": { "frames": 10, "fps": 8, "loop": true, "source": "qinglan/sword_ride", "sourceMode": "pose-video" },
+        "hand_seal": { "frames": 10, "fps": 10, "loop": false, "source": "qinglan/hand_seal", "sourceMode": "pose-video", "events": [{ "name": "seal-formed", "time": 0.6 }] },
+        "cast": { "frames": 12, "fps": 12, "loop": false, "source": "qinglan/cast", "sourceMode": "pose-video", "quality": { "maxScaleDrift": 0.17 }, "events": [{ "name": "sword-release", "time": 0.42 }] },
+        "hurt": { "frames": 6, "fps": 10, "loop": false, "source": "qinglan/hurt", "sourceMode": "pose-video" },
+        "death": { "frames": 10, "fps": 8, "loop": false, "source": "qinglan/death", "sourceMode": "layered-keyframes" }
+      }
+    },
+    "moss-wolf": {
+      "id": "moss-wolf",
+      "type": "monster",
+      "folder": "MossWolf",
+      "masterFrameSize": [384, 480],
+      "runtimeFrameSize": [256, 320],
+      "anchor": { "x": 0.5, "y": 0.82 },
+      "quality": {
+        "maxCenterDrift": 0.08,
+        "maxScaleDrift": 0.12,
+        "minAlphaCoverage": 0.02,
+        "maxAlphaCoverage": 0.72,
+        "safePadding": 0.08
+      },
+      "actions": {
+        "idle": { "frames": 6, "fps": 6, "loop": true, "source": "moss-wolf/idle", "sourceMode": "pose-video" },
+        "move": { "frames": 8, "fps": 10, "loop": true, "source": "moss-wolf/move", "sourceMode": "pose-video" },
+        "telegraph": { "frames": 4, "fps": 8, "loop": false, "source": "moss-wolf/telegraph", "sourceMode": "pose-video" },
+        "attack": { "frames": 8, "fps": 12, "loop": false, "source": "moss-wolf/attack", "sourceMode": "pose-video", "quality": { "maxScaleDrift": 0.20 }, "events": [{ "name": "bite-contact", "time": 0.55 }] },
+        "hurt": { "frames": 4, "fps": 10, "loop": false, "source": "moss-wolf/hurt", "sourceMode": "pose-video", "quality": { "maxScaleDrift": 0.14 } },
+        "death": { "frames": 8, "fps": 8, "loop": false, "source": "moss-wolf/death", "sourceMode": "pose-video", "quality": { "maxCenterDrift": 0.14, "maxScaleDrift": 0.29 } }
+      }
+    },
+    "green-wing-moth": {
+      "id": "green-wing-moth",
+      "type": "monster",
+      "folder": "GreenWingMoth",
+      "masterFrameSize": [384, 480],
+      "runtimeFrameSize": [256, 320],
+      "anchor": { "x": 0.5, "y": 0.58 },
+      "quality": {
+        "maxCenterDrift": 0.08,
+        "maxScaleDrift": 0.12,
+        "minAlphaCoverage": 0.02,
+        "maxAlphaCoverage": 0.72,
+        "safePadding": 0.08
+      },
+      "actions": {
+        "idle": { "frames": 6, "fps": 6, "loop": true, "source": "green-wing-moth/idle", "sourceMode": "frame-sequence" },
+        "move": { "frames": 8, "fps": 10, "loop": true, "source": "green-wing-moth/move", "sourceMode": "frame-sequence" },
+        "dive": { "frames": 8, "fps": 12, "loop": false, "source": "green-wing-moth/dive", "sourceMode": "frame-sequence" },
+        "cast": { "frames": 8, "fps": 10, "loop": false, "source": "green-wing-moth/cast", "sourceMode": "frame-sequence" },
+        "hurt": { "frames": 4, "fps": 10, "loop": false, "source": "green-wing-moth/hurt", "sourceMode": "frame-sequence" },
+        "death": { "frames": 8, "fps": 8, "loop": false, "source": "green-wing-moth/death", "sourceMode": "frame-sequence" }
+      }
+    },
+    "bamboo-warden": {
+      "id": "bamboo-warden",
+      "type": "monster",
+      "folder": "BambooWarden",
+      "masterFrameSize": [768, 960],
+      "runtimeFrameSize": [384, 480],
+      "anchor": { "x": 0.5, "y": 0.84 },
+      "quality": {
+        "maxCenterDrift": 0.08,
+        "maxScaleDrift": 0.12,
+        "minAlphaCoverage": 0.02,
+        "maxAlphaCoverage": 0.72,
+        "safePadding": 0.08
+      },
+      "actions": {
+        "idle": { "frames": 8, "fps": 6, "loop": true, "source": "bamboo-warden/idle", "sourceMode": "frame-sequence" },
+        "move": { "frames": 10, "fps": 8, "loop": true, "source": "bamboo-warden/move", "sourceMode": "frame-sequence" },
+        "sweep": { "frames": 12, "fps": 12, "loop": false, "source": "bamboo-warden/sweep", "sourceMode": "frame-sequence" },
+        "spikes": { "frames": 12, "fps": 12, "loop": false, "source": "bamboo-warden/spikes", "sourceMode": "frame-sequence" },
+        "roar": { "frames": 12, "fps": 12, "loop": false, "source": "bamboo-warden/roar", "sourceMode": "frame-sequence" },
+        "hurt": { "frames": 6, "fps": 10, "loop": false, "source": "bamboo-warden/hurt", "sourceMode": "frame-sequence" },
+        "death": { "frames": 12, "fps": 8, "loop": false, "source": "bamboo-warden/death", "sourceMode": "frame-sequence" }
+      }
+    },
+    "mist-bamboo-emperor": {
+      "id": "mist-bamboo-emperor",
+      "type": "monster",
+      "folder": "MistBambooEmperor",
+      "packingMode": "unified",
+      "sanitizeRuntimeFragments": true,
+      "masterFrameSize": [256, 320],
+      "runtimeFrameSize": [256, 320],
+      "anchor": { "x": 0.5, "y": 0.86 },
+      "quality": {
+        "maxCenterDrift": 0.1,
+        "maxScaleDrift": 0.16,
+        "minAlphaCoverage": 0.02,
+        "maxAlphaCoverage": 0.76,
+        "safePadding": 0.10
+      },
+      "actions": {
+        "idle": { "frames": 6, "fps": 6, "loop": true, "source": "mist-bamboo-emperor/idle", "sourceMode": "pose-video" },
+        "move": { "frames": 6, "fps": 8, "loop": true, "source": "mist-bamboo-emperor/move", "sourceMode": "pose-video" },
+        "sweep": { "frames": 6, "fps": 10, "loop": false, "source": "mist-bamboo-emperor/sweep", "sourceMode": "pose-video", "quality": { "maxScaleDrift": 0.35 }, "events": [{ "name": "sweep-impact", "time": 0.58 }] },
+        "spikes": { "frames": 6, "fps": 10, "loop": false, "source": "mist-bamboo-emperor/spikes", "sourceMode": "pose-video", "quality": { "maxCenterDrift": 0.14, "maxScaleDrift": 0.30 }, "events": [{ "name": "spikes-rise", "time": 0.62 }] },
+        "roar": { "frames": 6, "fps": 8, "loop": false, "source": "mist-bamboo-emperor/roar", "sourceMode": "pose-video", "events": [{ "name": "pursuit-roar", "time": 0.5 }] },
+        "hurt": { "frames": 6, "fps": 10, "loop": false, "source": "mist-bamboo-emperor/hurt", "sourceMode": "frame-sequence", "quality": { "maxScaleDrift": 0.22 } },
+        "death": { "frames": 6, "fps": 8, "loop": false, "source": "mist-bamboo-emperor/death", "sourceMode": "frame-sequence", "quality": { "maxScaleDrift": 0.28 } }
+      }
+    }
+  }
+}

@@ -1,0 +1,109 @@
+{
+  "id": "mist-bamboo-encounters-v1",
+  "encounters": [
+    {
+      "id": "mist-bamboo-forest-pack",
+      "roomId": "f1-forest-combat",
+      "seedSalt": 31337,
+      "enemies": [
+        { "id": "moss-wolf", "name": "苔衣地狼", "role": "ground", "theme": "mist-bamboo" },
+        { "id": "green-wing-moth", "name": "青翅雾蛾", "role": "flying", "theme": "mist-bamboo" }
+      ],
+      "defeatTarget": 8,
+      "maxAlive": 8,
+      "completion": "clear-room",
+      "loot": [
+        { "itemId": "spirit-ore", "amount": 2 },
+        { "itemId": "mist-herb", "amount": 1 }
+      ]
+    },
+    {
+      "id": "cold-lantern-bridge-pack",
+      "roomId": "f2-bridge-combat",
+      "seedSalt": 70421,
+      "enemies": [
+        { "id": "fog-spider", "name": "寒雾蛛", "role": "ground", "theme": "cold-lantern-bridge" },
+        { "id": "lantern-wraith", "name": "青灯幽影", "role": "flying", "theme": "cold-lantern-bridge" }
+      ],
+      "defeatTarget": 10,
+      "maxAlive": 10,
+      "completion": "clear-room",
+      "loot": [
+        { "itemId": "spirit-ore", "amount": 3 },
+        { "itemId": "ghost-lantern-wick", "amount": 1 }
+      ]
+    },
+    {
+      "id": "cold-lantern-sword-array",
+      "roomId": "f2-sword-array",
+      "seedSalt": 91241,
+      "enemies": [
+        { "id": "lantern-wraith", "name": "剑阵灯灵", "role": "flying", "theme": "cold-lantern-sword-array" },
+        { "id": "fog-spider", "name": "伏阵雾蛛", "role": "ground", "theme": "cold-lantern-sword-array" }
+      ],
+      "defeatTarget": 9,
+      "maxAlive": 9,
+      "completion": "clear-room",
+      "loot": [
+        { "itemId": "sword-array-seal", "amount": 1 },
+        { "itemId": "refined-spirit-ore", "amount": 1 }
+      ]
+    },
+    {
+      "id": "cold-lantern-gate-elite",
+      "roomId": "f2-gate-elite",
+      "seedSalt": 120113,
+      "enemies": [
+        { "id": "moss-wolf", "name": "雾甲狼王", "role": "ground", "theme": "cold-lantern-elite" }
+      ],
+      "defeatTarget": 4,
+      "maxAlive": 4,
+      "completion": "clear-room",
+      "loot": [
+        { "itemId": "refined-spirit-ore", "amount": 2 },
+        { "itemId": "elite-beast-core", "amount": 1 }
+      ]
+    },
+    {
+      "id": "bamboo-emperor-sanctuary-guard",
+      "roomId": "f3-antechamber",
+      "seedSalt": 160001,
+      "enemies": [
+        { "id": "fog-spider", "name": "洞天雾蛛", "role": "ground", "theme": "bamboo-emperor-sanctuary" },
+        { "id": "lantern-wraith", "name": "守殿灯魂", "role": "flying", "theme": "bamboo-emperor-sanctuary" },
+        { "id": "mist-deer-king", "name": "青篁灵鹿", "role": "ground", "theme": "bamboo-emperor-sanctuary" }
+      ],
+      "defeatTarget": 12,
+      "maxAlive": 12,
+      "completion": "clear-room",
+      "loot": [
+        { "itemId": "jade-elixir", "amount": 1 },
+        { "itemId": "sanctuary-jade", "amount": 2 }
+      ]
+    },
+    {
+      "id": "bamboo-emperor-true-form",
+      "roomId": "f3-altar",
+      "seedSalt": 210019,
+      "enemies": [
+        { "id": "mist-bamboo-emperor", "name": "雾竹皇", "role": "boss", "theme": "bamboo-emperor-altar" }
+      ],
+      "defeatTarget": 1,
+      "maxAlive": 1,
+      "completion": "kill",
+      "loot": [
+        { "itemId": "mist-core", "amount": 1 },
+        { "itemId": "bamboo-emperor-fitting", "amount": 1 }
+      ]
+    }
+  ],
+  "pursuit": {
+    "id": "mist-bamboo-emperor-pursuit",
+    "seed": 2654435761,
+    "boss": { "id": "mist-bamboo-emperor", "name": "雾竹皇", "role": "boss", "theme": "mist-bamboo-pursuit" },
+    "maxAlive": 1,
+    "loot": [
+      { "itemId": "bound-mist-essence", "amount": 1 }
+    ]
+  }
+}

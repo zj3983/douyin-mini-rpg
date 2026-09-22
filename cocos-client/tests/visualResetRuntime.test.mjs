@@ -11,10 +11,52 @@ import {
   bindVisualListeners,
   createVisualResetState,
   prepareVisualForPool,
+  resolveActorVisualAction,
   resetVisualForSpawn,
   setVisualActionState,
   visualResetCommands,
 } from '../tools/visual-reset-runtime.mjs'
+
+test('generic Boss attack resolves to an action present in its atlas', () => {
+  assert.equal(resolveActorVisualAction('bamboo-warden', 'attack'), 'sweep')
+  assert.equal(resolveActorVisualAction('mist-bamboo-emperor', 'attack'), 'sweep')
+  assert.equal(resolveActorVisualAction('bamboo-warden', 'boss-sweep-telegraph'), 'sweep')
+  assert.equal(resolveActorVisualAction('bamboo-warden', 'boss-sweep-active'), 'sweep')
+  assert.equal(resolveActorVisualAction('bamboo-warden', 'boss-spikes-telegraph'), 'spikes')
+  assert.equal(resolveActorVisualAction('bamboo-warden', 'boss-spikes-active'), 'spikes')
+  assert.equal(resolveActorVisualAction('bamboo-warden', 'boss-roar-telegraph'), 'roar')
+  assert.equal(resolveActorVisualAction('bamboo-warden', 'boss-roar-active'), 'roar')
+  assert.equal(resolveActorVisualAction('bamboo-warden', 'boss-recovery'), 'idle')
+  assert.equal(resolveActorVisualAction('bamboo-warden', 'hurt'), 'hurt')
+  assert.equal(resolveActorVisualAction('moss-wolf', 'attack'), 'attack')
+})
+
+test('dungeon actor fallbacks resolve to attack without mutating a shared manifest', async () => {
+  const source = await readFile(new URL('../assets/Scripts/Core/VisualResetRuntime.ts', import.meta.url), 'utf8')
+  const executable = stripTypeScriptTypes(source, { mode: 'transform' })
+  const runtime = await import(`data:text/javascript;base64,${Buffer.from(executable).toString('base64')}`)
+  const manifest = {
+    actors: [{
+      id: 'fog-spider',
+      actions: [{ name: 'attack', atlas: 'fog-spider.png', frames: [{ x: 0, y: 0, w: 64, h: 64 }] }],
+    }],
+  }
+  const original = structuredClone(manifest)
+  const played = []
+  const instances = [
+    { manifest, play(action) { played.push(['first', action]) } },
+    { manifest, play(action) { played.push(['second', action]) } },
+  ]
+
+  instances[0].play(runtime.resolveActorVisualAction('fog-spider', 'telegraph'))
+  instances[1].play(runtime.resolveActorVisualAction('mist-deer-king', 'telegraph'))
+  instances[1].play(runtime.resolveActorVisualAction('lantern-wraith', 'dive'))
+  instances[1].play(runtime.resolveActorVisualAction('lantern-wraith', 'cast'))
+  instances[1].play(runtime.resolveActorVisualAction('lantern-wraith', 'telegraph'))
+
+  assert.deepEqual(played.map(([, action]) => action), ['attack', 'attack', 'attack', 'attack', 'attack'])
+  assert.deepEqual(manifest, original)
+})
 
 test('twenty pooled spawn cycles restore the canonical monster visual state', () => {
   let state = createVisualResetState()
@@ -134,6 +176,19 @@ test('TypeScript and executable mirrors produce the same pooled lifecycle trace'
   const tsRuntime = await import(`data:text/javascript;base64,${Buffer.from(executable).toString('base64')}`)
 
   assert.deepEqual(parityTrace(tsRuntime), parityTrace(esmRuntime))
+  for (const [actorId, action] of [
+    ['fog-spider', 'telegraph'],
+    ['mist-deer-king', 'telegraph'],
+    ['lantern-wraith', 'dive'],
+    ['lantern-wraith', 'cast'],
+    ['lantern-wraith', 'telegraph'],
+  ]) {
+    assert.equal(
+      tsRuntime.resolveActorVisualAction(actorId, action),
+      esmRuntime.resolveActorVisualAction(actorId, action),
+      `${actorId}.${action} mapping drifted`,
+    )
+  }
 })
 
 function parityTrace(runtime) {

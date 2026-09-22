@@ -1,3 +1,5 @@
+import type { WorldEncounterKind } from './World/WorldRegion'
+
 export type CharacterStat = 'attack' | 'health' | 'mana'
 export type ArtifactKey = 'flyingSword' | 'thunderSeal' | 'fireRuler' | 'soulBell'
 
@@ -45,6 +47,7 @@ export interface StageProfile {
   name: string
   theme: string
   background: string
+  encounter: WorldEncounterKind
   enemies: EnemyProfile[]
   boss: EnemyProfile
 }

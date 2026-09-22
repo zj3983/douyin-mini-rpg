@@ -1,6 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { frameIndexAtTime, shouldAdvanceAnimation, resourcePathForPng } from '../tools/strip-animation-runtime.mjs'
+import {
+  consumeAnimationTime,
+  frameIndexAtTime,
+  shouldAdvanceAnimation,
+  resourcePathForPng,
+} from '../tools/strip-animation-runtime.mjs'
 
 test('strip animation frame index loops by elapsed time and fps', () => {
   assert.equal(frameIndexAtTime({ elapsed: 0, framesPerSecond: 8, frameCount: 4, loop: true }), 0)
@@ -19,20 +24,31 @@ test('animation update can be culled or throttled for performance', () => {
   assert.equal(shouldAdvanceAnimation({ visible: true, distanceToCamera: 100, maxActiveDistance: 600, accumulatedTime: 0.12, updateInterval: 0.1 }), true)
 })
 
+test('throttled animation consumes every accumulated frame delta', () => {
+  assert.deepEqual(
+    consumeAnimationTime({ accumulatedTime: 0.034, updateInterval: 0.033 }),
+    { shouldAdvance: true, elapsedDelta: 0.034 },
+  )
+  assert.deepEqual(
+    consumeAnimationTime({ accumulatedTime: 0.016, updateInterval: 0.033 }),
+    { shouldAdvance: false, elapsedDelta: 0 },
+  )
+})
+
 test('atlas png path maps to its Cocos Texture2D subresource', () => {
   assert.equal(
-    resourcePathForPng('Assets/Combat/MistBamboo/moss-wolf-strip.png'),
-    'Assets/Combat/MistBamboo/moss-wolf-strip/texture',
+    resourcePathForPng('Assets/ActorAtlases/MossWolf/atlas.png'),
+    'Assets/ActorAtlases/MossWolf/atlas/texture',
   )
 })
 
 test('existing texture paths are normalized without adding texture twice', () => {
   assert.equal(
-    resourcePathForPng('Assets/Combat/QinglanSwordCultivator/action-strip/texture.png'),
-    'Assets/Combat/QinglanSwordCultivator/action-strip/texture',
+    resourcePathForPng('Assets/ActorAtlases/QinglanSwordCultivator/idle/texture.png'),
+    'Assets/ActorAtlases/QinglanSwordCultivator/idle/texture',
   )
   assert.equal(
-    resourcePathForPng('Assets/Combat/QinglanSwordCultivator/action-strip/texture'),
-    'Assets/Combat/QinglanSwordCultivator/action-strip/texture',
+    resourcePathForPng('Assets/ActorAtlases/QinglanSwordCultivator/idle/texture'),
+    'Assets/ActorAtlases/QinglanSwordCultivator/idle/texture',
   )
 })

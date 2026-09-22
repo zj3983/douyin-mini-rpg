@@ -1,6 +1,8 @@
-import { existsSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { join, relative, resolve, sep } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
+import { validateDungeonProfile } from '../assets/Scripts/Core/Dungeon/DungeonSession.ts'
+import { validateSceneBlueprint } from './validate-scene-blueprint.mjs'
 
 const defaultCreatorCandidates = [
   'D:/CocosCreator/CocosCreator.exe',
@@ -9,11 +11,153 @@ const defaultCreatorCandidates = [
   'D:/CocosDashboard/editors/Creator/3.8.8/CocosCreator.exe',
 ]
 
+export const requiredDualModeAssets = [
+  'assets/Scenes/MainBattle.scene',
+  'assets/Scenes/MainBattle.scene.meta',
+  'assets/Data/scene-blueprint.json',
+  'assets/Data/scene-blueprint.json.meta',
+  'assets/Data/cultivation-design.json',
+  'assets/Data/cultivation-design.json.meta',
+  'assets/resources/Data/cultivation-design.json',
+  'assets/resources/Data/cultivation-design.json.meta',
+  'assets/resources/Data/dual-mode-slice.json',
+  'assets/resources/Data/dual-mode-slice.json.meta',
+  'assets/Scripts/Core/Dungeon.meta',
+  'assets/Scripts/Core/Dungeon/DungeonInteraction.ts',
+  'assets/Scripts/Core/Dungeon/DungeonInteraction.ts.meta',
+  'assets/Scripts/Core/Dungeon/DungeonSession.ts',
+  'assets/Scripts/Core/Dungeon/DungeonSession.ts.meta',
+  'assets/Scripts/Core/Dungeon/DungeonTypes.ts',
+  'assets/Scripts/Core/Dungeon/DungeonTypes.ts.meta',
+  'assets/Scripts/Core/Dungeon/DungeonPressureRuntime.ts',
+  'assets/Scripts/Core/Dungeon/DungeonPressureRuntime.ts.meta',
+  'assets/Scripts/Core/Dungeon/PursuitBossRuntime.ts',
+  'assets/Scripts/Core/Dungeon/PursuitBossRuntime.ts.meta',
+  'assets/Scripts/Core/BossTelegraphVisualProfile.ts',
+  'assets/Scripts/Core/BossTelegraphVisualProfile.ts.meta',
+  'assets/Scripts/Core/GameContent.ts',
+  'assets/Scripts/Core/GameContent.ts.meta',
+  'assets/Scripts/Core/Loadout.meta',
+  'assets/Scripts/Core/Loadout/LoadoutRules.ts',
+  'assets/Scripts/Core/Loadout/LoadoutRules.ts.meta',
+  'assets/Scripts/Core/Progression.meta',
+  'assets/Scripts/Core/Progression/BestEffortNotification.ts',
+  'assets/Scripts/Core/Progression/BestEffortNotification.ts.meta',
+  'assets/Scripts/Core/Progression/DualModeRuntime.ts',
+  'assets/Scripts/Core/Progression/DualModeRuntime.ts.meta',
+  'assets/Scripts/Core/Progression/PlayerSave.ts',
+  'assets/Scripts/Core/Progression/PlayerSave.ts.meta',
+  'assets/Scripts/Core/Progression/SaveRepository.ts',
+  'assets/Scripts/Core/Progression/SaveRepository.ts.meta',
+  'assets/Scripts/Core/World.meta',
+  'assets/Scripts/Core/World/WorldRegion.ts',
+  'assets/Scripts/Core/World/WorldRegion.ts.meta',
+  'assets/Scripts/Core/World/WorldRewards.ts',
+  'assets/Scripts/Core/World/WorldRewards.ts.meta',
+  'assets/Scripts/Game/DungeonRunController.ts',
+  'assets/Scripts/Game/DungeonRunController.ts.meta',
+  'assets/Scripts/Game/DungeonRunPresenter.ts',
+  'assets/Scripts/Game/DungeonRunPresenter.ts.meta',
+  'assets/Scripts/Game/DungeonResourceController.ts',
+  'assets/Scripts/Game/DungeonResourceController.ts.meta',
+  'assets/Scripts/Game/DualModeGameController.ts',
+  'assets/Scripts/Game/DualModeGameController.ts.meta',
+  'assets/Scripts/Game/BossHazardVisualController.ts',
+  'assets/Scripts/Game/BossHazardVisualController.ts.meta',
+  'assets/Scripts/Game/BossTelegraphPresenter.ts',
+  'assets/Scripts/Game/BossTelegraphPresenter.ts.meta',
+  'assets/Scripts/Game/WorldStageSelectLayout.ts',
+  'assets/Scripts/Game/WorldStageSelectLayout.ts.meta',
+  'assets/Scripts/Game/WorldStageSelectController.ts',
+  'assets/Scripts/Game/WorldStageSelectController.ts.meta',
+  'assets/Scripts/Game/WorldStageSelectPageAssembler.ts',
+  'assets/Scripts/Game/WorldStageSelectPageAssembler.ts.meta',
+  'assets/Scripts/Game/WorldStageSelectionViewModel.ts',
+  'assets/Scripts/Game/WorldStageSelectionViewModel.ts.meta',
+  'assets/resources/Data/dungeon-encounters.json',
+  'assets/resources/Data/dungeon-encounters.json.meta',
+  ...[1, 2, 3].flatMap((floor) => ['far', 'mid'].flatMap((layer) => [
+    `assets/resources/Assets/Dungeon/MistBamboo/Floor${floor}/${layer}.webp`,
+    `assets/resources/Assets/Dungeon/MistBamboo/Floor${floor}/${layer}.webp.meta`,
+  ])),
+  'assets/resources/Assets/Dungeon/MistBamboo/Effects/pursuit_edge.png',
+  'assets/resources/Assets/Dungeon/MistBamboo/Effects/pursuit_edge.png.meta',
+  'assets/resources/Assets/Dungeon/MistBamboo/Effects/extraction_array.png',
+  'assets/resources/Assets/Dungeon/MistBamboo/Effects/extraction_array.png.meta',
+  'assets/resources/Assets/World/MysticSpring.meta',
+  'assets/resources/Assets/World/MysticSpring/far.png',
+  'assets/resources/Assets/World/MysticSpring/far.png.meta',
+  'assets/resources/Assets/World/MysticSpring/mid.png',
+  'assets/resources/Assets/World/MysticSpring/mid.png.meta',
+  'assets/resources/Assets/World/MistHeaven.meta',
+  'assets/resources/Assets/World/MistHeaven/far.png',
+  'assets/resources/Assets/World/MistHeaven/far.png.meta',
+  'assets/resources/Assets/World/MistHeaven/mid.png',
+  'assets/resources/Assets/World/MistHeaven/mid.png.meta',
+  'assets/resources/Assets/Skills/BossDomain.meta',
+  'assets/resources/Assets/Skills/BossDomain/sweep_arc.png',
+  'assets/resources/Assets/Skills/BossDomain/sweep_arc.png.meta',
+  'assets/resources/Assets/Skills/BossDomain/sweep_trail.png',
+  'assets/resources/Assets/Skills/BossDomain/sweep_trail.png.meta',
+  'assets/resources/Assets/Skills/BossDomain/spike_cluster.png',
+  'assets/resources/Assets/Skills/BossDomain/spike_cluster.png.meta',
+  'assets/resources/Assets/Skills/BossDomain/ground_dust.png',
+  'assets/resources/Assets/Skills/BossDomain/ground_dust.png.meta',
+  'assets/resources/Assets/Skills/BossDomain/roar_wave.png',
+  'assets/resources/Assets/Skills/BossDomain/roar_wave.png.meta',
+  'assets/resources/Assets/Skills/BossDomain/leaf_particle.png',
+  'assets/resources/Assets/Skills/BossDomain/leaf_particle.png.meta',
+  'assets/resources/Assets/Skills/BossDomain/impact_spark.png',
+  'assets/resources/Assets/Skills/BossDomain/impact_spark.png.meta',
+]
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const REQUIRED_BOSS_VFX_META_PATHS = new Set(
+  requiredDualModeAssets.filter((asset) => (
+    asset.startsWith('assets/resources/Assets/Skills/BossDomain/')
+    && asset.endsWith('.png.meta')
+  )),
+)
+const REQUIRED_SCENE_NODES = [
+  'SharedCombatRoot',
+  'SharedActorLayer',
+  'SharedEffectLayer',
+  'SharedDropLayer',
+  'SharedInputLayer',
+  'WorldRoot',
+  'WorldLayer',
+  'WorldHudLayer',
+  'DualModeGameController',
+  'DungeonRoot',
+  'DungeonWorldLayer',
+  'DungeonHud',
+  'DungeonRunController',
+]
+const REQUIRED_STRUCTURED_ASSETS = [
+  'assets/Scenes/MainBattle.scene',
+  'assets/Data/scene-blueprint.json',
+  'assets/resources/Data/dual-mode-slice.json',
+]
+
+function metaConvention(path) {
+  if (path.endsWith('.png.meta') || path.endsWith('.webp.meta')) return { importer: 'image', ver: '1.0.27' }
+  if (path.endsWith('.scene.meta')) return { importer: 'scene', ver: '1.1.50' }
+  if (path.endsWith('.json.meta')) return { importer: 'json', ver: '2.0.1' }
+  if (path.endsWith('.ts.meta')) return { importer: 'typescript', ver: '4.0.24' }
+  return { importer: 'directory', ver: '1.2.0' }
+}
+
+export function isCanonicalAssetUuid(value) {
+  return typeof value === 'string' && UUID_PATTERN.test(value)
+}
+
 export function checkCocosBuildReadiness(options = {}) {
   const projectRoot = options.projectRoot ?? process.cwd()
   const files = options.files ?? null
   const creatorCommand = options.creatorCommand ?? process.env.COCOS_CREATOR_PATH ?? findCreatorCommand()
   const buildRoot = options.buildRoot ? resolve(options.buildRoot) : null
+  const readFile = options.readFile
+    ?? (files ? () => undefined : (path) => readFileSync(join(projectRoot, ...path.split('/')), 'utf8'))
   const blockers = []
 
   if (!creatorCommand) {
@@ -28,12 +172,70 @@ export function checkCocosBuildReadiness(options = {}) {
     blockers.push('settings is missing Creator build configuration, such as settings/v2/packages/builder.json.')
   }
 
-  const hasBuildIndex = buildRoot
-    ? existsSync(join(buildRoot, 'index.html'))
-    : hasPath(projectRoot, 'build/web-mobile/index.html', files)
-  if (!hasBuildIndex) {
-    const expectedIndex = buildRoot ? join(buildRoot, 'index.html') : 'build/web-mobile/index.html'
-    blockers.push(`${expectedIndex} is missing; run a Cocos web-mobile build before deployment can serve it.`)
+  for (const asset of requiredDualModeAssets) {
+    if (!hasPath(projectRoot, asset, files)) blockers.push(`${asset} is missing from the Cocos import contract.`)
+  }
+
+  for (const asset of REQUIRED_STRUCTURED_ASSETS) {
+    if (!hasPath(projectRoot, asset, files)) continue
+    const parsed = parseJsonAsset(asset, readFile, blockers)
+    if (parsed === undefined) continue
+    if (asset.endsWith('.scene')) {
+      for (const error of validateCocosSceneStructure(parsed)) blockers.push(`${asset} ${error}.`)
+    } else if (asset.endsWith('scene-blueprint.json')) {
+      const report = validateSceneBlueprint(parsed)
+      if (!report.ok) blockers.push(`${asset} fails scene blueprint structural validation: ${report.errors.join('; ')}.`)
+    } else {
+      try {
+        validateDungeonProfile(parsed)
+      } catch (error) {
+        blockers.push(`${asset} fails dungeon profile validation: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+  }
+
+  const requiredMetaPaths = new Set(requiredDualModeAssets.filter((asset) => asset.endsWith('.meta')))
+  const metaUuidOwners = new Map()
+  for (const asset of discoverAssetMetaPaths(projectRoot, files)) {
+    const parsed = parseJsonAsset(asset, readFile, blockers)
+    if (parsed === undefined) continue
+    if (!isCanonicalAssetUuid(parsed.uuid)) {
+      blockers.push(`${asset} has a missing or invalid UUID.`)
+    } else if (metaUuidOwners.has(parsed.uuid)) {
+      blockers.push(`${asset} has duplicate asset meta UUID ${parsed.uuid} also used by ${metaUuidOwners.get(parsed.uuid)}.`)
+    } else {
+      metaUuidOwners.set(parsed.uuid, asset)
+    }
+    if (requiredMetaPaths.has(asset)) {
+      const expected = metaConvention(asset)
+      if (parsed.importer !== expected.importer || parsed.ver !== expected.ver) {
+        blockers.push(`${asset} must use importer ${expected.importer} version ${expected.ver}.`)
+      }
+      if (asset.endsWith('.png.meta') || asset.endsWith('.webp.meta')) {
+        const subMetas = parsed.subMetas && typeof parsed.subMetas === 'object'
+          ? Object.values(parsed.subMetas)
+          : []
+        if (!subMetas.some((subMeta) => subMeta?.importer === 'sprite-frame')) {
+          blockers.push(`${asset} must contain at least one sprite-frame subMeta.`)
+        }
+        if (REQUIRED_BOSS_VFX_META_PATHS.has(asset)) {
+          const spriteFrameMeta = parsed.subMetas?.f9941
+          if (spriteFrameMeta?.importer !== 'sprite-frame' || spriteFrameMeta?.name !== 'spriteFrame') {
+            blockers.push(`${asset} f9941 must use importer sprite-frame and name spriteFrame.`)
+          }
+          if (
+            isCanonicalAssetUuid(parsed.uuid)
+            && spriteFrameMeta?.uuid !== `${parsed.uuid}@f9941`
+          ) {
+            blockers.push(`${asset} must use spriteFrame UUID ${parsed.uuid}@f9941.`)
+          }
+        }
+      }
+    }
+  }
+
+  if (buildRoot && !existsSync(join(buildRoot, 'index.html'))) {
+    blockers.push(`${join(buildRoot, 'index.html')} is missing; run a Cocos web-mobile build before deployment can serve it.`)
   }
 
   return {
@@ -44,7 +246,75 @@ export function checkCocosBuildReadiness(options = {}) {
   }
 }
 
+export function validateCocosSceneStructure(scene) {
+  const errors = []
+  if (!Array.isArray(scene)) return ['must be a Cocos scene array']
+  const sceneAssetIndex = scene.findIndex((entry) => entry?.__type__ === 'cc.SceneAsset')
+  const sceneIndex = scene.findIndex((entry) => entry?.__type__ === 'cc.Scene')
+  if (sceneAssetIndex < 0) errors.push('is missing a cc.SceneAsset record')
+  if (sceneIndex < 0) errors.push('is missing a cc.Scene record')
+  if (sceneAssetIndex >= 0 && scene[sceneAssetIndex]?.scene?.__id__ !== sceneIndex) {
+    errors.push('has a SceneAsset that does not reference its cc.Scene record')
+  }
+  visitReferences(scene, scene.length, errors, '$')
+  const nodeNames = new Set(
+    scene.filter((entry) => entry?.__type__ === 'cc.Node' && typeof entry._name === 'string').map((entry) => entry._name),
+  )
+  for (const name of REQUIRED_SCENE_NODES) {
+    if (!nodeNames.has(name)) errors.push(`is missing required stable node ${name}`)
+  }
+  return errors
+}
+
+function visitReferences(value, recordCount, errors, path) {
+  if (!value || typeof value !== 'object') return
+  if (!Array.isArray(value) && Object.hasOwn(value, '__id__')) {
+    if (!Number.isSafeInteger(value.__id__) || value.__id__ < 0 || value.__id__ >= recordCount) {
+      errors.push(`has invalid __id__ reference at ${path}`)
+    }
+  }
+  for (const [key, child] of Object.entries(value)) visitReferences(child, recordCount, errors, `${path}.${key}`)
+}
+
+function parseJsonAsset(asset, readFile, blockers) {
+  try {
+    const contents = readFile(asset)
+    if (typeof contents !== 'string') throw new TypeError('JSON contents are unavailable')
+    return JSON.parse(contents)
+  } catch {
+    blockers.push(`${asset} contains malformed JSON or could not be read.`)
+    return undefined
+  }
+}
+
+function discoverAssetMetaPaths(projectRoot, files) {
+  if (files) {
+    return Array.from(files)
+      .map(normalizePath)
+      .filter((path) => path.startsWith('assets/') && path.endsWith('.meta'))
+      .sort()
+  }
+  const assetRoot = join(projectRoot, 'assets')
+  if (!existsSync(assetRoot)) return []
+  return walk(assetRoot)
+    .map((path) => normalizePath(relative(projectRoot, path)))
+    .filter((path) => path.endsWith('.meta'))
+    .sort()
+}
+
 export function findCreatorCommand(candidates = defaultCreatorCandidates) {
+  return candidates.find((candidate) => existsSync(candidate)) ?? null
+}
+
+export function findCreatorTypeDeclarations(creatorCommand) {
+  if (typeof creatorCommand !== 'string' || creatorCommand.trim() === '') return null
+  const executableDirectory = dirname(resolve(creatorCommand))
+  const relativeDeclarationPath = ['3d', 'engine', 'bin', '.declarations', 'cc.d.ts']
+  const candidates = [
+    join(executableDirectory, 'resources', 'resources', ...relativeDeclarationPath),
+    join(executableDirectory, 'resources', ...relativeDeclarationPath),
+    join(executableDirectory, '..', 'Resources', 'resources', ...relativeDeclarationPath),
+  ]
   return candidates.find((candidate) => existsSync(candidate)) ?? null
 }
 
