@@ -33,6 +33,8 @@ jobs:
 
       - name: Install test dependencies
         run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg
           npm ci
           python -m pip install --disable-pip-version-check pillow
 
