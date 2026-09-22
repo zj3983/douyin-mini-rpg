@@ -1,0 +1,56 @@
+name: PR CI
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: PR validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install image-test dependency
+        run: python -m pip install --disable-pip-version-check pillow
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Run root tests
+        run: npm test
+
+      - name: Run Cocos tests
+        working-directory: cocos-client
+        run: npm test
+
+      - name: Verify Cocos build readiness
+        working-directory: cocos-client
+        env:
+          COCOS_CREATOR_PATH: prebuilt
+        run: npm run build:check
+
+      - name: Verify committed web-mobile build
+        working-directory: cocos-client
+        env:
+          COCOS_CREATOR_PATH: prebuilt
+        run: npm run verify:build-output -- build/web-mobile
