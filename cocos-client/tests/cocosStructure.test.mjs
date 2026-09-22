@@ -127,6 +127,29 @@ test('Cocos game layer has dedicated battle-loop components', () => {
   }
 })
 
+test('bootstrap keeps failed room starts retryable instead of claiming a room battle', () => {
+  const source = readSource('assets/Scripts/Game/PortraitBattleBootstrap.ts')
+  const roomStart = extractBlock(source, 'private beginDungeonRoomEncounter')
+
+  assert.match(roomStart, /startDungeonEncounterWithRecovery\(/)
+  assert.match(roomStart, /if \(!started\)/)
+  assertStatementOrder(roomStart, ['if (!started)', 'this.dungeonEncounterRoomId = roomId'])
+  assert.match(source, /this\.dungeonEncounterRoomId !== snapshot\.map\.currentRoomId/)
+})
+
+test('bootstrap preserves failed pursuit starts for a later retry', () => {
+  const source = readSource('assets/Scripts/Game/PortraitBattleBootstrap.ts')
+  const pursuitStart = extractBlock(source, 'private beginPursuitEncounter')
+  const pendingStart = extractBlock(source, 'private tryStartPendingPursuitEncounter')
+
+  assert.match(source, /private pendingPursuitHunt: 1 \| 2 \| 3 \| null = null/)
+  assert.match(pursuitStart, /this\.pendingPursuitHunt = hunt/)
+  assert.match(pendingStart, /startDungeonEncounterWithRecovery\(/)
+  assert.match(pendingStart, /if \(!started\)/)
+  assert.match(source, /this\.pendingPursuitHunt !== null/)
+  assert.match(source, /this\.tryStartPendingPursuitEncounter\(\)/)
+})
+
 test('complete ten-stage world region is part of the Cocos import contract', () => {
   for (const asset of requiredWorldRegionAssets) {
     assert.equal(requiredDualModeAssets.includes(asset), true, `${asset} should be build-readiness required`)
