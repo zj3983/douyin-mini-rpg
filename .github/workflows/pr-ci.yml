@@ -30,6 +30,7 @@ jobs:
         with:
           python-version: '3.12'
 
+      # Animation asset tests require ffmpeg on the runner.
       - name: Install system test dependency
         run: |
           sudo apt-get update
