@@ -131,9 +131,11 @@ test('bootstrap keeps failed room starts retryable instead of claiming a room ba
   const source = readSource('assets/Scripts/Game/PortraitBattleBootstrap.ts')
   const roomStart = extractBlock(source, 'private beginDungeonRoomEncounter')
 
-  assert.match(roomStart, /startDungeonEncounterWithRecovery\(/)
-  assert.match(roomStart, /if \(!started\)/)
-  assertStatementOrder(roomStart, ['if (!started)', 'this.dungeonEncounterRoomId = roomId'])
+  assert.match(source, /private dungeonRoomEncounterRetry = createDungeonEncounterRetryState\(\)/)
+  assert.match(roomStart, /retryDungeonEncounterStart\(this\.dungeonRoomEncounterRetry/)
+  assert.match(roomStart, /retryDelayMs: DUNGEON_ENCOUNTER_RETRY_DELAY_MS/)
+  assert.match(roomStart, /if \(!result\.started\)/)
+  assertStatementOrder(roomStart, ['if (!result.started)', 'this.dungeonEncounterRoomId = roomId'])
   assert.match(source, /this\.dungeonEncounterRoomId !== snapshot\.map\.currentRoomId/)
 })
 
@@ -143,9 +145,11 @@ test('bootstrap preserves failed pursuit starts for a later retry', () => {
   const pendingStart = extractBlock(source, 'private tryStartPendingPursuitEncounter')
 
   assert.match(source, /private pendingPursuitHunt: 1 \| 2 \| 3 \| null = null/)
+  assert.match(source, /private dungeonPursuitEncounterRetry = createDungeonEncounterRetryState\(\)/)
   assert.match(pursuitStart, /this\.pendingPursuitHunt = hunt/)
-  assert.match(pendingStart, /startDungeonEncounterWithRecovery\(/)
-  assert.match(pendingStart, /if \(!started\)/)
+  assert.match(pendingStart, /retryDungeonEncounterStart\(this\.dungeonPursuitEncounterRetry/)
+  assert.match(pendingStart, /retryDelayMs: DUNGEON_ENCOUNTER_RETRY_DELAY_MS/)
+  assert.match(pendingStart, /if \(!result\.started\)/)
   assert.match(source, /this\.pendingPursuitHunt !== null/)
   assert.match(source, /this\.tryStartPendingPursuitEncounter\(\)/)
 })

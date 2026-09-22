@@ -70,7 +70,11 @@ import {
   planPursuitEncounter,
   type DungeonEncounterCatalog,
 } from '../Core/Dungeon/DungeonEncounterDirector.ts'
-import { startDungeonEncounterWithRecovery } from '../Core/Dungeon/DungeonEncounterStart.ts'
+import {
+  createDungeonEncounterRetryState,
+  resetDungeonEncounterRetryState,
+  retryDungeonEncounterStart,
+} from '../Core/Dungeon/DungeonEncounterStart.ts'
 import { StageBackgroundController } from './StageBackgroundController'
 import { StageResourceController } from './StageResourceController'
 import { createDefaultViewportMetricsProvider } from './ViewportMetrics.ts'
@@ -86,6 +90,7 @@ const TOP_HUD_RESERVE = BATTLE_TOP_HUD_RESERVE
 const TOP_HUD_OFFSET = 83
 const BOSS_HUD_OFFSET = 179
 const UI_LAYER = Layers.Enum.UI_2D
+const DUNGEON_ENCOUNTER_RETRY_DELAY_MS = 250
 
 interface BarParts {
   root: Node
@@ -148,6 +153,8 @@ export class PortraitBattleBootstrap extends Component {
   private dungeonRuntimeRunId = ''
   private dungeonEncounterRoomId = ''
   private pendingPursuitHunt: 1 | 2 | 3 | null = null
+  private dungeonRoomEncounterRetry = createDungeonEncounterRetryState()
+  private dungeonPursuitEncounterRetry = createDungeonEncounterRetryState()
   private dungeonFloorSyncKey = ''
   private dungeonFloorSyncPending = false
   private nextDungeonResourceRetryAt = 0
@@ -531,6 +538,7 @@ export class PortraitBattleBootstrap extends Component {
     if (event.type === 'room-entered') {
       this.dungeonEncounterRoomId = ''
       this.pendingPursuitHunt = null
+      resetDungeonEncounterRetryState(this.dungeonPursuitEncounterRetry)
       this.dungeonFloorSyncKey = ''
       this.beginDungeonRoomEncounter(event.roomId)
     }
@@ -615,12 +623,15 @@ export class PortraitBattleBootstrap extends Component {
     const snapshot = this.dungeonRunController?.getRunSnapshot()
     const runtime = this.battleRuntimeController
     if (!catalog || !snapshot || !runtime) return false
-    const started = startDungeonEncounterWithRecovery(
-      () => runtime.beginDungeonEncounter(planDungeonEncounter(catalog, roomId, snapshot.seed)),
-      () => runtime.enterDungeonExplorationMode(),
-    )
-    if (!started) {
-      this.dungeonPresenter?.setInteractionHint('战斗加载失败，正在重试')
+    const result = retryDungeonEncounterStart(this.dungeonRoomEncounterRetry, {
+      key: `room:${snapshot.runId}:${roomId}`,
+      nowMs: Date.now(),
+      retryDelayMs: DUNGEON_ENCOUNTER_RETRY_DELAY_MS,
+      start: () => runtime.beginDungeonEncounter(planDungeonEncounter(catalog, roomId, snapshot.seed)),
+      recover: () => runtime.enterDungeonExplorationMode(),
+    })
+    if (!result.started) {
+      if (result.attempted) this.dungeonPresenter?.setInteractionHint('战斗加载失败，正在重试')
       return false
     }
     this.dungeonEncounterRoomId = roomId
@@ -658,6 +669,8 @@ export class PortraitBattleBootstrap extends Component {
       this.dungeonRuntimeRunId = snapshot.runId
       this.dungeonEncounterRoomId = ''
       this.pendingPursuitHunt = null
+      resetDungeonEncounterRetryState(this.dungeonRoomEncounterRetry)
+      resetDungeonEncounterRetryState(this.dungeonPursuitEncounterRetry)
     }
     if (runtime && this.dungeonEncounterCatalog && this.dungeonEncounterRoomId !== snapshot.map.currentRoomId) {
       this.beginDungeonRoomEncounter(snapshot.map.currentRoomId)
@@ -688,6 +701,8 @@ export class PortraitBattleBootstrap extends Component {
     this.dungeonRuntimeRunId = ''
     this.dungeonEncounterRoomId = ''
     this.pendingPursuitHunt = null
+    resetDungeonEncounterRetryState(this.dungeonRoomEncounterRetry)
+    resetDungeonEncounterRetryState(this.dungeonPursuitEncounterRetry)
     this.dungeonFloorSyncKey = ''
     this.dungeonFloorSyncPending = false
     this.nextDungeonResourceRetryAt = 0
@@ -719,13 +734,17 @@ export class PortraitBattleBootstrap extends Component {
     const hunt = this.pendingPursuitHunt
     const catalog = this.dungeonEncounterCatalog
     const runtime = this.battleRuntimeController
-    if (hunt === null || !catalog || !runtime) return false
-    const started = startDungeonEncounterWithRecovery(
-      () => runtime.beginDungeonEncounter(planPursuitEncounter(catalog, hunt)),
-      () => runtime.enterDungeonExplorationMode(),
-    )
-    if (!started) {
-      this.dungeonPresenter?.setInteractionHint('追击战加载失败，正在重试')
+    const runId = this.dungeonRunController?.getRunSnapshot()?.runId
+    if (hunt === null || !catalog || !runtime || !runId) return false
+    const result = retryDungeonEncounterStart(this.dungeonPursuitEncounterRetry, {
+      key: `pursuit:${runId}:${hunt}`,
+      nowMs: Date.now(),
+      retryDelayMs: DUNGEON_ENCOUNTER_RETRY_DELAY_MS,
+      start: () => runtime.beginDungeonEncounter(planPursuitEncounter(catalog, hunt)),
+      recover: () => runtime.enterDungeonExplorationMode(),
+    })
+    if (!result.started) {
+      if (result.attempted) this.dungeonPresenter?.setInteractionHint('追击战加载失败，正在重试')
       return false
     }
     this.pendingPursuitHunt = null
