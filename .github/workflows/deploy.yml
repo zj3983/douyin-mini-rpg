@@ -53,8 +53,8 @@ jobs:
 
       - name: Create release archive
         run: |
-          RELEASE_DIR="$RUNNER_TEMP/douyin-mini-rpg-release"
-          ARCHIVE="$RUNNER_TEMP/douyin-mini-rpg-release.tar.gz"
+          RELEASE_DIR="$GITHUB_WORKSPACE/.deploy-release"
+          ARCHIVE="$GITHUB_WORKSPACE/douyin-mini-rpg-release.tar.gz"
           rm -rf "$RELEASE_DIR" "$ARCHIVE"
           mkdir -p "$RELEASE_DIR/cocos-client/build"
           cp -R cocos-client/build/web-mobile "$RELEASE_DIR/cocos-client/build/web-mobile"
@@ -69,7 +69,7 @@ jobs:
           host: ${{ env.DEPLOY_HOST }}
           username: ubuntu
           key: ${{ secrets.SERVER_KEY }}
-          source: ${{ runner.temp }}/douyin-mini-rpg-release.tar.gz
+          source: douyin-mini-rpg-release.tar.gz
           target: /tmp/douyin-mini-rpg-transfer
           rm: true
           command_timeout: 10m
