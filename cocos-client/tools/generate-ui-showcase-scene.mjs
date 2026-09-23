@@ -1,6 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { compressCocosUuid } from './compress-cocos-uuid.mjs'
 
 const projectDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const sourcePath = path.join(projectDir, 'assets/Scenes/MainBattle.scene')
@@ -18,17 +19,6 @@ const prefabUuids = {
   progressBarPrefab: 'e7a2bb45-8c5f-4af4-9b05-5b6349f98634',
   navItemPrefab: '9d32a585-852d-4447-a7b8-272813544b07',
   qualityFramePrefab: '7c79efb6-9f00-473c-b4be-49f121791b96',
-}
-
-function compressUuid(uuid) {
-  const hex = uuid.replaceAll('-', '')
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
-  const bits = hex.slice(5).split('').map((char) => Number.parseInt(char, 16).toString(2).padStart(4, '0')).join('')
-  let output = hex.slice(0, 5)
-  for (let offset = 0; offset < bits.length; offset += 6) {
-    output += alphabet[Number.parseInt(bits.slice(offset, offset + 6).padEnd(6, '0'), 2)]
-  }
-  return output
 }
 
 function remapIds(value, idMap) {
@@ -119,7 +109,7 @@ scene.push(
     _id: '',
   },
   {
-    __type__: compressUuid(showcaseScriptUuid),
+    __type__: compressCocosUuid(showcaseScriptUuid),
     _name: '',
     _objFlags: 0,
     node: { __id__: 10 },

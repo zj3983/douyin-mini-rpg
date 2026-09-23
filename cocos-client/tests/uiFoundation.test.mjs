@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { compressCocosUuid } from '../tools/compress-cocos-uuid.mjs'
 
 const readJson = (file) => JSON.parse(readFileSync(resolve(file), 'utf8'))
 const tokens = readJson('assets/UI/Theme/ui-tokens.json')
@@ -31,6 +32,13 @@ test('showcase scene uses Canvas as the 2D render root', () => {
   assert.equal(showcaseNode._parent.__id__, canvasNodeId)
   assert.equal(scene[canvasNode._components[0].__id__]._contentSize.width, tokens.designResolution.width)
   assert.equal(scene[canvasNode._components[0].__id__]._contentSize.height, tokens.designResolution.height)
+})
+
+test('showcase script UUID uses Creator 3.8 22-character compression', () => {
+  assert.equal(compressCocosUuid('fc991dd7-0033-4b80-9d41-c8a86a702e59'), 'fcmR3XADNLgJ1ByKhqcC5Z')
+  const scene = readJson('assets/Scenes/UIShowcase.scene')
+  const scriptComponent = scene.find((item) => item.__type__ === compressCocosUuid('17a48556-c5b1-4ba8-a036-13cf32cf0046'))
+  assert.ok(scriptComponent, 'scene must serialize UIShowcaseController using a valid compressed script UUID')
 })
 
 test('generated runtime token projection exactly matches the JSON source', () => {
