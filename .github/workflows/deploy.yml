@@ -51,7 +51,30 @@ jobs:
           COCOS_CREATOR_PATH=prebuilt npm run verify:build-output -- build/web-mobile
           cd ..
 
-      - name: Checkout release on server
+      - name: Create release archive
+        run: |
+          RELEASE_DIR="$RUNNER_TEMP/douyin-mini-rpg-release"
+          ARCHIVE="$RUNNER_TEMP/douyin-mini-rpg-release.tar.gz"
+          rm -rf "$RELEASE_DIR" "$ARCHIVE"
+          mkdir -p "$RELEASE_DIR/cocos-client/build"
+          cp -R cocos-client/build/web-mobile "$RELEASE_DIR/cocos-client/build/web-mobile"
+          cp -R server "$RELEASE_DIR/server"
+          cp package.json package-lock.json "$RELEASE_DIR/"
+          printf '%s\n' "$GITHUB_SHA" > "$RELEASE_DIR/release-sha.txt"
+          tar -czf "$ARCHIVE" -C "$RELEASE_DIR" .
+
+      - name: Upload release archive to server
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ env.DEPLOY_HOST }}
+          username: ubuntu
+          key: ${{ secrets.SERVER_KEY }}
+          source: ${{ runner.temp }}/douyin-mini-rpg-release.tar.gz
+          target: /tmp/douyin-mini-rpg-transfer
+          rm: true
+          command_timeout: 10m
+
+      - name: Stage release archive on server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ env.DEPLOY_HOST }}
@@ -60,21 +83,14 @@ jobs:
           command_timeout: 5m
           script: |
             set -e
-            CLONE_OK=0
-            for attempt in 1 2 3; do
-              rm -rf /tmp/douyin-mini-rpg-app
-              if git -c http.version=HTTP/1.1 clone --depth 1 --branch main https://github.com/zj3983/douyin-mini-rpg.git /tmp/douyin-mini-rpg-app; then
-                CLONE_OK=1
-                break
-              fi
-              echo "GitHub clone attempt $attempt failed; retrying after backoff"
-              sleep $((attempt * 5))
-            done
-            if [ "$CLONE_OK" -ne 1 ]; then
-              echo "Unable to clone main from GitHub after 3 attempts"
-              exit 1
-            fi
-            test "$(git -C /tmp/douyin-mini-rpg-app rev-parse HEAD)" = "${{ github.sha }}"
+            ARCHIVE="/tmp/douyin-mini-rpg-transfer/douyin-mini-rpg-release.tar.gz"
+            APP_SOURCE="/tmp/douyin-mini-rpg-app"
+            test -f "$ARCHIVE"
+            rm -rf "$APP_SOURCE"
+            mkdir -p "$APP_SOURCE"
+            tar -xzf "$ARCHIVE" -C "$APP_SOURCE"
+            test "$(cat "$APP_SOURCE/release-sha.txt")" = "${{ github.sha }}"
+            rm -rf /tmp/douyin-mini-rpg-transfer
 
       - name: Deploy archive and route domain
         uses: appleboy/ssh-action@v1.0.3
