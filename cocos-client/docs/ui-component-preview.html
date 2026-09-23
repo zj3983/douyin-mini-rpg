@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>虚境试炼 · UI 组件样稿</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #173632;
+      --ink-soft: #47635d;
+      --muted: #72847d;
+      --paper: #f0f2e9;
+      --paper-bright: #fbfaf2;
+      --jade: #247d70;
+      --jade-deep: #164e4a;
+      --jade-pale: #dcebe3;
+      --jade-line: #83b9a7;
+      --gold: #c59a3d;
+      --gold-pale: #f0d98c;
+      --coral: #c96c5b;
+      --blue: #548db2;
+      --violet: #8c72b2;
+      --shadow: 0 10px 28px #183b3020;
+      --serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", serif;
+      --sans: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: var(--sans);
+      background:
+        radial-gradient(ellipse at 8% 4%, #d3e4d6 0, transparent 35%),
+        radial-gradient(ellipse at 94% 16%, #d5e3dd 0, transparent 31%),
+        linear-gradient(145deg, #e8ede4, #f6f3e9 48%, #e4ebe4);
+    }
+    .sheet { width: min(1120px, calc(100% - 40px)); margin: 0 auto; padding: 42px 0 72px; }
+    header { display: flex; align-items: end; justify-content: space-between; gap: 24px; padding-bottom: 28px; border-bottom: 1px solid #79988d55; }
+    .eyebrow { margin: 0 0 8px; color: var(--jade); font-size: 12px; font-weight: 700; letter-spacing: 1.5px; }
+    h1 { margin: 0; font: 700 34px/1.25 var(--serif); }
+    .intro { max-width: 390px; margin: 0; color: var(--ink-soft); font-size: 14px; line-height: 1.8; }
+    section { padding: 27px 0 8px; }
+    .section-head { display: flex; align-items: baseline; gap: 12px; margin: 0 0 16px; }
+    h2 { margin: 0; font: 700 20px/1.4 var(--serif); }
+    .section-head span { color: var(--muted); font-size: 12px; }
+    .sample-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+    .button {
+      min-height: 48px; padding: 0 22px; border: 1px solid transparent; border-radius: 10px;
+      font: 700 15px var(--sans); cursor: pointer; transition: transform .12s ease, box-shadow .12s ease, filter .12s ease;
+    }
+    .button:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+    .button:active { transform: scale(.98); }
+    .primary { color: #fff8dc; border-color: #e4c66c; background: linear-gradient(115deg, #8a6828, #c39a42 54%, #99752e); box-shadow: inset 0 1px #f7dfa0, 0 3px 9px #80601f35; }
+    .secondary { color: #eaf4ed; border-color: #78b7a5; background: var(--jade-deep); box-shadow: inset 0 1px #a2d0bd55; }
+    .quiet { color: var(--jade-deep); border-color: #a8c8ba; background: #edf4ed; }
+    .icon-button { width: 48px; height: 48px; display: grid; place-items: center; padding: 0; border: 1px solid #9bb9ad; border-radius: 12px; color: var(--jade-deep); background: #f6f5e9; font-size: 24px; }
+    .panel { position: relative; overflow: hidden; min-height: 156px; padding: 20px 22px; border: 1px solid #7eb3a0; border-radius: 16px; background: linear-gradient(135deg, #f9f8efef, #dcece4e8); box-shadow: var(--shadow); }
+    .panel:before, .panel:after { content: ""; position: absolute; width: 30px; height: 30px; border-color: var(--gold); border-style: solid; opacity: .72; }
+    .panel:before { top: 8px; left: 8px; border-width: 1px 0 0 1px; }
+    .panel:after { right: 8px; bottom: 8px; border-width: 0 1px 1px 0; }
+    .panel-title { display: flex; justify-content: space-between; gap: 18px; align-items: center; padding-bottom: 14px; border-bottom: 1px solid #8ab6a755; }
+    .panel-title h3 { margin: 0; font: 700 20px var(--serif); }
+    .panel-title small { color: var(--muted); }
+    .panel-copy { max-width: 600px; margin: 13px 0 0; color: var(--ink-soft); line-height: 1.7; }
+    .chips { display: flex; flex-wrap: wrap; gap: 10px; }
+    .chip { display: inline-flex; min-height: 36px; align-items: center; gap: 9px; padding: 0 13px; border: 1px solid #99b9a9; border-radius: 20px; background: #f7f7eb; color: var(--ink-soft); font-size: 13px; }
+    .chip strong { color: var(--ink); font-size: 14px; }
+    .gem { width: 10px; height: 10px; border: 1px solid #d1a746; border-radius: 3px 50% 50%; transform: rotate(45deg); background: #e2bd5b; }
+    .bars { display: grid; grid-template-columns: repeat(3, minmax(160px, 1fr)); gap: 16px; }
+    .bar-block { padding: 14px 16px; border-left: 2px solid #9fc4b1; background: #fbfaf2a8; }
+    .bar-label { display: flex; justify-content: space-between; margin-bottom: 9px; color: var(--ink-soft); font-size: 13px; }
+    .track { height: 9px; overflow: hidden; border: 1px solid #9db9aa; border-radius: 9px; background: #dce5da; }
+    .fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, #348b73, #8bc79c); }
+    .fill.gold { background: linear-gradient(90deg, #ae8031, #e3c568); }
+    .fill.blue { background: linear-gradient(90deg, #477da5, #8dc5d0); }
+    .nav { display: grid; grid-template-columns: repeat(6, 1fr); border: 1px solid #aac4b5; border-radius: 14px; background: #f5f4e9; box-shadow: var(--shadow); }
+    .nav-item { display: grid; justify-items: center; gap: 5px; padding: 13px 6px 11px; color: var(--muted); border-right: 1px solid #cad7cb; font-size: 12px; }
+    .nav-item:last-child { border: 0; }
+    .nav-item b { color: var(--ink-soft); font: 700 20px var(--serif); }
+    .nav-item.active { color: var(--jade-deep); background: #dcebe3; box-shadow: inset 0 -3px var(--gold); }
+    .nav-item.active b { color: var(--jade); }
+    .qualities { display: grid; grid-template-columns: repeat(6, minmax(100px, 1fr)); gap: 10px; }
+    .quality { padding: 13px 12px; border: 1px solid currentColor; border-radius: 12px; background: #fbfaf2; box-shadow: inset 0 0 0 3px color-mix(in srgb, currentColor 12%, transparent); }
+    .quality strong { display: block; color: currentColor; font: 700 14px var(--serif); }
+    .quality small { display: block; margin-top: 6px; color: var(--muted); font-size: 11px; }
+    .common { color: #84918c; } .spirit { color: #4b9c73; } .mystic { color: #4384ad; } .earth { color: var(--violet); } .heaven { color: #ad8129; } .immortal { color: #c2684c; }
+    .bottom-grid { display: grid; grid-template-columns: 1.2fr .8fr; gap: 18px; }
+    .status { display: flex; align-items: center; gap: 14px; padding: 15px; border: 1px solid #9bbbaa; border-radius: 14px; background: #f9f8ef; }
+    .portrait { width: 52px; height: 52px; display: grid; place-items: center; border: 1px solid #c5a657; border-radius: 12px; color: #f2dfa5; background: radial-gradient(circle at 35% 25%, #77a994, #255d55 72%); font: 700 23px var(--serif); }
+    .status-info { flex: 1; min-width: 0; }
+    .status-info strong { font: 700 16px var(--serif); }
+    .status-info p { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
+    .stage { min-width: 0; padding: 14px; border: 1px solid #b19a5c; border-radius: 14px; background: #f8f5e7; }
+    .stage-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .stage h3 { margin: 0; font: 700 16px var(--serif); }
+    .stage p { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+    .badge { padding: 5px 9px; border-radius: 20px; color: #fff6d4; background: #987432; font-size: 11px; }
+    @media (max-width: 720px) {
+      .sheet { width: min(100% - 28px, 520px); padding-top: 26px; }
+      header { display: block; } .intro { margin-top: 12px; }
+      h1 { font-size: 28px; }
+      .bars { grid-template-columns: 1fr; gap: 8px; }
+      .qualities { grid-template-columns: repeat(3, 1fr); }
+      .bottom-grid { grid-template-columns: 1fr; }
+      .nav-item { font-size: 10px; padding-inline: 2px; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *:before, *:after { transition: none !important; } }
+  </style>
+</head>
+<body>
+  <main class="sheet">
+    <header>
+      <div><p class="eyebrow">UI FOUNDATION · 01</p><h1>虚境试炼 · 组件样稿</h1></div>
+      <p class="intro">以云白玉面承载信息，以青玉区分操作层级，以鎏金标记关键奖励。组件先统一，再进入战斗 HUD 与结算页。</p>
+    </header>
+
+    <section>
+      <div class="section-head"><h2>操作按钮</h2><span>Primary · Secondary · Quiet · Icon</span></div>
+      <div class="sample-row">
+        <button class="button primary">继续破境</button>
+        <button class="button secondary">查看详情</button>
+        <button class="button quiet">稍后再说</button>
+        <button class="icon-button" aria-label="关闭">×</button>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head"><h2>玉简面板</h2><span>PanelFrame · TitleBar</span></div>
+      <article class="panel">
+        <div class="panel-title"><h3>青岚剑宗 · 试炼进度</h3><small>云岫峰 · 第三重</small></div>
+        <p class="panel-copy">半透玉白承载内容，青玉勾边，角部鎏金收口。背景仍能透出场景，不用整块不透明黑底遮住战斗画面。</p>
+      </article>
+    </section>
+
+    <section>
+      <div class="section-head"><h2>资源与进度</h2><span>ResourceChip · ProgressBar</span></div>
+      <div class="sample-row chips" style="margin-bottom:16px">
+        <span class="chip"><i class="gem"></i>灵石 <strong>2,685</strong></span>
+        <span class="chip">副本卷 <strong>3</strong></span>
+        <span class="chip">法宝精华 <strong>12</strong></span>
+      </div>
+      <div class="bars">
+        <div class="bar-block"><div class="bar-label"><span>气血</span><strong>72%</strong></div><div class="track"><div class="fill" style="width:72%"></div></div></div>
+        <div class="bar-block"><div class="bar-label"><span>灵力</span><strong>54%</strong></div><div class="track"><div class="fill blue" style="width:54%"></div></div></div>
+        <div class="bar-block"><div class="bar-label"><span>魂魄</span><strong>8 / 12</strong></div><div class="track"><div class="fill gold" style="width:66%"></div></div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head"><h2>品质框</h2><span>QualityFrame · 色彩与名称一致</span></div>
+      <div class="qualities">
+        <div class="quality common"><strong>凡品</strong><small>素石 · #84918C</small></div>
+        <div class="quality spirit"><strong>灵品</strong><small>青木 · #4B9C73</small></div>
+        <div class="quality mystic"><strong>玄品</strong><small>苍蓝 · #4384AD</small></div>
+        <div class="quality earth"><strong>地品</strong><small>灵紫 · #8C72B2</small></div>
+        <div class="quality heaven"><strong>天品</strong><small>鎏金 · #AD8129</small></div>
+        <div class="quality immortal"><strong>仙品</strong><small>赤金 · #C2684C</small></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head"><h2>状态与导航</h2><span>HeroStatus · StageCard · NavItem</span></div>
+      <div class="bottom-grid">
+        <div class="status">
+          <div class="portrait">剑</div>
+          <div class="status-info"><strong>筑基三重</strong><p>青岚剑修 · 气血充盈 · 灵力 24</p></div>
+          <span class="badge">破境中</span>
+        </div>
+        <div class="stage"><div class="stage-top"><h3>雾竹林道</h3><span class="badge">第 12 关</span></div><p>击败守关 Boss 后可前往下一境</p></div>
+      </div>
+      <nav class="nav" aria-label="游戏导航" style="margin-top:16px">
+        <div class="nav-item active"><b>剑</b>战斗</div>
+        <div class="nav-item"><b>境</b>副本</div>
+        <div class="nav-item"><b>印</b>抽卡</div>
+        <div class="nav-item"><b>器</b>装备</div>
+        <div class="nav-item"><b>囊</b>背包</div>
+        <div class="nav-item"><b>宝</b>法宝</div>
+      </nav>
+    </section>
+  </main>
+</body>
+</html>
