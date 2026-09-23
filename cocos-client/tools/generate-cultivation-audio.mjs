@@ -7,10 +7,11 @@ const root = resolve(import.meta.dirname, '..')
 const catalog = {
   bgm: {
     'mist-bamboo': {
-      title: '雾竹清修',
-      description: '修仙世界地图背景音，风声、箫音和古琴拨弦铺底。',
+      title: '仙巅',
+      description: '修仙世界地图背景音，以恢宏仙侠旋律铺陈探索与战斗氛围。',
       resource: 'Assets/Audio/Bgm/mist-bamboo',
       minDurationSeconds: 8,
+      durationSeconds: 174.184,
       loop: true,
       volume: 0.42,
     },
@@ -76,7 +77,6 @@ const catalog = {
 }
 
 const metaByResource = {
-  'Assets/Audio/Bgm/mist-bamboo': 'e90d43ed-7668-4378-9769-56f357395f21',
   'Assets/Audio/Cues/hand-seal': 'd71a1a58-e28b-4140-967e-c32a29ce7bd3',
   'Assets/Audio/Cues/sword-launch': '540033df-8b60-4e33-b2e0-c851fd4497a5',
   'Assets/Audio/Cues/sword-return': 'a03333ee-7f1e-4025-a7fc-8fead5ac4236',
@@ -90,25 +90,6 @@ const metaByResource = {
 function clamp(value, min = -1, max = 1) {
   return Math.max(min, Math.min(max, value))
 }
-
-function smoothNoise(seed) {
-  let state = seed >>> 0
-  let current = 0
-  let next = 0
-  return (t) => {
-    const step = Math.floor(t * 18)
-    const local = t * 18 - step
-    if (step !== smoothNoise.lastStep) {
-      smoothNoise.lastStep = step
-      state = (Math.imul(state, 1664525) + 1013904223) >>> 0
-      current = next
-      next = (state / 0x100000000) * 2 - 1
-    }
-    const fade = local * local * (3 - 2 * local)
-    return current + (next - current) * fade
-  }
-}
-smoothNoise.lastStep = -1
 
 function envelope(t, duration, attack = 0.02, release = 0.12) {
   if (t < attack) return t / attack
@@ -192,24 +173,7 @@ function writeJsonMeta(path, uuid) {
   }, null, 2)}\n`)
 }
 
-function renderBgm() {
-  const noise = smoothNoise(20260714)
-  const notes = [146.83, 164.81, 196, 220, 246.94, 293.66]
-  return synth(10.5, (t, duration) => {
-    const wind = 0.08 * noise(t) + 0.03 * noise(t * 0.37 + 3)
-    const drone = 0.08 * Math.sin(Math.PI * 2 * 73.42 * t) + 0.04 * Math.sin(Math.PI * 2 * 110 * t)
-    const flute = 0.16 * envelope(t % 4.6, 4.6, 0.55, 1.4)
-      * Math.sin(Math.PI * 2 * (392 + Math.sin(t * 2.1) * 4) * t)
-    let strings = 0
-    for (let index = 0; index < 12; index += 1) {
-      strings += pluck(t, notes[index % notes.length], index * 0.82 + 0.18, 0.12, 2.4)
-    }
-    return (wind + drone + flute + strings) * envelope(t, duration, 1.1, 1.5)
-  })
-}
-
 const renders = {
-  'Assets/Audio/Bgm/mist-bamboo': renderBgm,
   'Assets/Audio/Cues/hand-seal': () => synth(0.46, (t, duration) => {
     const pulse = Math.sin(Math.PI * 2 * 540 * t) * 0.25 + Math.sin(Math.PI * 2 * 810 * t) * 0.16
     return (pulse + sweep(t, 220, 680, duration, 0.32)) * envelope(t, duration, 0.018, 0.18)

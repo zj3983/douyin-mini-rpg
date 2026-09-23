@@ -50,7 +50,7 @@ const dungeonExpected = [
   'assets/resources/Assets/Audio/Cues/pursuit-warning.wav',
   'assets/resources/Assets/Audio/Cues/extraction-start.wav',
   'assets/resources/Assets/Audio/Cues/extraction-complete.wav',
-  'assets/resources/Assets/Audio/Bgm/mist-bamboo.wav',
+  'assets/resources/Assets/Audio/Bgm/mist-bamboo.mp3',
 ]
 const dungeonActorFolders = new Set([
   'MossWolf',
@@ -116,7 +116,7 @@ console.log(JSON.stringify({
       missing: dungeonExpected.filter((path) => !dungeonPaths.has(path)),
       backgroundCount: dungeonFiles.filter(({ path }) => /\/Floor[123]\/(?:far|mid)\.webp$/.test(path)).length,
       effectCount: dungeonFiles.filter(({ path }) => /\/Effects\/.*\.png$/.test(path)).length,
-      audioCount: dungeonFiles.filter(({ path }) => /\/Audio\/(?:Cues|Bgm)\/.*\.wav$/.test(path)).length,
+      audioCount: dungeonFiles.filter(({ path }) => /\/Audio\/(?:Cues|Bgm)\/.*\.(?:wav|mp3|ogg|m4a)$/.test(path)).length,
       actorAtlasCount: dungeonFiles.filter(({ path }) => /\/ActorAtlases\/.*\.png$/.test(path)).length,
     },
   },

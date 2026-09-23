@@ -1,10 +1,11 @@
 {
   "bgm": {
     "mist-bamboo": {
-      "title": "雾竹清修",
-      "description": "修仙世界地图背景音，风声、箫音和古琴拨弦铺底。",
+      "title": "仙巅",
+      "description": "修仙世界地图背景音，以恢宏仙侠旋律铺陈探索与战斗氛围。",
       "resource": "Assets/Audio/Bgm/mist-bamboo",
       "minDurationSeconds": 8,
+      "durationSeconds": 174.184,
       "loop": true,
       "volume": 0.42
     }

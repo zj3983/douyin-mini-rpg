@@ -29,6 +29,14 @@ function wavInfo(path) {
   }
 }
 
+function audioAsset(entry) {
+  const wavPath = resolve('assets/resources', `${entry.resource}.wav`)
+  if (existsSync(wavPath)) return { path: wavPath, format: 'wav' }
+  const mp3Path = resolve('assets/resources', `${entry.resource}.mp3`)
+  if (existsSync(mp3Path)) return { path: mp3Path, format: 'mp3' }
+  return null
+}
+
 test('source and resource audio catalogs stay identical', () => {
   assert.equal(existsSync(sourcePath), true)
   assert.equal(existsSync(resourcePath), true)
@@ -49,13 +57,21 @@ test('cultivation audio catalog covers bgm and combat feedback cues', () => {
     assert.equal(typeof entry.description, 'string')
     assert.equal(entry.description.includes('修仙') || entry.description.includes('飞剑') || entry.description.includes('法诀'), true)
     assert.match(entry.resource, /^Assets\/Audio\/.+$/)
-    const wavPath = resolve('assets/resources', `${entry.resource}.wav`)
-    assert.equal(existsSync(wavPath), true, `${entry.resource}.wav should exist`)
-    assert.equal(existsSync(`${wavPath}.meta`), true, `${entry.resource}.wav.meta should exist`)
-    const info = wavInfo(wavPath)
-    assert.equal(info.channels, 1)
-    assert.equal(info.sampleRate, 44100)
-    assert.equal(info.bitsPerSample, 16)
-    assert.ok(info.durationSeconds >= entry.minDurationSeconds, `${entry.resource} should meet min duration`)
+    const asset = audioAsset(entry)
+    assert.ok(asset, `${entry.resource} should exist as a supported audio asset`)
+    assert.equal(existsSync(`${asset.path}.meta`), true, `${asset.path}.meta should exist`)
+    if (asset.format === 'wav') {
+      const info = wavInfo(asset.path)
+      assert.equal(info.channels, 1)
+      assert.equal(info.sampleRate, 44100)
+      assert.equal(info.bitsPerSample, 16)
+      assert.ok(info.durationSeconds >= entry.minDurationSeconds, `${entry.resource} should meet min duration`)
+    } else {
+      const buffer = readFileSync(asset.path)
+      const hasId3 = buffer.toString('ascii', 0, 3) === 'ID3'
+      const hasFrameSync = buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0
+      assert.equal(hasId3 || hasFrameSync, true, `${entry.resource} should be a valid MP3 stream`)
+      assert.ok(entry.durationSeconds >= entry.minDurationSeconds, `${entry.resource} should meet min duration`)
+    }
   }
 })
