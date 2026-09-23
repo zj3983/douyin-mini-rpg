@@ -60,8 +60,20 @@ jobs:
           command_timeout: 5m
           script: |
             set -e
-            rm -rf /tmp/douyin-mini-rpg-app
-            git clone --depth 1 --branch main https://github.com/zj3983/douyin-mini-rpg.git /tmp/douyin-mini-rpg-app
+            CLONE_OK=0
+            for attempt in 1 2 3; do
+              rm -rf /tmp/douyin-mini-rpg-app
+              if git -c http.version=HTTP/1.1 clone --depth 1 --branch main https://github.com/zj3983/douyin-mini-rpg.git /tmp/douyin-mini-rpg-app; then
+                CLONE_OK=1
+                break
+              fi
+              echo "GitHub clone attempt $attempt failed; retrying after backoff"
+              sleep $((attempt * 5))
+            done
+            if [ "$CLONE_OK" -ne 1 ]; then
+              echo "Unable to clone main from GitHub after 3 attempts"
+              exit 1
+            fi
             test "$(git -C /tmp/douyin-mini-rpg-app rev-parse HEAD)" = "${{ github.sha }}"
 
       - name: Deploy archive and route domain
