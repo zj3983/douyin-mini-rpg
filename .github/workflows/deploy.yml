@@ -3,6 +3,10 @@ name: Deploy to Cloud Server
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: deploy-main
@@ -16,6 +20,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Require main deployment ref
+        run: test "$GITHUB_REF" = "refs/heads/main"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
