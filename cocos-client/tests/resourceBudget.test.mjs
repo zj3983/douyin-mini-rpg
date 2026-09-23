@@ -21,7 +21,7 @@ test('resource budget report groups source assets by kind', () => {
     assert.equal(report.groups[key].largest.length <= 10, true)
   }
   assert.ok(report.groups.image.bytes > report.groups.audio.bytes)
-  assert.ok(report.groups.audio.largest.some((entry) => entry.path.endsWith('mist-bamboo.wav')))
+  assert.ok(report.groups.audio.largest.some((entry) => entry.path.endsWith('mist-bamboo.mp3')))
   assert.ok(report.budgets.dungeon)
   assert.equal(report.budgets.dungeon.withinBudget, true)
   assert.equal(report.budgets.dungeon.backgroundCount, 6)
