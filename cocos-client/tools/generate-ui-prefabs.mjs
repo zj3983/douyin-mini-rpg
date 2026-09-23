@@ -1,12 +1,13 @@
 import { createHash } from 'node:crypto'
 import { deflateSync } from 'node:zlib'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const projectDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const tokens = JSON.parse(await readFile(path.join(projectDir, 'assets/UI/Theme/ui-tokens.json'), 'utf8'))
 const spriteDir = path.join(projectDir, 'assets/UI/Common/Sprites')
-const frameBorder = 14
+const frameBorder = tokens.skin.borderPixels
 const frameAssetUuid = '6f06f458-77c5-4dd4-aea3-0e9531d17031'
 const fillAssetUuid = 'd8876554-8a80-4e76-aba1-ab7c20349be2'
 const frameUuid = `${frameAssetUuid}@f9941`
@@ -14,14 +15,44 @@ const fillUuid = `${fillAssetUuid}@f9941`
 const uiLayer = 33554432
 
 const definitions = [
-  { name: 'PrimaryButton', folder: 'Atoms', uuid: 'be923624-563a-49ed-b5d0-0e6422deec1a', width: 260, height: 72, fill: [159, 121, 47, 255], border: [240, 217, 140, 255], label: '继续破境', color: [255, 248, 220, 255], button: true },
-  { name: 'PanelFrame', folder: 'Atoms', uuid: '7c8e0a1c-1d13-4520-adfb-0b2a6c459df5', width: 620, height: 260, fill: [247, 247, 237, 246], border: [119, 184, 165, 255] },
-  { name: 'TitleBar', folder: 'Atoms', uuid: 'f3bedb60-7757-4199-9985-e1f66e3d3c3f', width: 620, height: 72, fill: [22, 78, 74, 255], border: [215, 174, 85, 255], label: '青岚剑宗', color: [244, 241, 223, 255] },
-  { name: 'ResourceChip', folder: 'Atoms', uuid: 'c4888eba-5079-4572-855b-97402797e3b9', width: 220, height: 52, fill: [251, 250, 242, 255], border: [153, 185, 169, 255], label: '灵石  2,685', color: [23, 54, 50, 255] },
-  { name: 'ProgressBar', folder: 'Atoms', uuid: 'e7a2bb45-8c5f-4af4-9b05-5b6349f98634', width: 420, height: 16, fill: [179, 202, 188, 255], border: [140, 175, 157, 255], progress: 0.68 },
-  { name: 'NavItem', folder: 'Molecules', uuid: '9d32a585-852d-4447-a7b8-272813544b07', width: 96, height: 84, fill: [220, 235, 227, 255], border: [119, 184, 165, 255], icon: '剑', label: '战斗', color: [22, 78, 74, 255] },
-  { name: 'QualityFrame', folder: 'Atoms', uuid: '7c79efb6-9f00-473c-b4be-49f121791b96', width: 128, height: 152, fill: [251, 250, 242, 255], border: [215, 174, 85, 255], label: '天品', color: [23, 54, 50, 255] },
+  { name: 'PrimaryButton', folder: 'Atoms', uuid: 'be923624-563a-49ed-b5d0-0e6422deec1a', component: 'primaryButton', label: '继续破境', button: true },
+  { name: 'PanelFrame', folder: 'Atoms', uuid: '7c8e0a1c-1d13-4520-adfb-0b2a6c459df5', component: 'panelFrame' },
+  { name: 'TitleBar', folder: 'Atoms', uuid: 'f3bedb60-7757-4199-9985-e1f66e3d3c3f', component: 'titleBar', label: '青岚剑宗' },
+  { name: 'ResourceChip', folder: 'Atoms', uuid: 'c4888eba-5079-4572-855b-97402797e3b9', component: 'resourceChip', label: '灵石  2,685' },
+  { name: 'ProgressBar', folder: 'Atoms', uuid: 'e7a2bb45-8c5f-4af4-9b05-5b6349f98634', component: 'progressBar', progress: 0.68 },
+  { name: 'NavItem', folder: 'Molecules', uuid: '9d32a585-852d-4447-a7b8-272813544b07', component: 'navItem', icon: '剑', label: '战斗' },
+  { name: 'QualityFrame', folder: 'Atoms', uuid: '7c79efb6-9f00-473c-b4be-49f121791b96', component: 'qualityFrame', label: '天品' },
 ]
+
+function colorValue(tokenName) {
+  const hex = tokens.color[tokenName] ?? tokenName
+  const value = hex.replace('#', '')
+  return [0, 2, 4, 6].map((offset) => Number.parseInt(value.slice(offset, offset + 2) || 'ff', 16))
+}
+
+function componentStyle(definition) {
+  const style = tokens.component[definition.component]
+  return {
+    ...definition,
+    ...style,
+    width: style.width,
+    height: style.height,
+    fill: style.track ? colorValue(style.track) : (style.fill ? colorValue(style.fill) : (style.activeFill ? colorValue(style.activeFill) : null)),
+    border: style.border ? colorValue(style.border) : (style.activeBorder ? colorValue(style.activeBorder) : null),
+    textColor: style.text ? colorValue(style.text) : (style.activeText ? colorValue(style.activeText) : null),
+    fontSize: typeof style.fontSize === 'string' ? tokens.typeSize[style.fontSize] : style.fontSize,
+    hoverColor: style.hover ? colorValue(style.hover) : null,
+    pressedColor: style.pressed ? colorValue(style.pressed) : null,
+    disabledColor: style.disabled ? colorValue(style.disabled) : null,
+    trackColor: style.track ? colorValue(style.track) : null,
+    progressColor: style.fill && definition.progress !== undefined ? colorValue(style.fill) : null,
+    progress: definition.progress,
+  }
+}
+
+function surfaceColor(rgb) {
+  return { r: rgb[0], g: rgb[1], b: rgb[2], a: rgb[3] ?? 255 }
+}
 
 function crc32(buffer) {
   let crc = 0xffffffff
@@ -51,8 +82,8 @@ function roundedContains(x, y, left, top, right, bottom, radius) {
 }
 
 function roundedSurfacePng(hollow) {
-  const width = 64
-  const height = 64
+  const width = tokens.skin.surfacePixels
+  const height = tokens.skin.surfacePixels
   const samples = 4
   const rows = Buffer.alloc((width * 4 + 1) * height)
   for (let y = 0; y < height; y++) {
@@ -64,8 +95,8 @@ function roundedSurfacePng(hollow) {
         for (let sx = 0; sx < samples; sx++) {
           const px = x + (sx + 0.5) / samples
           const py = y + (sy + 0.5) / samples
-          const inside = roundedContains(px, py, 0, 0, width, height, 12)
-          const inHole = hollow && roundedContains(px, py, frameBorder, frameBorder, width - frameBorder, height - frameBorder, 7)
+          const inside = roundedContains(px, py, 0, 0, width, height, tokens.skin.cornerRadiusPixels)
+          const inHole = hollow && roundedContains(px, py, frameBorder, frameBorder, width - frameBorder, height - frameBorder, tokens.skin.innerCornerRadiusPixels)
           if (inside && !inHole) covered++
         }
       }
@@ -107,9 +138,9 @@ function compressUuid(uuid) {
   return output
 }
 
-function makeImageMeta(assetUuid, displayName, hollow) {
-  const width = 64
-  const height = 64
+function makeImageMeta(assetUuid, displayName) {
+  const width = tokens.skin.surfacePixels
+  const height = tokens.skin.surfacePixels
   const half = width / 2
   const rawPosition = [-half, -half, 0, half, -half, 0, -half, half, 0, half, half, 0]
   return {
@@ -140,13 +171,14 @@ function makeImageMeta(assetUuid, displayName, hollow) {
 async function generateSurface(fileName, assetUuid, hollow) {
   const pngPath = path.join(spriteDir, fileName)
   await writeFile(pngPath, roundedSurfacePng(hollow))
-  await writeFile(`${pngPath}.meta`, `${JSON.stringify(makeImageMeta(assetUuid, path.basename(fileName, '.png'), hollow), null, 2)}\n`)
+  await writeFile(`${pngPath}.meta`, `${JSON.stringify(makeImageMeta(assetUuid, path.basename(fileName, '.png')), null, 2)}\n`)
 }
 
 function color(rgb) { return { __type__: 'cc.Color', r: rgb[0], g: rgb[1], b: rgb[2], a: rgb[3] } }
 function ref(id) { return { __id__: id } }
 
 async function generatePrefab(definition) {
+  definition = componentStyle(definition)
   const objects = [{ __type__: 'cc.Prefab', _name: definition.name, _objFlags: 0, _native: '', data: ref(1), optimizationPolicy: 0, persistent: false, asyncLoadAssets: false }]
   const rootId = 1
 
@@ -206,13 +238,13 @@ async function generatePrefab(definition) {
     if (nodeOptions.button) {
       addComponent('cc.Button', {
         clickEvents: [], _interactable: true, _transition: 1,
-        _normalColor: color([255, 255, 255, 255]), _hoverColor: color([235, 226, 190, 255]),
-        _pressedColor: color([222, 209, 164, 255]), _disabledColor: color([155, 155, 155, 255]),
+        _normalColor: color(colorValue(tokens.prefab.buttonNormal)), _hoverColor: color(nodeOptions.hoverColor),
+        _pressedColor: color(nodeOptions.pressedColor), _disabledColor: color(nodeOptions.disabledColor),
         _normalSprite: { __uuid__: fillUuid, __expectedType__: 'cc.SpriteFrame' },
-        _hoverSprite: null, _pressedSprite: null, _disabledSprite: null, _duration: 0.1, _zoomScale: 0.96, _target: null,
+        _hoverSprite: null, _pressedSprite: null, _disabledSprite: null, _duration: tokens.prefab.buttonTransitionSeconds, _zoomScale: tokens.prefab.buttonZoomScale, _target: null,
       })
     }
-    if (nodeOptions.labelText) addLabel(nodeId, 'Title', nodeOptions.labelText, width - 24, height - 8, nodeOptions.fontSize ?? 26, nodeOptions.labelColor ?? [23, 54, 50, 255], 0, 0)
+    if (nodeOptions.labelText) addLabel(nodeId, 'Title', nodeOptions.labelText, width - tokens.prefab.labelHorizontalInset, height - tokens.prefab.labelVerticalInset, nodeOptions.fontSize ?? tokens.typeSize.component, nodeOptions.textColor ?? colorValue('ink'), 0, 0)
     if (nodeOptions.progress) {
       const fillWidth = width - 4
       const fillNodeId = addNode('ProgressFill', nodeId, -width / 2 + fillWidth / 2, 0, fillWidth, height - 4, false)
@@ -220,7 +252,7 @@ async function generatePrefab(definition) {
       const fillInfoId = fillCompId + 1
       objects.push({
         __type__: 'cc.Sprite', _name: '', _objFlags: 0, node: ref(fillNodeId), _enabled: true, __prefab: ref(fillInfoId),
-        _customMaterial: null, _srcBlendFactor: 2, _dstBlendFactor: 4, _color: color([72, 150, 108, 255]),
+        _customMaterial: null, _srcBlendFactor: 2, _dstBlendFactor: 4, _color: color(nodeOptions.progressColor),
         _spriteFrame: { __uuid__: fillUuid, __expectedType__: 'cc.SpriteFrame' },
         _type: 1, _fillType: 0, _sizeMode: 0, _fillCenter: { __type__: 'cc.Vec2', x: 0, y: 0 },
         _fillStart: 0, _fillRange: 0, _isTrimmedMode: true, _useGrayscale: false, _atlas: null, _id: '',
@@ -229,8 +261,8 @@ async function generatePrefab(definition) {
       objects[fillNodeId]._components.push(ref(fillCompId))
       addComponent('cc.ProgressBar', { _barSprite: ref(fillCompId), _mode: 0, _totalLength: fillWidth, _progress: definition.progress, _reverse: false })
     }
-    if (nodeOptions.icon) addLabel(nodeId, 'Icon', nodeOptions.icon, 44, 34, 25, [36, 125, 112, 255], -14, 13)
-    if (nodeOptions.secondaryLabel) addLabel(nodeId, 'Subtitle', nodeOptions.secondaryLabel, width - 8, 25, 17, [91, 116, 106, 255], 0, -20)
+    if (nodeOptions.icon) addLabel(nodeId, 'Icon', nodeOptions.icon, tokens.prefab.iconWidth, tokens.prefab.iconHeight, tokens.component.navItem.iconFontSize, colorValue('jadePrimary'), tokens.prefab.iconX, tokens.prefab.iconY)
+    if (nodeOptions.secondaryLabel) addLabel(nodeId, 'Subtitle', nodeOptions.secondaryLabel, width - tokens.space.xs, tokens.prefab.subtitleHeight, tokens.typeSize.caption, colorValue('muted'), 0, tokens.prefab.subtitleY)
 
     if (root) {
       objects[nodeId]._prefab = ref(objects.length)
@@ -264,7 +296,11 @@ async function generatePrefab(definition) {
     border: definition.border,
     button: definition.button,
     labelText: definition.label && !definition.icon ? definition.label : null,
-    labelColor: definition.color,
+    textColor: definition.textColor,
+    hoverColor: definition.hoverColor,
+    pressedColor: definition.pressedColor,
+    disabledColor: definition.disabledColor,
+    progressColor: definition.progressColor,
     progress: definition.progress !== undefined,
     icon: definition.icon,
     secondaryLabel: definition.icon ? definition.label : null,

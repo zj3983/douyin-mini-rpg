@@ -105,10 +105,10 @@
     "_dstBlendFactor": 4,
     "_color": {
       "__type__": "cc.Color",
-      "r": 247,
-      "g": 247,
-      "b": 237,
-      "a": 246
+      "r": 221,
+      "g": 235,
+      "b": 229,
+      "a": 242
     },
     "_spriteFrame": {
       "__uuid__": "d8876554-8a80-4e76-aba1-ab7c20349be2@f9941",

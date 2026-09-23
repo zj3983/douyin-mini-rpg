@@ -29,7 +29,8 @@ export class UIShowcaseController extends Component {
 
   onLoad() {
     this.node.layer = UI_LAYER
-    this.node.getComponent(UITransform)?.setContentSize(750, 1334)
+    const resolution = Ui.tokens.designResolution
+    this.node.getComponent(UITransform)?.setContentSize(resolution.width, resolution.height)
     if (!this.hasAllPrefabs()) return
     this.buildGallery()
   }
@@ -81,99 +82,103 @@ export class UIShowcaseController extends Component {
 
   private buildGallery() {
     const root = this.node
-    const text = (name: string, value: string, y: number, size: number, color = new Color(23, 54, 50, 255), width = 680) =>
-      Ui.label(root, name, value, width, size + 12, size, color, 0, y)
+    const { designResolution, color, gallery, typeSize, component, space } = Ui.tokens
+    const layout = gallery.layout
+    const sizes = gallery.sampleSize
+    const tokenColor = (name: string) => Ui.color(color[name as keyof typeof color] as string)
+    const text = (name: string, value: string, y: number, size: number, tint = tokenColor('ink'), width = designResolution.width - space.xl * 2) =>
+      Ui.label(root, name, value, width, size + space.sm, size, tint, 0, y)
     const section = (name: string, title: string, y: number) =>
-      text(name, title, y, 23, new Color(36, 125, 112, 255), 690)
+      text(name, title, y, typeSize.section, tokenColor('jadePrimary'), designResolution.width - space.xl * 2)
 
-    const backdrop = Ui.box(root, 'GalleryBackdrop', 750, 1334)
+    const backdrop = Ui.box(root, 'GalleryBackdrop', designResolution.width, designResolution.height)
     const bg = backdrop.addComponent(Graphics)
-    bg.fillColor = new Color(237, 240, 231, 255)
-    bg.rect(-375, -667, 750, 1334)
+    bg.fillColor = tokenColor('galleryBackdrop')
+    bg.rect(-designResolution.width / 2, -designResolution.height / 2, designResolution.width, designResolution.height)
     bg.fill()
     backdrop.setSiblingIndex(0)
 
-    text('GalleryEyebrow', 'UI FOUNDATION  ·  COMPONENT GALLERY', 612, 16, new Color(36, 125, 112, 255))
-    text('GalleryTitle', '虚境试炼 · 修仙 UI 组件', 568, 36)
+    text('GalleryEyebrow', 'UI FOUNDATION  ·  COMPONENT GALLERY', layout.eyebrowY, typeSize.caption, tokenColor('jadePrimary'))
+    text('GalleryTitle', '虚境试炼 · 修仙 UI 组件', layout.titleY, typeSize.title)
 
-    section('ButtonSection', '操作按钮  /  Primary · Secondary · Quiet', 505)
-    const primary = this.placePrefab(root, this.primaryButtonPrefab!, 'PrimaryButtonSample', -225, 447)
+    section('ButtonSection', '操作按钮  /  Primary · Secondary · Quiet', layout.sectionY.buttons)
+    const primary = this.placePrefab(root, this.primaryButtonPrefab!, 'PrimaryButtonSample', layout.buttons.x[0], layout.buttons.y)
     this.setLabel(primary, 'Title', '继续破境')
-    const secondary = this.placePrefab(root, this.primaryButtonPrefab!, 'SecondaryButtonSample', 0, 447)
-    this.setSpriteColor(secondary, null, new Color(22, 78, 74, 255))
-    this.setSpriteColor(secondary, 'Frame', new Color(119, 184, 165, 255))
+    const secondary = this.placePrefab(root, this.primaryButtonPrefab!, 'SecondaryButtonSample', layout.buttons.x[1], layout.buttons.y)
+    this.setSpriteColor(secondary, null, tokenColor(component.titleBar.fill))
+    this.setSpriteColor(secondary, 'Frame', tokenColor(component.panelFrame.border))
     this.setLabel(secondary, 'Title', '查看详情')
-    const quiet = this.placePrefab(root, this.primaryButtonPrefab!, 'QuietButtonSample', 225, 447)
-    this.setSpriteColor(quiet, null, new Color(251, 250, 242, 255))
-    this.setSpriteColor(quiet, 'Frame', new Color(168, 200, 186, 255))
+    const quiet = this.placePrefab(root, this.primaryButtonPrefab!, 'QuietButtonSample', layout.buttons.x[2], layout.buttons.y)
+    this.setSpriteColor(quiet, null, tokenColor(component.resourceChip.fill))
+    this.setSpriteColor(quiet, 'Frame', tokenColor('softBorder'))
     this.setLabel(quiet, 'Title', '稍后再说')
-    this.setLabelColor(quiet, 'Title', new Color(22, 78, 74, 255))
+    this.setLabelColor(quiet, 'Title', tokenColor(component.titleBar.fill))
 
-    section('PanelSection', '玉简面板  /  PanelFrame · TitleBar', 410)
-    const titleBar = this.placePrefab(root, this.titleBarPrefab!, 'TitleBarSample', 0, 360)
+    section('PanelSection', '玉简面板  /  PanelFrame · TitleBar', layout.sectionY.panel)
+    const titleBar = this.placePrefab(root, this.titleBarPrefab!, 'TitleBarSample', 0, layout.titleBarY)
     this.setLabel(titleBar, 'Title', '青岚剑宗 · 试炼进度')
-    const panel = this.placePrefab(root, this.panelFramePrefab!, 'PanelFrameSample', 0, 267)
-    this.resizePrefab(panel, 690, 112)
-    Ui.label(panel, 'PanelDescription', '雾竹林道 · 第三重', 620, 30, 19, new Color(91, 116, 106, 255), 0, 0)
+    const panel = this.placePrefab(root, this.panelFramePrefab!, 'PanelFrameSample', 0, layout.panelY)
+    this.resizePrefab(panel, sizes.panel.width, sizes.panel.height)
+    Ui.label(panel, 'PanelDescription', '雾竹林道 · 第三重', component.panelFrame.width, space.lg, typeSize.body, tokenColor('muted'), 0, 0)
 
-    section('ResourceSection', '资源与进度  /  ResourceChip · ProgressBar', 192)
-    const stone = this.placePrefab(root, this.resourceChipPrefab!, 'SpiritStoneChip', -220, 146)
-    const pass = this.placePrefab(root, this.resourceChipPrefab!, 'DungeonPassChip', 0, 146)
-    const essence = this.placePrefab(root, this.resourceChipPrefab!, 'ArtifactEssenceChip', 220, 146)
+    section('ResourceSection', '资源与进度  /  ResourceChip · ProgressBar', layout.sectionY.resources)
+    const stone = this.placePrefab(root, this.resourceChipPrefab!, 'SpiritStoneChip', layout.resources.x[0], layout.resources.y)
+    const pass = this.placePrefab(root, this.resourceChipPrefab!, 'DungeonPassChip', layout.resources.x[1], layout.resources.y)
+    const essence = this.placePrefab(root, this.resourceChipPrefab!, 'ArtifactEssenceChip', layout.resources.x[2], layout.resources.y)
     this.setLabel(stone, 'Title', '灵石  2,685')
     this.setLabel(pass, 'Title', '副本卷  3')
     this.setLabel(essence, 'Title', '法宝精华  12')
-    Ui.label(root, 'HealthLabel', '气血', 120, 26, 18, new Color(71, 99, 88, 255), -260, 91)
-    const health = this.placePrefab(root, this.progressBarPrefab!, 'HealthProgressSample', 42, 91)
+    Ui.label(root, 'HealthLabel', '气血', sizes.progressLabel.width, sizes.progressLabel.height, sizes.progressLabelFontSize, tokenColor('muted'), layout.progress.labelX, layout.progress.y[0])
+    const health = this.placePrefab(root, this.progressBarPrefab!, 'HealthProgressSample', layout.progress.x, layout.progress.y[0])
     health.getComponent(ProgressBar)!.progress = 0.72
-    this.setSpriteColor(health, 'ProgressFill', new Color(82, 164, 117, 255))
-    Ui.label(root, 'ManaLabel', '灵力', 120, 26, 18, new Color(71, 99, 88, 255), -260, 51)
-    const mana = this.placePrefab(root, this.progressBarPrefab!, 'ManaProgressSample', 42, 51)
+    this.setSpriteColor(health, 'ProgressFill', tokenColor('progressHealth'))
+    Ui.label(root, 'ManaLabel', '灵力', sizes.progressLabel.width, sizes.progressLabel.height, sizes.progressLabelFontSize, tokenColor('muted'), layout.progress.labelX, layout.progress.y[1])
+    const mana = this.placePrefab(root, this.progressBarPrefab!, 'ManaProgressSample', layout.progress.x, layout.progress.y[1])
     mana.getComponent(ProgressBar)!.progress = 0.54
-    this.setSpriteColor(mana, 'ProgressFill', new Color(83, 145, 181, 255))
-    Ui.label(root, 'SoulLabel', '魂魄', 120, 26, 18, new Color(71, 99, 88, 255), -260, 11)
-    const soul = this.placePrefab(root, this.progressBarPrefab!, 'SoulProgressSample', 42, 11)
+    this.setSpriteColor(mana, 'ProgressFill', tokenColor('progressMana'))
+    Ui.label(root, 'SoulLabel', '魂魄', sizes.progressLabel.width, sizes.progressLabel.height, sizes.progressLabelFontSize, tokenColor('muted'), layout.progress.labelX, layout.progress.y[2])
+    const soul = this.placePrefab(root, this.progressBarPrefab!, 'SoulProgressSample', layout.progress.x, layout.progress.y[2])
     soul.getComponent(ProgressBar)!.progress = 0.66
-    this.setSpriteColor(soul, 'ProgressFill', new Color(194, 151, 61, 255))
+    this.setSpriteColor(soul, 'ProgressFill', tokenColor('progressSoul'))
 
-    section('QualitySection', '品质框  /  QualityFrame', -65)
+    section('QualitySection', '品质框  /  QualityFrame', layout.sectionY.qualities)
     const qualities = [
       ['common', '凡品'], ['spirit', '灵品'], ['mystic', '玄品'],
       ['earth', '地品'], ['heaven', '天品'], ['immortal', '仙品'],
     ] as const
     qualities.forEach(([quality, title], index) => {
-      const x = -285 + index * 114
-      const frame = this.placePrefab(root, this.qualityFramePrefab!, `${title}QualityFrame`, x, -125)
-      this.resizePrefab(frame, 100, 70)
-      this.setSpriteColor(frame, 'Frame', this.qualityColor(quality))
+      const x = layout.qualityX.firstX + index * layout.qualityX.stepX
+      const frame = this.placePrefab(root, this.qualityFramePrefab!, `${title}QualityFrame`, x, layout.qualityY)
+      this.resizePrefab(frame, sizes.quality.width, sizes.quality.height)
+      this.setSpriteColor(frame, 'Frame', tokenColor(color.quality[quality]))
       this.setLabel(frame, 'Title', title)
     })
 
-    section('StatusSection', '角色状态  /  HeroStatus', -197)
-    const hero = this.placePrefab(root, this.panelFramePrefab!, 'HeroStatusSample', 0, -260)
-    this.resizePrefab(hero, 690, 84)
-    const portrait = Ui.panel(hero, 'PortraitBadge', 54, 54, { x: -298, fill: new Color(36, 104, 91, 255), border: new Color(197, 154, 61, 255), radius: 12 })
-    Ui.label(portrait, 'PortraitGlyph', '剑', 48, 48, 27, new Color(240, 217, 140, 255))
-    Ui.label(hero, 'RealmLabel', '筑基三重', 210, 30, 24, new Color(23, 54, 50, 255), -138, 14)
-    Ui.label(hero, 'HeroNameLabel', '青岚剑修 · 气血充盈 · 灵力 24', 420, 28, 17, new Color(91, 116, 106, 255), 66, -18)
+    section('StatusSection', '角色状态  /  HeroStatus', layout.sectionY.hero)
+    const hero = this.placePrefab(root, this.panelFramePrefab!, 'HeroStatusSample', 0, layout.heroY)
+    this.resizePrefab(hero, sizes.hero.width, sizes.hero.height)
+    const portrait = Ui.panel(hero, 'PortraitBadge', sizes.portrait.width, sizes.portrait.height, { x: sizes.portrait.x, fill: tokenColor('portraitFill'), border: tokenColor('portraitBorder'), radius: component.navItem.radius })
+    Ui.label(portrait, 'PortraitGlyph', '剑', component.navItem.iconWidth, component.navItem.iconHeight, typeSize.icon, tokenColor('goldHighlight'))
+    Ui.label(hero, 'RealmLabel', '筑基三重', component.primaryButton.width - space.xl * 2, space.lg, typeSize.label, tokenColor('ink'), layout.heroLabels.realmX, layout.heroLabels.realmY)
+    Ui.label(hero, 'HeroNameLabel', '青岚剑修 · 气血充盈 · 灵力 24', component.panelFrame.width - space.xl * 2, typeSize.caption + space.sm, typeSize.caption, tokenColor('muted'), layout.heroLabels.descriptionX, layout.heroLabels.descriptionY)
 
-    section('StageSection', '关卡条目  /  StageCard', -324)
-    const stage = this.placePrefab(root, this.panelFramePrefab!, 'StageCardSample', 0, -385)
-    this.resizePrefab(stage, 690, 82)
-    this.setSpriteColor(stage, 'Frame', new Color(193, 164, 91, 255))
-    Ui.label(stage, 'StageTitle', '雾竹林道', 280, 32, 24, new Color(23, 54, 50, 255), -160, 13)
-    Ui.label(stage, 'StageDescription', '击败守关 Boss 后可前往下一境', 430, 26, 17, new Color(91, 116, 106, 255), -80, -17)
-    const stageBadge = this.placePrefab(stage, this.primaryButtonPrefab!, 'StageNumberBadge', 255, 0)
-    this.resizePrefab(stageBadge, 120, 44)
+    section('StageSection', '关卡条目  /  StageCard', layout.sectionY.stage)
+    const stage = this.placePrefab(root, this.panelFramePrefab!, 'StageCardSample', 0, layout.stageY)
+    this.resizePrefab(stage, sizes.stage.width, sizes.stage.height)
+    this.setSpriteColor(stage, 'Frame', tokenColor('stageBorder'))
+    Ui.label(stage, 'StageTitle', '雾竹林道', component.panelFrame.width - space.xl * 2, typeSize.label + space.sm, typeSize.label, tokenColor('ink'), layout.stageLabels.titleX, layout.stageLabels.titleY)
+    Ui.label(stage, 'StageDescription', '击败守关 Boss 后可前往下一境', component.panelFrame.width - space.xl * 2, typeSize.caption + space.sm, typeSize.caption, tokenColor('muted'), layout.stageLabels.descriptionX, layout.stageLabels.descriptionY)
+    const stageBadge = this.placePrefab(stage, this.primaryButtonPrefab!, 'StageNumberBadge', layout.stageLabels.badgeX, 0)
+    this.resizePrefab(stageBadge, sizes.stageBadge.width, sizes.stageBadge.height)
     this.setLabel(stageBadge, 'Title', '第 12 关')
 
-    section('NavigationSection', '底部导航  /  NavItem', -454)
+    section('NavigationSection', '底部导航  /  NavItem', layout.sectionY.navigation)
     const navItems = [['剑', '战斗'], ['境', '副本'], ['印', '抽卡'], ['器', '装备'], ['囊', '背包'], ['宝', '法宝']]
     navItems.forEach(([glyph, title], index) => {
-      const item = this.placePrefab(root, this.navItemPrefab!, `NavItem${index + 1}`, -285 + index * 114, -555)
+      const item = this.placePrefab(root, this.navItemPrefab!, `NavItem${index + 1}`, layout.navigation.firstX + index * layout.navigation.stepX, layout.navigation.y)
       this.setLabel(item, 'Icon', glyph)
       this.setLabel(item, 'Subtitle', title)
-      if (index !== 0) this.setSpriteColor(item, null, new Color(251, 250, 242, 255))
+      if (index !== 0) this.setSpriteColor(item, null, tokenColor('cream'))
     })
   }
 
@@ -182,15 +187,4 @@ export class UIShowcaseController extends Component {
     if (label) label.color = color
   }
 
-  private qualityColor(quality: string) {
-    const colors: Record<string, Color> = {
-      common: new Color(145, 157, 151, 255),
-      spirit: new Color(99, 185, 141, 255),
-      mystic: new Color(93, 168, 216, 255),
-      earth: new Color(161, 123, 210, 255),
-      heaven: new Color(215, 174, 85, 255),
-      immortal: new Color(231, 140, 98, 255),
-    }
-    return colors[quality] ?? colors.common
-  }
 }

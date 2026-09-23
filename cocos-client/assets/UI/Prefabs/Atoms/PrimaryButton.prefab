@@ -285,9 +285,9 @@
     "_transition": 1,
     "_normalColor": {
       "__type__": "cc.Color",
-      "r": 255,
-      "g": 255,
-      "b": 255,
+      "r": 244,
+      "g": 241,
+      "b": 223,
       "a": 255
     },
     "_hoverColor": {
@@ -429,9 +429,9 @@
     "_dstBlendFactor": 4,
     "_color": {
       "__type__": "cc.Color",
-      "r": 255,
-      "g": 248,
-      "b": 220,
+      "r": 244,
+      "g": 241,
+      "b": 223,
       "a": 255
     },
     "_string": "继续破境",

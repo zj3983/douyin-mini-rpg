@@ -7,7 +7,7 @@ This foundation defines the shared visual and asset contract for the Cocos UI. I
 - Design canvas: portrait `750 × 1334`, matching `assets/Data/scene-blueprint.json`.
 - Resolution behavior: retain the current `FIXED_WIDTH` policy and existing viewport layout calculations.
 - Safe area: consume the current `ViewportMetrics` / `BattleLayout` insets. A component must not calculate device cutouts independently.
-- Visual tokens: `assets/UI/Theme/ui-tokens.json`.
+- Visual source of truth: `assets/UI/Theme/ui-tokens.json`. Runtime TypeScript is generated from this file; do not hand-edit the generated projection.
 - Figma component key and Cocos asset path must follow the mapping below.
 
 ## Asset map
@@ -30,7 +30,7 @@ This foundation defines the shared visual and asset contract for the Cocos UI. I
 - Repeated content is one prefab plus bound data, arranged with `Layout` or `ScrollView`; do not copy numbered node trees for each entry.
 - Prefab roots use the component name in PascalCase. Children use stable semantic names such as `TitleLabel`, `Icon`, `ValueLabel`, and `ProgressFill`.
 - Do not encode runtime state in node names. Expose state through controller properties or explicit child nodes.
-- Colors, spacing, radii, type sizes, and quality colors come from `ui-tokens.json` rather than page-local literals.
+- Colors, spacing, radii, type sizes, component dimensions, and quality colors come from `ui-tokens.json` rather than page-local literals. Run `npm run generate:ui-foundation` after changing tokens to regenerate the runtime projection, prefabs, and showcase scene.
 - Use `Widget` for anchoring and `Layout` for repeated rows or grids. Keep interactive hit areas at least the tokenized minimum size.
 - Use Cocos `Label`, `Button`, `ProgressBar`, and `Mask` components for standard controls. `Graphics` skin drawing is centralized in the shared UI factory; page controllers must not draw their own button or card skins.
 - Put reusable artwork under `assets/UI/Common`. Prefer atlased sprites for small UI pieces; keep large illustrations and battle art in their existing content asset domains.
@@ -58,7 +58,7 @@ This is the UI Foundation and runtime Gallery slice. Battle HUD, stage-clear, st
 
 ## Component gallery
 
-- Open `assets/Scenes/UIShowcase.scene` in Creator 3.8.8 and run Preview to inspect the runtime component gallery.
+- `UIShowcase.scene` contains a `Canvas` (`cc.Canvas`, the 2D render root) with a full-screen `Widget`; `UIShowcaseRoot` is its child. Open the scene in Creator 3.8.8 and run Preview to inspect the runtime component gallery.
 - `assets/UI/Scripts/CultivationUiFactory.ts` is the shared visual factory used by the gallery. Button, panel, progress, quality, resource-chip, and navigation skins belong here; page controllers should bind data and actions rather than draw their own copies.
 - `UIShowcase.scene` is a design review scene and is not added to the production build scene list.
 - The seven listed controls are serialized `.prefab` assets used by this runtime gallery. Battle HUD and production-page migration are not part of this slice.
