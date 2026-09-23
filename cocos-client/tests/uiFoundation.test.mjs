@@ -34,8 +34,11 @@ test('showcase scene uses Canvas as the 2D render root', () => {
   assert.equal(scene[canvasNode._components[0].__id__]._contentSize.height, tokens.designResolution.height)
 })
 
-test('showcase script UUID uses Creator 3.8 22-character compression', () => {
-  assert.equal(compressCocosUuid('fc991dd7-0033-4b80-9d41-c8a86a702e59'), 'fcmR3XADNLgJ1ByKhqcC5Z')
+test('showcase script UUID uses the same Creator compression as MainBattle', () => {
+  const mainBattle = readJson('assets/Scenes/MainBattle.scene')
+  const bootstrapMeta = readJson('assets/Scripts/Game/PortraitBattleBootstrap.ts.meta')
+  assert.ok(mainBattle.some((item) => item.__type__ === compressCocosUuid(bootstrapMeta.uuid)))
+  assert.equal(compressCocosUuid('17a48556-c5b1-4ba8-a036-13cf32cf0046'), '17a48VWxbFLqKA2E88yzwBG')
   const scene = readJson('assets/Scenes/UIShowcase.scene')
   const scriptComponent = scene.find((item) => item.__type__ === compressCocosUuid('17a48556-c5b1-4ba8-a036-13cf32cf0046'))
   assert.ok(scriptComponent, 'scene must serialize UIShowcaseController using a valid compressed script UUID')
